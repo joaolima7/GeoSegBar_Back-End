@@ -1,4 +1,4 @@
-package com.geosegbar.geosegbar;
+package com.geosegbar;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

@@ -1,4 +1,4 @@
-package com.geosegbar.infra;
+package com.geosegbar.infra.exception_handler;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

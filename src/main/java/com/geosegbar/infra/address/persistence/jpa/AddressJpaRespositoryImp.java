@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 
 import com.geosegbar.adapters.address.AddressRepositoryAdapter;
 import com.geosegbar.core.address.entities.AddressEntity;
-import com.geosegbar.infra.address.dto.AddressHandler;
+import com.geosegbar.infra.address.handler.AddressHandler;
 
 @Component
 public class AddressJpaRespositoryImp implements AddressRepositoryAdapter{

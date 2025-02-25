@@ -1,4 +1,4 @@
-package com.geosegbar.infra.address.dto;
+package com.geosegbar.infra.address.handler;
 
 import org.springframework.stereotype.Component;
 

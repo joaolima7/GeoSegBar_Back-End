@@ -46,7 +46,7 @@ public class AddressJpaRespositoryImp implements AddressRepositoryAdapter{
 
     @Override
     public List<AddressEntity> findAll() {
-        List<AddressModel> addressModels = addressRepository.findAll();
+        List<AddressModel> addressModels = addressRepository.findAllByOrderByIdAsc();
         return addressModels.stream().map(addressModel -> addressHandler.fromModel(addressModel).toEntity()).toList();
     }
 

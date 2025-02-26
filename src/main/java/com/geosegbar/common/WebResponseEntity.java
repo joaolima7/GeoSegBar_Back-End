@@ -20,6 +20,10 @@ public class WebResponseEntity<T> {
         return new WebResponseEntity<>(false, message, null);
     }
 
+    public static <T> WebResponseEntity<T> errorValidation(String message, T data) {
+        return new WebResponseEntity<>(false, message, data);
+    }
+
     public boolean isSuccess() { return success; }
     public T getData() { return data; }
     public String getMessage() { return message; }

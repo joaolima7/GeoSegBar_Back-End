@@ -1,7 +1,12 @@
 package com.geosegbar.infra.exception_handler;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -85,7 +90,19 @@ public class RestExceptionHandler {
     public ResponseEntity<WebResponseEntity<String>> handleUnsupportedFileTypeException(UnsupportedFileTypeException ex) {
         return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
                 .body(WebResponseEntity.error(ex.getMessage()));
-    }    
+    }  
+    
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+public ResponseEntity<WebResponseEntity<Map<String, String>>> handleValidationExceptions(MethodArgumentNotValidException ex) {
+    Map<String, String> errors = new HashMap<>();
+    
+    for (FieldError error : ex.getBindingResult().getFieldErrors()) {
+        errors.put(error.getField(), error.getDefaultMessage());
+    }
+
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .body(WebResponseEntity.errorValidation("Erro de validação", errors));
+}
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<WebResponseEntity<String>> handleGeneralException(Exception ex) {

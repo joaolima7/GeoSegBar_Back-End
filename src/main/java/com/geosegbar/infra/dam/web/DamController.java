@@ -18,16 +18,14 @@ import com.geosegbar.core.dam.entities.DamEntity;
 import com.geosegbar.infra.dam.services.DamService;
 
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/dams")
+@RequiredArgsConstructor
 public class DamController {
  
     private final DamService damService;
-
-    public DamController(DamService damService) {
-        this.damService = damService;
-    }
     
     @GetMapping
     public ResponseEntity<WebResponseEntity<List<DamEntity>>> getAllDams() {

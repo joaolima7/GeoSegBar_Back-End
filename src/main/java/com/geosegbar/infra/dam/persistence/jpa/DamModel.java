@@ -24,7 +24,7 @@ public class DamModel {
     private Long id;
 
     @NotBlank(message = "Nome é obrigatório!")
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     private String name;
 
     @Column(nullable = false)
@@ -35,7 +35,7 @@ public class DamModel {
     @NotNull(message = "Longitude é obrigatório!")
     private Double longitude;
 
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     @Size(min = 3, max = 3, message = "A sigla deve ter 3 caracteres!")
     private String acronym;
 }

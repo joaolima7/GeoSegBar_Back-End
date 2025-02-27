@@ -11,7 +11,10 @@ import com.geosegbar.core.dam.usecases.FindAllDamUseCase;
 import com.geosegbar.core.dam.usecases.FindByIdDamUseCase;
 import com.geosegbar.core.dam.usecases.UpdateDamUseCase;
 
+import lombok.RequiredArgsConstructor;
+
 @Service
+@RequiredArgsConstructor
 public class DamService {
     
     private final FindAllDamUseCase findAllDamUseCase;
@@ -19,18 +22,6 @@ public class DamService {
     private final CreateDamUseCase createDamUseCase;
     private final UpdateDamUseCase updateDamUseCase;
     private final DeleteDamUseCase deleteDamUseCase;
-
-    public DamService(FindAllDamUseCase findAllDamUseCase, 
-                      FindByIdDamUseCase findByIdDamUseCase,
-                      CreateDamUseCase createDamUseCase,
-                      UpdateDamUseCase updateDamUseCase,
-                      DeleteDamUseCase deleteDamUseCase) {
-        this.findAllDamUseCase = findAllDamUseCase;
-        this.findByIdDamUseCase = findByIdDamUseCase;
-        this.createDamUseCase = createDamUseCase;
-        this.updateDamUseCase = updateDamUseCase;
-        this.deleteDamUseCase = deleteDamUseCase;
-    }
 
     public DamEntity create(DamEntity dam) {
         return createDamUseCase.create(dam);

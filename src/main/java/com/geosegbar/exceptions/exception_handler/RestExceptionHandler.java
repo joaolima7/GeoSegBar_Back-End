@@ -1,4 +1,4 @@
-package com.geosegbar.infra.exception_handler;
+package com.geosegbar.exceptions.exception_handler;
 
 import java.util.HashMap;
 import java.util.Map;

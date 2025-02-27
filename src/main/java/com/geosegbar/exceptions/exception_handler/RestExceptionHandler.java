@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.TransactionSystemException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -121,6 +122,32 @@ public ResponseEntity<WebResponseEntity<Map<String, String>>> handleValidationEx
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(WebResponseEntity.errorValidation("Inválido!", errors));
     }
+
+    @ExceptionHandler(TransactionSystemException.class)
+    public ResponseEntity<WebResponseEntity<?>> handleTransactionSystemException(TransactionSystemException ex) {
+    Throwable cause = ex.getRootCause();
+    
+    if (cause instanceof jakarta.validation.ConstraintViolationException) {
+        jakarta.validation.ConstraintViolationException violationException = 
+            (jakarta.validation.ConstraintViolationException) cause;
+            
+        Map<String, String> errors = new HashMap<>();
+        
+        for (ConstraintViolation<?> violation : violationException.getConstraintViolations()) {
+            String propertyPath = violation.getPropertyPath().toString();
+            String field = propertyPath.contains(".") ? 
+                propertyPath.substring(propertyPath.lastIndexOf('.') + 1) : propertyPath;
+            errors.put(field, violation.getMessage());
+        }
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(WebResponseEntity.errorValidation("Inválido!", errors));
+    }
+    
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .body(WebResponseEntity.error("Erro na transação: " + 
+                  (cause != null ? cause.getMessage() : ex.getMessage())));
+}
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<WebResponseEntity<String>> handleGeneralException(Exception ex) {

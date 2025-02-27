@@ -7,16 +7,15 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
-import lombok.Getter;
+import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 @Entity
 @Table(name = "dam")
-@Getter
-@Setter
+@Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class DamModel {
@@ -24,16 +23,16 @@ public class DamModel {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotBlank(message = "Longitude é obrigatório!")
+    @NotBlank(message = "Nome é obrigatório!")
     @Column(nullable = false)
     private String name;
 
-    @Column(precision = 9, scale = 6, nullable = false)
-    @NotBlank(message = "Latitude é obrigatório!")
+    @Column(nullable = false)
+    @NotNull(message = "Latitude é obrigatório!")
     private Double latitude;
 
-    @Column(precision = 9, scale = 6, nullable = false)
-    @NotBlank(message = "Longitude é obrigatório!")
+    @Column(nullable = false)
+    @NotNull(message = "Longitude é obrigatório!")
     private Double longitude;
 
     @Column(nullable = false)

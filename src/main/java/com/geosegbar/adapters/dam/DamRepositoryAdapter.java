@@ -7,8 +7,8 @@ import com.geosegbar.core.dam.entities.DamEntity;
 
 public interface DamRepositoryAdapter {
     void deleteById(Long id);
-    DamEntity save(DamEntity DamEntity);
-    DamEntity update(DamEntity DamEntity);
+    DamEntity save(DamEntity damEntity);
+    DamEntity update(DamEntity damEntity);
     Optional<DamEntity> findById(Long id);
     List<DamEntity> findAll();
 }

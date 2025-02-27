@@ -23,6 +23,9 @@ import com.geosegbar.exceptions.TokenExpiredException;
 import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.exceptions.UnsupportedFileTypeException;
 
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
+
 @RestControllerAdvice
 public class RestExceptionHandler {
     
@@ -103,6 +106,21 @@ public ResponseEntity<WebResponseEntity<Map<String, String>>> handleValidationEx
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
             .body(WebResponseEntity.errorValidation("Erro de validação", errors));
 }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<WebResponseEntity<Map<String, String>>> handleConstraintViolationException(ConstraintViolationException ex) {
+        Map<String, String> errors = new HashMap<>();
+        
+        for (ConstraintViolation<?> violation : ex.getConstraintViolations()) {
+            String propertyPath = violation.getPropertyPath().toString();
+            String field = propertyPath.contains(".") ? 
+                propertyPath.substring(propertyPath.lastIndexOf('.') + 1) : propertyPath;
+            errors.put(field, violation.getMessage());
+        }
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(WebResponseEntity.errorValidation("Inválido!", errors));
+    }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<WebResponseEntity<String>> handleGeneralException(Exception ex) {

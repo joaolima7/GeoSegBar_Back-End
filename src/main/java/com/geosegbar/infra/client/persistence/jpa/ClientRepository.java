@@ -10,4 +10,9 @@ import com.geosegbar.core.client.entities.ClientEntity;
 @Repository
 public interface ClientRepository extends JpaRepository<ClientEntity, Long> {
     List<ClientEntity> findAllByOrderByIdAsc();
+
+    boolean existsByName(String name);
+    boolean existsByAcronym(String acronym);
+    boolean existsByNameAndIdNot(String name, Long id);
+    boolean existsByAcronymAndIdNot(String acronym, Long id);
 }

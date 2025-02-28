@@ -41,5 +41,23 @@ public class ClientJpaRepositoryImp implements ClientRepositoryAdapter{
         return clientRepository.findAllByOrderByIdAsc();
     }
 
+    @Override
+    public boolean existsByName(String name) {
+        return clientRepository.existsByName(name);
+    }
 
+    @Override
+    public boolean existsByAcronym(String acronym) {
+        return clientRepository.existsByAcronym(acronym);
+    }
+
+    @Override
+    public boolean existsByNameAndIdNot(String name, Long id) {
+        return clientRepository.existsByNameAndIdNot(name, id);
+    }
+
+    @Override
+    public boolean existsByAcronymAndIdNot(String acronym, Long id) {
+        return clientRepository.existsByAcronymAndIdNot(acronym, id);
+    }
 }

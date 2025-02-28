@@ -11,4 +11,9 @@ public interface ClientRepositoryAdapter {
     ClientEntity update(ClientEntity clientEntity);
     Optional<ClientEntity> findById(Long id);
     List<ClientEntity> findAll();
+
+    boolean existsByName(String name);
+    boolean existsByAcronym(String acronym);
+    boolean existsByNameAndIdNot(String name, Long id);
+    boolean existsByAcronymAndIdNot(String acronym, Long id);
 }

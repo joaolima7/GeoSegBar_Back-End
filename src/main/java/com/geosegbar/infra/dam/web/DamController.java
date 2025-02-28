@@ -30,21 +30,21 @@ public class DamController {
     @GetMapping
     public ResponseEntity<WebResponseEntity<List<DamEntity>>> getAllDams() {
         List<DamEntity> dams = damService.findAll();
-        WebResponseEntity<List<DamEntity>> response = WebResponseEntity.success(dams, "Barragens obtidas com sucesso");
+        WebResponseEntity<List<DamEntity>> response = WebResponseEntity.success(dams, "Barragens obtidas com sucesso!");
         return ResponseEntity.ok(response);
     }
     
     @GetMapping("/{id}")
     public ResponseEntity<WebResponseEntity<DamEntity>> getDamById(@PathVariable Long id) {
         DamEntity dam = damService.findById(id);
-        WebResponseEntity<DamEntity> response = WebResponseEntity.success(dam, "Barragem obtida com sucesso");
+        WebResponseEntity<DamEntity> response = WebResponseEntity.success(dam, "Barragem obtida com sucesso!");
         return ResponseEntity.ok(response);
     }
     
     @PostMapping
     public ResponseEntity<WebResponseEntity<DamEntity>> createDam(@Valid @RequestBody DamEntity dam) {
         DamEntity createdDam = damService.create(dam);
-        WebResponseEntity<DamEntity> response = WebResponseEntity.success(createdDam, "Barragem criada com sucesso");
+        WebResponseEntity<DamEntity> response = WebResponseEntity.success(createdDam, "Barragem criada com sucesso!");
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
     
@@ -52,14 +52,14 @@ public class DamController {
     public ResponseEntity<WebResponseEntity<DamEntity>> updateDam(@PathVariable Long id, @Valid @RequestBody DamEntity dam) {
         dam.setId(id);
         DamEntity updatedDam = damService.update(dam);
-        WebResponseEntity<DamEntity> response = WebResponseEntity.success(updatedDam, "Barragem atualizada com sucesso");
+        WebResponseEntity<DamEntity> response = WebResponseEntity.success(updatedDam, "Barragem atualizada com sucesso!");
         return ResponseEntity.ok(response);
     }
     
     @DeleteMapping("/{id}")
     public ResponseEntity<WebResponseEntity<Void>> deleteDam(@PathVariable Long id) {
         damService.delete(id);
-        WebResponseEntity<Void> response = WebResponseEntity.success(null, "Barragem excluída com sucesso");
+        WebResponseEntity<Void> response = WebResponseEntity.success(null, "Barragem excluída com sucesso!");
         return ResponseEntity.ok(response);
     }
 }

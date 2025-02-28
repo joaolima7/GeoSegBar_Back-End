@@ -7,7 +7,7 @@ import com.geosegbar.exceptions.NotFoundException;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
-public class UpdateCientUseCase {
+public class UpdateClientUseCase {
     
     private final ClientRepositoryAdapter clientRepositoryAdapter;
 

@@ -8,15 +8,13 @@ import org.springframework.stereotype.Component;
 import com.geosegbar.adapters.dam.DamRepositoryAdapter;
 import com.geosegbar.core.dam.entities.DamEntity;
 
+import lombok.RequiredArgsConstructor;
+
 @Component
+@RequiredArgsConstructor
 public class DamJpaRepositoryImp implements DamRepositoryAdapter{
     
     private final DamRepository damRepository;
-
-
-    public DamJpaRepositoryImp(DamRepository damRepository) {
-        this.damRepository = damRepository;
-    }
 
     @Override
     public void deleteById(Long id) {

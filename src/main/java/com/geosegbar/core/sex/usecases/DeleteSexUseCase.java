@@ -3,12 +3,11 @@ package com.geosegbar.core.sex.usecases;
 import com.geosegbar.adapters.sex.SexRepositoryAdapter;
 import com.geosegbar.exceptions.NotFoundException;
 
+import lombok.RequiredArgsConstructor;
+
+@RequiredArgsConstructor
 public class DeleteSexUseCase {
     private final SexRepositoryAdapter sexRepositoryAdapter;
-
-    public DeleteSexUseCase(SexRepositoryAdapter sexRepositoryAdapter) {
-        this.sexRepositoryAdapter = sexRepositoryAdapter;
-    }
 
     public void delete(Long id) {
         sexRepositoryAdapter.findById(id)

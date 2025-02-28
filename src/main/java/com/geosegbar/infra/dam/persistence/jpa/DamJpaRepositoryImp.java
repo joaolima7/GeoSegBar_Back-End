@@ -40,4 +40,14 @@ public class DamJpaRepositoryImp implements DamRepositoryAdapter{
     public List<DamEntity> findAll() {
         return damRepository.findAllByOrderByIdAsc();
     }
+
+    @Override
+    public boolean existsByName(String name) {
+        return damRepository.existsByName(name);
+    }
+
+    @Override
+    public boolean existsByAcronym(String acronym) {
+        return damRepository.existsByAcronym(acronym);
+    }
 }

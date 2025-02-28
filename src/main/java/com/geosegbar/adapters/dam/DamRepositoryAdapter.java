@@ -11,4 +11,7 @@ public interface DamRepositoryAdapter {
     DamEntity update(DamEntity damEntity);
     Optional<DamEntity> findById(Long id);
     List<DamEntity> findAll();
+
+    boolean existsByName(String name);
+    boolean existsByAcronym(String acronym);
 }

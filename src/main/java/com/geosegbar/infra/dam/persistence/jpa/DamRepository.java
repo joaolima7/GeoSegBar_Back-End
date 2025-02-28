@@ -10,4 +10,7 @@ import com.geosegbar.core.dam.entities.DamEntity;
 @Repository
 public interface DamRepository extends JpaRepository<DamEntity, Long>{
     List<DamEntity> findAllByOrderByIdAsc();
+
+    boolean existsByName(String name);
+    boolean existsByAcronym(String acronym);
 }

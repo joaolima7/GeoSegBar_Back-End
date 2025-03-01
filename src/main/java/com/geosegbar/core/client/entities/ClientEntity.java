@@ -3,16 +3,18 @@ package com.geosegbar.core.client.entities;
 import java.util.HashSet;
 import java.util.Set;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonProperty.Access;
 import com.geosegbar.core.dam.entities.DamEntity;
+import com.geosegbar.core.user.entities.UserEntity;
 
-import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.Email;
@@ -20,10 +22,12 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
@@ -44,7 +48,7 @@ public class ClientEntity {
 
     @NotBlank(message = "Email é obrigatório!")
     @Email(message = "Email inválido!")
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     private String email;
 
     @NotBlank(message = "O nome da rua é obrigatório!")
@@ -97,7 +101,11 @@ public class ClientEntity {
     @Column(length = 150)
     private String emailContact;
 
-    @JsonIgnore
-    @OneToMany(mappedBy = "client", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonProperty(access = Access.WRITE_ONLY)
+    @OneToMany(mappedBy = "client", fetch = FetchType.LAZY)
     private Set<DamEntity> dams = new HashSet<>();
+
+    @JsonProperty(access = Access.WRITE_ONLY)
+    @ManyToMany(mappedBy = "clients", fetch = FetchType.LAZY)
+    private Set<UserEntity> users = new HashSet<>();
 }

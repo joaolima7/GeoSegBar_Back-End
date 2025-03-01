@@ -43,7 +43,7 @@ public class SexController {
     
     @PostMapping
     public ResponseEntity<WebResponseEntity<SexEntity>> createSex(@Valid @RequestBody SexEntity sex) {
-        SexEntity createdSex = sexService.create(sex);
+        SexEntity createdSex = sexService.save(sex);
         WebResponseEntity<SexEntity> response = WebResponseEntity.success(createdSex, "Sexo criado com sucesso!");
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
@@ -51,14 +51,14 @@ public class SexController {
     @PutMapping("/{id}")
     public ResponseEntity<WebResponseEntity<SexEntity>> updateDam(@PathVariable Long id, @Valid @RequestBody SexEntity sex) {
         sex.setId(id);
-        SexEntity updatedSex = sexService.update(sex);
+        SexEntity updatedSex = sexService.save(sex);
         WebResponseEntity<SexEntity> response = WebResponseEntity.success(updatedSex, "Sexo atualizado com sucesso!");
         return ResponseEntity.ok(response);
     }
     
     @DeleteMapping("/{id}")
     public ResponseEntity<WebResponseEntity<Void>> deleteSex(@PathVariable Long id) {
-        sexService.delete(id);
+        sexService.deleteById(id);
         WebResponseEntity<Void> response = WebResponseEntity.success(null, "Sexo excluído com sucesso!");
         return ResponseEntity.ok(response);
     }

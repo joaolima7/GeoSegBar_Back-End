@@ -42,7 +42,7 @@ public class ClientController {
 
     @PostMapping
     public ResponseEntity<WebResponseEntity<ClientEntity>> createClient(@Valid @RequestBody ClientEntity client) {
-        ClientEntity createdClient = clientService.create(client);
+        ClientEntity createdClient = clientService.save(client);
         WebResponseEntity<ClientEntity> response = WebResponseEntity.success(createdClient, "Cliente criado com sucesso!");
         return ResponseEntity.ok(response);
     }
@@ -57,7 +57,7 @@ public class ClientController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<WebResponseEntity<Void>> deleteClient(@PathVariable Long id) {
-        clientService.delete(id);
+        clientService.deleteById(id);
         WebResponseEntity<Void> response = WebResponseEntity.success(null, "Cliente deletado com sucesso!");
         return ResponseEntity.ok(response);
     }

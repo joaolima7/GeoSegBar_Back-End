@@ -43,7 +43,7 @@ public class DamController {
     
     @PostMapping
     public ResponseEntity<WebResponseEntity<DamEntity>> createDam(@Valid @RequestBody DamEntity dam) {
-        DamEntity createdDam = damService.create(dam);
+        DamEntity createdDam = damService.save(dam);
         WebResponseEntity<DamEntity> response = WebResponseEntity.success(createdDam, "Barragem criada com sucesso!");
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
@@ -58,7 +58,7 @@ public class DamController {
     
     @DeleteMapping("/{id}")
     public ResponseEntity<WebResponseEntity<Void>> deleteDam(@PathVariable Long id) {
-        damService.delete(id);
+        damService.deleteById(id);
         WebResponseEntity<Void> response = WebResponseEntity.success(null, "Barragem excluída com sucesso!");
         return ResponseEntity.ok(response);
     }

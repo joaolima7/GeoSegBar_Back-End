@@ -3,6 +3,7 @@ package com.geosegbar.infra.client.persistence.jpa;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import com.geosegbar.adapters.client.ClientRepositoryAdapter;
@@ -12,7 +13,8 @@ import lombok.RequiredArgsConstructor;
 
 @Component
 @RequiredArgsConstructor
-public class ClientJpaRepositoryImp implements ClientRepositoryAdapter{
+@Qualifier("clientRepository")
+public class ClientJpaRepositoryImp implements ClientRepositoryAdapter {
     
     private final ClientRepository clientRepository;
 

@@ -5,6 +5,7 @@ import com.geosegbar.core.client.entities.ClientEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 
 import lombok.RequiredArgsConstructor;
+
 @RequiredArgsConstructor
 public class CreateClientUseCase {
     private final ClientRepositoryAdapter clientRepositoryAdapter;

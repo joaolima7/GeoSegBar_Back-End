@@ -3,6 +3,7 @@ package com.geosegbar.infra.sex.persistence.jpa;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import com.geosegbar.adapters.sex.SexRepositoryAdapter;
@@ -12,7 +13,8 @@ import lombok.RequiredArgsConstructor;
 
 @Component
 @RequiredArgsConstructor
-public class SexJpaRepositoryImp implements SexRepositoryAdapter {
+@Qualifier("sexRepository")
+public class SexJpaRepositoryImp implements SexRepositoryAdapter{
 
     private final SexRepository sexRepository;
 
@@ -39,5 +41,15 @@ public class SexJpaRepositoryImp implements SexRepositoryAdapter {
     @Override
     public List<SexEntity> findAll() {
         return sexRepository.findAllByOrderByIdAsc();
+    }
+
+    @Override
+    public boolean existsByName(String name) {
+        return sexRepository.existsByName(name);
+    }
+
+    @Override
+    public boolean existsByNameAndIdNot(String name, Long id) {
+        return sexRepository.existsByNameAndIdNot(name, id);
     } 
 }

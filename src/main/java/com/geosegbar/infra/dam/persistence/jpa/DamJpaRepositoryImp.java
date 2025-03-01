@@ -3,6 +3,7 @@ package com.geosegbar.infra.dam.persistence.jpa;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import com.geosegbar.adapters.dam.DamRepositoryAdapter;
@@ -12,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 
 @Component
 @RequiredArgsConstructor
+@Qualifier("damRepository")
 public class DamJpaRepositoryImp implements DamRepositoryAdapter{
     
     private final DamRepository damRepository;
@@ -49,5 +51,15 @@ public class DamJpaRepositoryImp implements DamRepositoryAdapter{
     @Override
     public boolean existsByAcronym(String acronym) {
         return damRepository.existsByAcronym(acronym);
+    }
+
+    @Override
+    public boolean existsByNameAndIdNot(String name, Long id) {
+        return damRepository.existsByNameAndIdNot(name, id);
+    }
+
+    @Override
+    public boolean existsByAcronymAndIdNot(String acronym, Long id) {
+        return damRepository.existsByAcronymAndIdNot(acronym, id);
     }
 }

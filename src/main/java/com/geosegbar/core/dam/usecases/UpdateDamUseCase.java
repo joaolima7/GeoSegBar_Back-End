@@ -17,11 +17,11 @@ public class UpdateDamUseCase {
         damRepositoryAdapter.findById(damEntity.getId()).
         orElseThrow(() -> new NotFoundException("Endereço não encontrado para atualização!"));
 
-        if (damRepositoryAdapter.existsByName(damEntity.getName())) {
+        if (damRepositoryAdapter.existsByNameAndIdNot(damEntity.getName(), damEntity.getId())) {
             throw new DuplicateResourceException("Já existe uma barragem com este nome!");
         }
         
-        if (damRepositoryAdapter.existsByAcronym(damEntity.getAcronym())) {
+        if (damRepositoryAdapter.existsByAcronymAndIdNot(damEntity.getAcronym(), damEntity.getId())) {
             throw new DuplicateResourceException("Já existe uma barragem com esta sigla!");
         }
 

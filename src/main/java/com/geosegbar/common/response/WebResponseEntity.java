@@ -1,4 +1,4 @@
-package com.geosegbar.common;
+package com.geosegbar.common.response;
 
 public class WebResponseEntity<T> {
     private boolean success;

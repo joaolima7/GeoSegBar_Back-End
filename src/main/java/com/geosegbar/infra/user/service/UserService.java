@@ -1,11 +1,10 @@
 package com.geosegbar.infra.user.service;
 
 import java.util.List;
-import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
-import com.geosegbar.core.user.entities.UserEntity;
+import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.user.persistence.jpa.UserRepository;

@@ -1,11 +1,10 @@
 package com.geosegbar.infra.client.service;
 
 import java.util.List;
-import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
-import com.geosegbar.core.client.entities.ClientEntity;
+import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
@@ -58,7 +57,7 @@ public class ClientService {
         if(clientRepository.existsByEmailAndIdNot(clientEntity.getEmail(), clientEntity.getId())){
             throw new DuplicateResourceException("Já existe um cliente com este email.");
         }
-        
+
         return clientRepository.save(clientEntity);
     }
 

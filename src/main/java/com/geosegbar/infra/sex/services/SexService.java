@@ -1,11 +1,10 @@
 package com.geosegbar.infra.sex.services;
 
 import java.util.List;
-import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
-import com.geosegbar.core.sex.entities.SexEntity;
+import com.geosegbar.entities.SexEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.sex.persistence.jpa.SexRepository;

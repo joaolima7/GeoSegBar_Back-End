@@ -4,7 +4,7 @@ import java.util.List;
 
 import org.springframework.stereotype.Service;
 
-import com.geosegbar.core.dam.entities.DamEntity;
+import com.geosegbar.entities.DamEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;

@@ -1,6 +1,4 @@
-package com.geosegbar.core.dam.entities;
-
-import com.geosegbar.core.client.entities.ClientEntity;
+package com.geosegbar.entities;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

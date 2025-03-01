@@ -13,8 +13,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.geosegbar.common.WebResponseEntity;
-import com.geosegbar.core.dam.entities.DamEntity;
+import com.geosegbar.common.response.WebResponseEntity;
+import com.geosegbar.entities.DamEntity;
 import com.geosegbar.infra.dam.services.DamService;
 
 import jakarta.validation.Valid;

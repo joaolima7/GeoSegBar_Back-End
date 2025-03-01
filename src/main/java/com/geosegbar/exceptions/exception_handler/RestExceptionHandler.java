@@ -11,7 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import com.geosegbar.common.WebResponseEntity;
+import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DatabaseException;
 import com.geosegbar.exceptions.DuplicateResourceException;

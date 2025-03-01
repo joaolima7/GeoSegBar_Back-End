@@ -1,12 +1,10 @@
-package com.geosegbar.core.client.entities;
+package com.geosegbar.entities;
 
 import java.util.HashSet;
 import java.util.Set;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonProperty.Access;
-import com.geosegbar.core.dam.entities.DamEntity;
-import com.geosegbar.core.user.entities.UserEntity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

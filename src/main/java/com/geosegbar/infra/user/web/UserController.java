@@ -15,6 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.UserEntity;
+import com.geosegbar.infra.user.dto.UserClientAssociationDTO;
+import com.geosegbar.infra.user.dto.UserPasswordUpdateDTO;
+import com.geosegbar.infra.user.dto.UserUpdateDTO;
 import com.geosegbar.infra.user.service.UserService;
 
 import jakarta.validation.Valid;
@@ -49,10 +52,27 @@ public class UserController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<WebResponseEntity<UserEntity>> updateUser(@PathVariable Long id, @Valid @RequestBody UserEntity user) {
-        user.setId(id);
-        UserEntity updatedUser = userService.update(user);
+    public ResponseEntity<WebResponseEntity<UserEntity>> updateUser(@PathVariable Long id, @Valid @RequestBody UserUpdateDTO user) {
+        UserEntity updatedUser = userService.update(id, user);
         WebResponseEntity<UserEntity> response = WebResponseEntity.success(updatedUser, "Usuário atualizado com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}/password")
+    public ResponseEntity<WebResponseEntity<UserEntity>> updatePassword(@PathVariable Long id, @Valid @RequestBody UserPasswordUpdateDTO passwordDTO) {
+        UserEntity updatedUser = userService.updatePassword(id, passwordDTO);
+        WebResponseEntity<UserEntity> response = WebResponseEntity.success(updatedUser, "Senha atualizada com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}/clients")
+    public ResponseEntity<WebResponseEntity<UserEntity>> updateUserClients(
+        @PathVariable Long id, 
+        @RequestBody UserClientAssociationDTO clientAssociationDTO) {
+        
+        UserEntity updatedUser = userService.updateUserClients(id, clientAssociationDTO);
+        WebResponseEntity<UserEntity> response = 
+            WebResponseEntity.success(updatedUser, "Clientes do usuário atualizados com sucesso!");
         return ResponseEntity.ok(response);
     }
 

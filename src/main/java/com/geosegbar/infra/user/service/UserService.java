@@ -1,12 +1,20 @@
 package com.geosegbar.infra.user.service;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 
+import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
+import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
+import com.geosegbar.infra.user.dto.UserClientAssociationDTO;
+import com.geosegbar.infra.user.dto.UserPasswordUpdateDTO;
+import com.geosegbar.infra.user.dto.UserUpdateDTO;
 import com.geosegbar.infra.user.persistence.jpa.UserRepository;
 
 import jakarta.transaction.Transactional;
@@ -17,6 +25,7 @@ import lombok.RequiredArgsConstructor;
 public class UserService {
     
     private final UserRepository userRepository;
+    private final ClientRepository clientRepository;
 
     @Transactional
     public void deleteById(Long id) {
@@ -36,15 +45,51 @@ public class UserService {
     }
 
     @Transactional
-    public UserEntity update(UserEntity userEntity) {
-        userRepository.findById(userEntity.getId()).
-        orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização!"));
+    public UserEntity update(Long id, UserUpdateDTO userDTO) {
+        UserEntity existingUser = userRepository.findById(id)
+            .orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização!"));
 
-        if(userRepository.existsByEmailAndIdNot(userEntity.getEmail(), userEntity.getId())) {
+        if(userRepository.existsByEmailAndIdNot(userDTO.getEmail(), id)) {
             throw new DuplicateResourceException("Já existe um usuário com o email informado!");
         }
 
-        return userRepository.save(userEntity);
+        existingUser.setName(userDTO.getName());
+        existingUser.setEmail(userDTO.getEmail());
+        existingUser.setPhone(userDTO.getPhone());
+        existingUser.setSex(userDTO.getSex());
+
+        return userRepository.save(existingUser);
+    }
+
+    @Transactional
+    public UserEntity updatePassword(Long id, UserPasswordUpdateDTO passwordDTO) {
+        UserEntity existingUser = userRepository.findById(id)
+            .orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização de senha!"));
+            
+        if (!existingUser.getPassword().equals(passwordDTO.getCurrentPassword())) {
+            throw new InvalidInputException("Senha atual incorreta!");
+        }
+        
+        existingUser.setPassword(passwordDTO.getNewPassword());
+        return userRepository.save(existingUser);
+    }
+
+    @Transactional
+    public UserEntity updateUserClients(Long userId, UserClientAssociationDTO clientAssociationDTO) {
+        UserEntity user = userRepository.findById(userId)
+            .orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização de clientes!"));
+        
+        Set<ClientEntity> clients = new HashSet<>();
+        
+        for (Long clientId : clientAssociationDTO.getClientIds()) {
+            ClientEntity client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new NotFoundException("Cliente com ID " + clientId + " não encontrado!"));
+            clients.add(client);
+        }
+        
+        user.setClients(clients);
+        
+        return userRepository.save(user);
     }
 
     public UserEntity findById(Long id) {

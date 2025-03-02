@@ -4,14 +4,18 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import com.geosegbar.configs.security.TokenService;
 import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
+import com.geosegbar.infra.user.dto.LoginRequestDTO;
+import com.geosegbar.infra.user.dto.LoginResponseDTO;
 import com.geosegbar.infra.user.dto.UserClientAssociationDTO;
 import com.geosegbar.infra.user.dto.UserPasswordUpdateDTO;
 import com.geosegbar.infra.user.dto.UserUpdateDTO;
@@ -26,6 +30,8 @@ public class UserService {
     
     private final UserRepository userRepository;
     private final ClientRepository clientRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final TokenService tokenService;
 
     @Transactional
     public void deleteById(Long id) {
@@ -41,6 +47,7 @@ public class UserService {
             throw new DuplicateResourceException("Já existe um usuário com o email informado!");
         }
         
+        userEntity.setPassword(passwordEncoder.encode(userEntity.getPassword()));
         return userRepository.save(userEntity);
     }
 
@@ -90,6 +97,18 @@ public class UserService {
         user.setClients(clients);
         
         return userRepository.save(user);
+    }
+
+    public LoginResponseDTO login(LoginRequestDTO userDTO) {
+        UserEntity user = userRepository.findByEmail(userDTO.email())
+        .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+
+        if(passwordEncoder.matches(userDTO.password(), user.getPassword())){
+            String token = tokenService.generateToken(user);
+            return new LoginResponseDTO(user.getId(), user.getName(), user.getEmail(), user.getPhone(), user.getSex(), token);
+        }
+
+        throw new InvalidInputException("Credenciais incorretas!"); 
     }
 
     public UserEntity findById(Long id) {

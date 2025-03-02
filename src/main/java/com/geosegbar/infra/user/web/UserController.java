@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.UserEntity;
+import com.geosegbar.infra.user.dto.LoginRequestDTO;
+import com.geosegbar.infra.user.dto.LoginResponseDTO;
 import com.geosegbar.infra.user.dto.UserClientAssociationDTO;
 import com.geosegbar.infra.user.dto.UserPasswordUpdateDTO;
 import com.geosegbar.infra.user.dto.UserUpdateDTO;
@@ -44,11 +46,18 @@ public class UserController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping
+    @PostMapping("/register")
     public ResponseEntity<WebResponseEntity<UserEntity>> createUser(@Valid @RequestBody UserEntity user) {
         UserEntity createdUser = userService.save(user);
         WebResponseEntity<UserEntity> response = WebResponseEntity.success(createdUser, "Usuário criado com sucesso!");
         return new ResponseEntity<>(response, HttpStatus.CREATED);
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<WebResponseEntity<LoginResponseDTO>> login(@Valid @RequestBody LoginRequestDTO userDTO) {
+        LoginResponseDTO loggedUser = userService.login(userDTO);
+        WebResponseEntity<LoginResponseDTO> response = WebResponseEntity.success(loggedUser, "Usuário logado com sucesso!");
+        return ResponseEntity.ok(response);
     }
 
     @PutMapping("/{id}")

@@ -1,5 +1,6 @@
 package com.geosegbar.infra.user.service;
 
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -7,9 +8,12 @@ import java.util.Set;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import com.geosegbar.common.email.EmailService;
+import com.geosegbar.common.utils.GenerateRandomCode;
 import com.geosegbar.configs.security.TokenService;
 import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.UserEntity;
+import com.geosegbar.entities.VerificationCodeEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
@@ -20,6 +24,8 @@ import com.geosegbar.infra.user.dto.UserClientAssociationDTO;
 import com.geosegbar.infra.user.dto.UserPasswordUpdateDTO;
 import com.geosegbar.infra.user.dto.UserUpdateDTO;
 import com.geosegbar.infra.user.persistence.jpa.UserRepository;
+import com.geosegbar.infra.verification_code.dto.VerifyCodeRequestDTO;
+import com.geosegbar.infra.verification_code.persistence.jpa.VerificationCodeRepository;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +38,8 @@ public class UserService {
     private final ClientRepository clientRepository;
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokenService;
+    private final VerificationCodeRepository verificationCodeRepository;
+    private final EmailService emailService;
 
     @Transactional
     public void deleteById(Long id) {
@@ -114,6 +122,68 @@ public class UserService {
     public UserEntity findById(Long id) {
         return userRepository.findById(id).
         orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+    }
+
+
+    @Transactional
+    public void initiateLogin(LoginRequestDTO userDTO) {
+        UserEntity user = userRepository.findByEmail(userDTO.email())
+            .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+
+        if (!passwordEncoder.matches(userDTO.password(), user.getPassword())) {
+            throw new InvalidInputException("Credenciais incorretas!");
+        }
+        
+        // Gerar um código aleatório de 6 dígitos
+        String verificationCode = GenerateRandomCode.generateRandomCode();
+        
+        // Salvar o código no banco de dados
+        VerificationCodeEntity codeEntity = new VerificationCodeEntity();
+        codeEntity.setCode(verificationCode);
+        codeEntity.setUser(user);
+        codeEntity.setUsed(false);
+        codeEntity.setExpiryDate(LocalDateTime.now().plusMinutes(10)); // Código válido por 10 minutos
+        
+        verificationCodeRepository.save(codeEntity);
+        
+        // Enviar o código por email
+        emailService.sendVerificationCode(user.getEmail(), verificationCode);
+    }
+
+
+    @Transactional
+    public LoginResponseDTO verifyCodeAndLogin(VerifyCodeRequestDTO verifyRequest) {
+        UserEntity user = userRepository.findByEmail(verifyRequest.getEmail())
+            .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+        
+        // Buscar o código de verificação mais recente e não utilizado para o usuário
+        VerificationCodeEntity codeEntity = verificationCodeRepository
+            .findByUserAndUsedFalseOrderByExpiryDateDesc(user)
+            .orElseThrow(() -> new NotFoundException("Código de verificação não encontrado ou expirado!"));
+        
+        // Verificar se o código corresponde e se ainda é válido
+        if (!codeEntity.getCode().equals(verifyRequest.getCode())) {
+            throw new InvalidInputException("Código de verificação inválido!");
+        }
+        
+        if (LocalDateTime.now().isAfter(codeEntity.getExpiryDate())) {
+            throw new InvalidInputException("Código de verificação expirado!");
+        }
+        
+        // Marcar o código como utilizado
+        codeEntity.setUsed(true);
+        verificationCodeRepository.save(codeEntity);
+        
+        // Gerar token e retornar resposta de login bem-sucedido
+        String token = tokenService.generateToken(user);
+        return new LoginResponseDTO(
+            user.getId(), 
+            user.getName(), 
+            user.getEmail(), 
+            user.getPhone(), 
+            user.getSex(), 
+            token
+        );
     }
 
     public List<UserEntity> findAll() {

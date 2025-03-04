@@ -21,6 +21,7 @@ import com.geosegbar.infra.user.dto.UserClientAssociationDTO;
 import com.geosegbar.infra.user.dto.UserPasswordUpdateDTO;
 import com.geosegbar.infra.user.dto.UserUpdateDTO;
 import com.geosegbar.infra.user.service.UserService;
+import com.geosegbar.infra.verification_code.dto.VerifyCodeRequestDTO;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -57,6 +58,23 @@ public class UserController {
     public ResponseEntity<WebResponseEntity<LoginResponseDTO>> login(@Valid @RequestBody LoginRequestDTO userDTO) {
         LoginResponseDTO loggedUser = userService.login(userDTO);
         WebResponseEntity<LoginResponseDTO> response = WebResponseEntity.success(loggedUser, "Usuário logado com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
+
+    @PostMapping("/login/initiate")
+    public ResponseEntity<WebResponseEntity<Void>> initiateLogin(@Valid @RequestBody LoginRequestDTO userDTO) {
+        userService.initiateLogin(userDTO);
+        WebResponseEntity<Void> response = WebResponseEntity.success(null, 
+            "Código de verificação enviado para seu email!");
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/login/verify")
+    public ResponseEntity<WebResponseEntity<LoginResponseDTO>> verifyAndLogin(@Valid @RequestBody VerifyCodeRequestDTO verifyRequest) {
+        LoginResponseDTO loggedUser = userService.verifyCodeAndLogin(verifyRequest);
+        WebResponseEntity<LoginResponseDTO> response = WebResponseEntity.success(loggedUser, 
+            "Usuário autenticado com sucesso!");
         return ResponseEntity.ok(response);
     }
 

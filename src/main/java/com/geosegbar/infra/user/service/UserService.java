@@ -134,10 +134,8 @@ public class UserService {
             throw new InvalidInputException("Credenciais incorretas!");
         }
         
-        // Gerar um código aleatório de 6 dígitos
         String verificationCode = GenerateRandomCode.generateRandomCode();
         
-        // Salvar o código no banco de dados
         VerificationCodeEntity codeEntity = new VerificationCodeEntity();
         codeEntity.setCode(verificationCode);
         codeEntity.setUser(user);
@@ -146,7 +144,6 @@ public class UserService {
         
         verificationCodeRepository.save(codeEntity);
         
-        // Enviar o código por email
         emailService.sendVerificationCode(user.getEmail(), verificationCode);
     }
 
@@ -156,12 +153,10 @@ public class UserService {
         UserEntity user = userRepository.findByEmail(verifyRequest.getEmail())
             .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
         
-        // Buscar o código de verificação mais recente e não utilizado para o usuário
         VerificationCodeEntity codeEntity = verificationCodeRepository
-            .findByUserAndUsedFalseOrderByExpiryDateDesc(user)
+            .findLatestActiveByUser(user)
             .orElseThrow(() -> new NotFoundException("Código de verificação não encontrado ou expirado!"));
         
-        // Verificar se o código corresponde e se ainda é válido
         if (!codeEntity.getCode().equals(verifyRequest.getCode())) {
             throw new InvalidInputException("Código de verificação inválido!");
         }
@@ -170,11 +165,9 @@ public class UserService {
             throw new InvalidInputException("Código de verificação expirado!");
         }
         
-        // Marcar o código como utilizado
         codeEntity.setUsed(true);
         verificationCodeRepository.save(codeEntity);
         
-        // Gerar token e retornar resposta de login bem-sucedido
         String token = tokenService.generateToken(user);
         return new LoginResponseDTO(
             user.getId(), 

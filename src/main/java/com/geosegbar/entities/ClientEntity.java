@@ -99,6 +99,10 @@ public class ClientEntity {
     @Column(length = 150)
     private String emailContact;
 
+    @Size(max = 255, message = "A Logo deve ter no máximo 255 caracteres!")
+    @Column(length = 255)
+    private String logoPath;
+
     @JsonProperty(access = Access.WRITE_ONLY)
     @OneToMany(mappedBy = "client", fetch = FetchType.LAZY)
     private Set<DamEntity> dams = new HashSet<>();

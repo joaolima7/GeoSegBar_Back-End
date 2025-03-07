@@ -3,11 +3,13 @@ package com.geosegbar.infra.client.service;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
+import com.geosegbar.infra.file_storage.FileStorageService;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 public class ClientService {
 
     private final ClientRepository clientRepository;
+    private final FileStorageService fileStorageService;
 
     @Transactional
     public void deleteById(Long id) {
@@ -59,6 +62,20 @@ public class ClientService {
         }
 
         return clientRepository.save(clientEntity);
+    }
+
+        @Transactional
+    public ClientEntity saveLogo(Long clientId, MultipartFile logo) {
+        ClientEntity client = findById(clientId);
+        
+        if (client.getLogoPath() != null) {
+            fileStorageService.deleteFile(client.getLogoPath());
+        }
+        
+        String logoUrl = fileStorageService.storeFile(logo, "client-logos");
+        client.setLogoPath(logoUrl);
+        
+        return clientRepository.save(client);
     }
 
     public ClientEntity findById(Long id) {

@@ -32,3 +32,9 @@ build/
 ### VS Code ###
 .vscode/
 .env
+
+
+/uploads/ uploads/ **/uploads/
+*.jpg *.jpeg *.png *.gif *.bmp *.tiff *.ico
+/uploads/ !uploads/.gitkeep
+

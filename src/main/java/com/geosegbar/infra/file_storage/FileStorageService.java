@@ -16,19 +16,19 @@ import java.util.UUID;
 @Service
 public class FileStorageService {
 
-    @Value("${file.upload-dir:uploads}")
+    @Value("${file.upload-dir:target/uploads}")
     private String uploadDir;
     
-    @Value("${file.base-url:http://localhost:8080/uploads/}")
+    @Value("${file.base-url:http://backend.geometrisa-prod.com.br:9090/uploads/}")
     private String baseUrl;
 
     public String storeFile(MultipartFile file, String subDirectory) {
         try {
-            // Cria diretórios se não existirem
+            // Create directories if they don't exist
             Path uploadPath = Paths.get(uploadDir + "/" + subDirectory).toAbsolutePath().normalize();
             Files.createDirectories(uploadPath);
             
-            // Gera nome único para o arquivo para evitar substituições
+            // Generate unique filename to prevent overwrites
             String originalFileName = file.getOriginalFilename();
             String fileExtension = "";
             
@@ -38,15 +38,15 @@ public class FileStorageService {
             
             String fileName = UUID.randomUUID() + fileExtension;
             
-            // Salva o arquivo no sistema de arquivos
+            // Save file to filesystem
             Path targetLocation = uploadPath.resolve(fileName);
             Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
             
-            // Retorna a URL para o arquivo
+            // Return URL to file using configured base URL
             return baseUrl + subDirectory + "/" + fileName;
             
         } catch (IOException ex) {
-            throw new FileStorageException("Não foi possível armazenar o arquivo.", ex);
+            throw new FileStorageException("Could not store file.", ex);
         }
     }
     
@@ -58,7 +58,7 @@ public class FileStorageService {
                 Files.deleteIfExists(filePath);
             }
         } catch (IOException ex) {
-            throw new FileStorageException("Não foi possível excluir o arquivo.", ex);
+            throw new FileStorageException("Could not delete file.", ex);
         }
     }
 }

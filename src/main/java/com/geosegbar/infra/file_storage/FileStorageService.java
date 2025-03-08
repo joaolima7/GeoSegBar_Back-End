@@ -24,11 +24,9 @@ public class FileStorageService {
 
     public String storeFile(MultipartFile file, String subDirectory) {
         try {
-            // Create directories if they don't exist
             Path uploadPath = Paths.get(uploadDir + "/" + subDirectory).toAbsolutePath().normalize();
             Files.createDirectories(uploadPath);
             
-            // Generate unique filename to prevent overwrites
             String originalFileName = file.getOriginalFilename();
             String fileExtension = "";
             
@@ -38,11 +36,9 @@ public class FileStorageService {
             
             String fileName = UUID.randomUUID() + fileExtension;
             
-            // Save file to filesystem
             Path targetLocation = uploadPath.resolve(fileName);
             Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
             
-            // Return URL to file using configured base URL
             return baseUrl + subDirectory + "/" + fileName;
             
         } catch (IOException ex) {

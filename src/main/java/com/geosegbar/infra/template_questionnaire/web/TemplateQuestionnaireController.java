@@ -41,6 +41,13 @@ public class TemplateQuestionnaireController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/checklist/{checklistId}")
+    public ResponseEntity<WebResponseEntity<List<TemplateQuestionnaireEntity>>> getTemplatesByChecklistId(@PathVariable Long checklistId) {
+        List<TemplateQuestionnaireEntity> templates = templateQuestionnaireService.findByChecklistId(checklistId);
+        WebResponseEntity<List<TemplateQuestionnaireEntity>> response = WebResponseEntity.success(templates, "Templates do checklist obtidos com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping
     public ResponseEntity<WebResponseEntity<TemplateQuestionnaireEntity>> createTemplate(@Valid @RequestBody TemplateQuestionnaireEntity template) {
         TemplateQuestionnaireEntity created = templateQuestionnaireService.save(template);

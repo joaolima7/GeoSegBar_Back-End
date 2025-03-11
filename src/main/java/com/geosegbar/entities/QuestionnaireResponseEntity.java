@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import org.hibernate.annotations.CreationTimestamp;
@@ -52,6 +53,12 @@ public class QuestionnaireResponseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "dam_id")
     private DamEntity dam;
+
+    @NotNull(message = "Informe a resposta de checklist à qual este questionário pertence!")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "checklist_response_id", nullable = false)
+    @JsonBackReference(value = "checklist-questionnaire-responses")
+    private ChecklistResponseEntity checklistResponse;
 
     //Adicionar nullable posteriormente
     @Column(name = "created_at", updatable = false)

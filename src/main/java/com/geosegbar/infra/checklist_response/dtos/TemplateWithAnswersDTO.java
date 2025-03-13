@@ -14,5 +14,4 @@ public class TemplateWithAnswersDTO {
     private String templateName;
     private Long questionnaireResponseId;
     private List<QuestionWithAnswerDTO> questionsWithAnswers;
-    private Long userId;
 }

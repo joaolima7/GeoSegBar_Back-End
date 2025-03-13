@@ -44,10 +44,6 @@ public class QuestionnaireResponseEntity {
     @JoinColumn(name = "template_questionnaire_id", nullable = false)
     private TemplateQuestionnaireEntity templateQuestionnaire;
 
-    @NotNull(message = "Informe o usuário que respondeu o checklist!")
-    @Column(name = "user_id", nullable = false)
-    private Long userId;
-
     @NotNull(message = "Informe a barragem que corresponde a esse checklist!")
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "dam_id", nullable = false)

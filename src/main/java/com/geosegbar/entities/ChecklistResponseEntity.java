@@ -52,6 +52,11 @@ public class ChecklistResponseEntity {
     @JoinColumn(name = "dam_id", nullable = false)
     private DamEntity dam;
     
+    @NotNull(message = "Informe o usuário que respondeu esse checklist!")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private UserEntity user;
+
     @OneToMany(mappedBy = "checklistResponse", fetch = FetchType.LAZY,
                cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference(value = "checklist-questionnaire-responses")

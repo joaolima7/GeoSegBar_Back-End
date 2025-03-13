@@ -21,6 +21,10 @@ public class ChecklistResponseSubmissionDTO {
     
     @NotBlank(message = "Nome do checklist é obrigatório!")
     private String checklistName;
+
+    @NotNull(message = "ID do usuário é obrigatório!")
+    @Positive(message = "ID do usuário deve ser um número positivo!")
+    private Long userId;
     
     @NotEmpty(message = "É necessário incluir pelo menos um questionário!")
     @Valid

@@ -14,6 +14,7 @@ import com.geosegbar.entities.OptionEntity;
 import com.geosegbar.entities.QuestionEntity;
 import com.geosegbar.entities.QuestionnaireResponseEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
+import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.FileStorageException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.answer.persistence.jpa.AnswerRepository;
@@ -29,6 +30,7 @@ import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
 import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
 import com.geosegbar.infra.questionnaire_response.persistence.jpa.QuestionnaireResponseRepository;
 import com.geosegbar.infra.template_questionnaire.persistence.jpa.TemplateQuestionnaireRepository;
+import com.geosegbar.infra.user.persistence.jpa.UserRepository;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +48,7 @@ public class ChecklistResponseSubmissionService {
     private final TemplateQuestionnaireRepository templateQuestionnaireRepository;
     private final FileStorageService fileStorageService;
     private final DamService damService;
+    private final UserRepository userRepository; 
 
     @Transactional
     public ChecklistResponseEntity submitChecklistResponse(ChecklistResponseSubmissionDTO submissionDto) {
@@ -66,32 +69,34 @@ public class ChecklistResponseSubmissionService {
         return checklistResponse;
     }
     
-    private ChecklistResponseEntity createChecklistResponse(ChecklistResponseSubmissionDTO submissionDto) {
-        DamEntity dam = damService.findById(submissionDto.getDamId());
-        
-        ChecklistResponseEntity checklistResponse = new ChecklistResponseEntity();
-        checklistResponse.setChecklistName(submissionDto.getChecklistName());
-        checklistResponse.setDam(dam);
-        
-        return checklistResponseRepository.save(checklistResponse);
-    }
+private ChecklistResponseEntity createChecklistResponse(ChecklistResponseSubmissionDTO submissionDto) {
+    DamEntity dam = damService.findById(submissionDto.getDamId());
+    UserEntity user = userRepository.findById(submissionDto.getUserId())
+        .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+
+    ChecklistResponseEntity checklistResponse = new ChecklistResponseEntity();
+    checklistResponse.setChecklistName(submissionDto.getChecklistName());
+    checklistResponse.setDam(dam);
+    checklistResponse.setUser(user);
+
+    return checklistResponseRepository.save(checklistResponse);
+}
     
-    private QuestionnaireResponseEntity createQuestionnaireResponse(
-            QuestionnaireResponseSubmissionDTO questionnaireDto, 
-            ChecklistResponseEntity checklistResponse) {
-        
-        TemplateQuestionnaireEntity templateQuestionnaire = templateQuestionnaireRepository
-            .findById(questionnaireDto.getTemplateQuestionnaireId())
-            .orElseThrow(() -> new NotFoundException("Modelo de questionário não encontrado: " + questionnaireDto.getTemplateQuestionnaireId()));
-        
-        QuestionnaireResponseEntity questionnaireResponse = new QuestionnaireResponseEntity();
-        questionnaireResponse.setTemplateQuestionnaire(templateQuestionnaire);
-        questionnaireResponse.setUserId(questionnaireDto.getUserId());
-        questionnaireResponse.setChecklistResponse(checklistResponse);
-        questionnaireResponse.setDam(checklistResponse.getDam());
-        
-        return questionnaireResponseRepository.save(questionnaireResponse);
-    }
+private QuestionnaireResponseEntity createQuestionnaireResponse(
+        QuestionnaireResponseSubmissionDTO questionnaireDto,
+        ChecklistResponseEntity checklistResponse) {
+
+    TemplateQuestionnaireEntity templateQuestionnaire = templateQuestionnaireRepository
+        .findById(questionnaireDto.getTemplateQuestionnaireId())
+        .orElseThrow(() -> new NotFoundException("Modelo de questionário não encontrado!"));
+
+    QuestionnaireResponseEntity questionnaireResponse = new QuestionnaireResponseEntity();
+    questionnaireResponse.setTemplateQuestionnaire(templateQuestionnaire);
+    questionnaireResponse.setChecklistResponse(checklistResponse);
+    questionnaireResponse.setDam(checklistResponse.getDam());
+
+    return questionnaireResponseRepository.save(questionnaireResponse);
+}
     
     private AnswerEntity createAnswer(AnswerSubmissionDTO answerDto, QuestionnaireResponseEntity questionnaireResponse) {
         QuestionEntity question = questionRepository

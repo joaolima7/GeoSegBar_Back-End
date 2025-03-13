@@ -15,4 +15,6 @@ public class ChecklistResponseDetailDTO {
     private String checklistName;
     private LocalDateTime createdAt;
     private List<TemplateWithAnswersDTO> templates;
+    private Long userId;
+    private String userName;    
 }

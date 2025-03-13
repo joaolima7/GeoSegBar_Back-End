@@ -114,6 +114,8 @@ public class ChecklistResponseService {
         dto.setId(checklistResponse.getId());
         dto.setChecklistName(checklistResponse.getChecklistName());
         dto.setCreatedAt(checklistResponse.getCreatedAt());
+        dto.setUserId(checklistResponse.getUser().getId());
+        dto.setUserName(checklistResponse.getUser().getName());
         
         // Buscar questionários respondidos para este checklist
         List<QuestionnaireResponseEntity> questionnaireResponses = questionnaireResponseRepository
@@ -143,8 +145,7 @@ public class ChecklistResponseService {
                             templateId, 
                             template.getName(),
                             qResponse.getId(),
-                            new ArrayList<>(),
-                            qResponse.getUserId()
+                            new ArrayList<>()   
                     ));
             
             // Processa as respostas

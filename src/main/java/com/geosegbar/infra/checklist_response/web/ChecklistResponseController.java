@@ -1,7 +1,9 @@
 package com.geosegbar.infra.checklist_response.web;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -11,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
@@ -93,5 +96,32 @@ public class ChecklistResponseController {
         );
         
         return ResponseEntity.ok(webResponse);
+    }
+
+    @GetMapping("/user/{userId}/detail")
+    public ResponseEntity<WebResponseEntity<List<ChecklistResponseDetailDTO>>> getDetailedUserChecklistResponses(@PathVariable Long userId) {
+    List<ChecklistResponseDetailDTO> responses = checklistResponseService.findChecklistResponsesByUserId(userId);
+    
+    WebResponseEntity<List<ChecklistResponseDetailDTO>> response = WebResponseEntity.success(
+            responses, 
+            "Respostas de checklist do usuário obtidas com sucesso!"
+    );
+    
+    return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/date-range/detail")
+    public ResponseEntity<WebResponseEntity<List<ChecklistResponseDetailDTO>>> getDetailedChecklistResponsesByDateRange(
+        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
+        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
+    
+    List<ChecklistResponseDetailDTO> responses = checklistResponseService.findChecklistResponsesByDateRange(startDate, endDate);
+    
+    WebResponseEntity<List<ChecklistResponseDetailDTO>> response = WebResponseEntity.success(
+            responses, 
+            "Respostas de checklist no período especificado obtidas com sucesso!"
+    );
+    
+    return ResponseEntity.ok(response);
     }
 }

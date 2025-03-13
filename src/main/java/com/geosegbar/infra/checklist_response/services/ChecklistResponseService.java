@@ -1,5 +1,6 @@
 package com.geosegbar.infra.checklist_response.services;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -191,5 +192,31 @@ public class ChecklistResponseService {
         dto.setTemplates(templates);
         
         return dto;
+    }
+
+    public List<ChecklistResponseDetailDTO> findChecklistResponsesByUserId(Long userId) {
+        // Busca todas as respostas de checklist associadas ao usuário
+        List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByUserId(userId);
+        if (checklistResponses.isEmpty()) {
+            throw new NotFoundException("Nenhuma resposta de checklist encontrada para o Usuário com id: " + userId);
+        }
+        
+        // Converte cada resposta de checklist para o formato detalhado
+        return checklistResponses.stream()
+                .map(this::convertToDetailDto)
+                .collect(Collectors.toList());
+    }
+
+    public List<ChecklistResponseDetailDTO> findChecklistResponsesByDateRange(LocalDateTime startDate, LocalDateTime endDate) {
+    // Busca todas as respostas de checklist dentro do intervalo de datas
+    List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByCreatedAtBetween(startDate, endDate);
+    if (checklistResponses.isEmpty()) {
+        throw new NotFoundException("Nenhuma resposta de checklist encontrada no período especificado");
+    }
+    
+    // Converte cada resposta de checklist para o formato detalhado
+    return checklistResponses.stream()
+            .map(this::convertToDetailDto)
+            .collect(Collectors.toList());
     }
 }

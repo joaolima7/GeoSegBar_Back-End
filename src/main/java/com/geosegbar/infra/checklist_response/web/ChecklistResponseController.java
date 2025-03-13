@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.ChecklistResponseEntity;
+import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseDetailDTO;
 import com.geosegbar.infra.checklist_response.services.ChecklistResponseService;
 
 import jakarta.validation.Valid;
@@ -68,5 +69,29 @@ public class ChecklistResponseController {
         checklistResponseService.deleteById(id);
         WebResponseEntity<Void> response = WebResponseEntity.success(null, "Resposta de checklist excluída com sucesso!");
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/dam/{damId}/detail")
+    public ResponseEntity<WebResponseEntity<List<ChecklistResponseDetailDTO>>> getDetailedDamChecklistResponses(@PathVariable Long damId) {
+        List<ChecklistResponseDetailDTO> responses = checklistResponseService.findChecklistResponsesByDamId(damId);
+        
+        WebResponseEntity<List<ChecklistResponseDetailDTO>> response = WebResponseEntity.success(
+                responses, 
+                "Respostas de checklist da barragem obtidas com sucesso!"
+        );
+        
+        return ResponseEntity.ok(response);
+    }
+    
+    @GetMapping("/{id}/detail")
+    public ResponseEntity<WebResponseEntity<ChecklistResponseDetailDTO>> getDetailedChecklistResponse(@PathVariable Long id) {
+        ChecklistResponseDetailDTO response = checklistResponseService.findChecklistResponseById(id);
+        
+        WebResponseEntity<ChecklistResponseDetailDTO> webResponse = WebResponseEntity.success(
+                response, 
+                "Detalhes da resposta de checklist obtidos com sucesso!"
+        );
+        
+        return ResponseEntity.ok(webResponse);
     }
 }

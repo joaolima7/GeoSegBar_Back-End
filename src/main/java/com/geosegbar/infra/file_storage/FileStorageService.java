@@ -6,6 +6,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.geosegbar.exceptions.FileStorageException;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,6 +44,36 @@ public class FileStorageService {
             
         } catch (IOException ex) {
             throw new FileStorageException("Could not store file.", ex);
+        }
+    }
+
+        public String storeFileFromBytes(byte[] fileBytes, String originalFileName, String contentType, String subDirectory) {
+        try {
+            Path uploadPath = Paths.get(uploadDir + "/" + subDirectory).toAbsolutePath().normalize();
+            Files.createDirectories(uploadPath);
+            
+            String fileExtension = "";
+            if (originalFileName != null && originalFileName.contains(".")) {
+                fileExtension = originalFileName.substring(originalFileName.lastIndexOf("."));
+            } else if (contentType != null) {
+                switch (contentType) {
+                    case "image/jpeg": fileExtension = ".jpg"; break;
+                    case "image/png": fileExtension = ".png"; break;
+                    case "image/gif": fileExtension = ".gif"; break;
+                    case "image/bmp": fileExtension = ".bmp"; break;
+                    default: fileExtension = "";
+                }
+            }
+            
+            String fileName = UUID.randomUUID() + fileExtension;
+            
+            Path targetLocation = uploadPath.resolve(fileName);
+            Files.copy(new ByteArrayInputStream(fileBytes), targetLocation, StandardCopyOption.REPLACE_EXISTING);
+            
+            return baseUrl + subDirectory + "/" + fileName;
+            
+        } catch (IOException ex) {
+            throw new FileStorageException("Could not store file from bytes.", ex);
         }
     }
     

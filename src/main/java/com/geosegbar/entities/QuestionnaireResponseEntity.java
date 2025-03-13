@@ -45,13 +45,12 @@ public class QuestionnaireResponseEntity {
     private TemplateQuestionnaireEntity templateQuestionnaire;
 
     @NotNull(message = "Informe o usuário que respondeu o checklist!")
-    @Column(name = "user_id", nullable = true)
+    @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    //Adicionar nullable posteriormente
     @NotNull(message = "Informe a barragem que corresponde a esse checklist!")
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "dam_id")
+    @JoinColumn(name = "dam_id", nullable = false)
     private DamEntity dam;
 
     @NotNull(message = "Informe a resposta de checklist à qual este questionário pertence!")
@@ -60,8 +59,7 @@ public class QuestionnaireResponseEntity {
     @JsonBackReference(value = "checklist-questionnaire-responses")
     private ChecklistResponseEntity checklistResponse;
 
-    //Adicionar nullable posteriormente
-    @Column(name = "created_at", updatable = false)
+    @Column(name = "created_at", updatable = false, nullable = false)
     @CreationTimestamp
     private LocalDateTime createdAt;
 

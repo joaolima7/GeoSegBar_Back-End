@@ -43,7 +43,6 @@ public class QuestionEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "type", nullable = false)
-    @NotBlank(message = "Tipo da pergunta é obrigatório!")
     private TypeQuestionEnum type;
 
     @ManyToMany(fetch = FetchType.LAZY)

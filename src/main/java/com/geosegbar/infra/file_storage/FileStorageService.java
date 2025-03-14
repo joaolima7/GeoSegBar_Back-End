@@ -47,7 +47,7 @@ public class FileStorageService {
         }
     }
 
-        public String storeFileFromBytes(byte[] fileBytes, String originalFileName, String contentType, String subDirectory) {
+    public String storeFileFromBytes(byte[] fileBytes, String originalFileName, String contentType, String subDirectory) {
         try {
             Path uploadPath = Paths.get(uploadDir + "/" + subDirectory).toAbsolutePath().normalize();
             Files.createDirectories(uploadPath);

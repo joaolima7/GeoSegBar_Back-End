@@ -54,14 +54,6 @@ public class UserController {
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
-    @PostMapping("/login")
-    public ResponseEntity<WebResponseEntity<LoginResponseDTO>> login(@Valid @RequestBody LoginRequestDTO userDTO) {
-        LoginResponseDTO loggedUser = userService.login(userDTO);
-        WebResponseEntity<LoginResponseDTO> response = WebResponseEntity.success(loggedUser, "Usuário logado com sucesso!");
-        return ResponseEntity.ok(response);
-    }
-
-
     @PostMapping("/login/initiate")
     public ResponseEntity<WebResponseEntity<Void>> initiateLogin(@Valid @RequestBody LoginRequestDTO userDTO) {
         userService.initiateLogin(userDTO);

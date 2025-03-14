@@ -2,12 +2,15 @@ package com.geosegbar.infra.checklist_submission.services;
 
 import java.util.Base64;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.AnswerEntity;
 import com.geosegbar.entities.AnswerPhotoEntity;
+import com.geosegbar.entities.ChecklistEntity;
 import com.geosegbar.entities.ChecklistResponseEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.OptionEntity;
@@ -16,9 +19,11 @@ import com.geosegbar.entities.QuestionnaireResponseEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.FileStorageException;
+import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.answer.persistence.jpa.AnswerRepository;
 import com.geosegbar.infra.answer_photo.persistence.jpa.AnswerPhotoRepository;
+import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
 import com.geosegbar.infra.checklist_response.persistence.jpa.ChecklistResponseRepository;
 import com.geosegbar.infra.checklist_submission.dtos.AnswerSubmissionDTO;
 import com.geosegbar.infra.checklist_submission.dtos.ChecklistResponseSubmissionDTO;
@@ -49,25 +54,125 @@ public class ChecklistResponseSubmissionService {
     private final FileStorageService fileStorageService;
     private final DamService damService;
     private final UserRepository userRepository; 
+    private final ChecklistRepository checklistRepository;
 
-    @Transactional
-    public ChecklistResponseEntity submitChecklistResponse(ChecklistResponseSubmissionDTO submissionDto) {
-        // 1. Criar a ChecklistResponse
-        ChecklistResponseEntity checklistResponse = createChecklistResponse(submissionDto);
+
+@Transactional
+public ChecklistResponseEntity submitChecklistResponse(ChecklistResponseSubmissionDTO submissionDto) {
+    ChecklistResponseEntity checklistResponse = createChecklistResponse(submissionDto);
+    
+    validateAllRequiredQuestionnaires(submissionDto);
+    
+    for (QuestionnaireResponseSubmissionDTO questionnaireDto : submissionDto.getQuestionnaireResponses()) {
+        validateAllQuestionsAnswered(questionnaireDto);
         
-        // 2. Processar cada questionário
-        for (QuestionnaireResponseSubmissionDTO questionnaireDto : submissionDto.getQuestionnaireResponses()) {
-            QuestionnaireResponseEntity questionnaireResponse = createQuestionnaireResponse(questionnaireDto, checklistResponse);
-            
-            // 3. Processar cada resposta do questionário
-            for (AnswerSubmissionDTO answerDto : questionnaireDto.getAnswers()) {
-                createAnswer(answerDto, questionnaireResponse);
-            }
+        QuestionnaireResponseEntity questionnaireResponse = createQuestionnaireResponse(questionnaireDto, checklistResponse);
+        
+        for (AnswerSubmissionDTO answerDto : questionnaireDto.getAnswers()) {
+            createAnswer(answerDto, questionnaireResponse);
         }
-        
-        // 4. Retornar a ChecklistResponse salva com todas as relações
-        return checklistResponse;
     }
+    
+    return checklistResponse;
+}
+
+private void validateAllRequiredQuestionnaires(ChecklistResponseSubmissionDTO submissionDto) {
+    ChecklistEntity checklist = checklistRepository.findByNameIgnoreCase(submissionDto.getChecklistName())
+        .orElseThrow(() -> new NotFoundException("Checklist não encontrado com o nome: " + submissionDto.getChecklistName()));
+    
+    Set<TemplateQuestionnaireEntity> requiredTemplates = checklist.getTemplateQuestionnaires();
+    
+    Set<Long> requiredTemplateIds = requiredTemplates.stream()
+        .map(TemplateQuestionnaireEntity::getId)
+        .collect(Collectors.toSet());
+    
+    Set<Long> submittedTemplateIds = submissionDto.getQuestionnaireResponses().stream()
+        .map(QuestionnaireResponseSubmissionDTO::getTemplateQuestionnaireId)
+        .collect(Collectors.toSet());
+    
+    if (!submittedTemplateIds.containsAll(requiredTemplateIds)) {
+        Set<Long> missingTemplateIds = new HashSet<>(requiredTemplateIds);
+        missingTemplateIds.removeAll(submittedTemplateIds);
+        
+        List<String> missingTemplateNames = missingTemplateIds.stream()
+            .map(id -> {
+                TemplateQuestionnaireEntity template = templateQuestionnaireRepository.findById(id)
+                    .orElseThrow(() -> new NotFoundException("Template de questionário não encontrado: " + id));
+                return template.getName();
+            })
+            .collect(Collectors.toList());
+        
+        String errorMsg = String.format(
+            "Os seguintes questionários obrigatórios não foram incluídos no checklist '%s': %s",
+            checklist.getName(),
+            String.join(", ", missingTemplateNames)
+        );
+        
+        throw new InvalidInputException(errorMsg);
+    }
+    
+    if (!requiredTemplateIds.containsAll(submittedTemplateIds)) {
+        Set<Long> extraTemplateIds = new HashSet<>(submittedTemplateIds);
+        extraTemplateIds.removeAll(requiredTemplateIds);
+        
+        String errorMsg = String.format(
+            "Os seguintes questionários não pertencem ao checklist '%s': %s",
+            checklist.getName(),
+            extraTemplateIds
+        );
+        
+        throw new InvalidInputException(errorMsg);
+    }
+}
+
+private void validateAllQuestionsAnswered(QuestionnaireResponseSubmissionDTO questionnaireDto) {
+    TemplateQuestionnaireEntity template = templateQuestionnaireRepository
+        .findById(questionnaireDto.getTemplateQuestionnaireId())
+        .orElseThrow(() -> new NotFoundException("Modelo de questionário não encontrado: " + 
+                                                questionnaireDto.getTemplateQuestionnaireId()));
+    
+    Set<Long> templateQuestionIds = template.getTemplateQuestions().stream()
+        .map(tq -> tq.getQuestion().getId())
+        .collect(Collectors.toSet());
+    
+    Set<Long> answeredQuestionIds = questionnaireDto.getAnswers().stream()
+        .map(AnswerSubmissionDTO::getQuestionId)
+        .collect(Collectors.toSet());
+    
+    if (!answeredQuestionIds.containsAll(templateQuestionIds)) {
+        Set<Long> missingQuestionIds = new HashSet<>(templateQuestionIds);
+        missingQuestionIds.removeAll(answeredQuestionIds);
+        
+        List<String> missingQuestionTexts = missingQuestionIds.stream()
+            .map(id -> {
+                QuestionEntity question = questionRepository.findById(id)
+                    .orElseThrow(() -> new NotFoundException("Pergunta não encontrada: " + id));
+                return question.getQuestionText();
+            })
+            .collect(Collectors.toList());
+        
+        String errorMsg = String.format(
+            "As seguintes perguntas não foram respondidas para o questionário '%s': %s",
+            template.getName(),
+            String.join(", ", missingQuestionTexts)
+        );
+        
+        throw new InvalidInputException(errorMsg);
+    }
+    
+    if (!templateQuestionIds.containsAll(answeredQuestionIds)) {
+        Set<Long> extraQuestionIds = new HashSet<>(answeredQuestionIds);
+        extraQuestionIds.removeAll(templateQuestionIds);
+        
+        String errorMsg = String.format(
+            "As seguintes perguntas não pertencem ao questionário '%s': %s",
+            template.getName(),
+            extraQuestionIds
+        );
+        
+        throw new InvalidInputException(errorMsg);
+    }
+}
     
 private ChecklistResponseEntity createChecklistResponse(ChecklistResponseSubmissionDTO submissionDto) {
     DamEntity dam = damService.findById(submissionDto.getDamId());
@@ -110,7 +215,6 @@ private QuestionnaireResponseEntity createQuestionnaireResponse(
         answer.setLatitude(answerDto.getLatitude());
         answer.setLongitude(answerDto.getLongitude());
         
-        // Processar opções selecionadas
         if (answerDto.getSelectedOptionIds() != null && !answerDto.getSelectedOptionIds().isEmpty()) {
             Set<OptionEntity> options = new HashSet<>();
             for (Long optionId : answerDto.getSelectedOptionIds()) {
@@ -122,10 +226,8 @@ private QuestionnaireResponseEntity createQuestionnaireResponse(
             answer.setSelectedOptions(options);
         }
         
-        // Salvar a resposta para obter o ID
         AnswerEntity savedAnswer = answerRepository.save(answer);
         
-        // Processar fotos se houver
         if (answerDto.getPhotos() != null && !answerDto.getPhotos().isEmpty()) {
             for (PhotoSubmissionDTO photoDto : answerDto.getPhotos()) {
                 saveAnswerPhoto(photoDto, savedAnswer);
@@ -137,10 +239,8 @@ private QuestionnaireResponseEntity createQuestionnaireResponse(
     
     private AnswerPhotoEntity saveAnswerPhoto(PhotoSubmissionDTO photoDto, AnswerEntity answer) {
         try {
-            // Converter Base64 para bytes
             byte[] imageBytes = Base64.getDecoder().decode(photoDto.getBase64Image());
             
-            // Modificar o FileStorageService para aceitar bytes diretamente
             String photoUrl = fileStorageService.storeFileFromBytes(
                 imageBytes, 
                 photoDto.getFileName(), 
@@ -148,7 +248,6 @@ private QuestionnaireResponseEntity createQuestionnaireResponse(
                 "answer-photos"
             );
             
-            // Criar e salvar a entidade de foto
             AnswerPhotoEntity photo = new AnswerPhotoEntity();
             photo.setAnswer(answer);
             photo.setImagePath(photoUrl);

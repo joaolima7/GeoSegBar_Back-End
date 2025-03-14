@@ -107,18 +107,6 @@ public class UserService {
         return userRepository.save(user);
     }
 
-    public LoginResponseDTO login(LoginRequestDTO userDTO) {
-        UserEntity user = userRepository.findByEmail(userDTO.email())
-        .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
-
-        if(passwordEncoder.matches(userDTO.password(), user.getPassword())){
-            String token = tokenService.generateToken(user);
-            return new LoginResponseDTO(user.getId(), user.getName(), user.getEmail(), user.getPhone(), user.getSex(), token);
-        }
-
-        throw new InvalidInputException("Credenciais incorretas!"); 
-    }
-
     public UserEntity findById(Long id) {
         return userRepository.findById(id).
         orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
@@ -128,7 +116,7 @@ public class UserService {
     @Transactional
     public void initiateLogin(LoginRequestDTO userDTO) {
         UserEntity user = userRepository.findByEmail(userDTO.email())
-            .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+            .orElseThrow(() -> new NotFoundException("Credenciais incorretas!"));
 
         if (!passwordEncoder.matches(userDTO.password(), user.getPassword())) {
             throw new InvalidInputException("Credenciais incorretas!");
@@ -140,7 +128,7 @@ public class UserService {
         codeEntity.setCode(verificationCode);
         codeEntity.setUser(user);
         codeEntity.setUsed(false);
-        codeEntity.setExpiryDate(LocalDateTime.now().plusMinutes(10)); // Código válido por 10 minutos
+        codeEntity.setExpiryDate(LocalDateTime.now().plusMinutes(10)); 
         
         verificationCodeRepository.save(codeEntity);
         

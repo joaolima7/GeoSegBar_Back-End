@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.AnswerEntity;
@@ -20,6 +22,7 @@ import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.answer_photo.persistence.jpa.AnswerPhotoRepository;
 import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseDetailDTO;
 import com.geosegbar.infra.checklist_response.dtos.OptionInfoDTO;
+import com.geosegbar.infra.checklist_response.dtos.PagedChecklistResponseDTO;
 import com.geosegbar.infra.checklist_response.dtos.PhotoInfoDTO;
 import com.geosegbar.infra.checklist_response.dtos.QuestionWithAnswerDTO;
 import com.geosegbar.infra.checklist_response.dtos.TemplateWithAnswersDTO;
@@ -86,30 +89,24 @@ public class ChecklistResponseService {
     }
 
 
-    // Método para buscar checklists respondidos por uma dam
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByDamId(Long damId) {
-        // Verifica se a barragem existe
         DamEntity dam = damService.findById(damId);
         
-        // Busca todas as respostas de checklist associadas à barragem
         List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByDamId(damId);
         if (checklistResponses.isEmpty()) {
             throw new NotFoundException("Nenhuma resposta de checklist encontrada para a Barragem: " + dam.getName());
         }
         
-        // Converte cada resposta de checklist para o formato desejado
         return checklistResponses.stream()
                 .map(this::convertToDetailDto)
                 .collect(Collectors.toList());
     }
     
-    // Método para buscar um checklist respondido específico
     public ChecklistResponseDetailDTO findChecklistResponseById(Long checklistResponseId) {
         ChecklistResponseEntity checklistResponse = findById(checklistResponseId);
         return convertToDetailDto(checklistResponse);
     }
     
-    // Método para converter a entidade no DTO estruturado
     private ChecklistResponseDetailDTO convertToDetailDto(ChecklistResponseEntity checklistResponse) {
         ChecklistResponseDetailDTO dto = new ChecklistResponseDetailDTO();
         dto.setId(checklistResponse.getId());
@@ -118,11 +115,9 @@ public class ChecklistResponseService {
         dto.setUserId(checklistResponse.getUser().getId());
         dto.setUserName(checklistResponse.getUser().getName());
         
-        // Buscar questionários respondidos para este checklist
         List<QuestionnaireResponseEntity> questionnaireResponses = questionnaireResponseRepository
                 .findByChecklistResponseId(checklistResponse.getId());
         
-        // Caso não encontre pela referência direta, tenta buscar pelo damId (compatibilidade)
         if (questionnaireResponses == null || questionnaireResponses.isEmpty()) {
             questionnaireResponses = questionnaireResponseRepository
                     .findByDamIdAndCreatedAtBetween(
@@ -132,15 +127,12 @@ public class ChecklistResponseService {
                     );
         }
         
-        // Mapa para agrupar questionários por templateId
         Map<Long, TemplateWithAnswersDTO> templateMap = new HashMap<>();
         
-        // Processa cada questionário respondido
         for (QuestionnaireResponseEntity qResponse : questionnaireResponses) {
             TemplateQuestionnaireEntity template = qResponse.getTemplateQuestionnaire();
             Long templateId = template.getId();
             
-            // Cria ou recupera o DTO de template
             TemplateWithAnswersDTO templateDto = templateMap.computeIfAbsent(templateId, 
                     id -> new TemplateWithAnswersDTO(
                             templateId, 
@@ -149,27 +141,22 @@ public class ChecklistResponseService {
                             new ArrayList<>()   
                     ));
             
-            // Processa as respostas
             for (AnswerEntity answer : qResponse.getAnswers()) {
                 QuestionEntity question = answer.getQuestion();
                 
-                // Busca todas as opções da pergunta
                 List<OptionInfoDTO> allQuestionOptions = question.getOptions().stream()
                     .map(opt -> new OptionInfoDTO(opt.getId(), opt.getLabel()))
                     .collect(Collectors.toList());
                 
-                // Busca as fotos da resposta
                 List<AnswerPhotoEntity> photos = answerPhotoRepository.findByAnswerId(answer.getId());
                 List<PhotoInfoDTO> photoDtos = photos.stream()
                     .map(photo -> new PhotoInfoDTO(photo.getId(), photo.getImagePath()))
                     .collect(Collectors.toList());
                 
-                // Converte as opções selecionadas
                 List<OptionInfoDTO> optionDtos = answer.getSelectedOptions().stream()
                     .map(option -> new OptionInfoDTO(option.getId(), option.getLabel()))
                     .collect(Collectors.toList());
                 
-                // Cria o objeto QuestionWithAnswer
                 QuestionWithAnswerDTO questionWithAnswer = new QuestionWithAnswerDTO(
                         question.getId(),
                         question.getQuestionText(),
@@ -178,7 +165,7 @@ public class ChecklistResponseService {
                         answer.getComment(),
                         answer.getLatitude(),
                         answer.getLongitude(),
-                        optionDtos,  // selectedOptions
+                        optionDtos, 
                         photoDtos,
                         allQuestionOptions
                 );
@@ -187,7 +174,6 @@ public class ChecklistResponseService {
             }
         }
         
-        // Converte o mapa para lista de templates
         List<TemplateWithAnswersDTO> templates = new ArrayList<>(templateMap.values());
         dto.setTemplates(templates);
         
@@ -195,28 +181,111 @@ public class ChecklistResponseService {
     }
 
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByUserId(Long userId) {
-        // Busca todas as respostas de checklist associadas ao usuário
         List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByUserId(userId);
         if (checklistResponses.isEmpty()) {
             throw new NotFoundException("Nenhuma resposta de checklist encontrada para o Usuário com id: " + userId);
         }
         
-        // Converte cada resposta de checklist para o formato detalhado
         return checklistResponses.stream()
                 .map(this::convertToDetailDto)
                 .collect(Collectors.toList());
     }
 
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByDateRange(LocalDateTime startDate, LocalDateTime endDate) {
-    // Busca todas as respostas de checklist dentro do intervalo de datas
     List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByCreatedAtBetween(startDate, endDate);
     if (checklistResponses.isEmpty()) {
         throw new NotFoundException("Nenhuma resposta de checklist encontrada no período especificado");
     }
     
-    // Converte cada resposta de checklist para o formato detalhado
     return checklistResponses.stream()
             .map(this::convertToDetailDto)
             .collect(Collectors.toList());
+    }
+
+    public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByDamIdPaged(Long damId, Pageable pageable) {
+    damService.findById(damId);
+    
+    Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamId(damId, pageable);
+    if (page.isEmpty()) {
+        throw new NotFoundException("Nenhuma resposta de checklist encontrada para a Barragem com id: " + damId);
+    }
+    
+    List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
+            .map(this::convertToDetailDto)
+            .collect(Collectors.toList());
+    
+    return new PagedChecklistResponseDTO<>(
+            dtos,
+            page.getNumber(),
+            page.getSize(),
+            page.getTotalElements(),
+            page.getTotalPages(),
+            page.isLast(),
+            page.isFirst()
+    );
+}
+
+    public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByUserIdPaged(Long userId, Pageable pageable) {
+        Page<ChecklistResponseEntity> page = checklistResponseRepository.findByUserId(userId, pageable);
+        if (page.isEmpty()) {
+            throw new NotFoundException("Nenhuma resposta de checklist encontrada para o Usuário com id: " + userId);
+        }
+        
+        List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
+                .map(this::convertToDetailDto)
+                .collect(Collectors.toList());
+        
+        return new PagedChecklistResponseDTO<>(
+                dtos,
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages(),
+                page.isLast(),
+                page.isFirst()
+        );
+    }
+
+    public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByDateRangePaged(
+            LocalDateTime startDate, LocalDateTime endDate, Pageable pageable) {
+        Page<ChecklistResponseEntity> page = checklistResponseRepository.findByCreatedAtBetween(startDate, endDate, pageable);
+        if (page.isEmpty()) {
+            throw new NotFoundException("Nenhuma resposta de checklist encontrada no período especificado");
+        }
+        
+        List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
+                .map(this::convertToDetailDto)
+                .collect(Collectors.toList());
+        
+        return new PagedChecklistResponseDTO<>(
+                dtos,
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages(),
+                page.isLast(),
+                page.isFirst()
+        );
+    }
+
+    public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findAllChecklistResponsesPaged(Pageable pageable) {
+        Page<ChecklistResponseEntity> page = checklistResponseRepository.findAll(pageable);
+        if (page.isEmpty()) {
+            throw new NotFoundException("Nenhuma resposta de checklist encontrada");
+        }
+        
+        List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
+                .map(this::convertToDetailDto)
+                .collect(Collectors.toList());
+        
+        return new PagedChecklistResponseDTO<>(
+                dtos,
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages(),
+                page.isLast(),
+                page.isFirst()
+        );
     }
 }

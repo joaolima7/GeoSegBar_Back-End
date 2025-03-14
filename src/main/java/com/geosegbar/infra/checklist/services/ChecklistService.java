@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.ChecklistEntity;
+import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
 
@@ -28,6 +29,9 @@ public class ChecklistService {
 
     @Transactional
     public ChecklistEntity save(ChecklistEntity checklist) {
+        if(checklistRepository.existsByName(checklist.getName())){
+            throw new DuplicateResourceException("Já existe um checklist com este nome!");
+        }
         return checklistRepository.save(checklist);
     }
 
@@ -35,6 +39,11 @@ public class ChecklistService {
     public ChecklistEntity update(ChecklistEntity checklist) {
         checklistRepository.findById(checklist.getId())
             .orElseThrow(() -> new NotFoundException("Checklist não encontrada para atualização!"));
+
+        if(checklistRepository.existsByNameAndIdNot(checklist.getName(), checklist.getId())){
+            throw new DuplicateResourceException("Já existe um checklist com este nome!");
+        }
+
         return checklistRepository.save(checklist);
     }
 

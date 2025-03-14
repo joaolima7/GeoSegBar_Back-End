@@ -12,4 +12,7 @@ import com.geosegbar.entities.ChecklistEntity;
 public interface ChecklistRepository extends JpaRepository<ChecklistEntity, Long> {
     List<ChecklistEntity> findByDams_Id(Long damId);
     Optional<ChecklistEntity> findByNameIgnoreCase(String name);
+
+    boolean existsByName(String name);
+    boolean existsByNameAndIdNot(String name, Long id);
 }

@@ -28,7 +28,7 @@ public class ChecklistEntity {
     private Long id;
 
     @NotBlank(message = "Nome do checklist é obrigatório!")
-    @Column(name = "name", nullable = false)
+    @Column(name = "name", nullable = false, unique = true)
     private String name;
 
     @Column(name = "created_at", updatable = false)

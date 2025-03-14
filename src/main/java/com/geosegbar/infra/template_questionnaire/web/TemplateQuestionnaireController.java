@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
+import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionnaireCreationDTO;
 import com.geosegbar.infra.template_questionnaire.services.TemplateQuestionnaireService;
 
 import jakarta.validation.Valid;
@@ -52,6 +53,20 @@ public class TemplateQuestionnaireController {
     public ResponseEntity<WebResponseEntity<TemplateQuestionnaireEntity>> createTemplate(@Valid @RequestBody TemplateQuestionnaireEntity template) {
         TemplateQuestionnaireEntity created = templateQuestionnaireService.save(template);
         WebResponseEntity<TemplateQuestionnaireEntity> response = WebResponseEntity.success(created, "Template criado com sucesso!");
+        return new ResponseEntity<>(response, HttpStatus.CREATED);
+    }
+
+    @PostMapping("/with-questions")
+    public ResponseEntity<WebResponseEntity<TemplateQuestionnaireEntity>> createTemplateWithQuestions(
+            @Valid @RequestBody TemplateQuestionnaireCreationDTO creationDto) {
+        
+        TemplateQuestionnaireEntity created = templateQuestionnaireService.createWithQuestions(creationDto);
+        
+        WebResponseEntity<TemplateQuestionnaireEntity> response = WebResponseEntity.success(
+                created, 
+                "Template de questionário e suas questões criadas com sucesso!"
+        );
+        
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 

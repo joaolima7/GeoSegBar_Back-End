@@ -47,32 +47,25 @@ public class TemplateQuestionnaireService {
 
     @Transactional
     public TemplateQuestionnaireEntity createWithQuestions(TemplateQuestionnaireCreationDTO dto) {
-        // 1. Criar o template
         TemplateQuestionnaireEntity template = new TemplateQuestionnaireEntity();
         template.setName(dto.getName());
         template.setTemplateQuestions(new HashSet<>());
         
-        // 2. Salvar o template primeiro para obter um ID
         template = templateQuestionnaireRepository.save(template);
         
-        // 3. Processar as questões
         for (TemplateQuestionDTO questionDto : dto.getQuestions()) {
-            // 3.1 Buscar a questão
             QuestionEntity question = questionRepository.findById(questionDto.getQuestionId())
                 .orElseThrow(() -> new NotFoundException(
                     "Questão não encontrada com ID: " + questionDto.getQuestionId()));
             
-            // 3.2 Criar a associação entre template e questão
             TemplateQuestionnaireQuestionEntity templateQuestion = new TemplateQuestionnaireQuestionEntity();
             templateQuestion.setTemplateQuestionnaire(template);
             templateQuestion.setQuestion(question);
             templateQuestion.setOrderIndex(questionDto.getOrderIndex());
             
-            // 3.3 Adicionar à coleção do template
             template.getTemplateQuestions().add(templateQuestion);
         }
         
-        // 4. Salvar novamente para persistir as questões
         return templateQuestionnaireRepository.save(template);
     }
 

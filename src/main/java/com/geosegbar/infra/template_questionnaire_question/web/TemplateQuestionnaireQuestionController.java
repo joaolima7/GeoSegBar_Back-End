@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.TemplateQuestionnaireQuestionEntity;
+import com.geosegbar.infra.template_questionnaire_question.dtos.QuestionReorderDTO;
 import com.geosegbar.infra.template_questionnaire_question.services.TemplateQuestionnaireQuestionService;
 
 import jakarta.validation.Valid;
@@ -46,6 +47,22 @@ public class TemplateQuestionnaireQuestionController {
         TemplateQuestionnaireQuestionEntity created = templateQuestionnaireQuestionService.save(entity);
         WebResponseEntity<TemplateQuestionnaireQuestionEntity> response = WebResponseEntity.success(created, "Questão do template criada com sucesso!");
         return new ResponseEntity<>(response, HttpStatus.CREATED);
+    }
+
+    @PutMapping("/reorder")
+    public ResponseEntity<WebResponseEntity<List<TemplateQuestionnaireQuestionEntity>>> reorderQuestions(
+        @Valid @RequestBody QuestionReorderDTO reorderDTO) {
+    
+    List<TemplateQuestionnaireQuestionEntity> reorderedQuestions = 
+            templateQuestionnaireQuestionService.reorderQuestions(reorderDTO);
+    
+    WebResponseEntity<List<TemplateQuestionnaireQuestionEntity>> response = 
+            WebResponseEntity.success(
+                reorderedQuestions, 
+                "Questões reordenadas com sucesso!"
+            );
+    
+    return ResponseEntity.ok(response);
     }
 
     @PutMapping("/{id}")

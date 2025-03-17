@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
+import com.geosegbar.common.enums.TypeQuestionEnum;
 import com.geosegbar.entities.AnswerEntity;
 import com.geosegbar.entities.AnswerPhotoEntity;
 import com.geosegbar.entities.ChecklistEntity;
@@ -203,37 +204,48 @@ private QuestionnaireResponseEntity createQuestionnaireResponse(
     return questionnaireResponseRepository.save(questionnaireResponse);
 }
     
-    private AnswerEntity createAnswer(AnswerSubmissionDTO answerDto, QuestionnaireResponseEntity questionnaireResponse) {
-        QuestionEntity question = questionRepository
-            .findById(answerDto.getQuestionId())
-            .orElseThrow(() -> new NotFoundException("Pergunta não encontrada: " + answerDto.getQuestionId()));
-        
-        AnswerEntity answer = new AnswerEntity();
-        answer.setQuestion(question);
-        answer.setQuestionnaireResponse(questionnaireResponse);
+private AnswerEntity createAnswer(AnswerSubmissionDTO answerDto, QuestionnaireResponseEntity questionnaireResponse) {
+    QuestionEntity question = questionRepository
+        .findById(answerDto.getQuestionId())
+        .orElseThrow(() -> new NotFoundException("Pergunta não encontrada: " + answerDto.getQuestionId()));
+    
+    AnswerEntity answer = new AnswerEntity();
+    answer.setQuestion(question);
+    answer.setQuestionnaireResponse(questionnaireResponse);
+    answer.setLatitude(answerDto.getLatitude());
+    answer.setLongitude(answerDto.getLongitude());
+    
+    if (TypeQuestionEnum.TEXT.equals(question.getType())) {
+        if (answerDto.getComment() == null || answerDto.getComment().trim().isEmpty()) {
+            throw new InvalidInputException("A pergunta '" + question.getQuestionText() + 
+                "' é do tipo TEXT e requer uma resposta textual!");
+        }
         answer.setComment(answerDto.getComment());
-        answer.setLatitude(answerDto.getLatitude());
-        answer.setLongitude(answerDto.getLongitude());
-        
-        if (answerDto.getSelectedOptionIds() != null && !answerDto.getSelectedOptionIds().isEmpty()) {
-            Set<OptionEntity> options = new HashSet<>();
-            for (Long optionId : answerDto.getSelectedOptionIds()) {
-                OptionEntity option = optionRepository
-                    .findById(optionId)
-                    .orElseThrow(() -> new NotFoundException("Opção não encontrada: " + optionId));
-                options.add(option);
-            }
-            answer.setSelectedOptions(options);
+    } else if (TypeQuestionEnum.CHECKBOX.equals(question.getType())) {
+        if (answerDto.getSelectedOptionIds() == null || answerDto.getSelectedOptionIds().isEmpty()) {
+            throw new InvalidInputException("A pergunta '" + question.getQuestionText() + 
+                "' é do tipo CHECKBOX e requer ao menos uma opção selecionada!");
         }
         
-        AnswerEntity savedAnswer = answerRepository.save(answer);
-        
-        if (answerDto.getPhotos() != null && !answerDto.getPhotos().isEmpty()) {
-            for (PhotoSubmissionDTO photoDto : answerDto.getPhotos()) {
-                saveAnswerPhoto(photoDto, savedAnswer);
-            }
+        Set<OptionEntity> options = new HashSet<>();
+        for (Long optionId : answerDto.getSelectedOptionIds()) {
+            OptionEntity option = optionRepository
+                .findById(optionId)
+                .orElseThrow(() -> new NotFoundException("Opção não encontrada: " + optionId));
+            options.add(option);
         }
-        
+        answer.setSelectedOptions(options);
+        answer.setComment(answerDto.getComment()); 
+    }
+    
+    AnswerEntity savedAnswer = answerRepository.save(answer);
+    
+    if (answerDto.getPhotos() != null && !answerDto.getPhotos().isEmpty()) {
+        for (PhotoSubmissionDTO photoDto : answerDto.getPhotos()) {
+            saveAnswerPhoto(photoDto, savedAnswer);
+        }
+    }
+    
         return savedAnswer;
     }
     

@@ -83,11 +83,15 @@ public class UserService {
         UserEntity existingUser = userRepository.findById(id)
             .orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização de senha!"));
             
-        if (!existingUser.getPassword().equals(passwordDTO.getCurrentPassword())) {
+        if (!passwordEncoder.matches(passwordDTO.getCurrentPassword(), existingUser.getPassword())) {
             throw new InvalidInputException("Senha atual incorreta!");
         }
         
-        existingUser.setPassword(passwordDTO.getNewPassword());
+        if (passwordDTO.getCurrentPassword().equals(passwordDTO.getNewPassword())) {
+            throw new InvalidInputException("A nova senha deve ser diferente da senha atual!");
+        }
+        
+        existingUser.setPassword(passwordEncoder.encode(passwordDTO.getNewPassword()));
         return userRepository.save(existingUser);
     }
 

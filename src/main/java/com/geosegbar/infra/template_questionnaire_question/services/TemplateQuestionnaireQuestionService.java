@@ -11,6 +11,8 @@ import org.springframework.stereotype.Service;
 import com.geosegbar.entities.TemplateQuestionnaireQuestionEntity;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
+import com.geosegbar.infra.questionnaire_response.persistence.jpa.QuestionnaireResponseRepository;
 import com.geosegbar.infra.template_questionnaire.persistence.jpa.TemplateQuestionnaireRepository;
 import com.geosegbar.infra.template_questionnaire_question.dtos.QuestionOrderDTO;
 import com.geosegbar.infra.template_questionnaire_question.dtos.QuestionReorderDTO;
@@ -25,24 +27,128 @@ public class TemplateQuestionnaireQuestionService {
 
     private final TemplateQuestionnaireQuestionRepository tqQuestionRepository;
     private final TemplateQuestionnaireRepository templateQuestionnaireRepository;
+    private final QuestionRepository questionRepository;
+    private final QuestionnaireResponseRepository questionnaireResponseRepository;
 
     @Transactional
     public void deleteById(Long id) {
-        tqQuestionRepository.findById(id)
+        TemplateQuestionnaireQuestionEntity questionToDelete = tqQuestionRepository.findById(id)
             .orElseThrow(() -> new NotFoundException("Questão do template não encontrada para exclusão!"));
+        
+        Long templateId = questionToDelete.getTemplateQuestionnaire().getId();
+        
+        if (questionnaireResponseRepository.existsByTemplateQuestionnaireId(templateId)) {
+            throw new InvalidInputException(
+                "Não é possível excluir esta questão pois existem questionários respondidos usando este template. " +
+                "Crie um novo template para aplicar as alterações desejadas."
+            );
+        }
+        
+        int deletedIndex = questionToDelete.getOrderIndex();
+        
         tqQuestionRepository.deleteById(id);
+        
+        List<TemplateQuestionnaireQuestionEntity> remainingQuestions = 
+            tqQuestionRepository.findByTemplateQuestionnaireIdOrderByOrderIndex(templateId);
+        
+        for (TemplateQuestionnaireQuestionEntity question : remainingQuestions) {
+            if (question.getOrderIndex() > deletedIndex) {
+                question.setOrderIndex(question.getOrderIndex() - 1);
+                tqQuestionRepository.save(question);
+            }
+        }
     }
 
     @Transactional
     public TemplateQuestionnaireQuestionEntity save(TemplateQuestionnaireQuestionEntity tqQuestion) {
+        questionRepository.findById(tqQuestion.getQuestion().getId())
+            .orElseThrow(() -> new NotFoundException("Questão não encontrada!"));
+    
+        var template = templateQuestionnaireRepository.findById(tqQuestion.getTemplateQuestionnaire().getId())
+            .orElseThrow(() -> new NotFoundException("Template não encontrado!"));
+        tqQuestion.setTemplateQuestionnaire(template);
+    
+        int currentQuestionCount = tqQuestionRepository.countQuestionsByTemplateId(template.getId());
+    
+        Integer requestedIndex = tqQuestion.getOrderIndex();
+        if (requestedIndex == null) {
+            tqQuestion.setOrderIndex(currentQuestionCount + 1);
+        } else if (requestedIndex <= 0) {
+            throw new InvalidInputException("O índice de ordem deve ser um número positivo!");
+        } else if (requestedIndex > currentQuestionCount + 1) {
+            tqQuestion.setOrderIndex(currentQuestionCount + 1);
+        } else {
+            List<TemplateQuestionnaireQuestionEntity> existingQuestions = 
+                tqQuestionRepository.findByTemplateQuestionnaireIdOrderByOrderIndex(template.getId());
+            
+            for (TemplateQuestionnaireQuestionEntity existing : existingQuestions) {
+                if (existing.getOrderIndex() >= requestedIndex) {
+                    existing.setOrderIndex(existing.getOrderIndex() + 1);
+                    tqQuestionRepository.save(existing);
+                }
+            }
+        }
+    
         return tqQuestionRepository.save(tqQuestion);
     }
 
     @Transactional
     public TemplateQuestionnaireQuestionEntity update(TemplateQuestionnaireQuestionEntity tqQuestion) {
-        tqQuestionRepository.findById(tqQuestion.getId())
-            .orElseThrow(() -> new NotFoundException("Questão do template não encontrada para atualização!"));
-        return tqQuestionRepository.save(tqQuestion);
+        var existingQuestion = tqQuestionRepository.findById(tqQuestion.getId())
+            .orElseThrow(() -> new NotFoundException("Questão do template não encontrada!"));
+        
+        Long templateId = existingQuestion.getTemplateQuestionnaire().getId();
+        if (questionnaireResponseRepository.existsByTemplateQuestionnaireId(templateId)) {
+            throw new InvalidInputException(
+                "Não é possível modificar esta questão pois existem questionários respondidos usando este template. " +
+                "Crie um novo template para aplicar as alterações desejadas."
+            );
+        }
+        
+        if (tqQuestion.getOrderIndex() != null && 
+            !tqQuestion.getOrderIndex().equals(existingQuestion.getOrderIndex())) {
+            
+            int currentCount = tqQuestionRepository.countQuestionsByTemplateId(templateId);
+            
+            if (tqQuestion.getOrderIndex() <= 0) {
+                throw new InvalidInputException("O índice de ordem deve ser um número positivo!");
+            }
+            
+            if (tqQuestion.getOrderIndex() > currentCount) {
+                throw new InvalidInputException("O índice de ordem não pode ser maior que o total de questões: " + currentCount);
+            }
+            
+            List<TemplateQuestionnaireQuestionEntity> questions = 
+                tqQuestionRepository.findByTemplateQuestionnaireIdOrderByOrderIndex(templateId);
+            
+            int oldIndex = existingQuestion.getOrderIndex();
+            int newIndex = tqQuestion.getOrderIndex();
+            
+            for (TemplateQuestionnaireQuestionEntity q : questions) {
+                if (q.getId().equals(tqQuestion.getId())) {
+                    continue;
+                }
+                
+                if (oldIndex < newIndex) {
+                    if (q.getOrderIndex() > oldIndex && q.getOrderIndex() <= newIndex) {
+                        q.setOrderIndex(q.getOrderIndex() - 1);
+                        tqQuestionRepository.save(q);
+                    }
+                } else {
+                    if (q.getOrderIndex() >= newIndex && q.getOrderIndex() < oldIndex) {
+                        q.setOrderIndex(q.getOrderIndex() + 1);
+                        tqQuestionRepository.save(q);
+                    }
+                }
+            }
+            
+            existingQuestion.setOrderIndex(tqQuestion.getOrderIndex());
+            return tqQuestionRepository.save(existingQuestion);
+        } else {
+            throw new InvalidInputException(
+                "Apenas o índice de ordem pode ser atualizado. Nenhuma alteração foi detectada ou solicitada."
+            );
+        }
     }
 
     public TemplateQuestionnaireQuestionEntity findById(Long id) {

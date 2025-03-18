@@ -13,5 +13,5 @@ public interface QuestionnaireResponseRepository extends JpaRepository<Questionn
     List<QuestionnaireResponseEntity> findByDamId(Long damId);
     List<QuestionnaireResponseEntity> findByChecklistResponseId(Long checklistResponseId);
     List<QuestionnaireResponseEntity> findByDamIdAndCreatedAtBetween(Long damId, LocalDateTime start, LocalDateTime end);
-    
+    boolean existsByTemplateQuestionnaireId(Long templateQuestionnaireId);
 }

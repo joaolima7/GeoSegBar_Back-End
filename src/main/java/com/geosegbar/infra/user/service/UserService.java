@@ -24,6 +24,8 @@ import com.geosegbar.infra.user.dto.UserClientAssociationDTO;
 import com.geosegbar.infra.user.dto.UserPasswordUpdateDTO;
 import com.geosegbar.infra.user.dto.UserUpdateDTO;
 import com.geosegbar.infra.user.persistence.jpa.UserRepository;
+import com.geosegbar.infra.verification_code.dto.ForgotPasswordRequestDTO;
+import com.geosegbar.infra.verification_code.dto.ResetPasswordRequestDTO;
 import com.geosegbar.infra.verification_code.dto.VerifyCodeRequestDTO;
 import com.geosegbar.infra.verification_code.persistence.jpa.VerificationCodeRepository;
 
@@ -165,6 +167,76 @@ public class UserService {
             user.getSex(), 
             token
         );
+    }
+
+    @Transactional
+    public void initiatePasswordReset(ForgotPasswordRequestDTO requestDTO) {
+        UserEntity user = userRepository.findByEmail(requestDTO.getEmail())
+            .orElseThrow(() -> new NotFoundException("Usuário não encontrado com este email!"));
+        
+        List<VerificationCodeEntity> activeCodes = verificationCodeRepository
+            .findAllByUserAndUsedFalseOrderByExpiryDateDesc(user);
+        
+        for (VerificationCodeEntity code : activeCodes) {
+            code.setUsed(true);
+            verificationCodeRepository.save(code);
+        }
+        
+        String verificationCode = GenerateRandomCode.generateRandomCode();
+        
+        VerificationCodeEntity codeEntity = new VerificationCodeEntity();
+        codeEntity.setCode(verificationCode);
+        codeEntity.setUser(user);
+        codeEntity.setUsed(false);
+        codeEntity.setExpiryDate(LocalDateTime.now().plusMinutes(10)); 
+        
+        verificationCodeRepository.save(codeEntity);
+        
+        emailService.sendPasswordResetCode(user.getEmail(), verificationCode);
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequestDTO requestDTO) {
+        UserEntity user = userRepository.findByEmail(requestDTO.getEmail())
+            .orElseThrow(() -> new NotFoundException("Usuário não encontrado com este email!"));
+        
+        VerificationCodeEntity codeEntity = verificationCodeRepository
+            .findLatestActiveByUser(user)
+            .orElseThrow(() -> new NotFoundException("Código de verificação não encontrado ou expirado!"));
+        
+        if (!codeEntity.getCode().equals(requestDTO.getCode())) {
+            throw new InvalidInputException("Código de verificação inválido!");
+        }
+        
+        if (LocalDateTime.now().isAfter(codeEntity.getExpiryDate())) {
+            throw new InvalidInputException("Código de verificação expirado!");
+        }
+        
+        codeEntity.setUsed(true);
+        verificationCodeRepository.save(codeEntity);
+        
+        user.setPassword(passwordEncoder.encode(requestDTO.getNewPassword()));
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public boolean verifyResetCode(VerifyCodeRequestDTO verifyRequest) {
+        UserEntity user = userRepository.findByEmail(verifyRequest.getEmail())
+            .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+        
+        VerificationCodeEntity codeEntity = verificationCodeRepository
+            .findLatestActiveByUser(user)
+            .orElseThrow(() -> new NotFoundException("Código de verificação não encontrado ou expirado!"));
+        
+        if (!codeEntity.getCode().equals(verifyRequest.getCode())) {
+            throw new InvalidInputException("Código de verificação inválido!");
+        }
+        
+        if (LocalDateTime.now().isAfter(codeEntity.getExpiryDate())) {
+            throw new InvalidInputException("Código de verificação expirado!");
+        }
+        
+        return true;
     }
 
     public List<UserEntity> findAll() {

@@ -30,6 +30,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "user/login/initiate").permitAll()
                         .requestMatchers(HttpMethod.POST, "user/login/verify").permitAll()
                         .requestMatchers(HttpMethod.POST, "user/register").permitAll()
+                        .requestMatchers(HttpMethod.POST, "user/forgot-password").permitAll()
+                        .requestMatchers(HttpMethod.POST, "user/verify-reset-code").permitAll()
+                        .requestMatchers(HttpMethod.POST, "user/reset-password").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(securityFilter, UsernamePasswordAuthenticationFilter.class);

@@ -44,4 +44,26 @@ public class EmailService {
             log.error("Erro ao enviar email de verificação: {}", e.getMessage());
         }
     }
+
+    public void sendPasswordResetCode(String toEmail, String code) {
+        try {
+            Context context = new Context();
+            context.setVariable("code", code);
+            
+            String htmlContent = templateEngine.process("emails/password-reset-code", context);
+            
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("Redefinição de Senha - GeoSegBar");
+            helper.setText(htmlContent, true);
+            
+            mailSender.send(message);
+            log.info("Email de redefinição de senha enviado para: {}", toEmail);
+        } catch (MessagingException e) {
+            log.error("Erro ao enviar email de redefinição de senha: {}", e.getMessage());
+        }
+    }
 }

@@ -21,6 +21,8 @@ import com.geosegbar.infra.user.dto.UserClientAssociationDTO;
 import com.geosegbar.infra.user.dto.UserPasswordUpdateDTO;
 import com.geosegbar.infra.user.dto.UserUpdateDTO;
 import com.geosegbar.infra.user.service.UserService;
+import com.geosegbar.infra.verification_code.dto.ForgotPasswordRequestDTO;
+import com.geosegbar.infra.verification_code.dto.ResetPasswordRequestDTO;
 import com.geosegbar.infra.verification_code.dto.VerifyCodeRequestDTO;
 
 import jakarta.validation.Valid;
@@ -67,6 +69,30 @@ public class UserController {
         LoginResponseDTO loggedUser = userService.verifyCodeAndLogin(verifyRequest);
         WebResponseEntity<LoginResponseDTO> response = WebResponseEntity.success(loggedUser, 
             "Usuário autenticado com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<WebResponseEntity<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequestDTO requestDTO) {
+        userService.initiatePasswordReset(requestDTO);
+        WebResponseEntity<Void> response = WebResponseEntity.success(null, 
+            "Código de redefinição de senha enviado para seu email!");
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/verify-reset-code")
+    public ResponseEntity<WebResponseEntity<Boolean>> verifyResetCode(@Valid @RequestBody VerifyCodeRequestDTO verifyRequest) {
+        boolean valid = userService.verifyResetCode(verifyRequest);
+        WebResponseEntity<Boolean> response = WebResponseEntity.success(valid, 
+            "Código verificado com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<WebResponseEntity<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequestDTO requestDTO) {
+        userService.resetPassword(requestDTO);
+        WebResponseEntity<Void> response = WebResponseEntity.success(null, 
+            "Senha redefinida com sucesso!");
         return ResponseEntity.ok(response);
     }
 

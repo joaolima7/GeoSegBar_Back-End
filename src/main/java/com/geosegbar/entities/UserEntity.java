@@ -62,6 +62,10 @@ public class UserEntity {
     @JoinColumn(name = "sex_id", nullable = false)
     private SexEntity sex;
 
+    @ManyToOne
+    @JoinColumn(name = "status_id")
+    private StatusEntity status;
+
     @ManyToMany
     @JoinTable(
         name = "user_client", 

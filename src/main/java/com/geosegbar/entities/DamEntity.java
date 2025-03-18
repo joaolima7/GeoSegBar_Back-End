@@ -58,6 +58,10 @@ public class DamEntity {
     @JoinColumn(name = "client_id")
     private ClientEntity client;
 
+    @ManyToOne
+    @JoinColumn(name = "status_id")
+    private StatusEntity status;
+
     @ManyToMany(mappedBy = "dams", fetch = FetchType.LAZY)
     @JsonIgnore
     private Set<ChecklistEntity> checklists = new HashSet<>();

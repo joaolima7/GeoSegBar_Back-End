@@ -12,7 +12,9 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToMany;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.Email;
@@ -102,6 +104,10 @@ public class ClientEntity {
     @Size(max = 255, message = "A Logo deve ter no máximo 255 caracteres!")
     @Column(length = 255)
     private String logoPath;
+
+    @ManyToOne
+    @JoinColumn(name = "status_id")
+    private StatusEntity status;
 
     @JsonProperty(access = Access.WRITE_ONLY)
     @OneToMany(mappedBy = "client", fetch = FetchType.LAZY)

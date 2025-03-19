@@ -1,6 +1,7 @@
 package com.geosegbar.infra.user.dto;
 
 import com.geosegbar.entities.SexEntity;
+import com.geosegbar.entities.StatusEntity;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -27,4 +28,7 @@ public class UserUpdateDTO {
 
     @NotNull(message = "O sexo deve ser informado!")
     private SexEntity sex;
+
+    @NotNull(message = "O status deve ser informado!")
+    private StatusEntity status;
 }

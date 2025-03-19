@@ -1,5 +1,6 @@
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/GeosegbarApplication.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/email/EmailService.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/enums/StatusEnum.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/enums/TypeQuestionEnum.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/response/WebResponseEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/utils/GenerateRandomCode.java
@@ -18,6 +19,7 @@
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/QuestionEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/QuestionnaireResponseEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/SexEntity.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/StatusEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/TemplateQuestionnaireEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/TemplateQuestionnaireQuestionEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/UserEntity.java
@@ -80,6 +82,8 @@
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/sex/persistence/jpa/SexRepository.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/sex/services/SexService.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/sex/web/SexController.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/status/persistence/jpa/StatusRepository.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/status/services/StatusService.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/template_questionnaire/dtos/TemplateQuestionDTO.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/template_questionnaire/dtos/TemplateQuestionnaireCreationDTO.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/template_questionnaire/persistence/jpa/TemplateQuestionnaireRepository.java
@@ -98,5 +102,7 @@
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/user/persistence/jpa/UserRepository.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/user/service/UserService.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/user/web/UserController.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/verification_code/dto/ForgotPasswordRequestDTO.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/verification_code/dto/ResetPasswordRequestDTO.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/verification_code/dto/VerifyCodeRequestDTO.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/verification_code/persistence/jpa/VerificationCodeRepository.java

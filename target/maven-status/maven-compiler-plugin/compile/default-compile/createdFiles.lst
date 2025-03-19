@@ -34,6 +34,7 @@ com/geosegbar/infra/template_questionnaire/dtos/TemplateQuestionDTO.class
 com/geosegbar/entities/TemplateQuestionnaireQuestionEntity.class
 com/geosegbar/infra/question/services/QuestionService.class
 com/geosegbar/infra/user/service/UserService.class
+com/geosegbar/infra/verification_code/dto/ForgotPasswordRequestDTO.class
 com/geosegbar/infra/checklist_response/dtos/ChecklistResponseDetailDTO.class
 com/geosegbar/exceptions/JWTException.class
 com/geosegbar/infra/checklist/web/ChecklistController.class
@@ -42,7 +43,9 @@ com/geosegbar/configs/security/TokenService.class
 com/geosegbar/common/enums/TypeQuestionEnum.class
 com/geosegbar/infra/user/dto/LoginRequestDTO.class
 com/geosegbar/infra/user/dto/UserClientAssociationDTO.class
+com/geosegbar/infra/status/services/StatusService.class
 com/geosegbar/exceptions/UnauthorizedException.class
+com/geosegbar/infra/status/persistence/jpa/StatusRepository.class
 com/geosegbar/infra/checklist_submission/web/ChecklistResponseSubmissionController.class
 com/geosegbar/infra/verification_code/dto/VerifyCodeRequestDTO.class
 com/geosegbar/entities/AnswerEntity.class
@@ -59,6 +62,7 @@ com/geosegbar/infra/checklist_response/web/ChecklistResponseController.class
 com/geosegbar/infra/option/services/OptionService.class
 com/geosegbar/infra/checklist_submission/dtos/PhotoSubmissionDTO.class
 com/geosegbar/infra/checklist_response/dtos/DamInfoDTO.class
+com/geosegbar/entities/StatusEntity.class
 com/geosegbar/infra/checklist_response/dtos/PhotoInfoDTO.class
 com/geosegbar/infra/client/service/ClientService.class
 com/geosegbar/infra/template_questionnaire_question/persistence/jpa/TemplateQuestionnaireQuestionRepository.class
@@ -68,6 +72,7 @@ com/geosegbar/infra/answer_photo/services/AnswerPhotoService.class
 com/geosegbar/infra/dam/services/DamService.class
 com/geosegbar/infra/questionnaire_response/services/QuestionnaireResponseService.class
 com/geosegbar/infra/checklist_submission/dtos/QuestionnaireResponseSubmissionDTO.class
+com/geosegbar/infra/verification_code/dto/ResetPasswordRequestDTO.class
 com/geosegbar/infra/dam/persistence/jpa/DamRepository.class
 com/geosegbar/infra/checklist_response/dtos/PagedChecklistResponseDTO.class
 com/geosegbar/infra/questionnaire_response/persistence/jpa/QuestionnaireResponseRepository.class
@@ -97,6 +102,7 @@ com/geosegbar/infra/answer/persistence/jpa/AnswerRepositoryCustom.class
 com/geosegbar/configs/web_config/WebConfig.class
 com/geosegbar/infra/template_questionnaire/persistence/jpa/TemplateQuestionnaireRepository.class
 com/geosegbar/common/response/WebResponseEntity.class
+com/geosegbar/common/enums/StatusEnum.class
 com/geosegbar/entities/AnswerPhotoEntity.class
 com/geosegbar/infra/verification_code/persistence/jpa/VerificationCodeRepository.class
 com/geosegbar/infra/question/web/QuestionController.class

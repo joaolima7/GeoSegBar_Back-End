@@ -1,9 +1,0 @@
-CREATE TABLE address(
-    id SERIAL PRIMARY KEY,
-    street VARCHAR(255) NOT NULL,
-    neighborhood VARCHAR(255) NOT NULL,
-    number VARCHAR(255) NOT NULL,
-    city VARCHAR(255) NOT NULL,
-    state VARCHAR(255) NOT NULL,
-    zipCode VARCHAR(255) NOT NULL
-);

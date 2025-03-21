@@ -60,7 +60,7 @@ public class UserController {
     public ResponseEntity<WebResponseEntity<Void>> initiateLogin(@Valid @RequestBody LoginRequestDTO userDTO) {
         userService.initiateLogin(userDTO);
         WebResponseEntity<Void> response = WebResponseEntity.success(null, 
-            "Código de verificação enviado para seu email!");
+            "Código de verificação enviado para seu email, verifique também a caixa de spam!");
         return ResponseEntity.ok(response);
     }
 
@@ -76,7 +76,7 @@ public class UserController {
     public ResponseEntity<WebResponseEntity<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequestDTO requestDTO) {
         userService.initiatePasswordReset(requestDTO);
         WebResponseEntity<Void> response = WebResponseEntity.success(null, 
-            "Código de redefinição de senha enviado para seu email!");
+            "Código de redefinição de senha enviado para seu email, verifique também a caixa de spam!");
         return ResponseEntity.ok(response);
     }
 

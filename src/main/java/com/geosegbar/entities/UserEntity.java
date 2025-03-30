@@ -63,8 +63,13 @@ public class UserEntity {
     private SexEntity sex;
 
     @ManyToOne
-    @JoinColumn(name = "status_id")
+    @JoinColumn(name = "status_id", nullable = false)
     private StatusEntity status;
+
+    @ManyToOne
+    @JoinColumn(name = "role_id", nullable = false)
+    @NotNull(message = "A role deve ser informada!")
+    private RoleEntity role;
 
     @ManyToMany
     @JoinTable(

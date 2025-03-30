@@ -9,10 +9,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.common.email.EmailService;
+import com.geosegbar.common.enums.RoleEnum;
 import com.geosegbar.common.enums.StatusEnum;
 import com.geosegbar.common.utils.GenerateRandomCode;
 import com.geosegbar.configs.security.TokenService;
 import com.geosegbar.entities.ClientEntity;
+import com.geosegbar.entities.RoleEntity;
 import com.geosegbar.entities.StatusEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.entities.VerificationCodeEntity;
@@ -20,6 +22,7 @@ import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
+import com.geosegbar.infra.roles.persistence.RoleRepository;
 import com.geosegbar.infra.sex.persistence.jpa.SexRepository;
 import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
 import com.geosegbar.infra.user.dto.LoginRequestDTO;
@@ -44,10 +47,12 @@ public class UserService {
     private final ClientRepository clientRepository;
     private final SexRepository sexRepository;
     private final StatusRepository statusRepository;
+    private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokenService;
     private final VerificationCodeRepository verificationCodeRepository;
     private final EmailService emailService;
+    
 
     @Transactional
     public void deleteById(Long id) {
@@ -57,32 +62,42 @@ public class UserService {
         userRepository.deleteById(id);
     }
 
-    @Transactional
+   @Transactional
     public UserEntity save(UserEntity userEntity) {
-        if(userRepository.existsByEmail(userEntity.getEmail())){
-            throw new DuplicateResourceException("Já existe um usuário com o email informado!");
-        }
-        
-        if (userEntity.getSex() == null || userEntity.getSex().getId() == null) {
-            throw new InvalidInputException("Sexo é obrigatório!");
-        }
-        
-        sexRepository.findById(userEntity.getSex().getId())
-            .orElseThrow(() -> new NotFoundException("Sexo não encontrado com ID: " + userEntity.getSex().getId()));
-        
-        if (userEntity.getStatus() == null) {
-            StatusEntity activeStatus = statusRepository.findByStatus(StatusEnum.ACTIVE)
-                .orElseThrow(() -> new NotFoundException("Status ACTIVE não encontrado no sistema!"));
-            userEntity.setStatus(activeStatus);
-        } else if (userEntity.getStatus().getId() != null) {
-            StatusEntity status = statusRepository.findById(userEntity.getStatus().getId())
-                .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + userEntity.getStatus().getId()));
-            userEntity.setStatus(status);
-        }
-        
-        userEntity.setPassword(passwordEncoder.encode(userEntity.getPassword()));
-        return userRepository.save(userEntity);
+    if(userRepository.existsByEmail(userEntity.getEmail())){
+        throw new DuplicateResourceException("Já existe um usuário com o email informado!");
     }
+    
+    if (userEntity.getSex() == null || userEntity.getSex().getId() == null) {
+        throw new InvalidInputException("Sexo é obrigatório!");
+    }
+    
+    sexRepository.findById(userEntity.getSex().getId())
+        .orElseThrow(() -> new NotFoundException("Sexo não encontrado com ID: " + userEntity.getSex().getId()));
+    
+    if (userEntity.getStatus() == null) {
+        StatusEntity activeStatus = statusRepository.findByStatus(StatusEnum.ACTIVE)
+            .orElseThrow(() -> new NotFoundException("Status ACTIVE não encontrado no sistema!"));
+        userEntity.setStatus(activeStatus);
+    } else if (userEntity.getStatus().getId() != null) {
+        StatusEntity status = statusRepository.findById(userEntity.getStatus().getId())
+            .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + userEntity.getStatus().getId()));
+        userEntity.setStatus(status);
+    }
+    
+    if (userEntity.getRole() == null) {
+        RoleEntity defaultRole = roleRepository.findByName(RoleEnum.COLLABORATOR)
+            .orElseThrow(() -> new NotFoundException("Role COLLABORATOR não encontrada no sistema!"));
+        userEntity.setRole(defaultRole);
+    } else if (userEntity.getRole().getId() != null) {
+        RoleEntity role = roleRepository.findById(userEntity.getRole().getId())
+            .orElseThrow(() -> new NotFoundException("Role não encontrada com ID: " + userEntity.getRole().getId()));
+        userEntity.setRole(role);
+    }
+    
+    userEntity.setPassword(passwordEncoder.encode(userEntity.getPassword()));
+    return userRepository.save(userEntity);
+}
 
     @Transactional
     public UserEntity update(Long id, UserUpdateDTO userDTO) {
@@ -104,6 +119,12 @@ public class UserService {
             StatusEntity status = statusRepository.findById(userDTO.getStatus().getId())
                 .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + userDTO.getStatus().getId()));
             existingUser.setStatus(status);
+        }
+        
+        if (userDTO.getRole() != null && userDTO.getRole().getId() != null) {
+            RoleEntity role = roleRepository.findById(userDTO.getRole().getId())
+                .orElseThrow(() -> new NotFoundException("Role não encontrada com ID: " + userDTO.getRole().getId()));
+            existingUser.setRole(role);
         }
 
         existingUser.setName(userDTO.getName());
@@ -204,7 +225,8 @@ public class UserService {
             user.getName(), 
             user.getEmail(), 
             user.getPhone(), 
-            user.getSex(), 
+            user.getSex(),
+            user.getRole().getName(),
             token
         );
     }

@@ -1,5 +1,6 @@
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/GeosegbarApplication.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/email/EmailService.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/enums/RoleEnum.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/enums/StatusEnum.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/enums/TypeQuestionEnum.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/response/WebResponseEntity.java
@@ -18,6 +19,7 @@
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/OptionEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/QuestionEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/QuestionnaireResponseEntity.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/RoleEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/SexEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/StatusEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/TemplateQuestionnaireEntity.java
@@ -79,6 +81,8 @@
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/questionnaire_response/persistence/jpa/QuestionnaireResponseRepository.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/questionnaire_response/services/QuestionnaireResponseService.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/questionnaire_response/web/QuestionnaireResponseController.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/roles/initializer/RoleInitializer.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/roles/persistence/RoleRepository.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/sex/persistence/jpa/SexRepository.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/sex/services/SexService.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/sex/web/SexController.java

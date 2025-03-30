@@ -1,5 +1,6 @@
 package com.geosegbar.infra.user.dto;
 
+import com.geosegbar.entities.RoleEntity;
 import com.geosegbar.entities.SexEntity;
 import com.geosegbar.entities.StatusEntity;
 
@@ -31,4 +32,7 @@ public class UserUpdateDTO {
 
     @NotNull(message = "O status deve ser informado!")
     private StatusEntity status;
+
+    @NotNull(message = "A role deve ser informada!")
+    private RoleEntity role;
 }

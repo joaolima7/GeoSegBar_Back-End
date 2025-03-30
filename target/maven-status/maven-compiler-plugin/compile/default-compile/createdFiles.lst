@@ -11,7 +11,9 @@ com/geosegbar/infra/sex/web/SexController.class
 com/geosegbar/exceptions/exception_handler/RestExceptionHandler.class
 com/geosegbar/infra/sex/persistence/jpa/SexRepository.class
 com/geosegbar/infra/option/web/OptionController.class
+com/geosegbar/common/enums/RoleEnum.class
 com/geosegbar/entities/ChecklistResponseEntity.class
+com/geosegbar/entities/RoleEntity.class
 com/geosegbar/common/utils/GenerateRandomCode.class
 com/geosegbar/infra/user/dto/UserPasswordUpdateDTO.class
 com/geosegbar/infra/sex/services/SexService.class
@@ -53,6 +55,7 @@ com/geosegbar/infra/dam/web/DamController.class
 com/geosegbar/infra/question/persistence/jpa/QuestionRepository.class
 com/geosegbar/exceptions/UnsupportedFileTypeException.class
 com/geosegbar/infra/answer/persistence/jpa/AnswerRepository.class
+com/geosegbar/infra/roles/persistence/RoleRepository.class
 com/geosegbar/infra/template_questionnaire_question/dtos/QuestionOrderDTO.class
 com/geosegbar/infra/checklist_submission/dtos/AnswerSubmissionDTO.class
 com/geosegbar/exceptions/DatabaseException.class
@@ -67,6 +70,7 @@ com/geosegbar/infra/checklist_response/dtos/PhotoInfoDTO.class
 com/geosegbar/infra/client/service/ClientService.class
 com/geosegbar/infra/template_questionnaire_question/persistence/jpa/TemplateQuestionnaireQuestionRepository.class
 com/geosegbar/infra/option/persistence/jpa/OptionRepository.class
+com/geosegbar/infra/roles/initializer/RoleInitializer.class
 com/geosegbar/infra/answer_photo/persistence/jpa/AnswerPhotoRepository.class
 com/geosegbar/infra/answer_photo/services/AnswerPhotoService.class
 com/geosegbar/infra/dam/services/DamService.class

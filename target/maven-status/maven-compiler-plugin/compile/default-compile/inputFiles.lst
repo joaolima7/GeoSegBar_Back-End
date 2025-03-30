@@ -83,6 +83,8 @@
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/questionnaire_response/web/QuestionnaireResponseController.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/roles/initializer/RoleInitializer.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/roles/persistence/RoleRepository.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/roles/services/RoleService.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/roles/web/RoleController.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/sex/persistence/jpa/SexRepository.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/sex/services/SexService.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/sex/web/SexController.java

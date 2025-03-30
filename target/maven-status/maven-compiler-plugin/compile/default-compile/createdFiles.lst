@@ -32,6 +32,7 @@ com/geosegbar/infra/client/web/ClientController.class
 com/geosegbar/exceptions/InvalidInputException.class
 com/geosegbar/entities/QuestionnaireResponseEntity.class
 com/geosegbar/infra/answer/services/AnswerService.class
+com/geosegbar/infra/roles/web/RoleController.class
 com/geosegbar/infra/template_questionnaire/dtos/TemplateQuestionDTO.class
 com/geosegbar/entities/TemplateQuestionnaireQuestionEntity.class
 com/geosegbar/infra/question/services/QuestionService.class
@@ -51,6 +52,7 @@ com/geosegbar/infra/status/persistence/jpa/StatusRepository.class
 com/geosegbar/infra/checklist_submission/web/ChecklistResponseSubmissionController.class
 com/geosegbar/infra/verification_code/dto/VerifyCodeRequestDTO.class
 com/geosegbar/entities/AnswerEntity.class
+com/geosegbar/infra/roles/services/RoleService.class
 com/geosegbar/infra/dam/web/DamController.class
 com/geosegbar/infra/question/persistence/jpa/QuestionRepository.class
 com/geosegbar/exceptions/UnsupportedFileTypeException.class

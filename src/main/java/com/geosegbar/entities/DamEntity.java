@@ -69,4 +69,8 @@ public class DamEntity {
     @OneToMany(mappedBy = "dam", fetch = FetchType.LAZY)
     @JsonIgnore
     private Set<ChecklistResponseEntity> checklistResponses = new HashSet<>();
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "dam", fetch = FetchType.LAZY)
+    private Set<DamPermissionEntity> damPermissions = new HashSet<>();
 }

@@ -3,6 +3,7 @@ package com.geosegbar.entities;
 import java.util.HashSet;
 import java.util.Set;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonProperty.Access;
 
@@ -116,4 +117,8 @@ public class ClientEntity {
     @JsonProperty(access = Access.WRITE_ONLY)
     @ManyToMany(mappedBy = "clients", fetch = FetchType.LAZY)
     private Set<UserEntity> users = new HashSet<>();
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "client", fetch = FetchType.LAZY)
+    private Set<DamPermissionEntity> damPermissions = new HashSet<>(); 
 }

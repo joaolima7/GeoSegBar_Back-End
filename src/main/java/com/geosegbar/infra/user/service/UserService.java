@@ -14,6 +14,8 @@ import com.geosegbar.common.enums.StatusEnum;
 import com.geosegbar.common.utils.GenerateRandomCode;
 import com.geosegbar.configs.security.TokenService;
 import com.geosegbar.entities.ClientEntity;
+import com.geosegbar.entities.DamEntity;
+import com.geosegbar.entities.DamPermissionEntity;
 import com.geosegbar.entities.RoleEntity;
 import com.geosegbar.entities.StatusEntity;
 import com.geosegbar.entities.UserEntity;
@@ -22,6 +24,8 @@ import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
+import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
+import com.geosegbar.infra.dam_permissions.persistence.DamPermissionRepository;
 import com.geosegbar.infra.roles.persistence.RoleRepository;
 import com.geosegbar.infra.sex.persistence.jpa.SexRepository;
 import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
@@ -52,6 +56,8 @@ public class UserService {
     private final TokenService tokenService;
     private final VerificationCodeRepository verificationCodeRepository;
     private final EmailService emailService;
+    private final DamRepository damRepository;
+    private final DamPermissionRepository damPermissionRepository;
     
 
     @Transactional
@@ -62,42 +68,48 @@ public class UserService {
         userRepository.deleteById(id);
     }
 
-   @Transactional
+    @Transactional
     public UserEntity save(UserEntity userEntity) {
-    if(userRepository.existsByEmail(userEntity.getEmail())){
-        throw new DuplicateResourceException("Já existe um usuário com o email informado!");
+        if(userRepository.existsByEmail(userEntity.getEmail())){
+            throw new DuplicateResourceException("Já existe um usuário com o email informado!");
+        }
+        
+        if (userEntity.getSex() == null || userEntity.getSex().getId() == null) {
+            throw new InvalidInputException("Sexo é obrigatório!");
+        }
+        
+        sexRepository.findById(userEntity.getSex().getId())
+            .orElseThrow(() -> new NotFoundException("Sexo não encontrado com ID: " + userEntity.getSex().getId()));
+        
+        if (userEntity.getStatus() == null) {
+            StatusEntity activeStatus = statusRepository.findByStatus(StatusEnum.ACTIVE)
+                .orElseThrow(() -> new NotFoundException("Status ACTIVE não encontrado no sistema!"));
+            userEntity.setStatus(activeStatus);
+        } else if (userEntity.getStatus().getId() != null) {
+            StatusEntity status = statusRepository.findById(userEntity.getStatus().getId())
+                .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + userEntity.getStatus().getId()));
+            userEntity.setStatus(status);
+        }
+        
+        if (userEntity.getRole() == null) {
+            RoleEntity defaultRole = roleRepository.findByName(RoleEnum.COLLABORATOR)
+                .orElseThrow(() -> new NotFoundException("Role COLLABORATOR não encontrada no sistema!"));
+            userEntity.setRole(defaultRole);
+        } else if (userEntity.getRole().getId() != null) {
+            RoleEntity role = roleRepository.findById(userEntity.getRole().getId())
+                .orElseThrow(() -> new NotFoundException("Role não encontrada com ID: " + userEntity.getRole().getId()));
+            userEntity.setRole(role);
+        }
+        
+        userEntity.setPassword(passwordEncoder.encode(userEntity.getPassword()));
+        UserEntity savedUser = userRepository.save(userEntity);
+        
+        if (savedUser.getRole().getName() == RoleEnum.COLLABORATOR && !savedUser.getClients().isEmpty()) {
+            createDefaultDamPermissions(savedUser);
+        }
+        
+        return savedUser;
     }
-    
-    if (userEntity.getSex() == null || userEntity.getSex().getId() == null) {
-        throw new InvalidInputException("Sexo é obrigatório!");
-    }
-    
-    sexRepository.findById(userEntity.getSex().getId())
-        .orElseThrow(() -> new NotFoundException("Sexo não encontrado com ID: " + userEntity.getSex().getId()));
-    
-    if (userEntity.getStatus() == null) {
-        StatusEntity activeStatus = statusRepository.findByStatus(StatusEnum.ACTIVE)
-            .orElseThrow(() -> new NotFoundException("Status ACTIVE não encontrado no sistema!"));
-        userEntity.setStatus(activeStatus);
-    } else if (userEntity.getStatus().getId() != null) {
-        StatusEntity status = statusRepository.findById(userEntity.getStatus().getId())
-            .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + userEntity.getStatus().getId()));
-        userEntity.setStatus(status);
-    }
-    
-    if (userEntity.getRole() == null) {
-        RoleEntity defaultRole = roleRepository.findByName(RoleEnum.COLLABORATOR)
-            .orElseThrow(() -> new NotFoundException("Role COLLABORATOR não encontrada no sistema!"));
-        userEntity.setRole(defaultRole);
-    } else if (userEntity.getRole().getId() != null) {
-        RoleEntity role = roleRepository.findById(userEntity.getRole().getId())
-            .orElseThrow(() -> new NotFoundException("Role não encontrada com ID: " + userEntity.getRole().getId()));
-        userEntity.setRole(role);
-    }
-    
-    userEntity.setPassword(passwordEncoder.encode(userEntity.getPassword()));
-    return userRepository.save(userEntity);
-}
 
     @Transactional
     public UserEntity update(Long id, UserUpdateDTO userDTO) {
@@ -121,9 +133,19 @@ public class UserService {
             existingUser.setStatus(status);
         }
         
+        boolean roleChanged = false;
+        RoleEnum oldRole = existingUser.getRole().getName();
+        RoleEnum newRole = oldRole;
+        
         if (userDTO.getRole() != null && userDTO.getRole().getId() != null) {
             RoleEntity role = roleRepository.findById(userDTO.getRole().getId())
                 .orElseThrow(() -> new NotFoundException("Role não encontrada com ID: " + userDTO.getRole().getId()));
+            
+            if (!existingUser.getRole().equals(role)) {
+                roleChanged = true;
+                newRole = role.getName();
+            }
+            
             existingUser.setRole(role);
         }
 
@@ -131,8 +153,56 @@ public class UserService {
         existingUser.setEmail(userDTO.getEmail());
         existingUser.setPhone(userDTO.getPhone());
         existingUser.setSex(userDTO.getSex());
+        
+        UserEntity savedUser = userRepository.save(existingUser);
+        
+        if (roleChanged) {
+            handleRoleChange(savedUser, oldRole, newRole);
+        }
+        
+        return savedUser;
+    }
 
-        return userRepository.save(existingUser);
+    private void handleRoleChange(UserEntity user, RoleEnum oldRole, RoleEnum newRole) {
+        
+        if (oldRole == RoleEnum.ADMIN && newRole == RoleEnum.COLLABORATOR) {
+            createDefaultDamPermissions(user);
+        }
+        
+        if (oldRole == RoleEnum.COLLABORATOR && newRole == RoleEnum.ADMIN) {
+            deleteAllDamPermissions(user);
+        }
+    }
+
+     private void createDefaultDamPermissions(UserEntity user) {
+        
+        for (ClientEntity client : user.getClients()) {
+            List<DamEntity> dams = damRepository.findByClient(client);
+            
+            
+            for (DamEntity dam : dams) {
+                if (damPermissionRepository.existsByUserAndDamAndClient(user, dam, client)) {
+                    continue;
+                }
+                
+                DamPermissionEntity permission = new DamPermissionEntity();
+                permission.setUser(user);
+                permission.setDam(dam);
+                permission.setClient(client);
+                permission.setHasAccess(false); 
+                permission.setCreatedAt(LocalDateTime.now());
+                
+                damPermissionRepository.save(permission);
+            }
+        }
+    }
+    
+    private void deleteAllDamPermissions(UserEntity user) {
+        List<DamPermissionEntity> permissions = damPermissionRepository.findByUser(user);
+        
+        if (!permissions.isEmpty()) {
+            damPermissionRepository.deleteAll(permissions);
+        }
     }
 
     @Transactional
@@ -157,15 +227,34 @@ public class UserService {
         UserEntity user = userRepository.findById(userId)
             .orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização de clientes!"));
         
-        Set<ClientEntity> clients = new HashSet<>();
+        Set<ClientEntity> oldClients = new HashSet<>(user.getClients());
+        
+        Set<ClientEntity> newClients = new HashSet<>();
         
         for (Long clientId : clientAssociationDTO.getClientIds()) {
             ClientEntity client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new NotFoundException("Cliente com ID " + clientId + " não encontrado!"));
-            clients.add(client);
+            newClients.add(client);
         }
         
-        user.setClients(clients);
+        user.setClients(newClients);
+        
+        if (user.getRole() != null && user.getRole().getName() == RoleEnum.COLLABORATOR) {
+            
+            Set<ClientEntity> addedClients = new HashSet<>(newClients);
+            addedClients.removeAll(oldClients);
+            
+            if (!addedClients.isEmpty()) {
+                createDamPermissionsForSpecificClients(user, addedClients);
+            }
+            
+            Set<ClientEntity> removedClients = new HashSet<>(oldClients);
+            removedClients.removeAll(newClients);
+            
+            if (!removedClients.isEmpty()) {
+                deleteDamPermissionsForSpecificClients(user, removedClients);
+            }
+        }
         
         return userRepository.save(user);
     }
@@ -299,6 +388,36 @@ public class UserService {
         }
         
         return true;
+    }
+
+    private void createDamPermissionsForSpecificClients(UserEntity user, Set<ClientEntity> clients) {
+        for (ClientEntity client : clients) {
+            List<DamEntity> dams = damRepository.findByClient(client);
+            
+            for (DamEntity dam : dams) {
+                if (damPermissionRepository.existsByUserAndDamAndClient(user, dam, client)) {
+                    continue;
+                }
+                
+                DamPermissionEntity permission = new DamPermissionEntity();
+                permission.setUser(user);
+                permission.setDam(dam);
+                permission.setClient(client);
+                permission.setHasAccess(false); 
+                permission.setCreatedAt(LocalDateTime.now());
+                
+                damPermissionRepository.save(permission);
+            }
+        }
+    }
+    
+    private void deleteDamPermissionsForSpecificClients(UserEntity user, Set<ClientEntity> clients) {
+        for (ClientEntity client : clients) {
+            List<DamPermissionEntity> permissions = damPermissionRepository.findByUserAndClient(user, client);
+            if (!permissions.isEmpty()) {
+                damPermissionRepository.deleteAll(permissions);
+            }
+        }
     }
 
     public List<UserEntity> findAll() {

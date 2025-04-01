@@ -1,5 +1,6 @@
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/GeosegbarApplication.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/email/EmailService.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/enums/RoleEnum.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/enums/StatusEnum.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/enums/TypeQuestionEnum.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/response/WebResponseEntity.java
@@ -15,9 +16,12 @@
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/ChecklistResponseEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/ClientEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/DamEntity.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/DamPermissionEntity.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/DocumentationPermissionEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/OptionEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/QuestionEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/QuestionnaireResponseEntity.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/RoleEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/SexEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/StatusEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/entities/TemplateQuestionnaireEntity.java
@@ -69,6 +73,15 @@
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/dam/persistence/jpa/DamRepository.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/dam/services/DamService.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/dam/web/DamController.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/dam_permissions/dtos/DamPermissionDTO.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/dam_permissions/dtos/UserDamPermissionsRequestDTO.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/dam_permissions/persistence/DamPermissionRepository.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/dam_permissions/services/DamPermissionService.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/dam_permissions/web/DamPermissionController.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/documentation_permission/dtos/DocumentationPermissionDTO.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/documentation_permission/persistence/DocumentationPermissionRepository.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/documentation_permission/services/DocumentationPermissionService.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/documentation_permission/web/DocumentationPermissionController.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/file_storage/FileStorageService.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/option/persistence/jpa/OptionRepository.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/option/services/OptionService.java
@@ -79,6 +92,10 @@
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/questionnaire_response/persistence/jpa/QuestionnaireResponseRepository.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/questionnaire_response/services/QuestionnaireResponseService.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/questionnaire_response/web/QuestionnaireResponseController.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/roles/initializer/RoleInitializer.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/roles/persistence/RoleRepository.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/roles/services/RoleService.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/roles/web/RoleController.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/sex/persistence/jpa/SexRepository.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/sex/services/SexService.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/sex/web/SexController.java

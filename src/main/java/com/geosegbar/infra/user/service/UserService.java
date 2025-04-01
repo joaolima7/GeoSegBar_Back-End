@@ -26,6 +26,7 @@ import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.dam_permissions.persistence.DamPermissionRepository;
+import com.geosegbar.infra.documentation_permission.services.DocumentationPermissionService;
 import com.geosegbar.infra.roles.persistence.RoleRepository;
 import com.geosegbar.infra.sex.persistence.jpa.SexRepository;
 import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
@@ -58,13 +59,21 @@ public class UserService {
     private final EmailService emailService;
     private final DamRepository damRepository;
     private final DamPermissionRepository damPermissionRepository;
+    private final DocumentationPermissionService documentationPermissionService;
     
 
     @Transactional
     public void deleteById(Long id) {
-        userRepository.findById(id)
-        .orElseThrow(() -> new NotFoundException("Usuário não encontrado para exclusão!"));
+        UserEntity user = userRepository.findById(id)
+            .orElseThrow(() -> new NotFoundException("Usuário não encontrado para exclusão!"));
 
+        documentationPermissionService.deleteByUserSafely(user.getId());
+        
+        List<DamPermissionEntity> damPermissions = damPermissionRepository.findByUser(user);
+        if (!damPermissions.isEmpty()) {
+            damPermissionRepository.deleteAll(damPermissions);
+        }
+        
         userRepository.deleteById(id);
     }
 
@@ -104,8 +113,12 @@ public class UserService {
         userEntity.setPassword(passwordEncoder.encode(userEntity.getPassword()));
         UserEntity savedUser = userRepository.save(userEntity);
         
-        if (savedUser.getRole().getName() == RoleEnum.COLLABORATOR && !savedUser.getClients().isEmpty()) {
-            createDefaultDamPermissions(savedUser);
+        if (savedUser.getRole().getName() == RoleEnum.COLLABORATOR) {
+            if (!savedUser.getClients().isEmpty()) {
+                createDefaultDamPermissions(savedUser);
+            }
+            
+            documentationPermissionService.createDefaultPermission(savedUser);
         }
         
         return savedUser;
@@ -166,11 +179,19 @@ public class UserService {
     private void handleRoleChange(UserEntity user, RoleEnum oldRole, RoleEnum newRole) {
         
         if (oldRole == RoleEnum.ADMIN && newRole == RoleEnum.COLLABORATOR) {
-            createDefaultDamPermissions(user);
+            
+            if (!user.getClients().isEmpty()) {
+                createDefaultDamPermissions(user);
+            }
+            
+            documentationPermissionService.createDefaultPermission(user);
         }
         
         if (oldRole == RoleEnum.COLLABORATOR && newRole == RoleEnum.ADMIN) {
+            
             deleteAllDamPermissions(user);
+            
+            documentationPermissionService.deleteByUserSafely(user.getId());
         }
     }
 

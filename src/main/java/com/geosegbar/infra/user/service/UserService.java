@@ -30,6 +30,7 @@ import com.geosegbar.infra.dam_permissions.persistence.DamPermissionRepository;
 import com.geosegbar.infra.documentation_permission.services.DocumentationPermissionService;
 import com.geosegbar.infra.instrumentation_permission.services.InstrumentationPermissionService;
 import com.geosegbar.infra.roles.persistence.RoleRepository;
+import com.geosegbar.infra.routine_inspection_permission.services.RoutineInspectionPermissionService;
 import com.geosegbar.infra.sex.persistence.jpa.SexRepository;
 import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
 import com.geosegbar.infra.user.dto.LoginRequestDTO;
@@ -64,7 +65,8 @@ public class UserService {
     private final DocumentationPermissionService documentationPermissionService;
     private final AttributionsPermissionService attributionsPermissionService;
     private final InstrumentationPermissionService instrumentationPermissionService;
-    
+    private final RoutineInspectionPermissionService routineInspectionPermissionService;
+
 
     @Transactional
     public void deleteById(Long id) {
@@ -73,7 +75,8 @@ public class UserService {
     
         documentationPermissionService.deleteByUserSafely(user.getId());
         attributionsPermissionService.deleteByUserSafely(user.getId());  
-        instrumentationPermissionService.deleteByUserSafely(user.getId()); 
+        instrumentationPermissionService.deleteByUserSafely(user.getId());
+        routineInspectionPermissionService.deleteByUserSafely(user.getId()); 
         
         List<DamPermissionEntity> damPermissions = damPermissionRepository.findByUser(user);
         if (!damPermissions.isEmpty()) {
@@ -126,7 +129,8 @@ public class UserService {
             
             documentationPermissionService.createDefaultPermission(savedUser);
             attributionsPermissionService.createDefaultPermission(savedUser);
-            instrumentationPermissionService.createDefaultPermission(savedUser); 
+            instrumentationPermissionService.createDefaultPermission(savedUser);
+            routineInspectionPermissionService.createDefaultPermission(savedUser); 
         }
         
         return savedUser;
@@ -194,7 +198,8 @@ public class UserService {
             
             documentationPermissionService.createDefaultPermission(user);
             attributionsPermissionService.createDefaultPermission(user);
-            instrumentationPermissionService.createDefaultPermission(user); 
+            instrumentationPermissionService.createDefaultPermission(user);
+            routineInspectionPermissionService.createDefaultPermission(user); 
         }
         
         if (oldRole == RoleEnum.COLLABORATOR && newRole == RoleEnum.ADMIN) {
@@ -203,7 +208,8 @@ public class UserService {
             
             documentationPermissionService.deleteByUserSafely(user.getId());
             attributionsPermissionService.deleteByUserSafely(user.getId());
-            instrumentationPermissionService.deleteByUserSafely(user.getId()); 
+            instrumentationPermissionService.deleteByUserSafely(user.getId());
+            routineInspectionPermissionService.deleteByUserSafely(user.getId()); 
         }
     }
 

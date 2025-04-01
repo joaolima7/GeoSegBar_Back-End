@@ -23,6 +23,7 @@ import com.geosegbar.entities.VerificationCodeEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.atributions_permission.services.AttributionsPermissionService;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.dam_permissions.persistence.DamPermissionRepository;
@@ -60,14 +61,16 @@ public class UserService {
     private final DamRepository damRepository;
     private final DamPermissionRepository damPermissionRepository;
     private final DocumentationPermissionService documentationPermissionService;
+    private final AttributionsPermissionService attributionsPermissionService;
     
 
     @Transactional
     public void deleteById(Long id) {
         UserEntity user = userRepository.findById(id)
             .orElseThrow(() -> new NotFoundException("Usuário não encontrado para exclusão!"));
-
+    
         documentationPermissionService.deleteByUserSafely(user.getId());
+        attributionsPermissionService.deleteByUserSafely(user.getId());  
         
         List<DamPermissionEntity> damPermissions = damPermissionRepository.findByUser(user);
         if (!damPermissions.isEmpty()) {
@@ -119,6 +122,7 @@ public class UserService {
             }
             
             documentationPermissionService.createDefaultPermission(savedUser);
+            attributionsPermissionService.createDefaultPermission(savedUser); 
         }
         
         return savedUser;
@@ -177,7 +181,7 @@ public class UserService {
     }
 
     private void handleRoleChange(UserEntity user, RoleEnum oldRole, RoleEnum newRole) {
-        
+    
         if (oldRole == RoleEnum.ADMIN && newRole == RoleEnum.COLLABORATOR) {
             
             if (!user.getClients().isEmpty()) {
@@ -185,6 +189,7 @@ public class UserService {
             }
             
             documentationPermissionService.createDefaultPermission(user);
+            attributionsPermissionService.createDefaultPermission(user); 
         }
         
         if (oldRole == RoleEnum.COLLABORATOR && newRole == RoleEnum.ADMIN) {
@@ -192,6 +197,7 @@ public class UserService {
             deleteAllDamPermissions(user);
             
             documentationPermissionService.deleteByUserSafely(user.getId());
+            attributionsPermissionService.deleteByUserSafely(user.getId()); 
         }
     }
 

@@ -99,9 +99,7 @@ public class DocumentationPermissionService {
     }
 
     @Transactional
-    public DocumentationPermissionEntity createDefaultPermission(UserEntity user) {
-        log.info("Creating default documentation permission for user {}", user.getId());
-        
+    public DocumentationPermissionEntity createDefaultPermission(UserEntity user) {        
         if (docPermissionRepository.existsByUser(user)) {
             log.info("Documentation permission already exists for user {}", user.getId());
             return docPermissionRepository.findByUser(user).get();
@@ -114,7 +112,6 @@ public class DocumentationPermissionService {
         permission.setSharePSB(false);
         
         DocumentationPermissionEntity savedPermission = docPermissionRepository.save(permission);
-        log.info("Created documentation permission for user {}", user.getId());
         return savedPermission;
     }
 }

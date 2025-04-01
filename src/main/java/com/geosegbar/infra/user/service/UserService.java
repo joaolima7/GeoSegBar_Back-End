@@ -28,6 +28,7 @@ import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.dam_permissions.persistence.DamPermissionRepository;
 import com.geosegbar.infra.documentation_permission.services.DocumentationPermissionService;
+import com.geosegbar.infra.instrumentation_permission.services.InstrumentationPermissionService;
 import com.geosegbar.infra.roles.persistence.RoleRepository;
 import com.geosegbar.infra.sex.persistence.jpa.SexRepository;
 import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
@@ -62,6 +63,7 @@ public class UserService {
     private final DamPermissionRepository damPermissionRepository;
     private final DocumentationPermissionService documentationPermissionService;
     private final AttributionsPermissionService attributionsPermissionService;
+    private final InstrumentationPermissionService instrumentationPermissionService;
     
 
     @Transactional
@@ -71,6 +73,7 @@ public class UserService {
     
         documentationPermissionService.deleteByUserSafely(user.getId());
         attributionsPermissionService.deleteByUserSafely(user.getId());  
+        instrumentationPermissionService.deleteByUserSafely(user.getId()); 
         
         List<DamPermissionEntity> damPermissions = damPermissionRepository.findByUser(user);
         if (!damPermissions.isEmpty()) {
@@ -122,7 +125,8 @@ public class UserService {
             }
             
             documentationPermissionService.createDefaultPermission(savedUser);
-            attributionsPermissionService.createDefaultPermission(savedUser); 
+            attributionsPermissionService.createDefaultPermission(savedUser);
+            instrumentationPermissionService.createDefaultPermission(savedUser); 
         }
         
         return savedUser;
@@ -189,7 +193,8 @@ public class UserService {
             }
             
             documentationPermissionService.createDefaultPermission(user);
-            attributionsPermissionService.createDefaultPermission(user); 
+            attributionsPermissionService.createDefaultPermission(user);
+            instrumentationPermissionService.createDefaultPermission(user); 
         }
         
         if (oldRole == RoleEnum.COLLABORATOR && newRole == RoleEnum.ADMIN) {
@@ -197,7 +202,8 @@ public class UserService {
             deleteAllDamPermissions(user);
             
             documentationPermissionService.deleteByUserSafely(user.getId());
-            attributionsPermissionService.deleteByUserSafely(user.getId()); 
+            attributionsPermissionService.deleteByUserSafely(user.getId());
+            instrumentationPermissionService.deleteByUserSafely(user.getId()); 
         }
     }
 

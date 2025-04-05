@@ -215,15 +215,11 @@ private void updateRoutineInspectionPermission(UserEntity user, RoutineInspectio
 
 private void updateDamPermissions(UserEntity user, List<Long> damIds) {
     try {
-        // Get all existing permissions for this user
         List<DamPermissionEntity> existingPermissions = damPermissionRepository.findByUser(user);
         
-        // First pass: Update existing permissions
-        // Set hasAccess=true for dams in damIds list, hasAccess=false for others
         for (DamPermissionEntity existing : existingPermissions) {
             boolean shouldHaveAccess = damIds.contains(existing.getDam().getId());
             
-            // Only update if the access status has changed
             if (existing.getHasAccess() != shouldHaveAccess) {
                 existing.setHasAccess(shouldHaveAccess);
                 existing.setUpdatedAt(LocalDateTime.now());
@@ -231,14 +227,11 @@ private void updateDamPermissions(UserEntity user, List<Long> damIds) {
             }
         }
         
-        // Get the updated list of existing dam IDs
         Set<Long> existingDamIds = existingPermissions.stream()
                 .map(perm -> perm.getDam().getId())
                 .collect(java.util.stream.Collectors.toSet());
         
-        // Second pass: Create new permissions for dams not yet in the list
         for (Long damId : damIds) {
-            // Skip if permission already exists
             if (existingDamIds.contains(damId)) {
                 continue;
             }
@@ -246,7 +239,6 @@ private void updateDamPermissions(UserEntity user, List<Long> damIds) {
             DamEntity dam = damRepository.findById(damId)
                     .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + damId));
             
-            // Ensure the client and dam relationship exists
             if (dam.getClient() == null) {
                 throw new NotFoundException("Barragem não está associada a nenhum cliente: " + damId);
             }
@@ -255,7 +247,7 @@ private void updateDamPermissions(UserEntity user, List<Long> damIds) {
             permission.setUser(user);
             permission.setDam(dam);
             permission.setClient(dam.getClient());
-            permission.setHasAccess(true); // Set to true since it's in the request list
+            permission.setHasAccess(true); 
             permission.setCreatedAt(LocalDateTime.now());
             
             damPermissionRepository.save(permission);

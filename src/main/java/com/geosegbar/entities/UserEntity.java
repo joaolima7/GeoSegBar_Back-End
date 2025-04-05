@@ -55,9 +55,8 @@ public class UserEntity {
     @Column(nullable = false)
     private String password;
 
-    @NotBlank(message = "O telefone é obrigatório!")
     @Pattern(regexp = "^\\d{10,11}$", message = "O telefone deve conter 10 ou 11 dígitos numéricos!")
-    @Column(nullable = false, length = 11)
+    @Column(nullable = true, length = 11)
     private String phone;
 
     @NotNull(message = "O sexo deve ser informado!")
@@ -73,6 +72,9 @@ public class UserEntity {
     @JoinColumn(name = "role_id", nullable = false)
     @NotNull(message = "A role deve ser informada!")
     private RoleEntity role;
+
+    @Column(name = "is_first_access")
+    private Boolean isFirstAccess = false;
 
     @ManyToMany
     @JoinTable(

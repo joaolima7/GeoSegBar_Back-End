@@ -5,6 +5,7 @@
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/enums/TypeQuestionEnum.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/response/WebResponseEntity.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/utils/GenerateRandomCode.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/common/utils/GenerateRandomPassword.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/configs/security/CustomUserDetailsService.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/configs/security/SecurityConfig.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/configs/security/SecurityFilter.java
@@ -130,6 +131,7 @@
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/user/dto/LoginRequestDTO.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/user/dto/LoginResponseDTO.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/user/dto/UserClientAssociationDTO.java
+/Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/user/dto/UserCreateDTO.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/user/dto/UserPasswordUpdateDTO.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/user/dto/UserUpdateDTO.java
 /Users/joaoremonato/Documents/Projects/SpringBoot/geosegbar/src/main/java/com/geosegbar/infra/user/persistence/jpa/UserRepository.java

@@ -23,8 +23,7 @@ public class UserUpdateDTO {
     @Email(message = "Email inválido!")
     private String email;
 
-    @NotBlank(message = "O telefone é obrigatório!")
-    @Pattern(regexp = "^\\d{10,11}$", message = "O telefone deve conter 10 ou 11 dígitos numéricos!")
+    @Pattern(regexp = "^(\\d{10,11})?$", message = "O telefone deve conter 10 ou 11 dígitos numéricos ou ser vazio!")
     private String phone;
 
     @NotNull(message = "O sexo deve ser informado!")

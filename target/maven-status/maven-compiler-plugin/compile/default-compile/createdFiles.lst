@@ -48,6 +48,7 @@ com/geosegbar/infra/template_questionnaire/dtos/TemplateQuestionDTO.class
 com/geosegbar/entities/TemplateQuestionnaireQuestionEntity.class
 com/geosegbar/entities/RoutineInspectionPermissionEntity.class
 com/geosegbar/infra/question/services/QuestionService.class
+com/geosegbar/common/utils/GenerateRandomPassword.class
 com/geosegbar/infra/user/service/UserService.class
 com/geosegbar/infra/verification_code/dto/ForgotPasswordRequestDTO.class
 com/geosegbar/infra/checklist_response/dtos/ChecklistResponseDetailDTO.class
@@ -85,6 +86,7 @@ com/geosegbar/infra/option/services/OptionService.class
 com/geosegbar/infra/permissions/dam_permissions/web/DamPermissionController.class
 com/geosegbar/infra/checklist_submission/dtos/PhotoSubmissionDTO.class
 com/geosegbar/infra/checklist_response/dtos/DamInfoDTO.class
+com/geosegbar/infra/user/dto/UserCreateDTO.class
 com/geosegbar/infra/permissions/documentation_permission/persistence/DocumentationPermissionRepository.class
 com/geosegbar/entities/StatusEntity.class
 com/geosegbar/infra/checklist_response/dtos/PhotoInfoDTO.class

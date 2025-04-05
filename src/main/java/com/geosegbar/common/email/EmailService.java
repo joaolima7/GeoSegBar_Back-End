@@ -66,4 +66,29 @@ public class EmailService {
             log.error("Erro ao enviar email de redefinição de senha: {}", e.getMessage());
         }
     }
+
+
+    public void sendFirstAccessPassword(String toEmail, String password, String userName) {
+        try {
+            Context context = new Context();
+            context.setVariable("password", password);
+            context.setVariable("userName", userName);
+            context.setVariable("userEmail", toEmail);
+            
+            String htmlContent = templateEngine.process("emails/first-access-password", context);
+            
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("Bem-vindo ao GeoSegBar - Sua senha de acesso");
+            helper.setText(htmlContent, true);
+            
+            mailSender.send(message);
+            log.info("Email de primeiro acesso enviado para: {}", toEmail);
+        } catch (MessagingException e) {
+            log.error("Erro ao enviar email de primeiro acesso: {}", e.getMessage());
+        }
+    }
 }

@@ -12,6 +12,7 @@ import com.geosegbar.common.email.EmailService;
 import com.geosegbar.common.enums.RoleEnum;
 import com.geosegbar.common.enums.StatusEnum;
 import com.geosegbar.common.utils.GenerateRandomCode;
+import com.geosegbar.common.utils.GenerateRandomPassword;
 import com.geosegbar.configs.security.TokenService;
 import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.DamEntity;
@@ -36,6 +37,7 @@ import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
 import com.geosegbar.infra.user.dto.LoginRequestDTO;
 import com.geosegbar.infra.user.dto.LoginResponseDTO;
 import com.geosegbar.infra.user.dto.UserClientAssociationDTO;
+import com.geosegbar.infra.user.dto.UserCreateDTO;
 import com.geosegbar.infra.user.dto.UserPasswordUpdateDTO;
 import com.geosegbar.infra.user.dto.UserUpdateDTO;
 import com.geosegbar.infra.user.persistence.jpa.UserRepository;
@@ -87,7 +89,16 @@ public class UserService {
     }
 
     @Transactional
-    public UserEntity save(UserEntity userEntity) {
+    public UserEntity save(UserCreateDTO userDTO) {        
+        UserEntity userEntity = new UserEntity();
+        userEntity.setName(userDTO.getName());
+        userEntity.setEmail(userDTO.getEmail());
+        userEntity.setPhone(userDTO.getPhone());
+        userEntity.setSex(userDTO.getSex());
+        userEntity.setStatus(userDTO.getStatus());
+        userEntity.setRole(userDTO.getRole());
+        userEntity.setClients(userDTO.getClients());
+        
         if(userRepository.existsByEmail(userEntity.getEmail())){
             throw new DuplicateResourceException("Já existe um usuário com o email informado!");
         }
@@ -119,8 +130,13 @@ public class UserService {
             userEntity.setRole(role);
         }
         
-        userEntity.setPassword(passwordEncoder.encode(userEntity.getPassword()));
+        String generatedPassword = GenerateRandomPassword.execute();
+        userEntity.setPassword(passwordEncoder.encode(generatedPassword));
+        userEntity.setIsFirstAccess(true);
+        
         UserEntity savedUser = userRepository.save(userEntity);
+        
+        emailService.sendFirstAccessPassword(savedUser.getEmail(), generatedPassword, savedUser.getName());
         
         if (savedUser.getRole().getName() == RoleEnum.COLLABORATOR) {
             if (!savedUser.getClients().isEmpty()) {
@@ -258,6 +274,11 @@ public class UserService {
         }
         
         existingUser.setPassword(passwordEncoder.encode(passwordDTO.getNewPassword()));
+
+        if (existingUser.getIsFirstAccess()) {
+            existingUser.setIsFirstAccess(false);
+        }
+
         return userRepository.save(existingUser);
     }
 
@@ -355,6 +376,7 @@ public class UserService {
             user.getPhone(), 
             user.getSex(),
             user.getRole().getName(),
+            user.getIsFirstAccess(), 
             token
         );
     }

@@ -18,6 +18,7 @@ import com.geosegbar.entities.UserEntity;
 import com.geosegbar.infra.user.dto.LoginRequestDTO;
 import com.geosegbar.infra.user.dto.LoginResponseDTO;
 import com.geosegbar.infra.user.dto.UserClientAssociationDTO;
+import com.geosegbar.infra.user.dto.UserCreateDTO;
 import com.geosegbar.infra.user.dto.UserPasswordUpdateDTO;
 import com.geosegbar.infra.user.dto.UserUpdateDTO;
 import com.geosegbar.infra.user.service.UserService;
@@ -50,8 +51,8 @@ public class UserController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<WebResponseEntity<UserEntity>> createUser(@Valid @RequestBody UserEntity user) {
-        UserEntity createdUser = userService.save(user);
+    public ResponseEntity<WebResponseEntity<UserEntity>> createUser(@Valid @RequestBody UserCreateDTO userDTO) {
+        UserEntity createdUser = userService.save(userDTO);
         WebResponseEntity<UserEntity> response = WebResponseEntity.success(createdUser, "Usuário criado com sucesso!");
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }

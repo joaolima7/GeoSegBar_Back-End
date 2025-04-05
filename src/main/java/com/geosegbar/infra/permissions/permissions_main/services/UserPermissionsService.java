@@ -3,6 +3,7 @@ package com.geosegbar.infra.permissions.permissions_main.services;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 
@@ -214,21 +215,30 @@ private void updateRoutineInspectionPermission(UserEntity user, RoutineInspectio
 
 private void updateDamPermissions(UserEntity user, List<Long> damIds) {
     try {
+        // Get all existing permissions for this user
         List<DamPermissionEntity> existingPermissions = damPermissionRepository.findByUser(user);
         
+        // First pass: Update existing permissions
+        // Set hasAccess=true for dams in damIds list, hasAccess=false for others
         for (DamPermissionEntity existing : existingPermissions) {
-            if (!damIds.contains(existing.getDam().getId())) {
-                damPermissionRepository.delete(existing);
+            boolean shouldHaveAccess = damIds.contains(existing.getDam().getId());
+            
+            // Only update if the access status has changed
+            if (existing.getHasAccess() != shouldHaveAccess) {
+                existing.setHasAccess(shouldHaveAccess);
+                existing.setUpdatedAt(LocalDateTime.now());
+                damPermissionRepository.save(existing);
             }
         }
         
-        existingPermissions = damPermissionRepository.findByUser(user);
-        
-        List<Long> existingDamIds = existingPermissions.stream()
+        // Get the updated list of existing dam IDs
+        Set<Long> existingDamIds = existingPermissions.stream()
                 .map(perm -> perm.getDam().getId())
-                .toList();
+                .collect(java.util.stream.Collectors.toSet());
         
+        // Second pass: Create new permissions for dams not yet in the list
         for (Long damId : damIds) {
+            // Skip if permission already exists
             if (existingDamIds.contains(damId)) {
                 continue;
             }
@@ -236,16 +246,22 @@ private void updateDamPermissions(UserEntity user, List<Long> damIds) {
             DamEntity dam = damRepository.findById(damId)
                     .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + damId));
             
+            // Ensure the client and dam relationship exists
+            if (dam.getClient() == null) {
+                throw new NotFoundException("Barragem não está associada a nenhum cliente: " + damId);
+            }
+            
             DamPermissionEntity permission = new DamPermissionEntity();
             permission.setUser(user);
             permission.setDam(dam);
             permission.setClient(dam.getClient());
-            permission.setHasAccess(false);
+            permission.setHasAccess(true); // Set to true since it's in the request list
             permission.setCreatedAt(LocalDateTime.now());
             
             damPermissionRepository.save(permission);
         }
         
+        log.info("Updated dam permissions for user {}, dams with access: {}", user.getId(), damIds.size());
     } catch (Exception e) {
         log.error("Error updating dam permissions for user {}: {}", user.getId(), e.getMessage(), e);
         throw e;

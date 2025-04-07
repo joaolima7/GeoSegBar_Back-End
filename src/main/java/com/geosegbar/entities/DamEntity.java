@@ -109,6 +109,10 @@ public class DamEntity {
 
     @OneToOne(mappedBy = "dam", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnoreProperties({"dam"}) 
+    private RegulatoryDamEntity regulatoryDam;
+
+    @OneToOne(mappedBy = "dam", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnoreProperties({"dam"}) 
     private DocumentationDamEntity documentationDam;
 
     @ManyToMany(mappedBy = "dams", fetch = FetchType.LAZY)

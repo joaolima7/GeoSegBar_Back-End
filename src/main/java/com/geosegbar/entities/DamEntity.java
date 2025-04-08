@@ -123,4 +123,8 @@ public class DamEntity {
     @JsonIgnore
     @OneToMany(mappedBy = "dam", fetch = FetchType.LAZY)
     private Set<DamPermissionEntity> damPermissions = new HashSet<>();
+
+    @OneToMany(mappedBy = "dam", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnoreProperties("dam")
+    private Set<ReservoirEntity> reservoirs = new HashSet<>();
 }

@@ -1,7 +1,10 @@
 package com.geosegbar.infra.dam.dtos;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -99,4 +102,7 @@ public class CreateDamCompleteRequest {
     private Long riskCategoryId;
     private Long potentialDamageId;
     private Long classificationDamId;
+
+    @Valid
+    private List<ReservoirRequestDTO> reservoirs = new ArrayList<>();
 }

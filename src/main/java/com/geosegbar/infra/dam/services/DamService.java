@@ -9,8 +9,10 @@ import com.geosegbar.entities.ClassificationDamEntity;
 import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.DocumentationDamEntity;
+import com.geosegbar.entities.LevelEntity;
 import com.geosegbar.entities.PotentialDamageEntity;
 import com.geosegbar.entities.RegulatoryDamEntity;
+import com.geosegbar.entities.ReservoirEntity;
 import com.geosegbar.entities.RiskCategoryEntity;
 import com.geosegbar.entities.SecurityLevelEntity;
 import com.geosegbar.entities.StatusEntity;
@@ -20,11 +22,15 @@ import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.classification_dam.peristence.ClassificationDamRepository;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.dtos.CreateDamCompleteRequest;
+import com.geosegbar.infra.dam.dtos.LevelRequestDTO;
+import com.geosegbar.infra.dam.dtos.ReservoirRequestDTO;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.documentation_dam.persistence.DocumentationDamRepository;
 import com.geosegbar.infra.file_storage.FileStorageService;
+import com.geosegbar.infra.level.persistence.LevelRepository;
 import com.geosegbar.infra.potential_damage.persistence.PotentialDamageRepository;
 import com.geosegbar.infra.regulatory_dam.persistence.RegulatoryDamRepository;
+import com.geosegbar.infra.reservoir.persistence.ReservoirRepository;
 import com.geosegbar.infra.risk_category.persistence.RiskCategoryRepository;
 import com.geosegbar.infra.security_level.persistence.SecurityLevelRepository;
 import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
@@ -49,8 +55,11 @@ public class DamService {
     private final DocumentationDamRepository documentationDamRepository;
     private final RegulatoryDamRepository regulatoryDamRepository;
     private final FileStorageService fileStorageService;
+    private final LevelRepository levelRepository;
+    private final ReservoirRepository reservoirRepository;
 
-    @Transactional
+
+   @Transactional
     public DamEntity createCompleteWithRelationships(CreateDamCompleteRequest request) {
         // Verificar se já existe uma barragem com esse nome
         if (damRepository.existsByName(request.getName())) {
@@ -182,8 +191,43 @@ public class DamService {
         // Salvar RegulatoryDam
         regulatoryDam = regulatoryDamRepository.save(regulatoryDam);
         
+        // Processar reservoirs
+        if (request.getReservoirs() != null && !request.getReservoirs().isEmpty()) {
+            for (ReservoirRequestDTO reservoirDTO : request.getReservoirs()) {
+                // Criar/Buscar o Level
+                LevelEntity level = processLevel(reservoirDTO.getLevel());
+                
+                // Criar o Reservoir
+                ReservoirEntity reservoir = new ReservoirEntity();
+                reservoir.setDam(dam);
+                reservoir.setLevel(level);
+                
+                // Salvar o Reservoir
+                reservoirRepository.save(reservoir);
+            }
+        }
+        
         // Recarregar Dam com todos os relacionamentos
         return findById(dam.getId());
+    }
+    
+    private LevelEntity processLevel(LevelRequestDTO levelDTO) {
+        // Se um ID foi fornecido, buscar pelo ID
+        if (levelDTO.getId() != null) {
+            return levelRepository.findById(levelDTO.getId())
+                .orElseThrow(() -> new NotFoundException("Nível não encontrado com ID: " + levelDTO.getId()));
+        }
+        
+        // Verificar se já existe um level com este nome
+        return levelRepository.findByName(levelDTO.getName())
+            .orElseGet(() -> {
+                // Se não existe, criar novo
+                LevelEntity newLevel = new LevelEntity();
+                newLevel.setName(levelDTO.getName());
+                newLevel.setValue(levelDTO.getValue());
+                newLevel.setUnitLevel(levelDTO.getUnitLevel());
+                return levelRepository.save(newLevel);
+            });
     }
 
     @Transactional

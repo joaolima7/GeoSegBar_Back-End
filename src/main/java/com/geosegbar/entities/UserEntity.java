@@ -6,6 +6,7 @@ import java.util.Set;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonProperty.Access;
+import com.geosegbar.common.objects_values.UserCreatorInfo;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -86,6 +87,21 @@ public class UserEntity {
 
     @JsonIgnore
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
-    private Set<DamPermissionEntity> damPermissions = new HashSet<>();  
+    private Set<DamPermissionEntity> damPermissions = new HashSet<>();
     
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by_id")
+    private UserEntity createdBy;
+    
+    @JsonIgnore
+    @OneToMany(mappedBy = "createdBy", fetch = FetchType.LAZY)
+    private Set<UserEntity> createdUsers = new HashSet<>();
+    
+    @JsonProperty("createdBy")
+    public Object getCreatedByInfo() {
+        if (this.createdBy == null) {
+            return null;
+        }
+        return new UserCreatorInfo(createdBy.getId(), createdBy.getName(), createdBy.getEmail());
+    }
 }

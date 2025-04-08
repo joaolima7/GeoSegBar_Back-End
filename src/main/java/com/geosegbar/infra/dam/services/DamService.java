@@ -61,19 +61,16 @@ public class DamService {
 
    @Transactional
     public DamEntity createCompleteWithRelationships(CreateDamCompleteRequest request) {
-        // Verificar se já existe uma barragem com esse nome
         if (damRepository.existsByName(request.getName())) {
             throw new DuplicateResourceException("Já existe uma barragem com este nome!");
         }
         
-        // Buscar entidades relacionadas
         ClientEntity client = clientRepository.findById(request.getClientId())
             .orElseThrow(() -> new NotFoundException("Cliente não encontrado"));
             
         StatusEntity status = statusRepository.findById(request.getStatusId())
             .orElseThrow(() -> new NotFoundException("Status não encontrado"));
             
-        // Criar entidade Dam
         DamEntity dam = new DamEntity();
         dam.setName(request.getName());
         dam.setLatitude(request.getLatitude());
@@ -89,9 +86,7 @@ public class DamService {
         dam.setLinkPSB(request.getLinkPSB());
         dam.setLinkLegislation(request.getLinkLegislation());
         
-        // Processar imagens
         if (request.getLogoBase64() != null && !request.getLogoBase64().isEmpty()) {
-            // Remover prefixo da string base64 se existir
             String base64Image = request.getLogoBase64();
             if (base64Image.contains(",")) {
                 base64Image = base64Image.split(",")[1];
@@ -108,7 +103,6 @@ public class DamService {
         }
         
         if (request.getDamImageBase64() != null && !request.getDamImageBase64().isEmpty()) {
-            // Remover prefixo da string base64 se existir
             String base64Image = request.getDamImageBase64();
             if (base64Image.contains(",")) {
                 base64Image = base64Image.split(",")[1];
@@ -124,10 +118,8 @@ public class DamService {
             dam.setDamImagePath(damImageUrl);
         }
         
-        // Salvar Dam primeiro para ter o ID
         dam = damRepository.save(dam);
         
-        // Criar DocumentationDam
         DocumentationDamEntity documentationDam = new DocumentationDamEntity();
         documentationDam.setDam(dam);
         documentationDam.setLastUpdatePAE(request.getLastUpdatePAE());
@@ -143,10 +135,8 @@ public class DamService {
         documentationDam.setLastFillingFSB(request.getLastFillingFSB());
         documentationDam.setNextFillingFSB(request.getNextFillingFSB());
         
-        // Salvar DocumentationDam
         documentationDam = documentationDamRepository.save(documentationDam);
         
-        // Criar RegulatoryDam
         RegulatoryDamEntity regulatoryDam = new RegulatoryDamEntity();
         regulatoryDam.setDam(dam);
         regulatoryDam.setFramePNSB(request.getFramePNSB());
@@ -157,7 +147,6 @@ public class DamService {
         regulatoryDam.setTechnicalManagerEmail(request.getTechnicalManagerEmail());
         regulatoryDam.setTechnicalManagerPhone(request.getTechnicalManagerPhone());
         
-        // Associar entidades relacionadas a RegulatoryDam
         if (request.getSecurityLevelId() != null) {
             SecurityLevelEntity securityLevel = securityLevelRepository.findById(request.getSecurityLevelId())
                 .orElseThrow(() -> new NotFoundException("Nível de segurança não encontrado"));
@@ -188,40 +177,31 @@ public class DamService {
             regulatoryDam.setClassificationDam(classificationDam);
         }
         
-        // Salvar RegulatoryDam
         regulatoryDam = regulatoryDamRepository.save(regulatoryDam);
         
-        // Processar reservoirs
         if (request.getReservoirs() != null && !request.getReservoirs().isEmpty()) {
             for (ReservoirRequestDTO reservoirDTO : request.getReservoirs()) {
-                // Criar/Buscar o Level
                 LevelEntity level = processLevel(reservoirDTO.getLevel());
                 
-                // Criar o Reservoir
                 ReservoirEntity reservoir = new ReservoirEntity();
                 reservoir.setDam(dam);
                 reservoir.setLevel(level);
                 
-                // Salvar o Reservoir
                 reservoirRepository.save(reservoir);
             }
         }
         
-        // Recarregar Dam com todos os relacionamentos
         return findById(dam.getId());
     }
     
     private LevelEntity processLevel(LevelRequestDTO levelDTO) {
-        // Se um ID foi fornecido, buscar pelo ID
         if (levelDTO.getId() != null) {
             return levelRepository.findById(levelDTO.getId())
                 .orElseThrow(() -> new NotFoundException("Nível não encontrado com ID: " + levelDTO.getId()));
         }
         
-        // Verificar se já existe um level com este nome
         return levelRepository.findByName(levelDTO.getName())
             .orElseGet(() -> {
-                // Se não existe, criar novo
                 LevelEntity newLevel = new LevelEntity();
                 newLevel.setName(levelDTO.getName());
                 newLevel.setValue(levelDTO.getValue());

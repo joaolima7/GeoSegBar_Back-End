@@ -106,6 +106,12 @@ public class UserService {
         userEntity.setStatus(userDTO.getStatus());
         userEntity.setRole(userDTO.getRole());
         userEntity.setClients(userDTO.getClients());
+
+        if (userDTO.getCreatedById() != null) {
+            UserEntity creator = userRepository.findById(userDTO.getCreatedById())
+                .orElseThrow(() -> new NotFoundException("Usuário criador não encontrado com ID: " + userDTO.getCreatedById()));
+            userEntity.setCreatedBy(creator);
+        }
         
         if(userRepository.existsByEmail(userEntity.getEmail())){
             throw new DuplicateResourceException("Já existe um usuário com o email informado!");
@@ -150,7 +156,6 @@ public class UserService {
             if (userDTO.getSourceUserId() != null) {
                 copyPermissionsFromUser(savedUser, userDTO.getSourceUserId());
             } else {
-                // Criar permissões padrão como já é feito
                 if (!savedUser.getClients().isEmpty()) {
                     createDefaultDamPermissions(savedUser);
                 }

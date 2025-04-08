@@ -41,4 +41,5 @@ public class UserCreateDTO {
 
     private Set<ClientEntity> clients = new HashSet<>();
 
+    private Long sourceUserId;
 }

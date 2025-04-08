@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
@@ -47,6 +48,19 @@ public class UserController {
     public ResponseEntity<WebResponseEntity<UserEntity>> getUserById(@PathVariable Long id) {
         UserEntity user = userService.findById(id);
         WebResponseEntity<UserEntity> response = WebResponseEntity.success(user, "Usuário obtido com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/filter")
+    public ResponseEntity<WebResponseEntity<List<UserEntity>>> getUsersByRoleAndClient(
+            @RequestParam(required = false) Long roleId,
+            @RequestParam(required = false) Long clientId) {
+        
+        List<UserEntity> users = userService.findByRoleAndClient(roleId, clientId);
+        WebResponseEntity<List<UserEntity>> response = WebResponseEntity.success(
+            users, 
+            "Usuários filtrados obtidos com sucesso!"
+        );
         return ResponseEntity.ok(response);
     }
 

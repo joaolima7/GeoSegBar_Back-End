@@ -26,10 +26,14 @@ import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
+import com.geosegbar.infra.permissions.atributions_permission.dtos.AttributionsPermissionDTO;
 import com.geosegbar.infra.permissions.atributions_permission.services.AttributionsPermissionService;
 import com.geosegbar.infra.permissions.dam_permissions.persistence.DamPermissionRepository;
+import com.geosegbar.infra.permissions.documentation_permission.dtos.DocumentationPermissionDTO;
 import com.geosegbar.infra.permissions.documentation_permission.services.DocumentationPermissionService;
+import com.geosegbar.infra.permissions.instrumentation_permission.dtos.InstrumentationPermissionDTO;
 import com.geosegbar.infra.permissions.instrumentation_permission.services.InstrumentationPermissionService;
+import com.geosegbar.infra.permissions.routine_inspection_permission.dtos.RoutineInspectionPermissionDTO;
 import com.geosegbar.infra.permissions.routine_inspection_permission.services.RoutineInspectionPermissionService;
 import com.geosegbar.infra.roles.persistence.RoleRepository;
 import com.geosegbar.infra.sex.persistence.jpa.SexRepository;
@@ -88,6 +92,10 @@ public class UserService {
         userRepository.deleteById(id);
     }
 
+    public List<UserEntity> findByRoleAndClient(Long roleId, Long clientId) {
+        return userRepository.findByRoleAndClient(roleId, clientId);
+    }
+
     @Transactional
     public UserEntity save(UserCreateDTO userDTO) {        
         UserEntity userEntity = new UserEntity();
@@ -139,14 +147,19 @@ public class UserService {
         emailService.sendFirstAccessPassword(savedUser.getEmail(), generatedPassword, savedUser.getName());
         
         if (savedUser.getRole().getName() == RoleEnum.COLLABORATOR) {
-            if (!savedUser.getClients().isEmpty()) {
-                createDefaultDamPermissions(savedUser);
+            if (userDTO.getSourceUserId() != null) {
+                copyPermissionsFromUser(savedUser, userDTO.getSourceUserId());
+            } else {
+                // Criar permissões padrão como já é feito
+                if (!savedUser.getClients().isEmpty()) {
+                    createDefaultDamPermissions(savedUser);
+                }
+                
+                documentationPermissionService.createDefaultPermission(savedUser);
+                attributionsPermissionService.createDefaultPermission(savedUser);
+                instrumentationPermissionService.createDefaultPermission(savedUser);
+                routineInspectionPermissionService.createDefaultPermission(savedUser); 
             }
-            
-            documentationPermissionService.createDefaultPermission(savedUser);
-            attributionsPermissionService.createDefaultPermission(savedUser);
-            instrumentationPermissionService.createDefaultPermission(savedUser);
-            routineInspectionPermissionService.createDefaultPermission(savedUser); 
         }
         
         return savedUser;
@@ -491,5 +504,70 @@ public class UserService {
 
     public boolean existsByEmailAndIdNot(String email, Long id) {
         return userRepository.existsByEmailAndIdNot(email, id);
+    }
+
+    @Transactional
+    private void copyPermissionsFromUser(UserEntity targetUser, Long sourceUserId) {
+        UserEntity sourceUser = userRepository.findById(sourceUserId)
+            .orElseThrow(() -> new NotFoundException("Usuário não encontrado para cópia da permissões!"));
+        
+        if (sourceUser.getRole().getName() != RoleEnum.COLLABORATOR) {
+            throw new InvalidInputException("O usuário fonte deve ser um colaborador para copiar permissões!");
+        }
+        
+        try {
+            var sourceDocPermission = documentationPermissionService.findByUser(sourceUser.getId());
+            var docPermissionDTO = new DocumentationPermissionDTO();
+            docPermissionDTO.setUserId(targetUser.getId());
+            docPermissionDTO.setViewPSB(sourceDocPermission.getViewPSB());
+            docPermissionDTO.setEditPSB(sourceDocPermission.getEditPSB());
+            docPermissionDTO.setSharePSB(sourceDocPermission.getSharePSB());
+            documentationPermissionService.createOrUpdate(docPermissionDTO);
+        } catch (NotFoundException e) {
+            documentationPermissionService.createDefaultPermission(targetUser);
+        }
+        
+        try {
+            var sourceAttrPermission = attributionsPermissionService.findByUser(sourceUser.getId());
+            var attrPermissionDTO = new AttributionsPermissionDTO();
+            attrPermissionDTO.setUserId(targetUser.getId());
+            attrPermissionDTO.setEditUser(sourceAttrPermission.getEditUser());
+            attrPermissionDTO.setEditDam(sourceAttrPermission.getEditDam());
+            attrPermissionDTO.setEditGeralData(sourceAttrPermission.getEditGeralData());
+            attributionsPermissionService.createOrUpdate(attrPermissionDTO);
+        } catch (NotFoundException e) {
+            attributionsPermissionService.createDefaultPermission(targetUser);
+        }
+        
+        try {
+            var sourceInstrPermission = instrumentationPermissionService.findByUser(sourceUser.getId());
+            var instrPermissionDTO = new InstrumentationPermissionDTO();
+            instrPermissionDTO.setUserId(targetUser.getId());
+            instrPermissionDTO.setViewGraphs(sourceInstrPermission.getViewGraphs());
+            instrPermissionDTO.setEditGraphsLocal(sourceInstrPermission.getEditGraphsLocal());
+            instrPermissionDTO.setEditGraphsDefault(sourceInstrPermission.getEditGraphsDefault());
+            instrPermissionDTO.setViewRead(sourceInstrPermission.getViewRead());
+            instrPermissionDTO.setEditRead(sourceInstrPermission.getEditRead());
+            instrPermissionDTO.setViewSections(sourceInstrPermission.getViewSections());
+            instrPermissionDTO.setEditSections(sourceInstrPermission.getEditSections());
+            instrumentationPermissionService.createOrUpdate(instrPermissionDTO);
+        } catch (NotFoundException e) {
+            instrumentationPermissionService.createDefaultPermission(targetUser);
+        }
+        
+        try {
+            var sourceRoutinePermission = routineInspectionPermissionService.findByUser(sourceUser.getId());
+            var routinePermissionDTO = new RoutineInspectionPermissionDTO();
+            routinePermissionDTO.setUserId(targetUser.getId());
+            routinePermissionDTO.setIsFillWeb(sourceRoutinePermission.getIsFillWeb());
+            routinePermissionDTO.setIsFillMobile(sourceRoutinePermission.getIsFillMobile());
+            routineInspectionPermissionService.createOrUpdate(routinePermissionDTO);
+        } catch (NotFoundException e) {
+            routineInspectionPermissionService.createDefaultPermission(targetUser);
+        }
+        
+        if (!targetUser.getClients().isEmpty()) {
+            createDefaultDamPermissions(targetUser);
+        }
     }
 }

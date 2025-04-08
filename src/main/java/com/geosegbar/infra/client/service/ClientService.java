@@ -33,10 +33,6 @@ public class ClientService {
         if (clientRepository.existsByName(clientEntity.getName())) {
             throw new DuplicateResourceException("Já existe um cliente com este nome!");
         }
-        
-        if (clientRepository.existsByAcronym(clientEntity.getAcronym())) {
-            throw new DuplicateResourceException("Já existe um cliente com esta sigla!");
-        }
 
         if(clientRepository.existsByEmail(clientEntity.getEmail())){
             throw new DuplicateResourceException("Já existe um cliente com este email!");
@@ -51,10 +47,6 @@ public class ClientService {
 
         if (clientRepository.existsByNameAndIdNot(clientEntity.getName(), clientEntity.getId())) {
             throw new DuplicateResourceException("Já existe um cliente com este nome.");
-        }
-        
-        if (clientRepository.existsByAcronymAndIdNot(clientEntity.getAcronym(), clientEntity.getId())) {
-            throw new DuplicateResourceException("Já existe um cliente com esta sigla.");
         }
 
         if(clientRepository.existsByEmailAndIdNot(clientEntity.getEmail(), clientEntity.getId())){
@@ -91,16 +83,8 @@ public class ClientService {
         return clientRepository.existsByName(name);
     }
 
-    public boolean existsByAcronym(String acronym) {
-        return clientRepository.existsByAcronym(acronym);
-    }
-
     public boolean existsByNameAndIdNot(String name, Long id) {
         return clientRepository.existsByNameAndIdNot(name, id);
-    }
-
-    public boolean existsByAcronymAndIdNot(String acronym, Long id) {
-        return clientRepository.existsByAcronymAndIdNot(acronym, id);
     }
 
     public boolean existsByEmail(String email) {

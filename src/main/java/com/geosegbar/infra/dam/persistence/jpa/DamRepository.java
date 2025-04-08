@@ -14,7 +14,5 @@ public interface DamRepository extends JpaRepository<DamEntity, Long>{
     List<DamEntity> findByClient(ClientEntity client);
 
     boolean existsByName(String name);
-    boolean existsByAcronym(String acronym);
     boolean existsByNameAndIdNot(String name, Long id);
-    boolean existsByAcronymAndIdNot(String acronym, Long id);
 }

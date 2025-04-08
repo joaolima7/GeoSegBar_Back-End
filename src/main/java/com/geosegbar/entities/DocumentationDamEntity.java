@@ -32,6 +32,7 @@ public class DocumentationDamEntity {
     
     @OneToOne
     @JoinColumn(name = "dam_id", nullable = false, unique = true)
+    @JsonIgnoreProperties({"documentationDam"})
     private DamEntity dam;
     
     @Column(name = "last_update_pae")

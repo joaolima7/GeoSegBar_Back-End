@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.DamEntity;
+import com.geosegbar.infra.dam.dtos.CreateDamCompleteRequest;
 import com.geosegbar.infra.dam.services.DamService;
 
 import jakarta.validation.Valid;
@@ -39,6 +40,13 @@ public class DamController {
         DamEntity dam = damService.findById(id);
         WebResponseEntity<DamEntity> response = WebResponseEntity.success(dam, "Barragem obtida com sucesso!");
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/complete")
+    public ResponseEntity<WebResponseEntity<DamEntity>> createCompleteDam(@Valid @RequestBody CreateDamCompleteRequest request) {
+        DamEntity createdDam = damService.createCompleteWithRelationships(request);
+        WebResponseEntity<DamEntity> response = WebResponseEntity.success(createdDam, "Barragem completa criada com sucesso!");
+        return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
     
     @PostMapping

@@ -42,11 +42,6 @@ public class ClientEntity {
     @Column(nullable = false, unique = true)
     private String name;
 
-    @Pattern(regexp = "^[A-Za-zÀ-ÿ\\s]+$", message = "O campo não pode conter números!")
-    @Size(min = 3, max = 3, message = "A sigla deve ter 3 caracteres!")
-    @Column(nullable = false, unique = true)
-    private String acronym;
-
     @NotBlank(message = "Email é obrigatório!")
     @Email(message = "Email inválido!")
     @Column(nullable = false, unique = true)

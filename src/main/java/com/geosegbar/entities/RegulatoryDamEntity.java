@@ -33,6 +33,7 @@ public class RegulatoryDamEntity {
     
     @OneToOne
     @JoinColumn(name = "dam_id", nullable = false, unique = true)
+    @JsonIgnoreProperties
     private DamEntity dam;
     
     @Column(name = "frame_pnsb", nullable = false)

@@ -24,12 +24,14 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "dam")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
@@ -50,11 +52,6 @@ public class DamEntity {
     @Column(nullable = false)
     @NotNull(message = "Longitude é obrigatório!")
     private Double longitude;
-
-    @Column(nullable = false, unique = true)
-    @Pattern(regexp = "^[A-Za-zÀ-ÿ\\s]+$", message = "O campo não pode conter números!")
-    @Size(min = 3, max = 3, message = "A sigla deve ter 3 caracteres!")
-    private String acronym;
 
     @NotBlank(message = "O nome da rua é obrigatório!")
     @Column(nullable = false)

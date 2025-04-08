@@ -1,10 +1,17 @@
 package com.geosegbar.entities;
 
+import java.util.HashSet;
+import java.util.Set;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
@@ -24,4 +31,8 @@ public class SupervisoryBodyEntity {
     @NotBlank(message = "O nome do órgão fiscalizador é obrigatório!")
     @Column(nullable = false, unique = true)
     private String name;
+    
+    @JsonIgnore
+    @OneToMany(mappedBy = "supervisoryBody", fetch = FetchType.LAZY)
+    private Set<RegulatoryDamEntity> regulatoryDams = new HashSet<>();
 }

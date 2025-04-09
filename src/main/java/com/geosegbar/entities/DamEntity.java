@@ -1,6 +1,8 @@
 package com.geosegbar.entities;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -127,4 +129,8 @@ public class DamEntity {
     @OneToMany(mappedBy = "dam", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnoreProperties("dam")
     private Set<ReservoirEntity> reservoirs = new HashSet<>();
+
+    @OneToMany(mappedBy = "dam", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnoreProperties("dam")
+    private List<PSBFolderEntity> psbFolders = new ArrayList<>();
 }

@@ -10,6 +10,7 @@ import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.DocumentationDamEntity;
 import com.geosegbar.entities.LevelEntity;
+import com.geosegbar.entities.PSBFolderEntity;
 import com.geosegbar.entities.PotentialDamageEntity;
 import com.geosegbar.entities.RegulatoryDamEntity;
 import com.geosegbar.entities.ReservoirEntity;
@@ -29,6 +30,7 @@ import com.geosegbar.infra.documentation_dam.persistence.DocumentationDamReposit
 import com.geosegbar.infra.file_storage.FileStorageService;
 import com.geosegbar.infra.level.persistence.LevelRepository;
 import com.geosegbar.infra.potential_damage.persistence.PotentialDamageRepository;
+import com.geosegbar.infra.psb.services.PSBFolderService;
 import com.geosegbar.infra.regulatory_dam.persistence.RegulatoryDamRepository;
 import com.geosegbar.infra.reservoir.persistence.ReservoirRepository;
 import com.geosegbar.infra.risk_category.persistence.RiskCategoryRepository;
@@ -42,8 +44,6 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class DamService {
-    
-
     private final DamRepository damRepository;
     private final ClientRepository clientRepository;
     private final StatusRepository statusRepository;
@@ -57,6 +57,7 @@ public class DamService {
     private final FileStorageService fileStorageService;
     private final LevelRepository levelRepository;
     private final ReservoirRepository reservoirRepository;
+    private final PSBFolderService psbFolderService;
 
 
    @Transactional
@@ -189,6 +190,15 @@ public class DamService {
                 
                 reservoirRepository.save(reservoir);
             }
+        }
+
+        if (request.getPsbFolders() != null && !request.getPsbFolders().isEmpty()) {
+            List<PSBFolderEntity> folders = psbFolderService.createMultipleFolders(
+                dam,
+                request.getPsbFolders(),
+                request.getCreatedById()
+            );
+            dam.setPsbFolders(folders);
         }
         
         return findById(dam.getId());

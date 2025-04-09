@@ -96,6 +96,14 @@ public class UserEntity {
     @JsonIgnore
     @OneToMany(mappedBy = "createdBy", fetch = FetchType.LAZY)
     private Set<UserEntity> createdUsers = new HashSet<>();
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "createdBy", fetch = FetchType.LAZY)
+    private Set<PSBFolderEntity> psbFoldersCreated = new HashSet<>();
+    
+    @JsonIgnore
+    @OneToMany(mappedBy = "uploadedBy", fetch = FetchType.LAZY)
+    private Set<PSBFileEntity> psbFilesUploaded = new HashSet<>();
     
     @JsonProperty("createdBy")
     public Object getCreatedByInfo() {

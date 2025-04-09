@@ -4,6 +4,8 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.geosegbar.infra.psb.dtos.PSBFolderCreationDTO;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -105,4 +107,11 @@ public class CreateDamCompleteRequest {
 
     @Valid
     private List<ReservoirRequestDTO> reservoirs = new ArrayList<>();
+
+    @Valid
+    private List<PSBFolderCreationDTO> psbFolders = new ArrayList<>();
+
+    @NotNull(message = "ID do usuário criador é obrigatório")
+    private Long createdById;
+    
 }

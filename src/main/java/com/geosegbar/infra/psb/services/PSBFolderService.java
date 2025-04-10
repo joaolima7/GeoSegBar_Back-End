@@ -158,14 +158,20 @@ public class PSBFolderService {
     
     private String createFolderPath(Long damId, Integer folderIndex, String folderName) {
         String normalizedName = folderName.trim()
-            .toLowerCase()
-            .replaceAll("\\s+", "_")
-            .replaceAll("[^a-z0-9_]", "");
-            
-        return Paths.get(psbBaseDir, 
-                "dam-" + damId, 
-                String.format("%03d", folderIndex) + "-" + normalizedName)
-            .toString();
+        .toLowerCase()
+        .replace('ç', 'c')
+        .replace('á', 'a').replace('à', 'a').replace('ã', 'a').replace('â', 'a')
+        .replace('é', 'e').replace('ê', 'e')
+        .replace('í', 'i')
+        .replace('ó', 'o').replace('ô', 'o').replace('õ', 'o')
+        .replace('ú', 'u')
+        .replaceAll("\\s+", "_")
+        .replaceAll("[^a-z0-9_]", "");
+        
+    return Paths.get(psbBaseDir, 
+            "dam-" + damId, 
+            String.format("%03d", folderIndex) + "-" + normalizedName)
+        .toString();
     }
 
     @Transactional

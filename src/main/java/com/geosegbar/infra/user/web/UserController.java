@@ -51,6 +51,16 @@ public class UserController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/created-by/{createdById}")
+    public ResponseEntity<WebResponseEntity<List<UserEntity>>> getUsersByCreator(@PathVariable Long createdById) {
+        List<UserEntity> users = userService.findByCreatedBy(createdById);
+        WebResponseEntity<List<UserEntity>> response = WebResponseEntity.success(
+            users, 
+            "Usuários criados pelo usuário de ID " + createdById + " obtidos com sucesso!"
+        );
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/filter")
     public ResponseEntity<WebResponseEntity<List<UserEntity>>> getUsersByRoleAndClient(
             @RequestParam(required = false) Long roleId,

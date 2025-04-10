@@ -21,6 +21,8 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
            "AND (:clientId IS NULL OR c.id = :clientId)")
         List<UserEntity> findByRoleAndClient(@Param("roleId") Long roleId, @Param("clientId") Long clientId);
 
+    List<UserEntity> findByCreatedById(Long createdById);
+
     boolean existsByEmail(String email);
     boolean existsByEmailAndIdNot(String email, Long id);
 }

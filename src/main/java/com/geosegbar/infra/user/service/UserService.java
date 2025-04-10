@@ -92,6 +92,13 @@ public class UserService {
         userRepository.deleteById(id);
     }
 
+    public List<UserEntity> findByCreatedBy(Long createdById) {
+        userRepository.findById(createdById)
+            .orElseThrow(() -> new NotFoundException("Usuário criador não encontrado com ID: " + createdById));
+        
+        return userRepository.findByCreatedById(createdById);
+    }
+
     public List<UserEntity> findByRoleAndClient(Long roleId, Long clientId) {
         return userRepository.findByRoleAndClient(roleId, clientId);
     }

@@ -74,6 +74,7 @@ public class PSBFolderService {
         folder.setDam(dam);
         folder.setServerPath(folderPath);
         folder.setCreatedBy(currentUser);
+        folder.setColor(request.getColor());
         
         return psbFolderRepository.save(folder);
     }
@@ -127,6 +128,7 @@ public class PSBFolderService {
         existingFolder.setFolderIndex(request.getFolderIndex());
         existingFolder.setDescription(request.getDescription());
         existingFolder.setUpdatedAt(LocalDateTime.now());
+        existingFolder.setColor(request.getColor());
         
         return psbFolderRepository.save(existingFolder);
     }
@@ -200,6 +202,7 @@ public class PSBFolderService {
             folder.setDam(dam);
             folder.setServerPath(folderPath);
             folder.setCreatedBy(creator);
+            folder.setColor(folderDTO.getColor());
             
             createdFolders.add(psbFolderRepository.save(folder));
         }

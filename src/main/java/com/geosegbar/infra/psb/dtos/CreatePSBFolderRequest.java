@@ -1,5 +1,7 @@
 package com.geosegbar.infra.psb.dtos;
 
+import com.geosegbar.common.enums.FolderColorEnum;
+
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -25,4 +27,6 @@ public class CreatePSBFolderRequest {
     private Long damId;
 
     private Long createdById;
+
+    private FolderColorEnum color = FolderColorEnum.BLUE;
 }

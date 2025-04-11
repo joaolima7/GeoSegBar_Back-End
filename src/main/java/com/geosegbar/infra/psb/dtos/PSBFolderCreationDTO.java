@@ -1,5 +1,7 @@
 package com.geosegbar.infra.psb.dtos;
 
+import com.geosegbar.common.enums.FolderColorEnum;
+
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -19,4 +21,6 @@ public class PSBFolderCreationDTO {
     private Integer folderIndex;
     
     private String description;
+
+    private FolderColorEnum color = FolderColorEnum.BLUE;
 }

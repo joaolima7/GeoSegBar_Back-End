@@ -17,7 +17,7 @@ import java.util.UUID;
 @Service
 public class FileStorageService {
 
-    @Value("${file.upload-dir:uploads}")
+    @Value("${file.upload-dir:uploads/}")
     private String uploadDir;
     
     @Value("${file.base-url:http://backend.geometrisa-prod.com.br:9090/uploads/}")

@@ -40,7 +40,6 @@ public class PSBController {
     // --- Folder Endpoints ---
     
     @GetMapping("/folders/dam/{damId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENT_ADMIN', 'USER')")
     public ResponseEntity<WebResponseEntity<List<PSBFolderEntity>>> getFoldersByDamId(@PathVariable Long damId) {
         List<PSBFolderEntity> folders = psbFolderService.findAllByDamId(damId);
         WebResponseEntity<List<PSBFolderEntity>> response = WebResponseEntity.success(
@@ -49,7 +48,6 @@ public class PSBController {
     }
     
     @GetMapping("/folders/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENT_ADMIN', 'USER')")
     public ResponseEntity<WebResponseEntity<PSBFolderEntity>> getFolderById(@PathVariable Long id) {
         PSBFolderEntity folder = psbFolderService.findById(id);
         WebResponseEntity<PSBFolderEntity> response = WebResponseEntity.success(
@@ -58,7 +56,6 @@ public class PSBController {
     }
     
     @PostMapping("/folders")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENT_ADMIN')")
     public ResponseEntity<WebResponseEntity<PSBFolderEntity>> createFolder(
             @Valid @RequestBody CreatePSBFolderRequest request) {
         PSBFolderEntity folder = psbFolderService.create(request);
@@ -68,7 +65,6 @@ public class PSBController {
     }
     
     @PutMapping("/folders/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENT_ADMIN')")
     public ResponseEntity<WebResponseEntity<PSBFolderEntity>> updateFolder(
             @PathVariable Long id, @Valid @RequestBody CreatePSBFolderRequest request) {
         PSBFolderEntity folder = psbFolderService.update(id, request);
@@ -78,7 +74,6 @@ public class PSBController {
     }
     
     @DeleteMapping("/folders/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENT_ADMIN')")
     public ResponseEntity<WebResponseEntity<Void>> deleteFolder(@PathVariable Long id) {
         psbFolderService.delete(id);
         WebResponseEntity<Void> response = WebResponseEntity.success(
@@ -89,7 +84,6 @@ public class PSBController {
     // --- File Endpoints ---
     
     @GetMapping("/files/folder/{folderId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENT_ADMIN', 'USER')")
     public ResponseEntity<WebResponseEntity<List<PSBFileEntity>>> getFilesByFolderId(@PathVariable Long folderId) {
         List<PSBFileEntity> files = psbFileService.findByFolderId(folderId);
         WebResponseEntity<List<PSBFileEntity>> response = WebResponseEntity.success(
@@ -98,7 +92,6 @@ public class PSBController {
     }
     
     @PostMapping("/files/upload/{folderId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENT_ADMIN')")
     public ResponseEntity<WebResponseEntity<PSBFileEntity>> uploadFile(
             @PathVariable Long folderId,
             @RequestParam("file") MultipartFile file,
@@ -122,7 +115,6 @@ public class PSBController {
     }
     
     @DeleteMapping("/files/{fileId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENT_ADMIN')")
     public ResponseEntity<WebResponseEntity<Void>> deleteFile(@PathVariable Long fileId) {
         psbFileService.deleteFile(fileId);
         WebResponseEntity<Void> response = WebResponseEntity.success(

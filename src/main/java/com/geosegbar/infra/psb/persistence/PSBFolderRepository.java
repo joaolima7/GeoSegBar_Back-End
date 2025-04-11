@@ -16,4 +16,5 @@ public interface PSBFolderRepository extends JpaRepository<PSBFolderEntity, Long
     Optional<PSBFolderEntity> findByDamIdAndFolderIndex(Long damId, Integer folderIndex);
     boolean existsByDamIdAndName(Long damId, String name);
     boolean existsByDamIdAndFolderIndex(Long damId, Integer folderIndex);
+    List<PSBFolderEntity> findByDamIdAndFolderIndexGreaterThanOrderByFolderIndexAsc(Long damId, Integer folderIndex);
 }

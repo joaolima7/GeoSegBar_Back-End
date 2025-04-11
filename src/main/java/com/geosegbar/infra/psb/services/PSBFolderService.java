@@ -1,6 +1,7 @@
 package com.geosegbar.infra.psb.services;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -135,11 +136,14 @@ public class PSBFolderService {
     
     @Transactional
     public void delete(Long id) {
-        PSBFolderEntity folder = psbFolderRepository.findById(id)
+        PSBFolderEntity folderToDelete = psbFolderRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
         
+        Long damId = folderToDelete.getDam().getId();
+        Integer deletedFolderIndex = folderToDelete.getFolderIndex();
+        
         try {
-            Path folderPath = Paths.get(folder.getServerPath());
+            Path folderPath = Paths.get(folderToDelete.getServerPath());
             if (Files.exists(folderPath)) {
                 Files.walk(folderPath)
                     .sorted((a, b) -> b.toString().length() - a.toString().length()) 
@@ -155,7 +159,38 @@ public class PSBFolderService {
             System.err.println("Erro ao deletar diretório: " + e.getMessage());
         }
         
-        psbFolderRepository.delete(folder);
+        psbFolderRepository.delete(folderToDelete);
+        
+        List<PSBFolderEntity> foldersToReindex = psbFolderRepository
+                .findByDamIdAndFolderIndexGreaterThanOrderByFolderIndexAsc(damId, deletedFolderIndex);
+        
+        for (PSBFolderEntity folder : foldersToReindex) {
+            Integer oldIndex = folder.getFolderIndex();
+            Integer newIndex = oldIndex - 1;
+            
+            String oldFolderPath = folder.getServerPath();
+            String newFolderPath = createFolderPath(damId, newIndex, folder.getName());
+            
+            try {
+                Path sourcePath = Paths.get(oldFolderPath);
+                Path targetPath = Paths.get(newFolderPath);
+                
+                if (Files.exists(sourcePath)) {
+                    ensureDirectoryExists(targetPath.getParent().toString());
+                    
+                    Files.move(sourcePath, targetPath);
+                    
+                    folder.setServerPath(newFolderPath);
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Erro ao reindexar pasta: " + e.getMessage(), e);
+            }
+            
+            folder.setFolderIndex(newIndex);
+            
+            folder.setUpdatedAt(LocalDateTime.now());
+            psbFolderRepository.save(folder);
+        }
     }
     
     private String createFolderPath(Long damId, Integer folderIndex, String folderName) {

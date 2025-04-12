@@ -23,6 +23,9 @@ public class EmailService {
     @Value("${spring.mail.username}")
     private String fromEmail;
 
+    @Value("${application.frontend-url:http://geometrisa-prod.com.br}")
+    private String frontendUrl;
+
    public void sendVerificationCode(String toEmail, String code) {
         try {
             Context context = new Context();
@@ -89,6 +92,30 @@ public class EmailService {
             log.info("Email de primeiro acesso enviado para: {}", toEmail);
         } catch (MessagingException e) {
             log.error("Erro ao enviar email de primeiro acesso: {}", e.getMessage());
+        }
+    }
+
+    public void sendShareFolderEmail(String to, String sharedByName, String folderName, String token) {
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            
+            helper.setFrom(fromEmail);
+            helper.setTo(to);
+            helper.setSubject("Pasta compartilhada: " + folderName);
+            
+            Context context = new Context();
+            context.setVariable("sharedByName", sharedByName);
+            context.setVariable("folderName", folderName);
+            context.setVariable("accessLink", frontendUrl + "/shared/folder/" + token);
+            
+            String content = templateEngine.process("emails/share-folder", context);
+            helper.setText(content, true);
+            
+            mailSender.send(mimeMessage);
+            log.info("Email de compartilhamento enviado para: {}", to);
+        } catch (MessagingException e) {
+            log.error("Erro ao enviar email de compartilhamento: {}", e.getMessage());
         }
     }
 }

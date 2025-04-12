@@ -80,6 +80,11 @@ public class PSBFolderEntity {
     @JoinColumn(name = "created_by")
     @JsonIgnoreProperties({"psbFoldersCreated", "psbFilesUploaded"})
     private UserEntity createdBy;
+
+    @OneToMany(mappedBy = "psbFolder", cascade = CascadeType.ALL, 
+    orphanRemoval = true, fetch = FetchType.LAZY)
+    @JsonIgnoreProperties({"psbFolder"})
+    private Set<ShareFolderEntity> shareLinks = new HashSet<>();
     
     @PrePersist
     protected void onCreate() {

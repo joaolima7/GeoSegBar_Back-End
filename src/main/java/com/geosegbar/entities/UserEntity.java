@@ -104,6 +104,10 @@ public class UserEntity {
     @JsonIgnore
     @OneToMany(mappedBy = "uploadedBy", fetch = FetchType.LAZY)
     private Set<PSBFileEntity> psbFilesUploaded = new HashSet<>();
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "sharedBy", fetch = FetchType.LAZY)
+    private Set<ShareFolderEntity> sharedFolders = new HashSet<>();
     
     @JsonProperty("createdBy")
     public Object getCreatedByInfo() {

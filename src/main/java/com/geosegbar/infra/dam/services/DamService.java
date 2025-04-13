@@ -249,6 +249,14 @@ public class DamService {
         return damRepository.save(damEntity);
     }
 
+    public List<DamEntity> findDamsByClientId(Long clientId) {
+        List<DamEntity> dams = damRepository.findByClientId(clientId);
+        if (dams.isEmpty()) {
+            throw new NotFoundException("Nenhuma barragem encontrada para o cliente com ID: " + clientId);
+        }
+        return dams;
+    }
+
     public DamEntity findById(Long id) {
         return damRepository.findById(id).
         orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));

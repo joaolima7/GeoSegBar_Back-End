@@ -172,6 +172,28 @@ public class ChecklistResponseController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/client/{clientId}/paged")
+    public ResponseEntity<WebResponseEntity<PagedChecklistResponseDTO<ChecklistResponseDetailDTO>>> getDetailedClientChecklistResponsesPaged(
+            @PathVariable Long clientId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDirection) {
+        
+        Sort.Direction direction = sortDirection.equalsIgnoreCase("asc") ? Sort.Direction.ASC : Sort.Direction.DESC;
+        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
+        
+        PagedChecklistResponseDTO<ChecklistResponseDetailDTO> responses = 
+                checklistResponseService.findChecklistResponsesByClientIdPaged(clientId, pageable);
+        
+        WebResponseEntity<PagedChecklistResponseDTO<ChecklistResponseDetailDTO>> response = WebResponseEntity.success(
+                responses, 
+                "Respostas de checklist para barragens do cliente paginadas obtidas com sucesso!"
+        );
+        
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/user/{userId}/paged")
     public ResponseEntity<WebResponseEntity<PagedChecklistResponseDTO<ChecklistResponseDetailDTO>>> getDetailedUserChecklistResponsesPaged(
             @PathVariable Long userId,

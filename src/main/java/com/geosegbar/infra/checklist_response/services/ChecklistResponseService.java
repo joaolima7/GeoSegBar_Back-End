@@ -101,6 +101,37 @@ public class ChecklistResponseService {
                 .map(this::convertToDetailDto)
                 .collect(Collectors.toList());
     }
+
+
+    public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByClientIdPaged(
+        Long clientId, Pageable pageable) {
+
+    List<DamEntity> clientDams = damService.findDamsByClientId(clientId);
+
+    if (clientDams.isEmpty()) {
+        throw new NotFoundException("Nenhuma barragem encontrada para o Cliente com ID: " + clientId);
+    }
+
+    List<Long> damIds = clientDams.stream()
+            .map(DamEntity::getId)
+            .collect(Collectors.toList());
+
+    Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdIn(damIds, pageable);
+
+    List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
+            .map(this::convertToDetailDto)
+            .collect(Collectors.toList());
+
+    return new PagedChecklistResponseDTO<>(
+            dtos,
+            page.getNumber(),
+            page.getSize(),
+            page.getTotalElements(),
+            page.getTotalPages(),
+            page.isLast(),
+            page.isFirst()
+    );
+    }
     
     public ChecklistResponseDetailDTO findChecklistResponseById(Long checklistResponseId) {
         ChecklistResponseEntity checklistResponse = findById(checklistResponseId);

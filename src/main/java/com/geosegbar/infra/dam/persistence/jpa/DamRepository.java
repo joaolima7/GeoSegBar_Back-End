@@ -12,6 +12,7 @@ import com.geosegbar.entities.DamEntity;
 public interface DamRepository extends JpaRepository<DamEntity, Long>{
     List<DamEntity> findAllByOrderByIdAsc();
     List<DamEntity> findByClient(ClientEntity client);
+    List<DamEntity> findByClientId(Long clientId);  
 
     boolean existsByName(String name);
     boolean existsByNameAndIdNot(String name, Long id);

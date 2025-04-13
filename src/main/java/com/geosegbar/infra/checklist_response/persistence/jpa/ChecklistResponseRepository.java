@@ -1,6 +1,7 @@
 package com.geosegbar.infra.checklist_response.persistence.jpa;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 
 import org.springframework.data.domain.Page;
@@ -19,4 +20,5 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
     Page<ChecklistResponseEntity> findByUserId(Long userId, Pageable pageable);
     Page<ChecklistResponseEntity> findByCreatedAtBetween(LocalDateTime startDate, LocalDateTime endDate, Pageable pageable);
     Page<ChecklistResponseEntity> findAll(Pageable pageable);
+    Page<ChecklistResponseEntity> findByDamIdIn(Collection<Long> damIds, Pageable pageable);
 }

@@ -345,8 +345,12 @@ public class UserService {
     }
 
     public UserEntity findById(Long id) {
-        return userRepository.findById(id).
-        orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+        UserEntity user = userRepository.findById(id)
+        .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+    
+        user.getClients().size();
+        
+        return user;    
     }
 
 
@@ -507,7 +511,11 @@ public class UserService {
     }
 
     public List<UserEntity> findAll() {
-        return userRepository.findAllByOrderByIdAsc();
+        List<UserEntity> users = userRepository.findAllByOrderByIdAsc();
+    
+        users.forEach(user -> user.getClients().size());
+        
+        return users;
     }
 
     public boolean existsByEmail(String email) {

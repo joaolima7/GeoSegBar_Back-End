@@ -1,6 +1,7 @@
 package com.geosegbar.infra.checklist_response.services;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -22,6 +23,7 @@ import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.answer_photo.persistence.jpa.AnswerPhotoRepository;
 import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseDetailDTO;
 import com.geosegbar.infra.checklist_response.dtos.DamInfoDTO;
+import com.geosegbar.infra.checklist_response.dtos.DamLastChecklistDTO;
 import com.geosegbar.infra.checklist_response.dtos.OptionInfoDTO;
 import com.geosegbar.infra.checklist_response.dtos.PagedChecklistResponseDTO;
 import com.geosegbar.infra.checklist_response.dtos.PhotoInfoDTO;
@@ -326,5 +328,26 @@ public class ChecklistResponseService {
                 page.isLast(),
                 page.isFirst()
         );
+    }
+
+    public List<DamLastChecklistDTO> getLastChecklistDateByClient(Long clientId) {
+        List<DamEntity> dams = damService.findDamsByClientId(clientId);
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+        List<DamLastChecklistDTO> result = new ArrayList<>();
+
+        for (DamEntity dam : dams) {
+            List<ChecklistResponseEntity> responses = checklistResponseRepository.findByDamId(dam.getId());
+            if (responses.isEmpty()) {
+                result.add(new DamLastChecklistDTO(dam.getId(), dam.getName(), "Nenhuma inspeção realizada."));
+            } else {
+                ChecklistResponseEntity last = responses.stream()
+                    .max((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()))
+                    .orElse(null);
+                String dateStr = last != null ? last.getCreatedAt().format(formatter) : "Nenhuma inspeção realizada.";
+                result.add(new DamLastChecklistDTO(dam.getId(), dam.getName(), dateStr));
+            }
+        }
+        return result;
     }
 }

@@ -22,6 +22,7 @@ import org.springframework.data.domain.Sort;
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.ChecklistResponseEntity;
 import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseDetailDTO;
+import com.geosegbar.infra.checklist_response.dtos.DamLastChecklistDTO;
 import com.geosegbar.infra.checklist_response.dtos.PagedChecklistResponseDTO;
 import com.geosegbar.infra.checklist_response.services.ChecklistResponseService;
 
@@ -53,6 +54,15 @@ public class ChecklistResponseController {
     public ResponseEntity<WebResponseEntity<List<ChecklistResponseEntity>>> getChecklistResponsesByDamId(@PathVariable Long damId) {
         List<ChecklistResponseEntity> responses = checklistResponseService.findByDamId(damId);
         WebResponseEntity<List<ChecklistResponseEntity>> response = WebResponseEntity.success(responses, "Respostas de checklist da barragem obtidas com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/client/{clientId}/last-checklist")
+    public ResponseEntity<WebResponseEntity<List<DamLastChecklistDTO>>> getLastChecklistDateByClient(@PathVariable Long clientId) {
+        List<DamLastChecklistDTO> result = checklistResponseService.getLastChecklistDateByClient(clientId);
+        WebResponseEntity<List<DamLastChecklistDTO>> response = WebResponseEntity.success(
+                result, "Última inspeção de cada barragem do cliente obtida com sucesso!"
+        );
         return ResponseEntity.ok(response);
     }
 

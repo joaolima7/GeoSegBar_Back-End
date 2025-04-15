@@ -17,4 +17,5 @@ public class ChecklistResponseDetailDTO {
     private List<TemplateWithAnswersDTO> templates;
     private Long userId;
     private String userName;    
+    private DamInfoDTO dam;
 }

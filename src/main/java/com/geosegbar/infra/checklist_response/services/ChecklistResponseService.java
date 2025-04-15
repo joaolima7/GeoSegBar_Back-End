@@ -21,6 +21,7 @@ import com.geosegbar.entities.TemplateQuestionnaireEntity;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.answer_photo.persistence.jpa.AnswerPhotoRepository;
 import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseDetailDTO;
+import com.geosegbar.infra.checklist_response.dtos.DamInfoDTO;
 import com.geosegbar.infra.checklist_response.dtos.OptionInfoDTO;
 import com.geosegbar.infra.checklist_response.dtos.PagedChecklistResponseDTO;
 import com.geosegbar.infra.checklist_response.dtos.PhotoInfoDTO;
@@ -145,6 +146,13 @@ public class ChecklistResponseService {
         dto.setCreatedAt(checklistResponse.getCreatedAt());
         dto.setUserId(checklistResponse.getUser().getId());
         dto.setUserName(checklistResponse.getUser().getName());
+
+        DamEntity dam = checklistResponse.getDam();
+        DamInfoDTO damInfo = new DamInfoDTO();
+        damInfo.setId(dam.getId());
+        damInfo.setName(dam.getName());
+
+        dto.setDam(damInfo);
         
         List<QuestionnaireResponseEntity> questionnaireResponses = questionnaireResponseRepository
                 .findByChecklistResponseId(checklistResponse.getId());

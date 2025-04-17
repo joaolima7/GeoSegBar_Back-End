@@ -42,6 +42,13 @@ public class DamController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/client/{clientId}")
+    public ResponseEntity<WebResponseEntity<List<DamEntity>>> getDamsByClientId(@PathVariable Long clientId) {
+        List<DamEntity> dams = damService.findDamsByClientId(clientId);
+        WebResponseEntity<List<DamEntity>> response = WebResponseEntity.success(dams, "Barragens do cliente obtidas com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/complete")
     public ResponseEntity<WebResponseEntity<DamEntity>> createCompleteDam(@Valid @RequestBody CreateDamCompleteRequest request) {
         DamEntity createdDam = damService.createCompleteWithRelationships(request);

@@ -10,10 +10,10 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class LevelRequestDTO {
-    private Long id; // Se o level já existir
+    private Long id;
     
     @NotBlank(message = "O nome do nível é obrigatório!")
-    private String name; // Se for criar um novo level
+    private String name; 
     
     @NotNull(message = "O valor do nível é obrigatório!")
     private Double value;

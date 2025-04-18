@@ -30,7 +30,7 @@ import lombok.Setter;
 @Table(name = "template_questionnaires")
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class TemplateQuestionnaireEntity {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -39,9 +39,9 @@ public class TemplateQuestionnaireEntity {
     @Column(name = "name", nullable = false)
     private String name;
 
-    @OneToMany(mappedBy = "templateQuestionnaire", fetch = FetchType.LAZY,
-               cascade = CascadeType.ALL, orphanRemoval = true)
-    @JsonManagedReference  
+    @OneToMany(mappedBy = "templateQuestionnaire", fetch = FetchType.EAGER,
+            cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonManagedReference
     private Set<TemplateQuestionnaireQuestionEntity> templateQuestions = new HashSet<>();
 
     @ManyToMany(mappedBy = "templateQuestionnaires", fetch = FetchType.LAZY)

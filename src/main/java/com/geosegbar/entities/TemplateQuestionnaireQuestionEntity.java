@@ -26,7 +26,7 @@ import lombok.Setter;
 @Table(name = "template_questionnaire_questions")
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class TemplateQuestionnaireQuestionEntity {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -36,7 +36,7 @@ public class TemplateQuestionnaireQuestionEntity {
     @JsonBackReference
     private TemplateQuestionnaireEntity templateQuestionnaire;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "question_id", nullable = false)
     private QuestionEntity question;
 

@@ -24,12 +24,12 @@ public class ChecklistService {
 
     public ChecklistEntity findById(Long id) {
         return checklistRepository.findById(id)
-            .orElseThrow(() -> new NotFoundException("Checklist não encontrada para id: " + id));
+                .orElseThrow(() -> new NotFoundException("Checklist não encontrada para id: " + id));
     }
 
     @Transactional
     public ChecklistEntity save(ChecklistEntity checklist) {
-        if(checklistRepository.existsByName(checklist.getName())){
+        if (checklistRepository.existsByName(checklist.getName())) {
             throw new DuplicateResourceException("Já existe um checklist com este nome!");
         }
         return checklistRepository.save(checklist);
@@ -38,9 +38,9 @@ public class ChecklistService {
     @Transactional
     public ChecklistEntity update(ChecklistEntity checklist) {
         checklistRepository.findById(checklist.getId())
-            .orElseThrow(() -> new NotFoundException("Checklist não encontrada para atualização!"));
+                .orElseThrow(() -> new NotFoundException("Checklist não encontrada para atualização!"));
 
-        if(checklistRepository.existsByNameAndIdNot(checklist.getName(), checklist.getId())){
+        if (checklistRepository.existsByNameAndIdNot(checklist.getName(), checklist.getId())) {
             throw new DuplicateResourceException("Já existe um checklist com este nome!");
         }
 
@@ -50,7 +50,7 @@ public class ChecklistService {
     @Transactional
     public void deleteById(Long id) {
         checklistRepository.findById(id)
-            .orElseThrow(() -> new NotFoundException("Checklist não encontrada para exclusão!"));
+                .orElseThrow(() -> new NotFoundException("Checklist não encontrada para exclusão!"));
         checklistRepository.deleteById(id);
     }
 

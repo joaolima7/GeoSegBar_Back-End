@@ -35,15 +35,15 @@ public class ChecklistEntity {
     @CreationTimestamp
     private LocalDateTime createdAt;
 
-    @ManyToMany(fetch = FetchType.LAZY)
+    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(name = "checklist_template_questionnaire",
-        joinColumns = @JoinColumn(name = "checklist_id"),
-        inverseJoinColumns = @JoinColumn(name = "template_questionnaire_id"))
+            joinColumns = @JoinColumn(name = "checklist_id"),
+            inverseJoinColumns = @JoinColumn(name = "template_questionnaire_id"))
     private Set<TemplateQuestionnaireEntity> templateQuestionnaires = new HashSet<>();
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "checklist_dam",
-        joinColumns = @JoinColumn(name = "checklist_id"),
-        inverseJoinColumns = @JoinColumn(name = "dam_id"))
+            joinColumns = @JoinColumn(name = "checklist_id"),
+            inverseJoinColumns = @JoinColumn(name = "dam_id"))
     private Set<DamEntity> dams = new HashSet<>();
 }

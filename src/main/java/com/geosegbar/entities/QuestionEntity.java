@@ -45,10 +45,10 @@ public class QuestionEntity {
     @Column(name = "type", nullable = false)
     private TypeQuestionEnum type;
 
-    @ManyToMany(fetch = FetchType.LAZY)
+    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(name = "question_option",
-    joinColumns = @JoinColumn(name = "question_id"),
-    inverseJoinColumns = @JoinColumn(name = "option_id"))
+            joinColumns = @JoinColumn(name = "question_id"),
+            inverseJoinColumns = @JoinColumn(name = "option_id"))
     private Set<OptionEntity> options = new HashSet<>();
-    
+
 }

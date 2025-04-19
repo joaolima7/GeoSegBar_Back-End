@@ -17,9 +17,9 @@ import java.util.UUID;
 @Service
 public class FileStorageService {
 
-    @Value("${file.upload-dir:uploads/}")
+    @Value("${file.upload-dir}")
     private String uploadDir;
-    
+
     @Value("${file.base-url:http://backend.geometrisa-prod.com.br:9090/uploads/}")
     private String baseUrl;
 
@@ -27,21 +27,21 @@ public class FileStorageService {
         try {
             Path uploadPath = Paths.get(uploadDir + "/" + subDirectory).toAbsolutePath().normalize();
             Files.createDirectories(uploadPath);
-            
+
             String originalFileName = file.getOriginalFilename();
             String fileExtension = "";
-            
+
             if (originalFileName != null && originalFileName.contains(".")) {
                 fileExtension = originalFileName.substring(originalFileName.lastIndexOf("."));
             }
-            
+
             String fileName = UUID.randomUUID() + fileExtension;
-            
+
             Path targetLocation = uploadPath.resolve(fileName);
             Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
-            
+
             return baseUrl + subDirectory + "/" + fileName;
-            
+
         } catch (IOException ex) {
             throw new FileStorageException("Could not store file.", ex);
         }
@@ -51,32 +51,41 @@ public class FileStorageService {
         try {
             Path uploadPath = Paths.get(uploadDir + "/" + subDirectory).toAbsolutePath().normalize();
             Files.createDirectories(uploadPath);
-            
+
             String fileExtension = "";
             if (originalFileName != null && originalFileName.contains(".")) {
                 fileExtension = originalFileName.substring(originalFileName.lastIndexOf("."));
             } else if (contentType != null) {
                 switch (contentType) {
-                    case "image/jpeg": fileExtension = ".jpg"; break;
-                    case "image/png": fileExtension = ".png"; break;
-                    case "image/gif": fileExtension = ".gif"; break;
-                    case "image/bmp": fileExtension = ".bmp"; break;
-                    default: fileExtension = "";
+                    case "image/jpeg":
+                        fileExtension = ".jpg";
+                        break;
+                    case "image/png":
+                        fileExtension = ".png";
+                        break;
+                    case "image/gif":
+                        fileExtension = ".gif";
+                        break;
+                    case "image/bmp":
+                        fileExtension = ".bmp";
+                        break;
+                    default:
+                        fileExtension = "";
                 }
             }
-            
+
             String fileName = UUID.randomUUID() + fileExtension;
-            
+
             Path targetLocation = uploadPath.resolve(fileName);
             Files.copy(new ByteArrayInputStream(fileBytes), targetLocation, StandardCopyOption.REPLACE_EXISTING);
-            
+
             return baseUrl + subDirectory + "/" + fileName;
-            
+
         } catch (IOException ex) {
             throw new FileStorageException("Could not store file from bytes.", ex);
         }
     }
-    
+
     public void deleteFile(String fileUrl) {
         try {
             if (fileUrl != null && fileUrl.startsWith(baseUrl)) {

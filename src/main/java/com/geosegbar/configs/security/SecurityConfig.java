@@ -35,7 +35,6 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "user/reset-password").permitAll()
                 .requestMatchers(HttpMethod.GET, "/psb/files/download/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/share/access/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/uploads/answer-photos/**").permitAll()
                 .anyRequest().authenticated()
                 )
                 .addFilterBefore(securityFilter, UsernamePasswordAuthenticationFilter.class);

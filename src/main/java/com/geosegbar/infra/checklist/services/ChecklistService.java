@@ -62,4 +62,14 @@ public class ChecklistService {
         return checklists;
     }
 
+    public ChecklistEntity findChecklistForDam(Long damId, Long checklistId) {
+        ChecklistEntity checklist = findById(checklistId);
+
+        if (checklist.getDams().stream().anyMatch(dam -> dam.getId().equals(damId))) {
+            return checklist;
+        } else {
+            throw new NotFoundException("O checklist não pertence à barragem especificada!");
+        }
+    }
+
 }

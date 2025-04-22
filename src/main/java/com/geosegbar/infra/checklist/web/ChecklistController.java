@@ -48,6 +48,18 @@ public class ChecklistController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/dam/{damId}/checklist/{checklistId}")
+    public ResponseEntity<WebResponseEntity<ChecklistEntity>> getChecklistForDam(
+            @PathVariable Long damId,
+            @PathVariable Long checklistId) {
+        ChecklistEntity checklist = checklistService.findChecklistForDam(damId, checklistId);
+        WebResponseEntity<ChecklistEntity> response = WebResponseEntity.success(
+                checklist,
+                "Checklist encontrado para a barragem especificada!"
+        );
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping
     public ResponseEntity<WebResponseEntity<ChecklistEntity>> createChecklist(@Valid @RequestBody ChecklistEntity checklist) {
         ChecklistEntity created = checklistService.save(checklist);

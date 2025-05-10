@@ -13,12 +13,25 @@ import com.geosegbar.entities.ChecklistResponseEntity;
 
 @Repository
 public interface ChecklistResponseRepository extends JpaRepository<ChecklistResponseEntity, Long> {
+
     List<ChecklistResponseEntity> findByDamId(Long damId);
+
     List<ChecklistResponseEntity> findByUserId(Long userId);
+
     List<ChecklistResponseEntity> findByCreatedAtBetween(LocalDateTime startDate, LocalDateTime endDate);
+
     Page<ChecklistResponseEntity> findByDamId(Long damId, Pageable pageable);
+
     Page<ChecklistResponseEntity> findByUserId(Long userId, Pageable pageable);
+
     Page<ChecklistResponseEntity> findByCreatedAtBetween(LocalDateTime startDate, LocalDateTime endDate, Pageable pageable);
+
     Page<ChecklistResponseEntity> findAll(Pageable pageable);
+
     Page<ChecklistResponseEntity> findByDamIdIn(Collection<Long> damIds, Pageable pageable);
+
+    List<ChecklistResponseEntity> findByDamIdOrderByCreatedAtDesc(Long damId);
+
+    List<ChecklistResponseEntity> findByDamIdAndChecklistIdOrderByCreatedAtDesc(Long damId, Long checklistId);
+
 }

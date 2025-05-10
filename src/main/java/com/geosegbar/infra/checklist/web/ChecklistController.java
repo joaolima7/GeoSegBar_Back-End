@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.ChecklistEntity;
+import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersDTO;
 import com.geosegbar.infra.checklist.services.ChecklistService;
 
 import jakarta.validation.Valid;
@@ -56,6 +57,17 @@ public class ChecklistController {
         WebResponseEntity<ChecklistEntity> response = WebResponseEntity.success(
                 checklist,
                 "Checklist encontrado para a barragem especificada!"
+        );
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/dam/{damId}/with-last-answers")
+    public ResponseEntity<WebResponseEntity<List<ChecklistWithLastAnswersDTO>>> getChecklistsWithLastAnswersForDam(
+            @PathVariable Long damId) {
+        List<ChecklistWithLastAnswersDTO> checklists = checklistService.findChecklistsWithLastAnswersForDam(damId);
+        WebResponseEntity<List<ChecklistWithLastAnswersDTO>> response = WebResponseEntity.success(
+                checklists,
+                "Checklists com últimas respostas não-NI obtidos com sucesso!"
         );
         return ResponseEntity.ok(response);
     }

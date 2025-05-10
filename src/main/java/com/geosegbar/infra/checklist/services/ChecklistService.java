@@ -1,13 +1,29 @@
 package com.geosegbar.infra.checklist.services;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
+import com.geosegbar.entities.AnswerEntity;
 import com.geosegbar.entities.ChecklistEntity;
+import com.geosegbar.entities.ChecklistResponseEntity;
+import com.geosegbar.entities.OptionEntity;
+import com.geosegbar.entities.QuestionEntity;
+import com.geosegbar.entities.QuestionnaireResponseEntity;
+import com.geosegbar.entities.TemplateQuestionnaireEntity;
+import com.geosegbar.entities.TemplateQuestionnaireQuestionEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersDTO;
+import com.geosegbar.infra.checklist.dtos.OptionDTO;
+import com.geosegbar.infra.checklist.dtos.QuestionWithLastAnswerDTO;
+import com.geosegbar.infra.checklist.dtos.TemplateQuestionnaireWithAnswersDTO;
 import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
+import com.geosegbar.infra.checklist_response.persistence.jpa.ChecklistResponseRepository;
+import com.geosegbar.infra.dam.services.DamService;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +33,8 @@ import lombok.RequiredArgsConstructor;
 public class ChecklistService {
 
     private final ChecklistRepository checklistRepository;
+    private final ChecklistResponseRepository checklistResponseRepository;
+    private final DamService damService;
 
     public List<ChecklistEntity> findAll() {
         return checklistRepository.findAll();
@@ -33,6 +51,146 @@ public class ChecklistService {
             throw new DuplicateResourceException("Já existe um checklist com este nome!");
         }
         return checklistRepository.save(checklist);
+    }
+
+    public List<ChecklistWithLastAnswersDTO> findChecklistsWithLastAnswersForDam(Long damId) {
+        // Verificar se a barragem existe
+        damService.findById(damId);
+
+        // Buscar todos os checklists associados à barragem
+        List<ChecklistEntity> checklists = checklistRepository.findByDams_Id(damId);
+        if (checklists.isEmpty()) {
+            throw new NotFoundException("Nenhum checklist encontrado para a Barragem com id: " + damId);
+        }
+
+        // Lista de DTOs a serem retornados
+        List<ChecklistWithLastAnswersDTO> result = new ArrayList<>();
+
+        // Para cada checklist associado à barragem
+        for (ChecklistEntity checklist : checklists) {
+            // Criar um DTO para este checklist
+            ChecklistWithLastAnswersDTO checklistDTO = new ChecklistWithLastAnswersDTO();
+            checklistDTO.setId(checklist.getId());
+            checklistDTO.setName(checklist.getName());
+            checklistDTO.setCreatedAt(checklist.getCreatedAt());
+
+            // Buscar todas as respostas para este checklist específico nesta barragem, ordenadas por data (mais recentes primeiro)
+            List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository
+                    .findByDamIdAndChecklistIdOrderByCreatedAtDesc(damId, checklist.getId());
+
+            // Lista de template questionnaires para este checklist
+            List<TemplateQuestionnaireWithAnswersDTO> templateDTOs = new ArrayList<>();
+
+            // Para cada template de questionário no checklist
+            for (TemplateQuestionnaireEntity template : checklist.getTemplateQuestionnaires()) {
+                TemplateQuestionnaireWithAnswersDTO templateDTO = new TemplateQuestionnaireWithAnswersDTO();
+                templateDTO.setId(template.getId());
+                templateDTO.setName(template.getName());
+
+                // Lista de perguntas para este template
+                List<QuestionWithLastAnswerDTO> questionDTOs = new ArrayList<>();
+
+                // Para cada pergunta no template
+                for (TemplateQuestionnaireQuestionEntity tqQuestion : template.getTemplateQuestions()) {
+                    QuestionEntity question = tqQuestion.getQuestion();
+
+                    // Criar um DTO para esta pergunta
+                    QuestionWithLastAnswerDTO questionDTO = new QuestionWithLastAnswerDTO();
+                    questionDTO.setId(question.getId());
+                    questionDTO.setQuestionText(question.getQuestionText());
+                    questionDTO.setType(question.getType());
+
+                    // Converter todas as opções disponíveis para esta pergunta
+                    List<OptionDTO> allOptionDTOs = question.getOptions().stream()
+                            .map(opt -> new OptionDTO(opt.getId(), opt.getLabel(), opt.getValue()))
+                            .collect(Collectors.toList());
+
+                    questionDTO.setAllOptions(allOptionDTOs);
+
+                    // Apenas buscar a última resposta não-NI se houver respostas para este checklist
+                    if (!checklistResponses.isEmpty()) {
+                        // Encontrar a última resposta não-NI para esta pergunta
+                        Optional<OptionEntity> lastNonNIOption = findLastNonNIOption(checklistResponses, template.getId(), question.getId());
+
+                        if (lastNonNIOption.isPresent()) {
+                            OptionEntity option = lastNonNIOption.get();
+                            OptionDTO optionDTO = new OptionDTO(option.getId(), option.getLabel(), option.getValue());
+                            questionDTO.setLastSelectedOption(optionDTO);
+
+                            // Encontrar o ID da resposta que contém esta opção
+                            for (ChecklistResponseEntity response : checklistResponses) {
+                                boolean found = false;
+                                for (QuestionnaireResponseEntity qResponse : response.getQuestionnaireResponses()) {
+                                    if (qResponse.getTemplateQuestionnaire().getId().equals(template.getId())) {
+                                        for (AnswerEntity answer : qResponse.getAnswers()) {
+                                            if (answer.getQuestion().getId().equals(question.getId())
+                                                    && answer.getSelectedOptions().stream()
+                                                            .anyMatch(opt -> opt.getId().equals(option.getId()))) {
+                                                questionDTO.setAnswerResponseId(answer.getId());
+                                                found = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    if (found) {
+                                        break;
+                                    }
+                                }
+                                if (found) {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    // Se não houver respostas ou nenhuma resposta não-NI, lastSelectedOption permanecerá null
+
+                    // Adicionar esta pergunta à lista de perguntas para este template
+                    questionDTOs.add(questionDTO);
+                }
+
+                // Definir a lista de perguntas para este template
+                templateDTO.setQuestions(questionDTOs);
+
+                // Adicionar este template à lista de templates para este checklist
+                templateDTOs.add(templateDTO);
+            }
+
+            // Definir a lista de templates para este checklist
+            checklistDTO.setTemplateQuestionnaires(templateDTOs);
+
+            // Adicionar este checklist à lista de resultados
+            result.add(checklistDTO);
+        }
+
+        return result;
+    }
+
+    private Optional<OptionEntity> findLastNonNIOption(
+            List<ChecklistResponseEntity> checklistResponses,
+            Long templateId,
+            Long questionId) {
+
+        for (ChecklistResponseEntity response : checklistResponses) {
+            for (QuestionnaireResponseEntity qResponse : response.getQuestionnaireResponses()) {
+                if (qResponse.getTemplateQuestionnaire().getId().equals(templateId)) {
+                    for (AnswerEntity answer : qResponse.getAnswers()) {
+                        if (answer.getQuestion().getId().equals(questionId)) {
+                            // Procurar por uma opção não-NI nesta resposta
+                            Optional<OptionEntity> nonNIOption = answer.getSelectedOptions().stream()
+                                    .filter(opt -> !"NI".equalsIgnoreCase(opt.getLabel()))
+                                    .findFirst();
+
+                            if (nonNIOption.isPresent()) {
+                                return nonNIOption;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Se não encontrou nenhuma opção não-NI
+        return Optional.empty();
     }
 
     @Transactional

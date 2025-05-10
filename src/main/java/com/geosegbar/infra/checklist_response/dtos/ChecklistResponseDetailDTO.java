@@ -11,11 +11,13 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ChecklistResponseDetailDTO {
+
     private Long id;
     private String checklistName;
+    private Long checklistId;
     private LocalDateTime createdAt;
     private List<TemplateWithAnswersDTO> templates;
     private Long userId;
-    private String userName;    
+    private String userName;
     private DamInfoDTO dam;
 }

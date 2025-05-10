@@ -51,7 +51,7 @@ public class ChecklistResponseService {
 
     public ChecklistResponseEntity findById(Long id) {
         return checklistResponseRepository.findById(id)
-            .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para id: " + id));
+                .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para id: " + id));
     }
 
     public List<ChecklistResponseEntity> findByDamId(Long damId) {
@@ -68,83 +68,82 @@ public class ChecklistResponseService {
         Long damId = checklistResponse.getDam().getId();
         DamEntity dam = damService.findById(damId);
         checklistResponse.setDam(dam);
-        
+
         return checklistResponseRepository.save(checklistResponse);
     }
 
     @Transactional
     public ChecklistResponseEntity update(ChecklistResponseEntity checklistResponse) {
         checklistResponseRepository.findById(checklistResponse.getId())
-            .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para atualização!"));
-        
+                .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para atualização!"));
+
         Long damId = checklistResponse.getDam().getId();
         DamEntity dam = damService.findById(damId);
         checklistResponse.setDam(dam);
-        
+
         return checklistResponseRepository.save(checklistResponse);
     }
 
     @Transactional
     public void deleteById(Long id) {
         checklistResponseRepository.findById(id)
-            .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para exclusão!"));
+                .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para exclusão!"));
         checklistResponseRepository.deleteById(id);
     }
 
-
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByDamId(Long damId) {
         DamEntity dam = damService.findById(damId);
-        
+
         List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByDamId(damId);
         if (checklistResponses.isEmpty()) {
             throw new NotFoundException("Nenhuma resposta de checklist encontrada para a Barragem: " + dam.getName());
         }
-        
+
         return checklistResponses.stream()
                 .map(this::convertToDetailDto)
                 .collect(Collectors.toList());
     }
 
-
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByClientIdPaged(
-        Long clientId, Pageable pageable) {
+            Long clientId, Pageable pageable) {
 
-    List<DamEntity> clientDams = damService.findDamsByClientId(clientId);
+        List<DamEntity> clientDams = damService.findDamsByClientId(clientId);
 
-    if (clientDams.isEmpty()) {
-        throw new NotFoundException("Nenhuma barragem encontrada para o Cliente com ID: " + clientId);
+        if (clientDams.isEmpty()) {
+            throw new NotFoundException("Nenhuma barragem encontrada para o Cliente com ID: " + clientId);
+        }
+
+        List<Long> damIds = clientDams.stream()
+                .map(DamEntity::getId)
+                .collect(Collectors.toList());
+
+        Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdIn(damIds, pageable);
+
+        List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
+                .map(this::convertToDetailDto)
+                .collect(Collectors.toList());
+
+        return new PagedChecklistResponseDTO<>(
+                dtos,
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages(),
+                page.isLast(),
+                page.isFirst()
+        );
     }
 
-    List<Long> damIds = clientDams.stream()
-            .map(DamEntity::getId)
-            .collect(Collectors.toList());
-
-    Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdIn(damIds, pageable);
-
-    List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
-            .map(this::convertToDetailDto)
-            .collect(Collectors.toList());
-
-    return new PagedChecklistResponseDTO<>(
-            dtos,
-            page.getNumber(),
-            page.getSize(),
-            page.getTotalElements(),
-            page.getTotalPages(),
-            page.isLast(),
-            page.isFirst()
-    );
-    }
-    
     public ChecklistResponseDetailDTO findChecklistResponseById(Long checklistResponseId) {
         ChecklistResponseEntity checklistResponse = findById(checklistResponseId);
         return convertToDetailDto(checklistResponse);
     }
-    
+
     private ChecklistResponseDetailDTO convertToDetailDto(ChecklistResponseEntity checklistResponse) {
         ChecklistResponseDetailDTO dto = new ChecklistResponseDetailDTO();
         dto.setId(checklistResponse.getId());
         dto.setChecklistName(checklistResponse.getChecklistName());
+        dto.setChecklistId(checklistResponse.getChecklistId());
         dto.setCreatedAt(checklistResponse.getCreatedAt());
         dto.setUserId(checklistResponse.getUser().getId());
         dto.setUserName(checklistResponse.getUser().getName());
@@ -155,10 +154,10 @@ public class ChecklistResponseService {
         damInfo.setName(dam.getName());
 
         dto.setDam(damInfo);
-        
+
         List<QuestionnaireResponseEntity> questionnaireResponses = questionnaireResponseRepository
                 .findByChecklistResponseId(checklistResponse.getId());
-        
+
         if (questionnaireResponses == null || questionnaireResponses.isEmpty()) {
             questionnaireResponses = questionnaireResponseRepository
                     .findByDamIdAndCreatedAtBetween(
@@ -167,37 +166,37 @@ public class ChecklistResponseService {
                             checklistResponse.getCreatedAt().plusHours(1)
                     );
         }
-        
+
         Map<Long, TemplateWithAnswersDTO> templateMap = new HashMap<>();
-        
+
         for (QuestionnaireResponseEntity qResponse : questionnaireResponses) {
             TemplateQuestionnaireEntity template = qResponse.getTemplateQuestionnaire();
             Long templateId = template.getId();
-            
-            TemplateWithAnswersDTO templateDto = templateMap.computeIfAbsent(templateId, 
+
+            TemplateWithAnswersDTO templateDto = templateMap.computeIfAbsent(templateId,
                     id -> new TemplateWithAnswersDTO(
-                            templateId, 
+                            templateId,
                             template.getName(),
                             qResponse.getId(),
-                            new ArrayList<>()   
+                            new ArrayList<>()
                     ));
-            
+
             for (AnswerEntity answer : qResponse.getAnswers()) {
                 QuestionEntity question = answer.getQuestion();
-                
+
                 List<OptionInfoDTO> allQuestionOptions = question.getOptions().stream()
-                    .map(opt -> new OptionInfoDTO(opt.getId(), opt.getLabel()))
-                    .collect(Collectors.toList());
-                
+                        .map(opt -> new OptionInfoDTO(opt.getId(), opt.getLabel()))
+                        .collect(Collectors.toList());
+
                 List<AnswerPhotoEntity> photos = answerPhotoRepository.findByAnswerId(answer.getId());
                 List<PhotoInfoDTO> photoDtos = photos.stream()
-                    .map(photo -> new PhotoInfoDTO(photo.getId(), photo.getImagePath()))
-                    .collect(Collectors.toList());
-                
+                        .map(photo -> new PhotoInfoDTO(photo.getId(), photo.getImagePath()))
+                        .collect(Collectors.toList());
+
                 List<OptionInfoDTO> optionDtos = answer.getSelectedOptions().stream()
-                    .map(option -> new OptionInfoDTO(option.getId(), option.getLabel()))
-                    .collect(Collectors.toList());
-                
+                        .map(option -> new OptionInfoDTO(option.getId(), option.getLabel()))
+                        .collect(Collectors.toList());
+
                 QuestionWithAnswerDTO questionWithAnswer = new QuestionWithAnswerDTO(
                         question.getId(),
                         question.getQuestionText(),
@@ -206,18 +205,18 @@ public class ChecklistResponseService {
                         answer.getComment(),
                         answer.getLatitude(),
                         answer.getLongitude(),
-                        optionDtos, 
+                        optionDtos,
                         photoDtos,
                         allQuestionOptions
                 );
-                            
+
                 templateDto.getQuestionsWithAnswers().add(questionWithAnswer);
             }
         }
-        
+
         List<TemplateWithAnswersDTO> templates = new ArrayList<>(templateMap.values());
         dto.setTemplates(templates);
-        
+
         return dto;
     }
 
@@ -226,56 +225,56 @@ public class ChecklistResponseService {
         if (checklistResponses.isEmpty()) {
             throw new NotFoundException("Nenhuma resposta de checklist encontrada para o Usuário com id: " + userId);
         }
-        
+
         return checklistResponses.stream()
                 .map(this::convertToDetailDto)
                 .collect(Collectors.toList());
     }
 
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByDateRange(LocalDateTime startDate, LocalDateTime endDate) {
-    List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByCreatedAtBetween(startDate, endDate);
-    if (checklistResponses.isEmpty()) {
-        throw new NotFoundException("Nenhuma resposta de checklist encontrada no período especificado");
-    }
-    
-    return checklistResponses.stream()
-            .map(this::convertToDetailDto)
-            .collect(Collectors.toList());
+        List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByCreatedAtBetween(startDate, endDate);
+        if (checklistResponses.isEmpty()) {
+            throw new NotFoundException("Nenhuma resposta de checklist encontrada no período especificado");
+        }
+
+        return checklistResponses.stream()
+                .map(this::convertToDetailDto)
+                .collect(Collectors.toList());
     }
 
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByDamIdPaged(Long damId, Pageable pageable) {
-    damService.findById(damId);
-    
-    Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamId(damId, pageable);
-    if (page.isEmpty()) {
-        throw new NotFoundException("Nenhuma resposta de checklist encontrada para a Barragem com id: " + damId);
+        damService.findById(damId);
+
+        Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamId(damId, pageable);
+        if (page.isEmpty()) {
+            throw new NotFoundException("Nenhuma resposta de checklist encontrada para a Barragem com id: " + damId);
+        }
+
+        List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
+                .map(this::convertToDetailDto)
+                .collect(Collectors.toList());
+
+        return new PagedChecklistResponseDTO<>(
+                dtos,
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages(),
+                page.isLast(),
+                page.isFirst()
+        );
     }
-    
-    List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
-            .map(this::convertToDetailDto)
-            .collect(Collectors.toList());
-    
-    return new PagedChecklistResponseDTO<>(
-            dtos,
-            page.getNumber(),
-            page.getSize(),
-            page.getTotalElements(),
-            page.getTotalPages(),
-            page.isLast(),
-            page.isFirst()
-    );
-}
 
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByUserIdPaged(Long userId, Pageable pageable) {
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByUserId(userId, pageable);
         if (page.isEmpty()) {
             throw new NotFoundException("Nenhuma resposta de checklist encontrada para o Usuário com id: " + userId);
         }
-        
+
         List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
                 .map(this::convertToDetailDto)
                 .collect(Collectors.toList());
-        
+
         return new PagedChecklistResponseDTO<>(
                 dtos,
                 page.getNumber(),
@@ -293,11 +292,11 @@ public class ChecklistResponseService {
         if (page.isEmpty()) {
             throw new NotFoundException("Nenhuma resposta de checklist encontrada no período especificado");
         }
-        
+
         List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
                 .map(this::convertToDetailDto)
                 .collect(Collectors.toList());
-        
+
         return new PagedChecklistResponseDTO<>(
                 dtos,
                 page.getNumber(),
@@ -314,11 +313,11 @@ public class ChecklistResponseService {
         if (page.isEmpty()) {
             throw new NotFoundException("Nenhuma resposta de checklist encontrada");
         }
-        
+
         List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
                 .map(this::convertToDetailDto)
                 .collect(Collectors.toList());
-        
+
         return new PagedChecklistResponseDTO<>(
                 dtos,
                 page.getNumber(),
@@ -342,8 +341,8 @@ public class ChecklistResponseService {
                 result.add(new DamLastChecklistDTO(dam.getId(), dam.getName(), "Nenhuma inspeção realizada."));
             } else {
                 ChecklistResponseEntity last = responses.stream()
-                    .max((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()))
-                    .orElse(null);
+                        .max((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()))
+                        .orElse(null);
                 String dateStr = last != null ? last.getCreatedAt().format(formatter) : "Nenhuma inspeção realizada.";
                 result.add(new DamLastChecklistDTO(dam.getId(), dam.getName(), dateStr));
             }

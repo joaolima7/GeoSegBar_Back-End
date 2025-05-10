@@ -4,9 +4,10 @@ import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.hibernate.annotations.CreationTimestamp;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
-import org.hibernate.annotations.CreationTimestamp;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -34,31 +35,35 @@ import lombok.Setter;
 @Table(name = "checklist_responses")
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class ChecklistResponseEntity {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
+
     @NotBlank(message = "Nome do checklist é obrigatório!")
     @Column(name = "checklist_name", nullable = false)
     private String checklistName;
-    
+
+    @NotNull(message = "ID do checklist é obrigatório!")
+    @Column(name = "checklist_id", nullable = false)
+    private Long checklistId;
+
     @Column(name = "created_at", updatable = false)
     @CreationTimestamp
     private LocalDateTime createdAt;
-    
+
     @NotNull(message = "Informe a barragem que corresponde a essa resposta de checklist!")
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "dam_id", nullable = false)
     private DamEntity dam;
-    
+
     @NotNull(message = "Informe o usuário que respondeu esse checklist!")
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private UserEntity user;
 
     @OneToMany(mappedBy = "checklistResponse", fetch = FetchType.LAZY,
-               cascade = CascadeType.ALL, orphanRemoval = true)
+            cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference(value = "checklist-questionnaire-responses")
     private Set<QuestionnaireResponseEntity> questionnaireResponses = new HashSet<>();
 }

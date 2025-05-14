@@ -40,52 +40,52 @@ public class PSBFolderEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
+
     @NotBlank(message = "O nome da pasta é obrigatório")
     @Column(nullable = false)
     private String name;
-    
+
     @NotNull(message = "O índice da pasta é obrigatório")
     @Column(name = "folder_index", nullable = false)
     private Integer folderIndex;
-    
+
     @Column(nullable = true, length = 1000)
     private String description;
-    
+
     @Column(name = "server_path", nullable = false)
     private String serverPath;
-    
+
     @Enumerated(EnumType.STRING)
     @Column(name = "color", nullable = true)
-    private FolderColorEnum color = FolderColorEnum.BLUE; 
-    
+    private FolderColorEnum color = FolderColorEnum.BLUE;
+
     @ManyToOne
     @JoinColumn(name = "dam_id", nullable = false)
-    @JsonIgnoreProperties({"psbFolders", "reservoirs", "regulatoryDam", "documentationDam", 
-                          "checklists", "checklistResponses", "damPermissions"})
+    @JsonIgnoreProperties({"psbFolders", "reservoirs", "regulatoryDam", "documentationDam",
+        "checklists", "checklistResponses", "damPermissions"})
     private DamEntity dam;
-    
-    @OneToMany(mappedBy = "psbFolder", cascade = CascadeType.ALL, 
-              orphanRemoval = true, fetch = FetchType.LAZY)
+
+    @OneToMany(mappedBy = "psbFolder", cascade = CascadeType.ALL,
+            orphanRemoval = true, fetch = FetchType.LAZY)
     @JsonIgnoreProperties({"psbFolder"})
     private Set<PSBFileEntity> files = new HashSet<>();
-    
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
-    
+
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
-    
+
     @ManyToOne
     @JoinColumn(name = "created_by")
     @JsonIgnoreProperties({"psbFoldersCreated", "psbFilesUploaded"})
     private UserEntity createdBy;
 
-    @OneToMany(mappedBy = "psbFolder", cascade = CascadeType.ALL, 
-    orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "psbFolder", cascade = CascadeType.ALL,
+            orphanRemoval = true, fetch = FetchType.LAZY)
     @JsonIgnoreProperties({"psbFolder"})
     private Set<ShareFolderEntity> shareLinks = new HashSet<>();
-    
+
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();

@@ -3,9 +3,8 @@ package com.geosegbar.infra.dam.persistence.jpa;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.geosegbar.entities.ClientEntity;
@@ -24,12 +23,15 @@ public interface DamRepository extends JpaRepository<DamEntity, Long> {
 
     boolean existsByNameAndIdNot(String name, Long id);
 
-    @Query("SELECT d FROM DamEntity d LEFT JOIN FETCH d.reservoirs LEFT JOIN FETCH d.psbFolders WHERE d.id = :id")
-    Optional<DamEntity> findByIdWithReservoirsAndFolders(@Param("id") Long id);
+    @EntityGraph(attributePaths = {"psbFolders"})
+    Optional<DamEntity> findWithPsbFoldersById(Long id);
 
-    @Query("SELECT DISTINCT d FROM DamEntity d LEFT JOIN FETCH d.reservoirs LEFT JOIN FETCH d.psbFolders ORDER BY d.id ASC")
-    List<DamEntity> findAllWithReservoirsAndFolders();
+    @EntityGraph(attributePaths = {"reservoirs"})
+    Optional<DamEntity> findWithReservoirsById(Long id);
 
-    @Query("SELECT DISTINCT d FROM DamEntity d LEFT JOIN FETCH d.reservoirs LEFT JOIN FETCH d.psbFolders WHERE d.client.id = :clientId")
-    List<DamEntity> findByClientIdWithReservoirsAndFolders(@Param("clientId") Long clientId);
+    @EntityGraph(attributePaths = {"psbFolders"})
+    List<DamEntity> findWithPsbFoldersByClientId(Long clientId);
+
+    @EntityGraph(attributePaths = {"reservoirs"})
+    List<DamEntity> findWithReservoirsByClientId(Long clientId);
 }

@@ -1,8 +1,6 @@
 package com.geosegbar.entities;
 
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -38,6 +36,7 @@ import lombok.Setter;
 @AllArgsConstructor
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class DamEntity {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -102,16 +101,16 @@ public class DamEntity {
 
     @Column(nullable = true)
     private String linkPSB;
-    
+
     @Column(nullable = true)
     private String linkLegislation;
 
     @OneToOne(mappedBy = "dam", cascade = CascadeType.ALL, orphanRemoval = true)
-    @JsonIgnoreProperties({"dam"}) 
+    @JsonIgnoreProperties({"dam"})
     private RegulatoryDamEntity regulatoryDam;
 
     @OneToOne(mappedBy = "dam", cascade = CascadeType.ALL, orphanRemoval = true)
-    @JsonIgnoreProperties({"dam"}) 
+    @JsonIgnoreProperties({"dam"})
     private DocumentationDamEntity documentationDam;
 
     @ManyToMany(mappedBy = "dams", fetch = FetchType.LAZY)
@@ -132,5 +131,5 @@ public class DamEntity {
 
     @OneToMany(mappedBy = "dam", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnoreProperties("dam")
-    private List<PSBFolderEntity> psbFolders = new ArrayList<>();
+    private Set<PSBFolderEntity> psbFolders = new HashSet<>();
 }

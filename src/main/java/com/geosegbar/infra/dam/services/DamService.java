@@ -1,7 +1,9 @@
 package com.geosegbar.infra.dam.services;
 
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 
@@ -136,7 +138,7 @@ public class DamService {
         documentationDam.setLastFillingFSB(request.getLastFillingFSB());
         documentationDam.setNextFillingFSB(request.getNextFillingFSB());
 
-        documentationDam = documentationDamRepository.save(documentationDam);
+        documentationDamRepository.save(documentationDam);
 
         RegulatoryDamEntity regulatoryDam = new RegulatoryDamEntity();
         regulatoryDam.setDam(dam);
@@ -178,7 +180,7 @@ public class DamService {
             regulatoryDam.setClassificationDam(classificationDam);
         }
 
-        regulatoryDam = regulatoryDamRepository.save(regulatoryDam);
+        regulatoryDamRepository.save(regulatoryDam);
 
         if (request.getReservoirs() != null && !request.getReservoirs().isEmpty()) {
             for (ReservoirRequestDTO reservoirDTO : request.getReservoirs()) {
@@ -193,12 +195,15 @@ public class DamService {
         }
 
         if (request.getPsbFolders() != null && !request.getPsbFolders().isEmpty()) {
-            List<PSBFolderEntity> folders = psbFolderService.createMultipleFolders(
+            List<PSBFolderEntity> foldersList = psbFolderService.createMultipleFolders(
                     dam,
                     request.getPsbFolders(),
                     request.getCreatedById()
             );
-            dam.setPsbFolders(folders);
+
+            // Converter a List para Set
+            Set<PSBFolderEntity> foldersSet = new HashSet<>(foldersList);
+            dam.setPsbFolders(foldersSet);
         }
 
         return findById(dam.getId());
@@ -252,20 +257,47 @@ public class DamService {
     }
 
     public List<DamEntity> findDamsByClientId(Long clientId) {
-        List<DamEntity> dams = damRepository.findByClientIdWithReservoirsAndFolders(clientId);
-        if (dams.isEmpty()) {
+        List<DamEntity> damsWithFolders = damRepository.findWithPsbFoldersByClientId(clientId);
+        if (damsWithFolders.isEmpty()) {
             throw new NotFoundException("Nenhuma barragem encontrada para o cliente com ID: " + clientId);
         }
-        return dams;
+
+        List<DamEntity> damsWithReservoirs = damRepository.findWithReservoirsByClientId(clientId);
+
+        for (DamEntity dam : damsWithFolders) {
+            for (DamEntity damWithReservoirs : damsWithReservoirs) {
+                if (dam.getId().equals(damWithReservoirs.getId())) {
+                    dam.setReservoirs(damWithReservoirs.getReservoirs());
+                    break;
+                }
+            }
+        }
+
+        return damsWithFolders;
     }
 
     public DamEntity findById(Long id) {
-        return damRepository.findByIdWithReservoirsAndFolders(id)
+        DamEntity dam = damRepository.findWithPsbFoldersById(id)
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
+
+        DamEntity damWithReservoirs = damRepository.findWithReservoirsById(id)
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
+
+        dam.setReservoirs(damWithReservoirs.getReservoirs());
+
+        return dam;
     }
 
     public List<DamEntity> findAll() {
-        return damRepository.findAllWithReservoirsAndFolders();
+        List<DamEntity> dams = damRepository.findAll();
+
+        for (DamEntity dam : dams) {
+            DamEntity damWithDetails = findById(dam.getId());
+            dam.setPsbFolders(damWithDetails.getPsbFolders());
+            dam.setReservoirs(damWithDetails.getReservoirs());
+        }
+
+        return dams;
     }
 
     public boolean existsByName(String name) {

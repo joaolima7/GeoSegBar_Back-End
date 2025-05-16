@@ -32,7 +32,7 @@ public class AnomalyController {
     public ResponseEntity<WebResponseEntity<List<AnomalyEntity>>> getAllAnomalies() {
         List<AnomalyEntity> anomalies = anomalyService.findAll();
         WebResponseEntity<List<AnomalyEntity>> response = WebResponseEntity.success(
-                anomalies, "Anomalies retrieved successfully!");
+                anomalies, "Anomalias recuperadas com sucesso!");
         return ResponseEntity.ok(response);
     }
 
@@ -40,7 +40,7 @@ public class AnomalyController {
     public ResponseEntity<WebResponseEntity<AnomalyEntity>> getAnomalyById(@PathVariable Long id) {
         AnomalyEntity anomaly = anomalyService.findById(id);
         WebResponseEntity<AnomalyEntity> response = WebResponseEntity.success(
-                anomaly, "Anomaly retrieved successfully!");
+                anomaly, "Anomalia recuperada com sucesso!");
         return ResponseEntity.ok(response);
     }
 
@@ -48,7 +48,7 @@ public class AnomalyController {
     public ResponseEntity<WebResponseEntity<List<AnomalyEntity>>> getAnomaliesByDamId(@PathVariable Long damId) {
         List<AnomalyEntity> anomalies = anomalyService.findByDamId(damId);
         WebResponseEntity<List<AnomalyEntity>> response = WebResponseEntity.success(
-                anomalies, "Dam anomalies retrieved successfully!");
+                anomalies, "Anomalias recuperadas com sucesso!");
         return ResponseEntity.ok(response);
     }
 
@@ -56,7 +56,7 @@ public class AnomalyController {
     public ResponseEntity<WebResponseEntity<AnomalyEntity>> createAnomaly(@Valid @RequestBody AnomalyDTO request) {
         AnomalyEntity anomaly = anomalyService.create(request);
         WebResponseEntity<AnomalyEntity> response = WebResponseEntity.success(
-                anomaly, "Anomaly created successfully!");
+                anomaly, "Anomalia criada com sucesso!");
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
@@ -65,7 +65,7 @@ public class AnomalyController {
             @PathVariable Long id, @Valid @RequestBody AnomalyDTO request) {
         AnomalyEntity anomaly = anomalyService.update(id, request);
         WebResponseEntity<AnomalyEntity> response = WebResponseEntity.success(
-                anomaly, "Anomaly updated successfully!");
+                anomaly, "Anomalia atualizada com sucesso!");
         return ResponseEntity.ok(response);
     }
 
@@ -73,7 +73,7 @@ public class AnomalyController {
     public ResponseEntity<WebResponseEntity<Void>> deleteAnomaly(@PathVariable Long id) {
         anomalyService.delete(id);
         WebResponseEntity<Void> response = WebResponseEntity.success(
-                null, "Anomaly deleted successfully!");
+                null, "Anomalia excluída com sucesso!");
         return ResponseEntity.ok(response);
     }
 }

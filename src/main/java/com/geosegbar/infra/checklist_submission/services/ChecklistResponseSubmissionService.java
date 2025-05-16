@@ -117,16 +117,16 @@ public class ChecklistResponseSubmissionService {
             Long questionnaireId) {
 
         UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("User not found!"));
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
 
         DamEntity dam = damRepository.findById(damId)
-                .orElseThrow(() -> new NotFoundException("Dam not found!"));
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
 
         DangerLevelEntity dangerLevel = dangerLevelRepository.findById(answerDto.getAnomalyDangerLevelId())
-                .orElseThrow(() -> new NotFoundException("Danger level not found!"));
+                .orElseThrow(() -> new NotFoundException("Nível de perigo não encontrado!"));
 
         AnomalyStatusEntity status = anomalyStatusRepository.findById(answerDto.getAnomalyStatusId())
-                .orElseThrow(() -> new NotFoundException("Status not found!"));
+                .orElseThrow(() -> new NotFoundException("Status não encontrado!"));
 
         AnomalyEntity anomaly = new AnomalyEntity();
         anomaly.setUser(user);
@@ -165,7 +165,7 @@ public class ChecklistResponseSubmissionService {
                     "anomalies"
             );
         } catch (IllegalArgumentException e) {
-            throw new FileStorageException("Invalid image data provided", e);
+            throw new FileStorageException("Imagem inválida: ", e);
         }
     }
 

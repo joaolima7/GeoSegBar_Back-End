@@ -43,19 +43,19 @@ public class AnomalyService {
 
     private void initDangerLevels() {
         if (dangerLevelRepository.count() == 0) {
-            dangerLevelRepository.save(new DangerLevelEntity(null, "Normal", "Normal danger level"));
-            dangerLevelRepository.save(new DangerLevelEntity(null, "Attention", "Attention danger level"));
-            dangerLevelRepository.save(new DangerLevelEntity(null, "Alert", "Alert danger level"));
-            dangerLevelRepository.save(new DangerLevelEntity(null, "Emergency", "Emergency danger level"));
+            dangerLevelRepository.save(new DangerLevelEntity(null, "Normal", "Nível de perigo normal"));
+            dangerLevelRepository.save(new DangerLevelEntity(null, "Atenção", "Nível de perigo atenção"));
+            dangerLevelRepository.save(new DangerLevelEntity(null, "Alerta", "Nível de perigo alerta"));
+            dangerLevelRepository.save(new DangerLevelEntity(null, "Emergência", "Nível de perigo emergência"));
         }
     }
 
     private void initAnomalyStatuses() {
         if (statusRepository.count() == 0) {
-            statusRepository.save(new AnomalyStatusEntity(null, "Pending", "Anomaly pending analysis"));
-            statusRepository.save(new AnomalyStatusEntity(null, "In Progress", "Anomaly in analysis"));
-            statusRepository.save(new AnomalyStatusEntity(null, "Completed", "Anomaly resolved"));
-            statusRepository.save(new AnomalyStatusEntity(null, "Monitoring", "Anomaly being monitored"));
+            statusRepository.save(new AnomalyStatusEntity(null, "Pendente", "Anomalia pendente"));
+            statusRepository.save(new AnomalyStatusEntity(null, "Em andamento", "Anomalia em andamento"));
+            statusRepository.save(new AnomalyStatusEntity(null, "Concluído", "Anomalia concluída"));
+            statusRepository.save(new AnomalyStatusEntity(null, "Em monitoramento", "Anomalia em monitoramento"));
         }
     }
 
@@ -65,7 +65,7 @@ public class AnomalyService {
 
     public AnomalyEntity findById(Long id) {
         return anomalyRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Anomaly not found!"));
+                .orElseThrow(() -> new NotFoundException("Anomalia não encontrada!"));
     }
 
     public List<AnomalyEntity> findByDamId(Long damId) {
@@ -75,16 +75,16 @@ public class AnomalyService {
     @Transactional
     public AnomalyEntity create(AnomalyDTO request) {
         UserEntity user = userRepository.findById(request.getUserId())
-                .orElseThrow(() -> new NotFoundException("User not found!"));
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
 
         DamEntity dam = damRepository.findById(request.getDamId())
-                .orElseThrow(() -> new NotFoundException("Dam not found!"));
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
 
         DangerLevelEntity dangerLevel = dangerLevelRepository.findById(request.getDangerLevelId())
-                .orElseThrow(() -> new NotFoundException("Danger level not found!"));
+                .orElseThrow(() -> new NotFoundException("Nível de perigo não encontrado!"));
 
         AnomalyStatusEntity status = statusRepository.findById(request.getStatusId())
-                .orElseThrow(() -> new NotFoundException("Status not found!"));
+                .orElseThrow(() -> new NotFoundException("Status não encontrado!"));
 
         AnomalyEntity anomaly = new AnomalyEntity();
         anomaly.setUser(user);
@@ -103,7 +103,7 @@ public class AnomalyService {
             String photoUrl = processAndSavePhoto(request.getPhotoBase64());
             anomaly.setPhotoPath(photoUrl);
         } else {
-            throw new FileStorageException("Photo is required for anomaly!");
+            throw new FileStorageException("A foto é obrigatória!");
         }
 
         return anomalyRepository.save(anomaly);
@@ -114,16 +114,16 @@ public class AnomalyService {
         AnomalyEntity anomaly = findById(id);
 
         UserEntity user = userRepository.findById(request.getUserId())
-                .orElseThrow(() -> new NotFoundException("User not found!"));
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
 
         DamEntity dam = damRepository.findById(request.getDamId())
-                .orElseThrow(() -> new NotFoundException("Dam not found!"));
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
 
         DangerLevelEntity dangerLevel = dangerLevelRepository.findById(request.getDangerLevelId())
-                .orElseThrow(() -> new NotFoundException("Danger level not found!"));
+                .orElseThrow(() -> new NotFoundException("Nível de perigo não encontrado!"));
 
         AnomalyStatusEntity status = statusRepository.findById(request.getStatusId())
-                .orElseThrow(() -> new NotFoundException("Status not found!"));
+                .orElseThrow(() -> new NotFoundException("Status não encontrado!"));
 
         anomaly.setUser(user);
         anomaly.setDam(dam);
@@ -175,7 +175,7 @@ public class AnomalyService {
                     "anomalies"
             );
         } catch (IllegalArgumentException e) {
-            throw new FileStorageException("Invalid image data provided", e);
+            throw new FileStorageException("Imagem inválida! ", e);
         }
     }
 }

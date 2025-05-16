@@ -8,12 +8,16 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
+import com.geosegbar.common.enums.AnomalyOriginEnum;
 import com.geosegbar.common.enums.TypeQuestionEnum;
+import com.geosegbar.entities.AnomalyEntity;
+import com.geosegbar.entities.AnomalyStatusEntity;
 import com.geosegbar.entities.AnswerEntity;
 import com.geosegbar.entities.AnswerPhotoEntity;
 import com.geosegbar.entities.ChecklistEntity;
 import com.geosegbar.entities.ChecklistResponseEntity;
 import com.geosegbar.entities.DamEntity;
+import com.geosegbar.entities.DangerLevelEntity;
 import com.geosegbar.entities.OptionEntity;
 import com.geosegbar.entities.QuestionEntity;
 import com.geosegbar.entities.QuestionnaireResponseEntity;
@@ -22,6 +26,8 @@ import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.FileStorageException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
+import com.geosegbar.infra.anomaly_status.persistence.jpa.AnomalyStatusRepository;
 import com.geosegbar.infra.answer.persistence.jpa.AnswerRepository;
 import com.geosegbar.infra.answer_photo.persistence.jpa.AnswerPhotoRepository;
 import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
@@ -30,7 +36,9 @@ import com.geosegbar.infra.checklist_submission.dtos.AnswerSubmissionDTO;
 import com.geosegbar.infra.checklist_submission.dtos.ChecklistResponseSubmissionDTO;
 import com.geosegbar.infra.checklist_submission.dtos.PhotoSubmissionDTO;
 import com.geosegbar.infra.checklist_submission.dtos.QuestionnaireResponseSubmissionDTO;
+import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.dam.services.DamService;
+import com.geosegbar.infra.danger_level.persistence.jpa.DangerLevelRepository;
 import com.geosegbar.infra.file_storage.FileStorageService;
 import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
 import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
@@ -56,12 +64,18 @@ public class ChecklistResponseSubmissionService {
     private final DamService damService;
     private final UserRepository userRepository;
     private final ChecklistRepository checklistRepository;
+    private final DangerLevelRepository dangerLevelRepository;
+    private final AnomalyStatusRepository anomalyStatusRepository;
+    private final AnomalyRepository anomalyRepository;
+    private final PVAnswerValidator pvAnswerValidator;
+    private final DamRepository damRepository;
 
     @Transactional
     public ChecklistResponseEntity submitChecklistResponse(ChecklistResponseSubmissionDTO submissionDto) {
         ChecklistResponseEntity checklistResponse = createChecklistResponse(submissionDto);
 
         validateAllRequiredQuestionnaires(submissionDto);
+        validatePVAnswersHaveRequiredFields(submissionDto);
 
         for (QuestionnaireResponseSubmissionDTO questionnaireDto : submissionDto.getQuestionnaireResponses()) {
             validateAllQuestionsAnswered(questionnaireDto);
@@ -70,10 +84,89 @@ public class ChecklistResponseSubmissionService {
 
             for (AnswerSubmissionDTO answerDto : questionnaireDto.getAnswers()) {
                 createAnswer(answerDto, questionnaireResponse);
+
+                if (pvAnswerValidator.isPVAnswer(answerDto)) {
+                    createAnomalyFromPVAnswer(
+                            answerDto,
+                            submissionDto.getUserId(),
+                            submissionDto.getDamId(),
+                            questionnaireDto.getTemplateQuestionnaireId()
+                    );
+                }
             }
         }
 
         return checklistResponse;
+    }
+
+    private void validatePVAnswersHaveRequiredFields(ChecklistResponseSubmissionDTO submissionDto) {
+        for (QuestionnaireResponseSubmissionDTO questionnaireDto : submissionDto.getQuestionnaireResponses()) {
+            for (AnswerSubmissionDTO answerDto : questionnaireDto.getAnswers()) {
+                QuestionEntity question = questionRepository.findById(answerDto.getQuestionId())
+                        .orElseThrow(() -> new NotFoundException("Pergunta não encontrada: " + answerDto.getQuestionId()));
+
+                pvAnswerValidator.validatePVAnswer(answerDto, question.getQuestionText());
+            }
+        }
+    }
+
+    private void createAnomalyFromPVAnswer(
+            AnswerSubmissionDTO answerDto,
+            Long userId,
+            Long damId,
+            Long questionnaireId) {
+
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("User not found!"));
+
+        DamEntity dam = damRepository.findById(damId)
+                .orElseThrow(() -> new NotFoundException("Dam not found!"));
+
+        DangerLevelEntity dangerLevel = dangerLevelRepository.findById(answerDto.getAnomalyDangerLevelId())
+                .orElseThrow(() -> new NotFoundException("Danger level not found!"));
+
+        AnomalyStatusEntity status = anomalyStatusRepository.findById(answerDto.getAnomalyStatusId())
+                .orElseThrow(() -> new NotFoundException("Status not found!"));
+
+        AnomalyEntity anomaly = new AnomalyEntity();
+        anomaly.setUser(user);
+        anomaly.setDam(dam);
+        anomaly.setLatitude(answerDto.getLatitude());
+        anomaly.setLongitude(answerDto.getLongitude());
+        anomaly.setQuestionnaireId(questionnaireId);
+        anomaly.setQuestionId(answerDto.getQuestionId());
+        anomaly.setOrigin(AnomalyOriginEnum.CHECKLIST);
+        anomaly.setObservation(answerDto.getComment());
+        anomaly.setRecommendation(answerDto.getAnomalyRecommendation());
+        anomaly.setDangerLevel(dangerLevel);
+        anomaly.setStatus(status);
+
+        if (answerDto.getPhotos() != null && !answerDto.getPhotos().isEmpty()) {
+            PhotoSubmissionDTO photoDto = answerDto.getPhotos().get(0);
+            String photoUrl = processAndSaveAnomalyPhoto(photoDto.getBase64Image());
+            anomaly.setPhotoPath(photoUrl);
+        }
+
+        anomalyRepository.save(anomaly);
+    }
+
+    private String processAndSaveAnomalyPhoto(String base64Image) {
+        try {
+            if (base64Image.contains(",")) {
+                base64Image = base64Image.split(",")[1];
+            }
+
+            byte[] imageBytes = Base64.getDecoder().decode(base64Image);
+
+            return fileStorageService.storeFileFromBytes(
+                    imageBytes,
+                    "anomaly_photo.jpg",
+                    "image/jpeg",
+                    "anomalies"
+            );
+        } catch (IllegalArgumentException e) {
+            throw new FileStorageException("Invalid image data provided", e);
+        }
     }
 
     private void validateAllRequiredQuestionnaires(ChecklistResponseSubmissionDTO submissionDto) {

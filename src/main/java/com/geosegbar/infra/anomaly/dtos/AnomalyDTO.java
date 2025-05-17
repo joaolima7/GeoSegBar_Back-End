@@ -1,6 +1,9 @@
 package com.geosegbar.infra.anomaly.dtos;
 
+import java.util.List;
+
 import com.geosegbar.common.enums.AnomalyOriginEnum;
+import com.geosegbar.infra.checklist_submission.dtos.PhotoSubmissionDTO;
 
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -36,6 +39,8 @@ public class AnomalyDTO {
     private String recommendation;
 
     private String photoBase64;
+
+    private List<PhotoSubmissionDTO> photos;
 
     @NotNull(message = "Nível de Perigo é obrigatório!")
     private Long dangerLevelId;

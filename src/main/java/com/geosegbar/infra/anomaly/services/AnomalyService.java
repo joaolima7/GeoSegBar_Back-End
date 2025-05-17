@@ -1,5 +1,6 @@
 package com.geosegbar.infra.anomaly.services;
 
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 
@@ -7,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.entities.AnomalyEntity;
+import com.geosegbar.entities.AnomalyPhotoEntity;
 import com.geosegbar.entities.AnomalyStatusEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.DangerLevelEntity;
@@ -15,7 +17,9 @@ import com.geosegbar.exceptions.FileStorageException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.anomaly.dtos.AnomalyDTO;
 import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
+import com.geosegbar.infra.anomaly_photo.persistence.jpa.AnomalyPhotoRepository;
 import com.geosegbar.infra.anomaly_status.persistence.jpa.AnomalyStatusRepository;
+import com.geosegbar.infra.checklist_submission.dtos.PhotoSubmissionDTO;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.danger_level.persistence.jpa.DangerLevelRepository;
 import com.geosegbar.infra.file_storage.FileStorageService;
@@ -34,6 +38,7 @@ public class AnomalyService {
     private final DangerLevelRepository dangerLevelRepository;
     private final AnomalyStatusRepository statusRepository;
     private final FileStorageService fileStorageService;
+    private final AnomalyPhotoRepository anomalyPhotoRepository;
 
     @PostConstruct
     public void init() {
@@ -99,14 +104,26 @@ public class AnomalyService {
         anomaly.setDangerLevel(dangerLevel);
         anomaly.setStatus(status);
 
+        AnomalyEntity savedAnomaly = anomalyRepository.save(anomaly);
+
         if (request.getPhotoBase64() != null && !request.getPhotoBase64().isEmpty()) {
             String photoUrl = processAndSavePhoto(request.getPhotoBase64());
             anomaly.setPhotoPath(photoUrl);
-        } else {
-            throw new FileStorageException("A foto é obrigatória!");
+            savedAnomaly = anomalyRepository.save(anomaly);
         }
 
-        return anomalyRepository.save(anomaly);
+        if (request.getPhotos() != null && !request.getPhotos().isEmpty()) {
+            for (PhotoSubmissionDTO photoDto : request.getPhotos()) {
+                saveAnomalyPhoto(photoDto, savedAnomaly, dam.getId());
+            }
+        }
+
+        if ((request.getPhotoBase64() == null || request.getPhotoBase64().isEmpty())
+                && (request.getPhotos() == null || request.getPhotos().isEmpty())) {
+            throw new FileStorageException("É necessário fornecer pelo menos uma foto para a anomalia!");
+        }
+
+        return savedAnomaly;
     }
 
     @Transactional
@@ -146,6 +163,20 @@ public class AnomalyService {
             anomaly.setPhotoPath(photoUrl);
         }
 
+        if (request.getPhotos() != null && !request.getPhotos().isEmpty()) {
+            for (AnomalyPhotoEntity photo : new ArrayList<>(anomaly.getPhotos())) {
+                if (photo.getImagePath() != null && !photo.getImagePath().isEmpty()) {
+                    fileStorageService.deleteFile(photo.getImagePath());
+                }
+                anomalyPhotoRepository.delete(photo);
+            }
+            anomaly.getPhotos().clear();
+
+            for (PhotoSubmissionDTO photoDto : request.getPhotos()) {
+                saveAnomalyPhoto(photoDto, anomaly, dam.getId());
+            }
+        }
+
         return anomalyRepository.save(anomaly);
     }
 
@@ -155,6 +186,12 @@ public class AnomalyService {
 
         if (anomaly.getPhotoPath() != null && !anomaly.getPhotoPath().isEmpty()) {
             fileStorageService.deleteFile(anomaly.getPhotoPath());
+        }
+
+        for (AnomalyPhotoEntity photo : anomaly.getPhotos()) {
+            if (photo.getImagePath() != null && !photo.getImagePath().isEmpty()) {
+                fileStorageService.deleteFile(photo.getImagePath());
+            }
         }
 
         anomalyRepository.delete(anomaly);
@@ -176,6 +213,32 @@ public class AnomalyService {
             );
         } catch (IllegalArgumentException e) {
             throw new FileStorageException("Imagem inválida! ", e);
+        }
+    }
+
+    private AnomalyPhotoEntity saveAnomalyPhoto(PhotoSubmissionDTO photoDto, AnomalyEntity anomaly, Long damId) {
+        try {
+            String base64Image = photoDto.getBase64Image();
+            if (base64Image.contains(",")) {
+                base64Image = base64Image.split(",")[1];
+            }
+
+            byte[] imageBytes = Base64.getDecoder().decode(base64Image);
+
+            String photoUrl = fileStorageService.storeFileFromBytes(
+                    imageBytes,
+                    photoDto.getFileName(),
+                    photoDto.getContentType(),
+                    "anomalies"
+            );
+
+            AnomalyPhotoEntity photoEntity = new AnomalyPhotoEntity();
+            photoEntity.setAnomaly(anomaly);
+            photoEntity.setImagePath(photoUrl);
+            photoEntity.setDamId(damId);
+            return anomalyPhotoRepository.save(photoEntity);
+        } catch (Exception e) {
+            throw new FileStorageException("Erro ao processar imagem da anomalia: " + e.getMessage());
         }
     }
 }

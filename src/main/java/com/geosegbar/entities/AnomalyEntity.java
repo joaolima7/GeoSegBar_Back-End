@@ -1,12 +1,16 @@
 package com.geosegbar.entities;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.hibernate.annotations.CreationTimestamp;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import com.geosegbar.common.enums.AnomalyOriginEnum;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -17,6 +21,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -77,7 +82,7 @@ public class AnomalyEntity {
     @Column(name = "recommendation", columnDefinition = "TEXT")
     private String recommendation;
 
-    @Column(name = "photo_path", nullable = false)
+    @Column(name = "photo_path")
     private String photoPath;
 
     @ManyToOne(fetch = FetchType.EAGER)
@@ -89,4 +94,9 @@ public class AnomalyEntity {
     @JoinColumn(name = "status_id", nullable = false)
     @NotNull(message = "Status é obrigatório!")
     private AnomalyStatusEntity status;
+
+    @OneToMany(mappedBy = "anomaly", fetch = FetchType.LAZY,
+            cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonManagedReference(value = "anomaly-photos")
+    private Set<AnomalyPhotoEntity> photos = new HashSet<>();
 }

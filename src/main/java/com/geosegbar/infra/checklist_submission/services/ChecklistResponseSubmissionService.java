@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import com.geosegbar.common.enums.AnomalyOriginEnum;
 import com.geosegbar.common.enums.TypeQuestionEnum;
 import com.geosegbar.entities.AnomalyEntity;
+import com.geosegbar.entities.AnomalyPhotoEntity;
 import com.geosegbar.entities.AnomalyStatusEntity;
 import com.geosegbar.entities.AnswerEntity;
 import com.geosegbar.entities.AnswerPhotoEntity;
@@ -27,6 +28,7 @@ import com.geosegbar.exceptions.FileStorageException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
+import com.geosegbar.infra.anomaly_photo.persistence.jpa.AnomalyPhotoRepository;
 import com.geosegbar.infra.anomaly_status.persistence.jpa.AnomalyStatusRepository;
 import com.geosegbar.infra.answer.persistence.jpa.AnswerRepository;
 import com.geosegbar.infra.answer_photo.persistence.jpa.AnswerPhotoRepository;
@@ -69,6 +71,7 @@ public class ChecklistResponseSubmissionService {
     private final AnomalyRepository anomalyRepository;
     private final PVAnswerValidator pvAnswerValidator;
     private final DamRepository damRepository;
+    private final AnomalyPhotoRepository anomalyPhotoRepository;
 
     @Transactional
     public ChecklistResponseEntity submitChecklistResponse(ChecklistResponseSubmissionDTO submissionDto) {
@@ -141,31 +144,38 @@ public class ChecklistResponseSubmissionService {
         anomaly.setDangerLevel(dangerLevel);
         anomaly.setStatus(status);
 
-        if (answerDto.getPhotos() != null && !answerDto.getPhotos().isEmpty()) {
-            PhotoSubmissionDTO photoDto = answerDto.getPhotos().get(0);
-            String photoUrl = processAndSaveAnomalyPhoto(photoDto.getBase64Image());
-            anomaly.setPhotoPath(photoUrl);
-        }
+        AnomalyEntity savedAnomaly = anomalyRepository.save(anomaly);
 
-        anomalyRepository.save(anomaly);
+        if (answerDto.getPhotos() != null && !answerDto.getPhotos().isEmpty()) {
+            for (PhotoSubmissionDTO photoDto : answerDto.getPhotos()) {
+                saveAnomalyPhoto(photoDto, savedAnomaly, dam.getId());
+            }
+        }
     }
 
-    private String processAndSaveAnomalyPhoto(String base64Image) {
+    private void saveAnomalyPhoto(PhotoSubmissionDTO photoDto, AnomalyEntity anomaly, Long damId) {
         try {
+            String base64Image = photoDto.getBase64Image();
             if (base64Image.contains(",")) {
                 base64Image = base64Image.split(",")[1];
             }
 
             byte[] imageBytes = Base64.getDecoder().decode(base64Image);
 
-            return fileStorageService.storeFileFromBytes(
+            String photoUrl = fileStorageService.storeFileFromBytes(
                     imageBytes,
-                    "anomaly_photo.jpg",
-                    "image/jpeg",
+                    photoDto.getFileName(),
+                    photoDto.getContentType(),
                     "anomalies"
             );
-        } catch (IllegalArgumentException e) {
-            throw new FileStorageException("Imagem inválida: ", e);
+
+            AnomalyPhotoEntity photoEntity = new AnomalyPhotoEntity();
+            photoEntity.setAnomaly(anomaly);
+            photoEntity.setImagePath(photoUrl);
+            photoEntity.setDamId(damId);
+            anomalyPhotoRepository.save(photoEntity);
+        } catch (Exception e) {
+            throw new FileStorageException("Erro ao processar imagem da anomalia: " + e.getMessage());
         }
     }
 

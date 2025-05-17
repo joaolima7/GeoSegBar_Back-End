@@ -74,7 +74,7 @@ public class AnomalyService {
     }
 
     public List<AnomalyEntity> findByDamId(Long damId) {
-        return anomalyRepository.findWithPhotosByDamId(damId);
+        return anomalyRepository.findByDamId(damId);
     }
 
     @Transactional

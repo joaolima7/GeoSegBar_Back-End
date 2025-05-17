@@ -21,6 +21,9 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.NamedAttributeNode;
+import jakarta.persistence.NamedEntityGraph;
+import jakarta.persistence.NamedEntityGraphs;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
@@ -36,6 +39,18 @@ import lombok.Setter;
 @AllArgsConstructor
 @Table(name = "anomalies")
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@NamedEntityGraphs({
+    @NamedEntityGraph(
+            name = "anomaly.complete",
+            attributeNodes = {
+                @NamedAttributeNode("photos"),
+                @NamedAttributeNode("user"),
+                @NamedAttributeNode("dam"),
+                @NamedAttributeNode("dangerLevel"),
+                @NamedAttributeNode("status")
+            }
+    )
+})
 public class AnomalyEntity {
 
     @Id

@@ -74,7 +74,7 @@ public class AnomalyService {
     }
 
     public List<AnomalyEntity> findByDamId(Long damId) {
-        return anomalyRepository.findByDamId(damId);
+        return anomalyRepository.findWithPhotosByDamId(damId);
     }
 
     @Transactional
@@ -106,21 +106,10 @@ public class AnomalyService {
 
         AnomalyEntity savedAnomaly = anomalyRepository.save(anomaly);
 
-        if (request.getPhotoBase64() != null && !request.getPhotoBase64().isEmpty()) {
-            String photoUrl = processAndSavePhoto(request.getPhotoBase64());
-            anomaly.setPhotoPath(photoUrl);
-            savedAnomaly = anomalyRepository.save(anomaly);
-        }
-
         if (request.getPhotos() != null && !request.getPhotos().isEmpty()) {
             for (PhotoSubmissionDTO photoDto : request.getPhotos()) {
                 saveAnomalyPhoto(photoDto, savedAnomaly, dam.getId());
             }
-        }
-
-        if ((request.getPhotoBase64() == null || request.getPhotoBase64().isEmpty())
-                && (request.getPhotos() == null || request.getPhotos().isEmpty())) {
-            throw new FileStorageException("É necessário fornecer pelo menos uma foto para a anomalia!");
         }
 
         return savedAnomaly;
@@ -154,15 +143,6 @@ public class AnomalyService {
         anomaly.setDangerLevel(dangerLevel);
         anomaly.setStatus(status);
 
-        if (request.getPhotoBase64() != null && !request.getPhotoBase64().isEmpty()) {
-            if (anomaly.getPhotoPath() != null && !anomaly.getPhotoPath().isEmpty()) {
-                fileStorageService.deleteFile(anomaly.getPhotoPath());
-            }
-
-            String photoUrl = processAndSavePhoto(request.getPhotoBase64());
-            anomaly.setPhotoPath(photoUrl);
-        }
-
         if (request.getPhotos() != null && !request.getPhotos().isEmpty()) {
             for (AnomalyPhotoEntity photo : new ArrayList<>(anomaly.getPhotos())) {
                 if (photo.getImagePath() != null && !photo.getImagePath().isEmpty()) {
@@ -184,10 +164,6 @@ public class AnomalyService {
     public void delete(Long id) {
         AnomalyEntity anomaly = findById(id);
 
-        if (anomaly.getPhotoPath() != null && !anomaly.getPhotoPath().isEmpty()) {
-            fileStorageService.deleteFile(anomaly.getPhotoPath());
-        }
-
         for (AnomalyPhotoEntity photo : anomaly.getPhotos()) {
             if (photo.getImagePath() != null && !photo.getImagePath().isEmpty()) {
                 fileStorageService.deleteFile(photo.getImagePath());
@@ -195,25 +171,6 @@ public class AnomalyService {
         }
 
         anomalyRepository.delete(anomaly);
-    }
-
-    private String processAndSavePhoto(String base64Image) {
-        try {
-            if (base64Image.contains(",")) {
-                base64Image = base64Image.split(",")[1];
-            }
-
-            byte[] imageBytes = Base64.getDecoder().decode(base64Image);
-
-            return fileStorageService.storeFileFromBytes(
-                    imageBytes,
-                    "anomaly_photo.jpg",
-                    "image/jpeg",
-                    "anomalies"
-            );
-        } catch (IllegalArgumentException e) {
-            throw new FileStorageException("Imagem inválida! ", e);
-        }
     }
 
     private AnomalyPhotoEntity saveAnomalyPhoto(PhotoSubmissionDTO photoDto, AnomalyEntity anomaly, Long damId) {

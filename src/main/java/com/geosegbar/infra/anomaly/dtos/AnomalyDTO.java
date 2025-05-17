@@ -38,8 +38,6 @@ public class AnomalyDTO {
 
     private String recommendation;
 
-    private String photoBase64;
-
     private List<PhotoSubmissionDTO> photos;
 
     @NotNull(message = "Nível de Perigo é obrigatório!")

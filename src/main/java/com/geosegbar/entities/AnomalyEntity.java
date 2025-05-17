@@ -82,9 +82,6 @@ public class AnomalyEntity {
     @Column(name = "recommendation", columnDefinition = "TEXT")
     private String recommendation;
 
-    @Column(name = "photo_path")
-    private String photoPath;
-
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "danger_level_id", nullable = false)
     @NotNull(message = "Nível de Perigo é obrigatório!")

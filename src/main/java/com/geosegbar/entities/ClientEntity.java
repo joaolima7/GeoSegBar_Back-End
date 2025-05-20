@@ -34,6 +34,7 @@ import lombok.Setter;
 @Entity
 @Table(name = "client")
 public class ClientEntity {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -97,8 +98,7 @@ public class ClientEntity {
     @Column(length = 150)
     private String emailContact;
 
-    @Size(max = 255, message = "A Logo deve ter no máximo 255 caracteres!")
-    @Column(length = 255)
+    @Column(nullable = true)
     private String logoPath;
 
     @ManyToOne
@@ -115,5 +115,5 @@ public class ClientEntity {
 
     @JsonIgnore
     @OneToMany(mappedBy = "client", fetch = FetchType.LAZY)
-    private Set<DamPermissionEntity> damPermissions = new HashSet<>(); 
+    private Set<DamPermissionEntity> damPermissions = new HashSet<>();
 }

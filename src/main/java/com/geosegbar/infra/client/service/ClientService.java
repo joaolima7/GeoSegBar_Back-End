@@ -88,16 +88,14 @@ public class ClientService {
             client.setLogoPath(null);
         }
 
-        if (logoUpdateDTO != null && isBase64Image(logoUpdateDTO.getLogoBase64())) {
-            String logoPath = processAndSaveLogo(logoUpdateDTO.getLogoBase64());
+        String logoBase64 = logoUpdateDTO.getLogoBase64();
+
+        if (logoBase64 != null) {
+            String logoPath = processAndSaveLogo(logoBase64);
             client.setLogoPath(logoPath);
         }
 
         return clientRepository.save(client);
-    }
-
-    private boolean isBase64Image(String data) {
-        return data != null && data.contains("base64,");
     }
 
     private String processAndSaveLogo(String base64Image) {

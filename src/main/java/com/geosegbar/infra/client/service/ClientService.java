@@ -46,17 +46,15 @@ public class ClientService {
         }
 
         String logoBase64 = clientEntity.getLogoPath();
-        clientEntity.setLogoPath(null);
-
-        ClientEntity savedClient = clientRepository.save(clientEntity);
 
         if (isBase64Image(logoBase64)) {
             String logoPath = processAndSaveLogo(logoBase64);
-            savedClient.setLogoPath(logoPath);
-            return clientRepository.save(savedClient);
+            clientEntity.setLogoPath(logoPath);
+        } else {
+            clientEntity.setLogoPath(null);
         }
 
-        return savedClient;
+        return clientRepository.save(clientEntity);
     }
 
     @Transactional

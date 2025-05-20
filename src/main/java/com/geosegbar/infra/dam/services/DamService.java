@@ -201,7 +201,6 @@ public class DamService {
                     request.getCreatedById()
             );
 
-            // Converter a List para Set
             Set<PSBFolderEntity> foldersSet = new HashSet<>(foldersList);
             dam.setPsbFolders(foldersSet);
         }
@@ -223,6 +222,16 @@ public class DamService {
                     newLevel.setUnitLevel(levelDTO.getUnitLevel());
                     return levelRepository.save(newLevel);
                 });
+    }
+
+    public List<DamEntity> findByClientAndStatus(Long clientId, Long statusId) {
+        List<DamEntity> dams = damRepository.findWithDetailsByClientAndStatus(clientId, statusId);
+
+        if ((clientId == null && statusId == null) && dams.isEmpty()) {
+            return findAll();
+        }
+
+        return dams;
     }
 
     @Transactional

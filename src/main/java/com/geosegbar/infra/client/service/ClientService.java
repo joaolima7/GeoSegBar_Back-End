@@ -1,13 +1,15 @@
 package com.geosegbar.infra.client.service;
 
+import java.util.Base64;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
 import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
+import com.geosegbar.exceptions.FileStorageException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.client.dtos.LogoUpdateDTO;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.file_storage.FileStorageService;
 
@@ -23,8 +25,13 @@ public class ClientService {
 
     @Transactional
     public void deleteById(Long id) {
-        clientRepository.findById(id)
-        .orElseThrow(() -> new NotFoundException("Cliente não encontrado para exclusão!"));
+        ClientEntity client = clientRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Cliente não encontrado para exclusão!"));
+
+        if (client.getLogoPath() != null) {
+            fileStorageService.deleteFile(client.getLogoPath());
+        }
+
         clientRepository.deleteById(id);
     }
 
@@ -34,49 +41,103 @@ public class ClientService {
             throw new DuplicateResourceException("Já existe um cliente com este nome!");
         }
 
-        if(clientRepository.existsByEmail(clientEntity.getEmail())){
+        if (clientRepository.existsByEmail(clientEntity.getEmail())) {
             throw new DuplicateResourceException("Já existe um cliente com este email!");
         }
-        return clientRepository.save(clientEntity);
+
+        String logoBase64 = clientEntity.getLogoPath();
+        clientEntity.setLogoPath(null);
+
+        ClientEntity savedClient = clientRepository.save(clientEntity);
+
+        if (isBase64Image(logoBase64)) {
+            String logoPath = processAndSaveLogo(logoBase64);
+            savedClient.setLogoPath(logoPath);
+            return clientRepository.save(savedClient);
+        }
+
+        return savedClient;
     }
 
     @Transactional
     public ClientEntity update(ClientEntity clientEntity) {
-        clientRepository.findById(clientEntity.getId()).
-        orElseThrow(() -> new NotFoundException("Endereço não encontrado para atualização!"));
+        ClientEntity existingClient = clientRepository.findById(clientEntity.getId())
+                .orElseThrow(() -> new NotFoundException("Cliente não encontrado para atualização!"));
 
         if (clientRepository.existsByNameAndIdNot(clientEntity.getName(), clientEntity.getId())) {
             throw new DuplicateResourceException("Já existe um cliente com este nome.");
         }
 
-        if(clientRepository.existsByEmailAndIdNot(clientEntity.getEmail(), clientEntity.getId())){
+        if (clientRepository.existsByEmailAndIdNot(clientEntity.getEmail(), clientEntity.getId())) {
             throw new DuplicateResourceException("Já existe um cliente com este email.");
+        }
+
+        if (existingClient.getLogoPath() != null) {
+            clientEntity.setLogoPath(existingClient.getLogoPath());
+        } else {
+            clientEntity.setLogoPath(null);
         }
 
         return clientRepository.save(clientEntity);
     }
 
-        @Transactional
-    public ClientEntity saveLogo(Long clientId, MultipartFile logo) {
+    @Transactional
+    public ClientEntity updateLogo(Long clientId, LogoUpdateDTO logoUpdateDTO) {
         ClientEntity client = findById(clientId);
-        
+
         if (client.getLogoPath() != null) {
             fileStorageService.deleteFile(client.getLogoPath());
+            client.setLogoPath(null);
         }
-        
-        String logoUrl = fileStorageService.storeFile(logo, "client-logos");
-        client.setLogoPath(logoUrl);
-        
+
+        if (logoUpdateDTO != null && isBase64Image(logoUpdateDTO.getLogoBase64())) {
+            String logoPath = processAndSaveLogo(logoUpdateDTO.getLogoBase64());
+            client.setLogoPath(logoPath);
+        }
+
         return clientRepository.save(client);
+    }
+
+    private boolean isBase64Image(String data) {
+        return data != null && data.contains("base64,");
+    }
+
+    private String processAndSaveLogo(String base64Image) {
+        try {
+            if (base64Image.contains(",")) {
+                base64Image = base64Image.split(",")[1];
+            }
+
+            byte[] imageBytes = Base64.getDecoder().decode(base64Image);
+
+            return fileStorageService.storeFileFromBytes(
+                    imageBytes,
+                    "client_logo.png",
+                    "image/png",
+                    "client-logos"
+            );
+        } catch (IllegalArgumentException e) {
+            throw new FileStorageException("Formato de imagem inválido", e);
+        }
     }
 
     public ClientEntity findById(Long id) {
         return clientRepository.findById(id).
-        orElseThrow(() -> new NotFoundException("Cliente não encontrado!"));
+                orElseThrow(() -> new NotFoundException("Cliente não encontrado!"));
     }
 
     public List<ClientEntity> findAll() {
         return clientRepository.findAllByOrderByIdAsc();
+    }
+
+    public List<ClientEntity> findByStatus(Long statusId) {
+        if (statusId == null) {
+            return findAll();
+        }
+
+        List<ClientEntity> clients = clientRepository.findByStatus(statusId);
+
+        return clients;
     }
 
     public boolean existsByName(String name) {
@@ -94,5 +155,5 @@ public class ClientService {
     public boolean existsByEmailAndIdNot(String email, Long id) {
         return clientRepository.existsByEmailAndIdNot(email, id);
     }
-    
+
 }

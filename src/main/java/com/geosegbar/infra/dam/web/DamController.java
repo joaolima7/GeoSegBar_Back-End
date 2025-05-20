@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
@@ -25,20 +26,33 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/dams")
 @RequiredArgsConstructor
 public class DamController {
- 
+
     private final DamService damService;
-    
+
     @GetMapping
     public ResponseEntity<WebResponseEntity<List<DamEntity>>> getAllDams() {
         List<DamEntity> dams = damService.findAll();
         WebResponseEntity<List<DamEntity>> response = WebResponseEntity.success(dams, "Barragens obtidas com sucesso!");
         return ResponseEntity.ok(response);
     }
-    
+
     @GetMapping("/{id}")
     public ResponseEntity<WebResponseEntity<DamEntity>> getDamById(@PathVariable Long id) {
         DamEntity dam = damService.findById(id);
         WebResponseEntity<DamEntity> response = WebResponseEntity.success(dam, "Barragem obtida com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/filter")
+    public ResponseEntity<WebResponseEntity<List<DamEntity>>> getDamsByClientAndStatus(
+            @RequestParam(required = false) Long clientId,
+            @RequestParam(required = false) Long statusId) {
+
+        List<DamEntity> dams = damService.findByClientAndStatus(clientId, statusId);
+        WebResponseEntity<List<DamEntity>> response = WebResponseEntity.success(
+                dams,
+                "Barragens filtradas obtidas com sucesso!"
+        );
         return ResponseEntity.ok(response);
     }
 
@@ -55,14 +69,14 @@ public class DamController {
         WebResponseEntity<DamEntity> response = WebResponseEntity.success(createdDam, "Barragem completa criada com sucesso!");
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
-    
+
     @PostMapping
     public ResponseEntity<WebResponseEntity<DamEntity>> createDam(@Valid @RequestBody DamEntity dam) {
         DamEntity createdDam = damService.save(dam);
         WebResponseEntity<DamEntity> response = WebResponseEntity.success(createdDam, "Barragem criada com sucesso!");
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
-    
+
     @PutMapping("/{id}")
     public ResponseEntity<WebResponseEntity<DamEntity>> updateDam(@PathVariable Long id, @Valid @RequestBody DamEntity dam) {
         dam.setId(id);
@@ -70,7 +84,7 @@ public class DamController {
         WebResponseEntity<DamEntity> response = WebResponseEntity.success(updatedDam, "Barragem atualizada com sucesso!");
         return ResponseEntity.ok(response);
     }
-    
+
     @DeleteMapping("/{id}")
     public ResponseEntity<WebResponseEntity<Void>> deleteDam(@PathVariable Long id) {
         damService.deleteById(id);

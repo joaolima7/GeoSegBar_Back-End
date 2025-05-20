@@ -12,17 +12,24 @@ import com.geosegbar.entities.UserEntity;
 
 @Repository
 public interface UserRepository extends JpaRepository<UserEntity, Long> {
+
     List<UserEntity> findAllByOrderByIdAsc();
+
     Optional<UserEntity> findByEmail(String email);
 
-        @Query("SELECT DISTINCT u FROM UserEntity u " +
-           "LEFT JOIN u.clients c " +
-           "WHERE (:roleId IS NULL OR u.role.id = :roleId) " +
-           "AND (:clientId IS NULL OR c.id = :clientId)")
-        List<UserEntity> findByRoleAndClient(@Param("roleId") Long roleId, @Param("clientId") Long clientId);
+    @Query("SELECT DISTINCT u FROM UserEntity u "
+            + "LEFT JOIN u.clients c "
+            + "WHERE (:roleId IS NULL OR u.role.id = :roleId) "
+            + "AND (:clientId IS NULL OR c.id = :clientId) "
+            + "AND (:statusId IS NULL OR u.status.id = :statusId)")
+    List<UserEntity> findByRoleAndClient(
+            @Param("roleId") Long roleId,
+            @Param("clientId") Long clientId,
+            @Param("statusId") Long statusId);
 
     List<UserEntity> findByCreatedById(Long createdById);
 
     boolean existsByEmail(String email);
+
     boolean existsByEmailAndIdNot(String email, Long id);
 }

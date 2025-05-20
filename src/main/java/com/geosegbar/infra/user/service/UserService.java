@@ -56,7 +56,7 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class UserService {
-    
+
     private final UserRepository userRepository;
     private final ClientRepository clientRepository;
     private final SexRepository sexRepository;
@@ -73,38 +73,37 @@ public class UserService {
     private final InstrumentationPermissionService instrumentationPermissionService;
     private final RoutineInspectionPermissionService routineInspectionPermissionService;
 
-
     @Transactional
     public void deleteById(Long id) {
         UserEntity user = userRepository.findById(id)
-            .orElseThrow(() -> new NotFoundException("Usuário não encontrado para exclusão!"));
-    
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado para exclusão!"));
+
         documentationPermissionService.deleteByUserSafely(user.getId());
-        attributionsPermissionService.deleteByUserSafely(user.getId());  
+        attributionsPermissionService.deleteByUserSafely(user.getId());
         instrumentationPermissionService.deleteByUserSafely(user.getId());
-        routineInspectionPermissionService.deleteByUserSafely(user.getId()); 
-        
+        routineInspectionPermissionService.deleteByUserSafely(user.getId());
+
         List<DamPermissionEntity> damPermissions = damPermissionRepository.findByUser(user);
         if (!damPermissions.isEmpty()) {
             damPermissionRepository.deleteAll(damPermissions);
         }
-        
+
         userRepository.deleteById(id);
     }
 
     public List<UserEntity> findByCreatedBy(Long createdById) {
         userRepository.findById(createdById)
-            .orElseThrow(() -> new NotFoundException("Usuário criador não encontrado com ID: " + createdById));
-        
+                .orElseThrow(() -> new NotFoundException("Usuário criador não encontrado com ID: " + createdById));
+
         return userRepository.findByCreatedById(createdById);
     }
 
-    public List<UserEntity> findByRoleAndClient(Long roleId, Long clientId) {
-        return userRepository.findByRoleAndClient(roleId, clientId);
+    public List<UserEntity> findByRoleAndClient(Long roleId, Long clientId, Long statusId) {
+        return userRepository.findByRoleAndClient(roleId, clientId, statusId);
     }
 
     @Transactional
-    public UserEntity save(UserCreateDTO userDTO) {        
+    public UserEntity save(UserCreateDTO userDTO) {
         UserEntity userEntity = new UserEntity();
         userEntity.setName(userDTO.getName());
         userEntity.setEmail(userDTO.getEmail());
@@ -116,49 +115,49 @@ public class UserService {
 
         if (userDTO.getCreatedById() != null) {
             UserEntity creator = userRepository.findById(userDTO.getCreatedById())
-                .orElseThrow(() -> new NotFoundException("Usuário criador não encontrado com ID: " + userDTO.getCreatedById()));
+                    .orElseThrow(() -> new NotFoundException("Usuário criador não encontrado com ID: " + userDTO.getCreatedById()));
             userEntity.setCreatedBy(creator);
         }
-        
-        if(userRepository.existsByEmail(userEntity.getEmail())){
+
+        if (userRepository.existsByEmail(userEntity.getEmail())) {
             throw new DuplicateResourceException("Já existe um usuário com o email informado!");
         }
-        
+
         if (userEntity.getSex() == null || userEntity.getSex().getId() == null) {
             throw new InvalidInputException("Sexo é obrigatório!");
         }
-        
+
         sexRepository.findById(userEntity.getSex().getId())
-            .orElseThrow(() -> new NotFoundException("Sexo não encontrado com ID: " + userEntity.getSex().getId()));
-        
+                .orElseThrow(() -> new NotFoundException("Sexo não encontrado com ID: " + userEntity.getSex().getId()));
+
         if (userEntity.getStatus() == null) {
             StatusEntity activeStatus = statusRepository.findByStatus(StatusEnum.ACTIVE)
-                .orElseThrow(() -> new NotFoundException("Status ACTIVE não encontrado no sistema!"));
+                    .orElseThrow(() -> new NotFoundException("Status ACTIVE não encontrado no sistema!"));
             userEntity.setStatus(activeStatus);
         } else if (userEntity.getStatus().getId() != null) {
             StatusEntity status = statusRepository.findById(userEntity.getStatus().getId())
-                .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + userEntity.getStatus().getId()));
+                    .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + userEntity.getStatus().getId()));
             userEntity.setStatus(status);
         }
-        
+
         if (userEntity.getRole() == null) {
             RoleEntity defaultRole = roleRepository.findByName(RoleEnum.COLLABORATOR)
-                .orElseThrow(() -> new NotFoundException("Role COLLABORATOR não encontrada no sistema!"));
+                    .orElseThrow(() -> new NotFoundException("Role COLLABORATOR não encontrada no sistema!"));
             userEntity.setRole(defaultRole);
         } else if (userEntity.getRole().getId() != null) {
             RoleEntity role = roleRepository.findById(userEntity.getRole().getId())
-                .orElseThrow(() -> new NotFoundException("Role não encontrada com ID: " + userEntity.getRole().getId()));
+                    .orElseThrow(() -> new NotFoundException("Role não encontrada com ID: " + userEntity.getRole().getId()));
             userEntity.setRole(role);
         }
-        
+
         String generatedPassword = GenerateRandomPassword.execute();
         userEntity.setPassword(passwordEncoder.encode(generatedPassword));
         userEntity.setIsFirstAccess(true);
-        
+
         UserEntity savedUser = userRepository.save(userEntity);
-        
+
         emailService.sendFirstAccessPassword(savedUser.getEmail(), generatedPassword, savedUser.getName());
-        
+
         if (savedUser.getRole().getName() == RoleEnum.COLLABORATOR) {
             if (userDTO.getSourceUserId() != null) {
                 copyPermissionsFromUser(savedUser, userDTO.getSourceUserId());
@@ -166,52 +165,52 @@ public class UserService {
                 if (!savedUser.getClients().isEmpty()) {
                     createDefaultDamPermissions(savedUser);
                 }
-                
+
                 documentationPermissionService.createDefaultPermission(savedUser);
                 attributionsPermissionService.createDefaultPermission(savedUser);
                 instrumentationPermissionService.createDefaultPermission(savedUser);
-                routineInspectionPermissionService.createDefaultPermission(savedUser); 
+                routineInspectionPermissionService.createDefaultPermission(savedUser);
             }
         }
-        
+
         return savedUser;
     }
 
     @Transactional
     public UserEntity update(Long id, UserUpdateDTO userDTO) {
         UserEntity existingUser = userRepository.findById(id)
-            .orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização!"));
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização!"));
 
-        if(userRepository.existsByEmailAndIdNot(userDTO.getEmail(), id)) {
+        if (userRepository.existsByEmailAndIdNot(userDTO.getEmail(), id)) {
             throw new DuplicateResourceException("Já existe um usuário com o email informado!");
         }
 
         if (userDTO.getSex() == null || userDTO.getSex().getId() == null) {
             throw new InvalidInputException("Sexo é obrigatório!");
         }
-        
+
         sexRepository.findById(userDTO.getSex().getId())
-            .orElseThrow(() -> new NotFoundException("Sexo não encontrado com ID: " + userDTO.getSex().getId()));
-        
+                .orElseThrow(() -> new NotFoundException("Sexo não encontrado com ID: " + userDTO.getSex().getId()));
+
         if (userDTO.getStatus() != null && userDTO.getStatus().getId() != null) {
             StatusEntity status = statusRepository.findById(userDTO.getStatus().getId())
-                .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + userDTO.getStatus().getId()));
+                    .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + userDTO.getStatus().getId()));
             existingUser.setStatus(status);
         }
-        
+
         boolean roleChanged = false;
         RoleEnum oldRole = existingUser.getRole().getName();
         RoleEnum newRole = oldRole;
-        
+
         if (userDTO.getRole() != null && userDTO.getRole().getId() != null) {
             RoleEntity role = roleRepository.findById(userDTO.getRole().getId())
-                .orElseThrow(() -> new NotFoundException("Role não encontrada com ID: " + userDTO.getRole().getId()));
-            
+                    .orElseThrow(() -> new NotFoundException("Role não encontrada com ID: " + userDTO.getRole().getId()));
+
             if (!existingUser.getRole().equals(role)) {
                 roleChanged = true;
                 newRole = role.getName();
             }
-            
+
             existingUser.setRole(role);
         }
 
@@ -219,67 +218,66 @@ public class UserService {
         existingUser.setEmail(userDTO.getEmail());
         existingUser.setPhone(userDTO.getPhone());
         existingUser.setSex(userDTO.getSex());
-        
+
         UserEntity savedUser = userRepository.save(existingUser);
-        
+
         if (roleChanged) {
             handleRoleChange(savedUser, oldRole, newRole);
         }
-        
+
         return savedUser;
     }
 
     private void handleRoleChange(UserEntity user, RoleEnum oldRole, RoleEnum newRole) {
-    
+
         if (oldRole == RoleEnum.ADMIN && newRole == RoleEnum.COLLABORATOR) {
-            
+
             if (!user.getClients().isEmpty()) {
                 createDefaultDamPermissions(user);
             }
-            
+
             documentationPermissionService.createDefaultPermission(user);
             attributionsPermissionService.createDefaultPermission(user);
             instrumentationPermissionService.createDefaultPermission(user);
-            routineInspectionPermissionService.createDefaultPermission(user); 
+            routineInspectionPermissionService.createDefaultPermission(user);
         }
-        
+
         if (oldRole == RoleEnum.COLLABORATOR && newRole == RoleEnum.ADMIN) {
-            
+
             deleteAllDamPermissions(user);
-            
+
             documentationPermissionService.deleteByUserSafely(user.getId());
             attributionsPermissionService.deleteByUserSafely(user.getId());
             instrumentationPermissionService.deleteByUserSafely(user.getId());
-            routineInspectionPermissionService.deleteByUserSafely(user.getId()); 
+            routineInspectionPermissionService.deleteByUserSafely(user.getId());
         }
     }
 
-     private void createDefaultDamPermissions(UserEntity user) {
-        
+    private void createDefaultDamPermissions(UserEntity user) {
+
         for (ClientEntity client : user.getClients()) {
             List<DamEntity> dams = damRepository.findByClient(client);
-            
-            
+
             for (DamEntity dam : dams) {
                 if (damPermissionRepository.existsByUserAndDamAndClient(user, dam, client)) {
                     continue;
                 }
-                
+
                 DamPermissionEntity permission = new DamPermissionEntity();
                 permission.setUser(user);
                 permission.setDam(dam);
                 permission.setClient(client);
-                permission.setHasAccess(false); 
+                permission.setHasAccess(false);
                 permission.setCreatedAt(LocalDateTime.now());
-                
+
                 damPermissionRepository.save(permission);
             }
         }
     }
-    
+
     private void deleteAllDamPermissions(UserEntity user) {
         List<DamPermissionEntity> permissions = damPermissionRepository.findByUser(user);
-        
+
         if (!permissions.isEmpty()) {
             damPermissionRepository.deleteAll(permissions);
         }
@@ -288,16 +286,16 @@ public class UserService {
     @Transactional
     public UserEntity updatePassword(Long id, UserPasswordUpdateDTO passwordDTO) {
         UserEntity existingUser = userRepository.findById(id)
-            .orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização de senha!"));
-            
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização de senha!"));
+
         if (!passwordEncoder.matches(passwordDTO.getCurrentPassword(), existingUser.getPassword())) {
             throw new InvalidInputException("Senha atual incorreta!");
         }
-        
+
         if (passwordDTO.getCurrentPassword().equals(passwordDTO.getNewPassword())) {
             throw new InvalidInputException("A nova senha deve ser diferente da senha atual!");
         }
-        
+
         existingUser.setPassword(passwordEncoder.encode(passwordDTO.getNewPassword()));
 
         if (existingUser.getIsFirstAccess()) {
@@ -310,152 +308,150 @@ public class UserService {
     @Transactional
     public UserEntity updateUserClients(Long userId, UserClientAssociationDTO clientAssociationDTO) {
         UserEntity user = userRepository.findById(userId)
-            .orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização de clientes!"));
-        
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização de clientes!"));
+
         Set<ClientEntity> oldClients = new HashSet<>(user.getClients());
-        
+
         Set<ClientEntity> newClients = new HashSet<>();
-        
+
         for (Long clientId : clientAssociationDTO.getClientIds()) {
             ClientEntity client = clientRepository.findById(clientId)
-                .orElseThrow(() -> new NotFoundException("Cliente com ID " + clientId + " não encontrado!"));
+                    .orElseThrow(() -> new NotFoundException("Cliente com ID " + clientId + " não encontrado!"));
             newClients.add(client);
         }
-        
+
         user.setClients(newClients);
-        
+
         if (user.getRole() != null && user.getRole().getName() == RoleEnum.COLLABORATOR) {
-            
+
             Set<ClientEntity> addedClients = new HashSet<>(newClients);
             addedClients.removeAll(oldClients);
-            
+
             if (!addedClients.isEmpty()) {
                 createDamPermissionsForSpecificClients(user, addedClients);
             }
-            
+
             Set<ClientEntity> removedClients = new HashSet<>(oldClients);
             removedClients.removeAll(newClients);
-            
+
             if (!removedClients.isEmpty()) {
                 deleteDamPermissionsForSpecificClients(user, removedClients);
             }
         }
-        
+
         return userRepository.save(user);
     }
 
     public UserEntity findById(Long id) {
         UserEntity user = userRepository.findById(id)
-        .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
-    
-        user.getClients().size();
-        
-        return user;    
-    }
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
 
+        user.getClients().size();
+
+        return user;
+    }
 
     @Transactional
     public void initiateLogin(LoginRequestDTO userDTO) {
         UserEntity user = userRepository.findByEmail(userDTO.email())
-            .orElseThrow(() -> new NotFoundException("Credenciais incorretas!"));
+                .orElseThrow(() -> new NotFoundException("Credenciais incorretas!"));
 
         if (!passwordEncoder.matches(userDTO.password(), user.getPassword())) {
             throw new InvalidInputException("Credenciais incorretas!");
         }
-        
+
         String verificationCode = GenerateRandomCode.generateRandomCode();
-        
+
         VerificationCodeEntity codeEntity = new VerificationCodeEntity();
         codeEntity.setCode(verificationCode);
         codeEntity.setUser(user);
         codeEntity.setUsed(false);
-        codeEntity.setExpiryDate(LocalDateTime.now().plusMinutes(10)); 
-        
+        codeEntity.setExpiryDate(LocalDateTime.now().plusMinutes(10));
+
         verificationCodeRepository.save(codeEntity);
-        
+
         emailService.sendVerificationCode(user.getEmail(), verificationCode);
     }
-
 
     @Transactional
     public LoginResponseDTO verifyCodeAndLogin(VerifyCodeRequestDTO verifyRequest) {
         UserEntity user = userRepository.findByEmail(verifyRequest.getEmail())
-            .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
-        
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+
         VerificationCodeEntity codeEntity = verificationCodeRepository
-            .findLatestActiveByUser(user)
-            .orElseThrow(() -> new NotFoundException("Código de verificação não encontrado ou expirado!"));
-        
+                .findLatestActiveByUser(user)
+                .orElseThrow(() -> new NotFoundException("Código de verificação não encontrado ou expirado!"));
+
         if (!codeEntity.getCode().equals(verifyRequest.getCode())) {
             throw new InvalidInputException("Código de verificação inválido!");
         }
-        
+
         if (LocalDateTime.now().isAfter(codeEntity.getExpiryDate())) {
             throw new InvalidInputException("Código de verificação expirado!");
         }
-        
+
         codeEntity.setUsed(true);
         verificationCodeRepository.save(codeEntity);
-        
+
         String token = tokenService.generateToken(user);
         return new LoginResponseDTO(
-            user.getId(), 
-            user.getName(), 
-            user.getEmail(), 
-            user.getPhone(), 
-            user.getSex(),
-            user.getRole().getName(),
-            user.getIsFirstAccess(), 
-            token
+                user.getId(),
+                user.getName(),
+                user.getEmail(),
+                user.getPhone(),
+                user.getSex(),
+                user.getRole().getName(),
+                user.getIsFirstAccess(),
+                token
         );
     }
 
     @Transactional
     public void initiatePasswordReset(ForgotPasswordRequestDTO requestDTO) {
         UserEntity user = userRepository.findByEmail(requestDTO.getEmail())
-            .orElseThrow(() -> new NotFoundException("Usuário não encontrado com este email!"));
-        
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado com este email!"));
+
         List<VerificationCodeEntity> activeCodes = verificationCodeRepository
-            .findAllByUserAndUsedFalseOrderByExpiryDateDesc(user);
-        
+                .findAllByUserAndUsedFalseOrderByExpiryDateDesc(user);
+
         for (VerificationCodeEntity code : activeCodes) {
             code.setUsed(true);
             verificationCodeRepository.save(code);
         }
-        
+
         String verificationCode = GenerateRandomCode.generateRandomCode();
-        
+
         VerificationCodeEntity codeEntity = new VerificationCodeEntity();
         codeEntity.setCode(verificationCode);
         codeEntity.setUser(user);
         codeEntity.setUsed(false);
-        codeEntity.setExpiryDate(LocalDateTime.now().plusMinutes(10)); 
-        
+        codeEntity.setExpiryDate(LocalDateTime.now().plusMinutes(10));
+
         verificationCodeRepository.save(codeEntity);
-        
+
         emailService.sendPasswordResetCode(user.getEmail(), verificationCode);
     }
 
     @Transactional
     public void resetPassword(ResetPasswordRequestDTO requestDTO) {
         UserEntity user = userRepository.findByEmail(requestDTO.getEmail())
-            .orElseThrow(() -> new NotFoundException("Usuário não encontrado com este email!"));
-        
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado com este email!"));
+
         VerificationCodeEntity codeEntity = verificationCodeRepository
-            .findLatestActiveByUser(user)
-            .orElseThrow(() -> new NotFoundException("Código de verificação não encontrado ou expirado!"));
-        
+                .findLatestActiveByUser(user)
+                .orElseThrow(() -> new NotFoundException("Código de verificação não encontrado ou expirado!"));
+
         if (!codeEntity.getCode().equals(requestDTO.getCode())) {
             throw new InvalidInputException("Código de verificação inválido!");
         }
-        
+
         if (LocalDateTime.now().isAfter(codeEntity.getExpiryDate())) {
             throw new InvalidInputException("Código de verificação expirado!");
         }
-        
+
         codeEntity.setUsed(true);
         verificationCodeRepository.save(codeEntity);
-        
+
         user.setPassword(passwordEncoder.encode(requestDTO.getNewPassword()));
         userRepository.save(user);
     }
@@ -463,44 +459,44 @@ public class UserService {
     @Transactional
     public boolean verifyResetCode(VerifyCodeRequestDTO verifyRequest) {
         UserEntity user = userRepository.findByEmail(verifyRequest.getEmail())
-            .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
-        
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+
         VerificationCodeEntity codeEntity = verificationCodeRepository
-            .findLatestActiveByUser(user)
-            .orElseThrow(() -> new NotFoundException("Código de verificação não encontrado ou expirado!"));
-        
+                .findLatestActiveByUser(user)
+                .orElseThrow(() -> new NotFoundException("Código de verificação não encontrado ou expirado!"));
+
         if (!codeEntity.getCode().equals(verifyRequest.getCode())) {
             throw new InvalidInputException("Código de verificação inválido!");
         }
-        
+
         if (LocalDateTime.now().isAfter(codeEntity.getExpiryDate())) {
             throw new InvalidInputException("Código de verificação expirado!");
         }
-        
+
         return true;
     }
 
     private void createDamPermissionsForSpecificClients(UserEntity user, Set<ClientEntity> clients) {
         for (ClientEntity client : clients) {
             List<DamEntity> dams = damRepository.findByClient(client);
-            
+
             for (DamEntity dam : dams) {
                 if (damPermissionRepository.existsByUserAndDamAndClient(user, dam, client)) {
                     continue;
                 }
-                
+
                 DamPermissionEntity permission = new DamPermissionEntity();
                 permission.setUser(user);
                 permission.setDam(dam);
                 permission.setClient(client);
-                permission.setHasAccess(false); 
+                permission.setHasAccess(false);
                 permission.setCreatedAt(LocalDateTime.now());
-                
+
                 damPermissionRepository.save(permission);
             }
         }
     }
-    
+
     private void deleteDamPermissionsForSpecificClients(UserEntity user, Set<ClientEntity> clients) {
         for (ClientEntity client : clients) {
             List<DamPermissionEntity> permissions = damPermissionRepository.findByUserAndClient(user, client);
@@ -512,9 +508,9 @@ public class UserService {
 
     public List<UserEntity> findAll() {
         List<UserEntity> users = userRepository.findAllByOrderByIdAsc();
-    
+
         users.forEach(user -> user.getClients().size());
-        
+
         return users;
     }
 
@@ -529,12 +525,12 @@ public class UserService {
     @Transactional
     private void copyPermissionsFromUser(UserEntity targetUser, Long sourceUserId) {
         UserEntity sourceUser = userRepository.findById(sourceUserId)
-            .orElseThrow(() -> new NotFoundException("Usuário não encontrado para cópia da permissões!"));
-        
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado para cópia da permissões!"));
+
         if (sourceUser.getRole().getName() != RoleEnum.COLLABORATOR) {
             throw new InvalidInputException("O usuário fonte deve ser um colaborador para copiar permissões!");
         }
-        
+
         try {
             var sourceDocPermission = documentationPermissionService.findByUser(sourceUser.getId());
             var docPermissionDTO = new DocumentationPermissionDTO();
@@ -546,7 +542,7 @@ public class UserService {
         } catch (NotFoundException e) {
             documentationPermissionService.createDefaultPermission(targetUser);
         }
-        
+
         try {
             var sourceAttrPermission = attributionsPermissionService.findByUser(sourceUser.getId());
             var attrPermissionDTO = new AttributionsPermissionDTO();
@@ -558,7 +554,7 @@ public class UserService {
         } catch (NotFoundException e) {
             attributionsPermissionService.createDefaultPermission(targetUser);
         }
-        
+
         try {
             var sourceInstrPermission = instrumentationPermissionService.findByUser(sourceUser.getId());
             var instrPermissionDTO = new InstrumentationPermissionDTO();
@@ -574,7 +570,7 @@ public class UserService {
         } catch (NotFoundException e) {
             instrumentationPermissionService.createDefaultPermission(targetUser);
         }
-        
+
         try {
             var sourceRoutinePermission = routineInspectionPermissionService.findByUser(sourceUser.getId());
             var routinePermissionDTO = new RoutineInspectionPermissionDTO();
@@ -585,7 +581,7 @@ public class UserService {
         } catch (NotFoundException e) {
             routineInspectionPermissionService.createDefaultPermission(targetUser);
         }
-        
+
         if (!targetUser.getClients().isEmpty()) {
             createDefaultDamPermissions(targetUser);
         }

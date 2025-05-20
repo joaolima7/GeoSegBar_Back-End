@@ -34,7 +34,7 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/user")
 @RequiredArgsConstructor
 public class UserController {
-    
+
     private final UserService userService;
 
     @GetMapping
@@ -55,8 +55,8 @@ public class UserController {
     public ResponseEntity<WebResponseEntity<List<UserEntity>>> getUsersByCreator(@PathVariable Long createdById) {
         List<UserEntity> users = userService.findByCreatedBy(createdById);
         WebResponseEntity<List<UserEntity>> response = WebResponseEntity.success(
-            users, 
-            "Usuários criados pelo usuário de ID " + createdById + " obtidos com sucesso!"
+                users,
+                "Usuários criados pelo usuário de ID " + createdById + " obtidos com sucesso!"
         );
         return ResponseEntity.ok(response);
     }
@@ -64,12 +64,13 @@ public class UserController {
     @GetMapping("/filter")
     public ResponseEntity<WebResponseEntity<List<UserEntity>>> getUsersByRoleAndClient(
             @RequestParam(required = false) Long roleId,
-            @RequestParam(required = false) Long clientId) {
-        
-        List<UserEntity> users = userService.findByRoleAndClient(roleId, clientId);
+            @RequestParam(required = false) Long clientId,
+            @RequestParam(required = false) Long statusId) {
+
+        List<UserEntity> users = userService.findByRoleAndClient(roleId, clientId, statusId);
         WebResponseEntity<List<UserEntity>> response = WebResponseEntity.success(
-            users, 
-            "Usuários filtrados obtidos com sucesso!"
+                users,
+                "Usuários filtrados obtidos com sucesso!"
         );
         return ResponseEntity.ok(response);
     }
@@ -84,40 +85,40 @@ public class UserController {
     @PostMapping("/login/initiate")
     public ResponseEntity<WebResponseEntity<Void>> initiateLogin(@Valid @RequestBody LoginRequestDTO userDTO) {
         userService.initiateLogin(userDTO);
-        WebResponseEntity<Void> response = WebResponseEntity.success(null, 
-            "Código de verificação enviado para seu email, verifique também a caixa de spam!");
+        WebResponseEntity<Void> response = WebResponseEntity.success(null,
+                "Código de verificação enviado para seu email, verifique também a caixa de spam!");
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/login/verify")
     public ResponseEntity<WebResponseEntity<LoginResponseDTO>> verifyAndLogin(@Valid @RequestBody VerifyCodeRequestDTO verifyRequest) {
         LoginResponseDTO loggedUser = userService.verifyCodeAndLogin(verifyRequest);
-        WebResponseEntity<LoginResponseDTO> response = WebResponseEntity.success(loggedUser, 
-            "Usuário autenticado com sucesso!");
+        WebResponseEntity<LoginResponseDTO> response = WebResponseEntity.success(loggedUser,
+                "Usuário autenticado com sucesso!");
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/forgot-password")
     public ResponseEntity<WebResponseEntity<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequestDTO requestDTO) {
         userService.initiatePasswordReset(requestDTO);
-        WebResponseEntity<Void> response = WebResponseEntity.success(null, 
-            "Código de redefinição de senha enviado para seu email, verifique também a caixa de spam!");
+        WebResponseEntity<Void> response = WebResponseEntity.success(null,
+                "Código de redefinição de senha enviado para seu email, verifique também a caixa de spam!");
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/verify-reset-code")
     public ResponseEntity<WebResponseEntity<Boolean>> verifyResetCode(@Valid @RequestBody VerifyCodeRequestDTO verifyRequest) {
         boolean valid = userService.verifyResetCode(verifyRequest);
-        WebResponseEntity<Boolean> response = WebResponseEntity.success(valid, 
-            "Código verificado com sucesso!");
+        WebResponseEntity<Boolean> response = WebResponseEntity.success(valid,
+                "Código verificado com sucesso!");
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/reset-password")
     public ResponseEntity<WebResponseEntity<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequestDTO requestDTO) {
         userService.resetPassword(requestDTO);
-        WebResponseEntity<Void> response = WebResponseEntity.success(null, 
-            "Senha redefinida com sucesso!");
+        WebResponseEntity<Void> response = WebResponseEntity.success(null,
+                "Senha redefinida com sucesso!");
         return ResponseEntity.ok(response);
     }
 
@@ -137,12 +138,12 @@ public class UserController {
 
     @PutMapping("/{id}/clients")
     public ResponseEntity<WebResponseEntity<UserEntity>> updateUserClients(
-        @PathVariable Long id, 
-        @RequestBody UserClientAssociationDTO clientAssociationDTO) {
-        
+            @PathVariable Long id,
+            @RequestBody UserClientAssociationDTO clientAssociationDTO) {
+
         UserEntity updatedUser = userService.updateUserClients(id, clientAssociationDTO);
-        WebResponseEntity<UserEntity> response = 
-            WebResponseEntity.success(updatedUser, "Clientes do usuário atualizados com sucesso!");
+        WebResponseEntity<UserEntity> response
+                = WebResponseEntity.success(updatedUser, "Clientes do usuário atualizados com sucesso!");
         return ResponseEntity.ok(response);
     }
 
@@ -152,5 +153,5 @@ public class UserController {
         WebResponseEntity<Void> response = WebResponseEntity.success(null, "Usuário deletado com sucesso!");
         return ResponseEntity.ok(response);
     }
-    
+
 }

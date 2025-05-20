@@ -2,7 +2,6 @@ package com.geosegbar.infra.client.web;
 
 import java.util.List;
 
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,10 +12,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
 
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.ClientEntity;
+import com.geosegbar.infra.client.dtos.LogoUpdateDTO;
 import com.geosegbar.infra.client.service.ClientService;
 
 import jakarta.validation.Valid;
@@ -43,20 +42,22 @@ public class ClientController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/filter")
+    public ResponseEntity<WebResponseEntity<List<ClientEntity>>> getClientsByStatus(
+            @RequestParam(required = false) Long statusId) {
+
+        List<ClientEntity> clients = clientService.findByStatus(statusId);
+        WebResponseEntity<List<ClientEntity>> response = WebResponseEntity.success(
+                clients,
+                "Clientes filtrados obtidos com sucesso!"
+        );
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping
     public ResponseEntity<WebResponseEntity<ClientEntity>> createClient(@Valid @RequestBody ClientEntity client) {
         ClientEntity createdClient = clientService.save(client);
         WebResponseEntity<ClientEntity> response = WebResponseEntity.success(createdClient, "Cliente criado com sucesso!");
-        return ResponseEntity.ok(response);
-    }
-
-    @PostMapping(value = "/{id}/logo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<WebResponseEntity<ClientEntity>> uploadLogo(
-            @PathVariable Long id,
-            @RequestParam("logo") MultipartFile logo) {
-        ClientEntity updatedClient = clientService.saveLogo(id, logo);
-        WebResponseEntity<ClientEntity> response = WebResponseEntity.success(
-            updatedClient, "Logo do cliente atualizado com sucesso!");
         return ResponseEntity.ok(response);
     }
 
@@ -65,6 +66,24 @@ public class ClientController {
         client.setId(id);
         ClientEntity updatedClient = clientService.update(client);
         WebResponseEntity<ClientEntity> response = WebResponseEntity.success(updatedClient, "Cliente atualizado com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}/logo")
+    public ResponseEntity<WebResponseEntity<ClientEntity>> updateLogo(
+            @PathVariable Long id,
+            @RequestBody LogoUpdateDTO logoUpdateDTO) {
+        ClientEntity updatedClient = clientService.updateLogo(id, logoUpdateDTO);
+        WebResponseEntity<ClientEntity> response = WebResponseEntity.success(
+                updatedClient, "Logo do cliente atualizado com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/{id}/logo")
+    public ResponseEntity<WebResponseEntity<ClientEntity>> removeLogo(@PathVariable Long id) {
+        ClientEntity updatedClient = clientService.updateLogo(id, null);
+        WebResponseEntity<ClientEntity> response = WebResponseEntity.success(
+                updatedClient, "Logo do cliente removido com sucesso!");
         return ResponseEntity.ok(response);
     }
 

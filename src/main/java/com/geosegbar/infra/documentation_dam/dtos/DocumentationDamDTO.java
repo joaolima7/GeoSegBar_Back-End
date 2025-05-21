@@ -11,12 +11,12 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DocumentationDamDTO {
-    
+
     private Long id;
-    
+
     @NotNull(message = "O ID da barragem é obrigatório")
     private Long damId;
-    
+
     private LocalDate lastUpdatePAE;
     private LocalDate nextUpdatePAE;
     private LocalDate lastUpdatePSB;
@@ -29,4 +29,8 @@ public class DocumentationDamDTO {
     private LocalDate nextAchievementChecklist;
     private LocalDate lastFillingFSB;
     private LocalDate nextFillingFSB;
+    private LocalDate lastInternalSimulation;
+    private LocalDate nextInternalSimulation;
+    private LocalDate lastExternalSimulation;
+    private LocalDate nextExternalSimulation;
 }

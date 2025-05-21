@@ -29,45 +29,57 @@ public class DocumentationDamEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
+
     @OneToOne
     @JoinColumn(name = "dam_id", nullable = false, unique = true)
     @JsonIgnoreProperties({"documentationDam"})
     private DamEntity dam;
-    
+
     @Column(name = "last_update_pae")
     private LocalDate lastUpdatePAE;
-    
+
     @Column(name = "next_update_pae")
     private LocalDate nextUpdatePAE;
-    
+
     @Column(name = "last_update_psb")
     private LocalDate lastUpdatePSB;
-    
+
     @Column(name = "next_update_psb")
     private LocalDate nextUpdatePSB;
-    
+
     @Column(name = "last_update_rpsb")
     private LocalDate lastUpdateRPSB;
-    
+
     @Column(name = "next_update_rpsb")
     private LocalDate nextUpdateRPSB;
-    
+
     @Column(name = "last_achievement_isr")
     private LocalDate lastAchievementISR;
-    
+
     @Column(name = "next_achievement_isr")
     private LocalDate nextAchievementISR;
-    
+
     @Column(name = "last_achievement_checklist")
     private LocalDate lastAchievementChecklist;
-    
+
     @Column(name = "next_achievement_checklist")
     private LocalDate nextAchievementChecklist;
-    
+
     @Column(name = "last_filling_fsb")
     private LocalDate lastFillingFSB;
-    
+
     @Column(name = "next_filling_fsb")
     private LocalDate nextFillingFSB;
+
+    @Column(name = "last_internal_simulation")
+    private LocalDate lastInternalSimulation;
+
+    @Column(name = "next_internal_simulation")
+    private LocalDate nextInternalSimulation;
+
+    @Column(name = "last_external_simulation")
+    private LocalDate lastExternalSimulation;
+
+    @Column(name = "next_external_simulation")
+    private LocalDate nextExternalSimulation;
 }

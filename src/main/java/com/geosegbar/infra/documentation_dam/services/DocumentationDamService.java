@@ -21,47 +21,45 @@ public class DocumentationDamService {
 
     private final DocumentationDamRepository documentationDamRepository;
     private final DamRepository damRepository;
-    
+
     public DocumentationDamEntity findById(Long id) {
         return documentationDamRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Documentação de barragem não encontrada com ID: " + id));
     }
-    
+
     public DocumentationDamEntity findByDamId(Long damId) {
         return documentationDamRepository.findByDamId(damId)
                 .orElseThrow(() -> new NotFoundException("Documentação não encontrada para a barragem com ID: " + damId));
     }
-    
+
     public List<DocumentationDamEntity> findAll() {
         return documentationDamRepository.findAll();
     }
-    
+
     @Transactional
     public DocumentationDamEntity createOrUpdate(DocumentationDamDTO documentationDamDTO) {
         DamEntity dam = damRepository.findById(documentationDamDTO.getDamId())
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + documentationDamDTO.getDamId()));
-        
+
         DocumentationDamEntity documentationDam;
-        
+
         if (documentationDamDTO.getId() != null) {
             documentationDam = documentationDamRepository.findById(documentationDamDTO.getId())
                     .orElseThrow(() -> new NotFoundException("Documentação de barragem não encontrada com ID: " + documentationDamDTO.getId()));
-            
-            // Ensure we're not trying to change dam association
+
             if (!documentationDam.getDam().getId().equals(documentationDamDTO.getDamId())) {
                 throw new DuplicateResourceException("Não é permitido mudar a barragem associada à documentação");
             }
         } else {
-            // Check if documentation already exists for this dam
             if (documentationDamRepository.existsByDam(dam)) {
                 throw new DuplicateResourceException("Já existe documentação para esta barragem");
             }
-            
+
             documentationDam = new DocumentationDamEntity();
             documentationDam.setDam(dam);
-            dam.setDocumentationDam(documentationDam); // Set the bidirectional relationship
+            dam.setDocumentationDam(documentationDam);
         }
-        
+
         // Update all fields
         documentationDam.setLastUpdatePAE(documentationDamDTO.getLastUpdatePAE());
         documentationDam.setNextUpdatePAE(documentationDamDTO.getNextUpdatePAE());
@@ -75,21 +73,25 @@ public class DocumentationDamService {
         documentationDam.setNextAchievementChecklist(documentationDamDTO.getNextAchievementChecklist());
         documentationDam.setLastFillingFSB(documentationDamDTO.getLastFillingFSB());
         documentationDam.setNextFillingFSB(documentationDamDTO.getNextFillingFSB());
-        
+        documentationDam.setLastInternalSimulation(documentationDamDTO.getLastInternalSimulation());
+        documentationDam.setNextInternalSimulation(documentationDamDTO.getNextInternalSimulation());
+        documentationDam.setLastExternalSimulation(documentationDamDTO.getLastExternalSimulation());
+        documentationDam.setNextExternalSimulation(documentationDamDTO.getNextExternalSimulation());
+
         return documentationDamRepository.save(documentationDam);
     }
-    
+
     @Transactional
     public void delete(Long id) {
         DocumentationDamEntity documentationDam = documentationDamRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Documentação de barragem não encontrada com ID: " + id));
-        
+
         DamEntity dam = documentationDam.getDam();
         if (dam != null) {
             dam.setDocumentationDam(null);
             damRepository.save(dam);
         }
-        
+
         documentationDamRepository.delete(documentationDam);
     }
 }

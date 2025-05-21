@@ -137,6 +137,10 @@ public class DamService {
         documentationDam.setNextAchievementChecklist(request.getNextAchievementChecklist());
         documentationDam.setLastFillingFSB(request.getLastFillingFSB());
         documentationDam.setNextFillingFSB(request.getNextFillingFSB());
+        documentationDam.setLastInternalSimulation(request.getLastInternalSimulation());
+        documentationDam.setNextInternalSimulation(request.getNextInternalSimulation());
+        documentationDam.setLastExternalSimulation(request.getLastExternalSimulation());
+        documentationDam.setNextExternalSimulation(request.getNextExternalSimulation());
 
         documentationDamRepository.save(documentationDam);
 

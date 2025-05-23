@@ -190,6 +190,10 @@ public class UserService {
             throw new DuplicateResourceException("Já existe um usuário com o email informado!");
         }
 
+        if (userRepository.existsByPhoneAndIdNot(userDTO.getPhone(), id)) {
+            throw new DuplicateResourceException("Já existe um usuário com o telefone informado!");
+        }
+
         if (userDTO.getSex() == null || userDTO.getSex().getId() == null) {
             throw new InvalidInputException("Sexo é obrigatório!");
         }

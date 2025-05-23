@@ -22,6 +22,7 @@ import com.geosegbar.entities.StatusEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.entities.VerificationCodeEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
+import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
@@ -121,6 +122,10 @@ public class UserService {
 
         if (userRepository.existsByEmail(userEntity.getEmail())) {
             throw new DuplicateResourceException("Já existe um usuário com o email informado!");
+        }
+
+        if (userRepository.existsByPhone(userEntity.getPhone())) {
+            throw new DuplicateResourceException("Já existe um usuário com o telefone informado!");
         }
 
         if (userEntity.getSex() == null || userEntity.getSex().getId() == null) {
@@ -355,6 +360,10 @@ public class UserService {
     public void initiateLogin(LoginRequestDTO userDTO) {
         UserEntity user = userRepository.findByEmail(userDTO.email())
                 .orElseThrow(() -> new NotFoundException("Credenciais incorretas!"));
+
+        if (user.getStatus().getStatus() == StatusEnum.DISABLED) {
+            throw new ForbiddenException("Usuário desativado!");
+        }
 
         if (!passwordEncoder.matches(userDTO.password(), user.getPassword())) {
             throw new InvalidInputException("Credenciais incorretas!");

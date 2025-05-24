@@ -9,19 +9,38 @@ import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.classification_dam.peristence.ClassificationDamRepository;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
 public class ClassificationDamService {
-    
+
     private final ClassificationDamRepository classificationDamRepository;
+
+    @PostConstruct
+    @Transactional
+    public void initializeDefaultClassifications() {
+        createIfNotExists("A");
+        createIfNotExists("B");
+        createIfNotExists("C");
+        createIfNotExists("D");
+        createIfNotExists("E");
+    }
+
+    private void createIfNotExists(String classification) {
+        if (!classificationDamRepository.existsByClassification(classification)) {
+            ClassificationDamEntity classificationDam = new ClassificationDamEntity();
+            classificationDam.setClassification(classification);
+            classificationDamRepository.save(classificationDam);
+        }
+    }
 
     @Transactional
     public void deleteById(Long id) {
         classificationDamRepository.findById(id)
-        .orElseThrow(() -> new NotFoundException("Classificação de barragem não encontrada para exclusão!"));
+                .orElseThrow(() -> new NotFoundException("Classificação de barragem não encontrada para exclusão!"));
 
         classificationDamRepository.deleteById(id);
     }
@@ -38,18 +57,18 @@ public class ClassificationDamService {
     @Transactional
     public ClassificationDamEntity update(ClassificationDamEntity classificationDamEntity) {
         classificationDamRepository.findById(classificationDamEntity.getId())
-        .orElseThrow(() -> new NotFoundException("Classificação de barragem não encontrada para atualização!"));
+                .orElseThrow(() -> new NotFoundException("Classificação de barragem não encontrada para atualização!"));
 
         if (classificationDamRepository.existsByClassificationAndIdNot(classificationDamEntity.getClassification(), classificationDamEntity.getId())) {
             throw new DuplicateResourceException("Já existe uma classificação de barragem com este nome!");
         }
-        
+
         return classificationDamRepository.save(classificationDamEntity);
     }
 
     public ClassificationDamEntity findById(Long id) {
         return classificationDamRepository.findById(id)
-        .orElseThrow(() -> new NotFoundException("Classificação de barragem não encontrada!"));
+                .orElseThrow(() -> new NotFoundException("Classificação de barragem não encontrada!"));
     }
 
     public List<ClassificationDamEntity> findAll() {

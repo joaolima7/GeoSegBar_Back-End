@@ -9,19 +9,36 @@ import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.risk_category.persistence.RiskCategoryRepository;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
 public class RiskCategoryService {
-    
+
     private final RiskCategoryRepository riskCategoryRepository;
+
+    @PostConstruct
+    @Transactional
+    public void initializeDefaultRiskCategories() {
+        createIfNotExists("Baixo");
+        createIfNotExists("Médio");
+        createIfNotExists("Alto");
+    }
+
+    private void createIfNotExists(String name) {
+        if (!riskCategoryRepository.existsByName(name)) {
+            RiskCategoryEntity riskCategory = new RiskCategoryEntity();
+            riskCategory.setName(name);
+            riskCategoryRepository.save(riskCategory);
+        }
+    }
 
     @Transactional
     public void deleteById(Long id) {
         riskCategoryRepository.findById(id)
-        .orElseThrow(() -> new NotFoundException("Categoria de risco não encontrada para exclusão!"));
+                .orElseThrow(() -> new NotFoundException("Categoria de risco não encontrada para exclusão!"));
 
         riskCategoryRepository.deleteById(id);
     }
@@ -38,18 +55,18 @@ public class RiskCategoryService {
     @Transactional
     public RiskCategoryEntity update(RiskCategoryEntity riskCategoryEntity) {
         riskCategoryRepository.findById(riskCategoryEntity.getId())
-        .orElseThrow(() -> new NotFoundException("Categoria de risco não encontrada para atualização!"));
+                .orElseThrow(() -> new NotFoundException("Categoria de risco não encontrada para atualização!"));
 
         if (riskCategoryRepository.existsByNameAndIdNot(riskCategoryEntity.getName(), riskCategoryEntity.getId())) {
             throw new DuplicateResourceException("Já existe uma categoria de risco com este nome!");
         }
-        
+
         return riskCategoryRepository.save(riskCategoryEntity);
     }
 
     public RiskCategoryEntity findById(Long id) {
         return riskCategoryRepository.findById(id)
-        .orElseThrow(() -> new NotFoundException("Categoria de risco não encontrada!"));
+                .orElseThrow(() -> new NotFoundException("Categoria de risco não encontrada!"));
     }
 
     public List<RiskCategoryEntity> findAll() {

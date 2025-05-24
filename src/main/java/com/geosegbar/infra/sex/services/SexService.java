@@ -9,6 +9,7 @@ import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.sex.persistence.jpa.SexRepository;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
@@ -18,10 +19,25 @@ public class SexService {
 
     private final SexRepository sexRepository;
 
+    @PostConstruct
+    @Transactional
+    public void initializeDefaultSexes() {
+        createIfNotExists("Feminino");
+        createIfNotExists("Masculino");
+    }
+
+    private void createIfNotExists(String name) {
+        if (!sexRepository.existsByName(name)) {
+            SexEntity sex = new SexEntity();
+            sex.setName(name);
+            sexRepository.save(sex);
+        }
+    }
+
     @Transactional
     public void deleteById(Long id) {
         sexRepository.findById(id).
-        orElseThrow(() -> new NotFoundException("Sexo não encontrado para exclusão!"));
+                orElseThrow(() -> new NotFoundException("Sexo não encontrado para exclusão!"));
 
         sexRepository.deleteById(id);
     }
@@ -37,9 +53,9 @@ public class SexService {
     @Transactional
     public SexEntity update(SexEntity sexEntity) {
         sexRepository.findById(sexEntity.getId()).
-        orElseThrow(() -> new NotFoundException("Sexo não encontrado para atualização!"));
+                orElseThrow(() -> new NotFoundException("Sexo não encontrado para atualização!"));
 
-        if(sexRepository.existsByNameAndIdNot(sexEntity.getName(), sexEntity.getId())){
+        if (sexRepository.existsByNameAndIdNot(sexEntity.getName(), sexEntity.getId())) {
             throw new DuplicateResourceException("Já existe um sexo com este nome!");
         }
 
@@ -48,7 +64,7 @@ public class SexService {
 
     public SexEntity findById(Long id) {
         return sexRepository.findById(id).
-        orElseThrow(() -> new NotFoundException("Sexo não encontrado!"));
+                orElseThrow(() -> new NotFoundException("Sexo não encontrado!"));
     }
 
     public List<SexEntity> findAll() {
@@ -61,6 +77,6 @@ public class SexService {
 
     public boolean existsByNameAndIdNot(String name, Long id) {
         return sexRepository.existsByNameAndIdNot(name, id);
-    } 
+    }
 
 }

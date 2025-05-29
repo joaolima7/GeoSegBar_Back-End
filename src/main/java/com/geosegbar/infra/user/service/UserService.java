@@ -261,15 +261,6 @@ public class UserService {
     }
 
     private void handleRoleChange(UserEntity user, RoleEnum oldRole, RoleEnum newRole) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (userLogged.getId() != user.getId().longValue()) {
-                if (!userLogged.getAttributionsPermission().getEditUser()) {
-                    throw new UnauthorizedException("Usuário não tem permissão para editar usuários que não sejam ele mesmo!");
-                }
-            }
-        }
-
         if (oldRole == RoleEnum.ADMIN && newRole == RoleEnum.COLLABORATOR) {
 
             if (!user.getClients().isEmpty()) {

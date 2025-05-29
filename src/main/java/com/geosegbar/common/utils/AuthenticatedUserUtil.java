@@ -4,6 +4,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
+import com.geosegbar.entities.RoutineInspectionPermissionEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.UnauthorizedException;
 
@@ -48,5 +49,16 @@ public class AuthenticatedUserUtil {
         }
 
         throw new UnauthorizedException("Acesso negado. Permissão insuficiente para esta operação.");
+    }
+
+    public static boolean hasRoutineInspectionPermission(boolean isMobile) {
+        UserEntity currentUser = getCurrentUser();
+
+        if (currentUser.getRole().getName().toString().equals("ADMIN")) {
+            return true;
+        }
+
+        RoutineInspectionPermissionEntity permissions = currentUser.getRoutineInspectionPermission();
+        return permissions != null;
     }
 }

@@ -77,13 +77,15 @@ public class ChecklistResponseSubmissionService {
 
     @Transactional
     public ChecklistResponseEntity submitChecklistResponse(ChecklistResponseSubmissionDTO submissionDto) {
-        if (submissionDto.isMobile()) {
-            if (!AuthenticatedUserUtil.getCurrentUser().getRoutineInspectionPermission().getIsFillMobile()) {
-                throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via mobile!");
-            }
-        } else if (!submissionDto.isMobile()) {
-            if (!AuthenticatedUserUtil.getCurrentUser().getRoutineInspectionPermission().getIsFillWeb()) {
-                throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via web!");
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            if (submissionDto.isMobile()) {
+                if (!AuthenticatedUserUtil.getCurrentUser().getRoutineInspectionPermission().getIsFillMobile()) {
+                    throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via mobile!");
+                }
+            } else if (!submissionDto.isMobile()) {
+                if (!AuthenticatedUserUtil.getCurrentUser().getRoutineInspectionPermission().getIsFillWeb()) {
+                    throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via web!");
+                }
             }
         }
 

@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import com.geosegbar.common.email.EmailService;
 import com.geosegbar.common.enums.RoleEnum;
 import com.geosegbar.common.enums.StatusEnum;
+import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.common.utils.GenerateRandomCode;
 import com.geosegbar.common.utils.GenerateRandomPassword;
 import com.geosegbar.configs.security.TokenService;
@@ -25,6 +26,7 @@ import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.permissions.atributions_permission.dtos.AttributionsPermissionDTO;
@@ -76,6 +78,12 @@ public class UserService {
 
     @Transactional
     public void deleteById(Long id) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getAttributionsPermission().getEditUser()) {
+                throw new UnauthorizedException("Usuário não tem permissão para excluir usuários!");
+            }
+        }
         UserEntity user = userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado para exclusão!"));
 
@@ -105,6 +113,12 @@ public class UserService {
 
     @Transactional
     public UserEntity save(UserCreateDTO userDTO) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getAttributionsPermission().getEditUser()) {
+                throw new UnauthorizedException("Usuário não tem permissão para editar/criar usuários!");
+            }
+        }
         UserEntity userEntity = new UserEntity();
         userEntity.setName(userDTO.getName());
         userEntity.setEmail(userDTO.getEmail());
@@ -183,6 +197,15 @@ public class UserService {
 
     @Transactional
     public UserEntity update(Long id, UserUpdateDTO userDTO) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (userLogged.getId() != id.longValue()) {
+                if (!userLogged.getAttributionsPermission().getEditUser()) {
+                    throw new UnauthorizedException("Usuário não tem permissão para editar usuários que não sejam ele mesmo!");
+                }
+            }
+        }
+
         UserEntity existingUser = userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização!"));
 
@@ -238,6 +261,14 @@ public class UserService {
     }
 
     private void handleRoleChange(UserEntity user, RoleEnum oldRole, RoleEnum newRole) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (userLogged.getId() != user.getId().longValue()) {
+                if (!userLogged.getAttributionsPermission().getEditUser()) {
+                    throw new UnauthorizedException("Usuário não tem permissão para editar usuários que não sejam ele mesmo!");
+                }
+            }
+        }
 
         if (oldRole == RoleEnum.ADMIN && newRole == RoleEnum.COLLABORATOR) {
 
@@ -294,6 +325,14 @@ public class UserService {
 
     @Transactional
     public UserEntity updatePassword(Long id, UserPasswordUpdateDTO passwordDTO) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (userLogged.getId() != id.longValue()) {
+                if (!userLogged.getAttributionsPermission().getEditUser()) {
+                    throw new UnauthorizedException("Usuário não tem permissão para atualizar a senha de outros usuários!");
+                }
+            }
+        }
         UserEntity existingUser = userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização de senha!"));
 
@@ -316,6 +355,7 @@ public class UserService {
 
     @Transactional
     public UserEntity updateUserClients(Long userId, UserClientAssociationDTO clientAssociationDTO) {
+        AuthenticatedUserUtil.checkAdminPermission();
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização de clientes!"));
 

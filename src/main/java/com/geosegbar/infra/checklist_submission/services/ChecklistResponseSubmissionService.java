@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import com.geosegbar.common.enums.AnomalyOriginEnum;
 import com.geosegbar.common.enums.TypeQuestionEnum;
+import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.AnomalyEntity;
 import com.geosegbar.entities.AnomalyPhotoEntity;
 import com.geosegbar.entities.AnomalyStatusEntity;
@@ -27,6 +28,7 @@ import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.FileStorageException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
 import com.geosegbar.infra.anomaly_photo.persistence.jpa.AnomalyPhotoRepository;
 import com.geosegbar.infra.anomaly_status.persistence.jpa.AnomalyStatusRepository;
@@ -75,6 +77,16 @@ public class ChecklistResponseSubmissionService {
 
     @Transactional
     public ChecklistResponseEntity submitChecklistResponse(ChecklistResponseSubmissionDTO submissionDto) {
+        if (submissionDto.isMobile()) {
+            if (!AuthenticatedUserUtil.getCurrentUser().getRoutineInspectionPermission().getIsFillMobile()) {
+                throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via mobile!");
+            }
+        } else if (!submissionDto.isMobile()) {
+            if (!AuthenticatedUserUtil.getCurrentUser().getRoutineInspectionPermission().getIsFillWeb()) {
+                throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via web!");
+            }
+        }
+
         ChecklistResponseEntity checklistResponse = createChecklistResponse(submissionDto);
 
         validateAllRequiredQuestionnaires(submissionDto);

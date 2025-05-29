@@ -4,10 +4,12 @@ import java.util.HashSet;
 import java.util.Set;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonProperty.Access;
 import com.geosegbar.common.objects_values.UserCreatorInfo;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -19,6 +21,7 @@ import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -37,6 +40,7 @@ import lombok.Setter;
 @AllArgsConstructor
 @Table(name = "users")
 public class UserEntity {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -79,20 +83,20 @@ public class UserEntity {
 
     @ManyToMany
     @JoinTable(
-        name = "user_client", 
-        joinColumns = @JoinColumn(name = "user_id"),
-        inverseJoinColumns = @JoinColumn(name = "client_id")
+            name = "user_client",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "client_id")
     )
     private Set<ClientEntity> clients = new HashSet<>();
 
     @JsonIgnore
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
     private Set<DamPermissionEntity> damPermissions = new HashSet<>();
-    
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_id")
     private UserEntity createdBy;
-    
+
     @JsonIgnore
     @OneToMany(mappedBy = "createdBy", fetch = FetchType.LAZY)
     private Set<UserEntity> createdUsers = new HashSet<>();
@@ -100,7 +104,7 @@ public class UserEntity {
     @JsonIgnore
     @OneToMany(mappedBy = "createdBy", fetch = FetchType.LAZY)
     private Set<PSBFolderEntity> psbFoldersCreated = new HashSet<>();
-    
+
     @JsonIgnore
     @OneToMany(mappedBy = "uploadedBy", fetch = FetchType.LAZY)
     private Set<PSBFileEntity> psbFilesUploaded = new HashSet<>();
@@ -108,7 +112,23 @@ public class UserEntity {
     @JsonIgnore
     @OneToMany(mappedBy = "sharedBy", fetch = FetchType.LAZY)
     private Set<ShareFolderEntity> sharedFolders = new HashSet<>();
-    
+
+    @OneToOne(mappedBy = "user", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @JsonIgnoreProperties("user")
+    private AttributionsPermissionEntity attributionsPermission;
+
+    @OneToOne(mappedBy = "user", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @JsonIgnoreProperties("user")
+    private DocumentationPermissionEntity documentationPermission;
+
+    @OneToOne(mappedBy = "user", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @JsonIgnoreProperties("user")
+    private InstrumentationPermissionEntity instrumentationPermission;
+
+    @OneToOne(mappedBy = "user", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @JsonIgnoreProperties("user")
+    private RoutineInspectionPermissionEntity routineInspectionPermission;
+
     @JsonProperty("createdBy")
     public Object getCreatedByInfo() {
         if (this.createdBy == null) {

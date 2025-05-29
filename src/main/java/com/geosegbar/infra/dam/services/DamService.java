@@ -7,6 +7,7 @@ import java.util.Set;
 
 import org.springframework.stereotype.Service;
 
+import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.ClassificationDamEntity;
 import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.DamEntity;
@@ -20,8 +21,10 @@ import com.geosegbar.entities.RiskCategoryEntity;
 import com.geosegbar.entities.SecurityLevelEntity;
 import com.geosegbar.entities.StatusEntity;
 import com.geosegbar.entities.SupervisoryBodyEntity;
+import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.classification_dam.peristence.ClassificationDamRepository;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.dtos.CreateDamCompleteRequest;
@@ -64,6 +67,13 @@ public class DamService {
 
     @Transactional
     public DamEntity createCompleteWithRelationships(CreateDamCompleteRequest request) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getAttributionsPermission().getEditDam()) {
+                throw new UnauthorizedException("Usuário não tem permissão para criar barragens!");
+            }
+        }
+
         if (damRepository.existsByName(request.getName())) {
             throw new DuplicateResourceException("Já existe uma barragem com este nome!");
         }
@@ -248,6 +258,12 @@ public class DamService {
 
     @Transactional
     public DamEntity save(DamEntity damEntity) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getAttributionsPermission().getEditDam()) {
+                throw new UnauthorizedException("Usuário não tem permissão para criar barragens!");
+            }
+        }
         if (damRepository.existsByName(damEntity.getName())) {
             throw new DuplicateResourceException("Já existe uma barragem com este nome!");
         }
@@ -258,6 +274,12 @@ public class DamService {
 
     @Transactional
     public DamEntity update(DamEntity damEntity) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getAttributionsPermission().getEditDam()) {
+                throw new UnauthorizedException("Usuário não tem permissão para editar barragens!");
+            }
+        }
         damRepository.findById(damEntity.getId())
                 .orElseThrow(() -> new NotFoundException("Endereço não encontrado para atualização!"));
 

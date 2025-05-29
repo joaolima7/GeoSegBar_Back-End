@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.PSBFileEntity;
 import com.geosegbar.entities.PSBFolderEntity;
 import com.geosegbar.entities.UserEntity;
@@ -33,56 +34,66 @@ public class PSBFileService {
 
     @Value("${file.base-url}")
     private String baseUrl;
-    
+
     private final PSBFileRepository psbFileRepository;
     private final PSBFolderRepository psbFolderRepository;
     private final UserRepository userRepository;
-    
+
     public List<PSBFileEntity> findByFolderId(Long folderId) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getViewPSB()) {
+                throw new NotFoundException("Usuário não tem permissão para acessar as pastas PSB");
+            }
+        }
         return psbFileRepository.findByPsbFolderIdOrderByUploadedAtDesc(folderId);
     }
-    
+
     public PSBFileEntity findById(Long id) {
         return psbFileRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Arquivo PSB não encontrado"));
     }
-    
+
     @Transactional
     public PSBFileEntity uploadFile(Long folderId, MultipartFile file, Long uploadedById) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getEditPSB()) {
+                throw new NotFoundException("Usuário não tem permissão para enviar arquivos PSB");
+            }
+        }
         try {
             PSBFolderEntity folder = psbFolderRepository.findById(folderId)
                     .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
-            
+
             UserEntity uploader = userRepository.findById(uploadedById)
                     .orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
-            
+
             String originalFilename = file.getOriginalFilename();
             String fileExtension = "";
-            
+
             if (originalFilename != null && originalFilename.contains(".")) {
                 fileExtension = originalFilename.substring(originalFilename.lastIndexOf("."));
             }
-            
+
             String filename = UUID.randomUUID().toString() + fileExtension;
-            
+
             // Caminho completo onde o arquivo será salvo
             Path folderPath = Paths.get(folder.getServerPath());
             Path targetPath = folderPath.resolve(filename);
-            
+
             // Assegurar que o diretório existe
             if (!Files.exists(folderPath)) {
                 Files.createDirectories(folderPath);
             }
-            
+
             // Salvar o arquivo
             Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
-            
+
             // Construir URL de download
-            String relativePathFromPsbBase = "dam-" + folder.getDam().getId() + "/" + 
-                                          folder.getServerPath().substring(folder.getServerPath().lastIndexOf(File.separator) + 1) + 
-                                          "/" + filename;
+            String relativePathFromPsbBase = "dam-" + folder.getDam().getId() + "/"
+                    + folder.getServerPath().substring(folder.getServerPath().lastIndexOf(File.separator) + 1)
+                    + "/" + filename;
             String downloadUrl = baseUrl + "psb/" + relativePathFromPsbBase;
-            
+
             // Salvar entidade no banco
             PSBFileEntity psbFile = new PSBFileEntity();
             psbFile.setFilename(filename);
@@ -93,48 +104,51 @@ public class PSBFileService {
             psbFile.setUploadedBy(uploader);
             psbFile.setFilePath(targetPath.toString());
             psbFile.setDownloadUrl(downloadUrl);
-            
+
             return psbFileRepository.save(psbFile);
-            
+
         } catch (IOException ex) {
             throw new FileStorageException("Não foi possível armazenar o arquivo.", ex);
         }
     }
-    
+
     public Resource downloadFile(Long fileId) {
         try {
             PSBFileEntity file = psbFileRepository.findById(fileId)
                     .orElseThrow(() -> new NotFoundException("Arquivo PSB não encontrado"));
-            
+
             Path filePath = Paths.get(file.getFilePath());
             Resource resource = new UrlResource(filePath.toUri());
-            
+
             if (resource.exists() || resource.isReadable()) {
                 return resource;
             } else {
                 throw new FileStorageException("Não foi possível ler o arquivo");
             }
-            
+
         } catch (IOException ex) {
             throw new FileStorageException("Não foi possível ler o arquivo", ex);
         }
     }
-    
+
     @Transactional
     public void deleteFile(Long fileId) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getEditPSB()) {
+                throw new NotFoundException("Usuário não tem permissão para excluir arquivos PSB");
+            }
+        }
+
         PSBFileEntity file = psbFileRepository.findById(fileId)
                 .orElseThrow(() -> new NotFoundException("Arquivo PSB não encontrado"));
-        
-        // Excluir o arquivo do sistema de arquivos
+
         try {
             Path filePath = Paths.get(file.getFilePath());
             Files.deleteIfExists(filePath);
         } catch (IOException ex) {
-            // Log o erro mas continue com a exclusão do banco
             System.err.println("Erro ao excluir arquivo do sistema: " + ex.getMessage());
         }
-        
-        // Excluir do banco
+
         psbFileRepository.delete(file);
     }
 }

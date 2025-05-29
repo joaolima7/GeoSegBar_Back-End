@@ -34,4 +34,6 @@ public class ChecklistResponseSubmissionDTO {
     @NotEmpty(message = "É necessário incluir pelo menos um questionário!")
     @Valid
     private List<QuestionnaireResponseSubmissionDTO> questionnaireResponses;
+
+    private boolean isMobile;
 }

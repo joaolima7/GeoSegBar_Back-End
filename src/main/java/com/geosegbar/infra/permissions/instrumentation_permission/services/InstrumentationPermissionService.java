@@ -22,40 +22,40 @@ public class InstrumentationPermissionService {
 
     private final InstrumentationPermissionRepository instrPermissionRepository;
     private final UserRepository userRepository;
-    
+
     public List<InstrumentationPermissionEntity> findAll() {
         return instrPermissionRepository.findAll();
     }
-    
+
     public InstrumentationPermissionEntity findById(Long id) {
         return instrPermissionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Permissão de instrumentação não encontrada com ID: " + id));
     }
-    
+
     public InstrumentationPermissionEntity findByUser(Long userId) {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
-                
+
         return instrPermissionRepository.findByUser(user)
                 .orElseThrow(() -> new NotFoundException("Permissão de instrumentação não encontrada para o usuário"));
     }
-    
+
     @Transactional
     public InstrumentationPermissionEntity createOrUpdate(InstrumentationPermissionDTO permissionDTO) {
         UserEntity user = userRepository.findById(permissionDTO.getUserId())
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + permissionDTO.getUserId()));
-        
+
         InstrumentationPermissionEntity permission;
-        
+
         var existingPermission = instrPermissionRepository.findByUser(user);
-        
+
         if (existingPermission.isPresent()) {
             permission = existingPermission.get();
         } else {
             permission = new InstrumentationPermissionEntity();
             permission.setUser(user);
         }
-        
+
         permission.setViewGraphs(permissionDTO.getViewGraphs());
         permission.setEditGraphsLocal(permissionDTO.getEditGraphsLocal());
         permission.setEditGraphsDefault(permissionDTO.getEditGraphsDefault());
@@ -63,10 +63,10 @@ public class InstrumentationPermissionService {
         permission.setEditRead(permissionDTO.getEditRead());
         permission.setViewSections(permissionDTO.getViewSections());
         permission.setEditSections(permissionDTO.getEditSections());
-        
+
         return instrPermissionRepository.save(permission);
     }
-    
+
     @Transactional
     public void delete(Long id) {
         if (!instrPermissionRepository.existsById(id)) {
@@ -74,46 +74,45 @@ public class InstrumentationPermissionService {
         }
         instrPermissionRepository.deleteById(id);
     }
-    
+
     @Transactional
     public void deleteByUser(Long userId) {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
-                
+
         if (!instrPermissionRepository.existsByUser(user)) {
             throw new NotFoundException("Permissão de instrumentação não encontrada para o usuário");
         }
-        
+
         InstrumentationPermissionEntity permission = instrPermissionRepository.findByUser(user).get();
         permission.setUser(null);
         instrPermissionRepository.delete(permission);
     }
-    
+
     @Transactional
     public void deleteByUserSafely(Long userId) {
         try {
             UserEntity user = userRepository.findById(userId)
                     .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
-            
+
             if (instrPermissionRepository.existsByUser(user)) {
                 InstrumentationPermissionEntity permission = instrPermissionRepository.findByUser(user).get();
-                permission.setUser(null);
                 instrPermissionRepository.delete(permission);
             } else {
             }
         } catch (Exception e) {
-            log.error("Error while trying to delete instrumentation permission for user {}: {}", 
-                userId, e.getMessage(), e);
+            log.error("Error while trying to delete instrumentation permission for user {}: {}",
+                    userId, e.getMessage(), e);
         }
     }
 
     @Transactional
-    public InstrumentationPermissionEntity createDefaultPermission(UserEntity user) {        
+    public InstrumentationPermissionEntity createDefaultPermission(UserEntity user) {
         if (instrPermissionRepository.existsByUser(user)) {
             log.info("Instrumentation permission already exists for user {}", user.getId());
             return instrPermissionRepository.findByUser(user).get();
         }
-        
+
         InstrumentationPermissionEntity permission = new InstrumentationPermissionEntity();
         permission.setUser(user);
         permission.setViewGraphs(false);
@@ -123,7 +122,7 @@ public class InstrumentationPermissionService {
         permission.setEditRead(false);
         permission.setViewSections(false);
         permission.setEditSections(false);
-        
+
         InstrumentationPermissionEntity savedPermission = instrPermissionRepository.save(permission);
         return savedPermission;
     }

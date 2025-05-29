@@ -26,6 +26,7 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
 
     Page<ChecklistResponseEntity> findByCreatedAtBetween(LocalDateTime startDate, LocalDateTime endDate, Pageable pageable);
 
+    @Override
     Page<ChecklistResponseEntity> findAll(Pageable pageable);
 
     Page<ChecklistResponseEntity> findByDamIdIn(Collection<Long> damIds, Pageable pageable);

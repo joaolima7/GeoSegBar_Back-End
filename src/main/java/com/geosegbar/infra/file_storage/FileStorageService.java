@@ -1,11 +1,5 @@
 package com.geosegbar.infra.file_storage;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
-
-import com.geosegbar.exceptions.FileStorageException;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -14,13 +8,19 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.geosegbar.exceptions.FileStorageException;
+
 @Service
 public class FileStorageService {
 
     @Value("${file.upload-dir}")
     private String uploadDir;
 
-    @Value("${file.base-url:http://backend.geometrisa-prod.com.br:9090/uploads/}")
+    @Value("${file.base-url:https://backend.geometrisa-prod.com.br:9090/uploads/}")
     private String baseUrl;
 
     public String storeFile(MultipartFile file, String subDirectory) {

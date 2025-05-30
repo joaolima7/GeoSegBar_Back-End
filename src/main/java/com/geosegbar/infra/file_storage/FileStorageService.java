@@ -23,6 +23,9 @@ public class FileStorageService {
     @Value("${file.base-url}")
     private String baseUrl;
 
+    @Value("${application.frontend-url}")
+    private String frontendUrl;
+
     public String storeFile(MultipartFile file, String subDirectory) {
         try {
             Path uploadPath = Paths.get(uploadDir + "/" + subDirectory).toAbsolutePath().normalize();
@@ -35,7 +38,6 @@ public class FileStorageService {
                 fileExtension = originalFileName.substring(originalFileName.lastIndexOf("."));
             }
 
-            // Usar timestamp como Laravel faz
             String timestamp = String.valueOf(Instant.now().getEpochSecond());
             String safeFileName = timestamp + "_" + (originalFileName != null
                     ? originalFileName.replaceAll("[^a-zA-Z0-9.-]", "_") : "file" + fileExtension);
@@ -43,7 +45,7 @@ public class FileStorageService {
             Path targetLocation = uploadPath.resolve(safeFileName);
             Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
 
-            return baseUrl + subDirectory + "/" + safeFileName;
+            return frontendUrl + baseUrl + subDirectory + "/" + safeFileName;
         } catch (IOException ex) {
             throw new FileStorageException("Could not store file.", ex);
         }
@@ -58,7 +60,6 @@ public class FileStorageService {
             if (originalFileName != null && originalFileName.contains(".")) {
                 fileExtension = originalFileName.substring(originalFileName.lastIndexOf("."));
             } else if (contentType != null) {
-                // Mapear content-type para extensão
                 switch (contentType) {
                     case "image/jpeg":
                         fileExtension = ".jpg";
@@ -66,13 +67,17 @@ public class FileStorageService {
                     case "image/png":
                         fileExtension = ".png";
                         break;
-                    // Outros tipos mantidos...
+                    case "image/gif":
+                        fileExtension = ".gif";
+                        break;
+                    case "image/bmp":
+                        fileExtension = ".bmp";
+                        break;
                     default:
                         fileExtension = "";
                 }
             }
 
-            // Usar timestamp como Laravel faz
             String timestamp = String.valueOf(Instant.now().getEpochSecond());
             String safeFileName = timestamp + "_" + (originalFileName != null
                     ? originalFileName.replaceAll("[^a-zA-Z0-9.-]", "_") : "file" + fileExtension);
@@ -80,7 +85,8 @@ public class FileStorageService {
             Path targetLocation = uploadPath.resolve(safeFileName);
             Files.copy(new ByteArrayInputStream(fileBytes), targetLocation, StandardCopyOption.REPLACE_EXISTING);
 
-            return baseUrl + subDirectory + "/" + safeFileName;
+            return frontendUrl + baseUrl + subDirectory + "/" + safeFileName;
+
         } catch (IOException ex) {
             throw new FileStorageException("Could not store file from bytes.", ex);
         }
@@ -88,8 +94,13 @@ public class FileStorageService {
 
     public void deleteFile(String fileUrl) {
         try {
-            if (fileUrl != null && fileUrl.startsWith(baseUrl)) {
-                String relativePath = fileUrl.substring(baseUrl.length());
+            String urlWithoutDomain = fileUrl;
+            if (fileUrl != null && fileUrl.startsWith(frontendUrl)) {
+                urlWithoutDomain = fileUrl.substring(frontendUrl.length());
+            }
+
+            if (urlWithoutDomain != null && urlWithoutDomain.startsWith(baseUrl)) {
+                String relativePath = urlWithoutDomain.substring(baseUrl.length());
                 Path filePath = Paths.get(uploadDir + "/" + relativePath).toAbsolutePath().normalize();
                 Files.deleteIfExists(filePath);
             }

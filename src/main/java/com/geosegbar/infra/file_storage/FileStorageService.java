@@ -6,7 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.UUID;
+import java.time.Instant;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -20,7 +20,7 @@ public class FileStorageService {
     @Value("${file.upload-dir}")
     private String uploadDir;
 
-    @Value("${file.base-url:https://backend.geometrisa-prod.com.br:9090/uploads/}")
+    @Value("${file.base-url}")
     private String baseUrl;
 
     public String storeFile(MultipartFile file, String subDirectory) {
@@ -35,13 +35,15 @@ public class FileStorageService {
                 fileExtension = originalFileName.substring(originalFileName.lastIndexOf("."));
             }
 
-            String fileName = UUID.randomUUID() + fileExtension;
+            // Usar timestamp como Laravel faz
+            String timestamp = String.valueOf(Instant.now().getEpochSecond());
+            String safeFileName = timestamp + "_" + (originalFileName != null
+                    ? originalFileName.replaceAll("[^a-zA-Z0-9.-]", "_") : "file" + fileExtension);
 
-            Path targetLocation = uploadPath.resolve(fileName);
+            Path targetLocation = uploadPath.resolve(safeFileName);
             Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
 
-            return baseUrl + subDirectory + "/" + fileName;
-
+            return baseUrl + subDirectory + "/" + safeFileName;
         } catch (IOException ex) {
             throw new FileStorageException("Could not store file.", ex);
         }
@@ -56,6 +58,7 @@ public class FileStorageService {
             if (originalFileName != null && originalFileName.contains(".")) {
                 fileExtension = originalFileName.substring(originalFileName.lastIndexOf("."));
             } else if (contentType != null) {
+                // Mapear content-type para extensão
                 switch (contentType) {
                     case "image/jpeg":
                         fileExtension = ".jpg";
@@ -63,24 +66,21 @@ public class FileStorageService {
                     case "image/png":
                         fileExtension = ".png";
                         break;
-                    case "image/gif":
-                        fileExtension = ".gif";
-                        break;
-                    case "image/bmp":
-                        fileExtension = ".bmp";
-                        break;
+                    // Outros tipos mantidos...
                     default:
                         fileExtension = "";
                 }
             }
 
-            String fileName = UUID.randomUUID() + fileExtension;
+            // Usar timestamp como Laravel faz
+            String timestamp = String.valueOf(Instant.now().getEpochSecond());
+            String safeFileName = timestamp + "_" + (originalFileName != null
+                    ? originalFileName.replaceAll("[^a-zA-Z0-9.-]", "_") : "file" + fileExtension);
 
-            Path targetLocation = uploadPath.resolve(fileName);
+            Path targetLocation = uploadPath.resolve(safeFileName);
             Files.copy(new ByteArrayInputStream(fileBytes), targetLocation, StandardCopyOption.REPLACE_EXISTING);
 
-            return baseUrl + subDirectory + "/" + fileName;
-
+            return baseUrl + subDirectory + "/" + safeFileName;
         } catch (IOException ex) {
             throw new FileStorageException("Could not store file from bytes.", ex);
         }

@@ -97,12 +97,17 @@ public class InstrumentationPermissionService {
 
             if (instrPermissionRepository.existsByUser(user)) {
                 InstrumentationPermissionEntity permission = instrPermissionRepository.findByUser(user).get();
+
+                user.setInstrumentationPermission(null);
+                permission.setUser(null);
+
+                userRepository.save(user);
+                instrPermissionRepository.save(permission);
+
                 instrPermissionRepository.delete(permission);
-            } else {
             }
         } catch (Exception e) {
-            log.error("Error while trying to delete instrumentation permission for user {}: {}",
-                    userId, e.getMessage(), e);
+            log.error("Error while trying to delete instrumentation permission for user {}: {}", userId, e.getMessage(), e);
         }
     }
 

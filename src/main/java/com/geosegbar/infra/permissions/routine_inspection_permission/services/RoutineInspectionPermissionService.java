@@ -92,6 +92,13 @@ public class RoutineInspectionPermissionService {
 
             if (routinePermissionRepository.existsByUser(user)) {
                 RoutineInspectionPermissionEntity permission = routinePermissionRepository.findByUser(user).get();
+
+                user.setRoutineInspectionPermission(null);
+                permission.setUser(null);
+
+                userRepository.save(user);
+                routinePermissionRepository.save(permission);
+
                 routinePermissionRepository.delete(permission);
             } else {
                 log.info("No routine inspection permission found for user {}", userId);

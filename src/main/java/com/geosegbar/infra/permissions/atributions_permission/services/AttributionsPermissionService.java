@@ -93,12 +93,17 @@ public class AttributionsPermissionService {
 
             if (attrPermissionRepository.existsByUser(user)) {
                 AttributionsPermissionEntity permission = attrPermissionRepository.findByUser(user).get();
+
+                user.setAttributionsPermission(null);
+                permission.setUser(null);
+
+                userRepository.save(user);
+                attrPermissionRepository.save(permission);
+
                 attrPermissionRepository.delete(permission);
-            } else {
             }
         } catch (Exception e) {
-            log.error("Error while trying to delete attributions permission for user {}: {}",
-                    userId, e.getMessage(), e);
+            log.error("Error while trying to delete attributions permission for user {}: {}", userId, e.getMessage(), e);
         }
     }
 

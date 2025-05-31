@@ -91,4 +91,8 @@ public class InstrumentEntity {
     @OneToMany(mappedBy = "instrument", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnoreProperties("instrument")
     private Set<OutputEntity> outputs = new HashSet<>();
+
+    @OneToMany(mappedBy = "instrument", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnoreProperties("instrument")
+    private Set<ReadingEntity> readings = new HashSet<>();
 }

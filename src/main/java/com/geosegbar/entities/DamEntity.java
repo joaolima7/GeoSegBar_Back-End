@@ -132,4 +132,8 @@ public class DamEntity {
     @OneToMany(mappedBy = "dam", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnoreProperties("dam")
     private Set<PSBFolderEntity> psbFolders = new HashSet<>();
+
+    @OneToMany(mappedBy = "dam", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnoreProperties("dam")
+    private Set<InstrumentEntity> instruments = new HashSet<>();
 }

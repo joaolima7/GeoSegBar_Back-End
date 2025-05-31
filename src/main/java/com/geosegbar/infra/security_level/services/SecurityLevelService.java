@@ -22,8 +22,10 @@ public class SecurityLevelService {
     @PostConstruct
     @Transactional
     public void initializeDefaultSecurityLevels() {
-        createIfNotExists("Alto");
-        createIfNotExists("Baixo");
+        createIfNotExists("Normal");
+        createIfNotExists("Atenção");
+        createIfNotExists("Alerta");
+        createIfNotExists("Emergência");
     }
 
     private void createIfNotExists(String level) {

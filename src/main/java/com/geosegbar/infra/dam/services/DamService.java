@@ -20,7 +20,6 @@ import com.geosegbar.entities.ReservoirEntity;
 import com.geosegbar.entities.RiskCategoryEntity;
 import com.geosegbar.entities.SecurityLevelEntity;
 import com.geosegbar.entities.StatusEntity;
-import com.geosegbar.entities.SupervisoryBodyEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
@@ -41,7 +40,6 @@ import com.geosegbar.infra.reservoir.persistence.ReservoirRepository;
 import com.geosegbar.infra.risk_category.persistence.RiskCategoryRepository;
 import com.geosegbar.infra.security_level.persistence.SecurityLevelRepository;
 import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
-import com.geosegbar.infra.supervisory_body.persistence.SupervisoryBodyRepository;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -54,7 +52,6 @@ public class DamService {
     private final ClientRepository clientRepository;
     private final StatusRepository statusRepository;
     private final SecurityLevelRepository securityLevelRepository;
-    private final SupervisoryBodyRepository supervisoryBodyRepository;
     private final RiskCategoryRepository riskCategoryRepository;
     private final PotentialDamageRepository potentialDamageRepository;
     private final ClassificationDamRepository classificationDamRepository;
@@ -170,10 +167,9 @@ public class DamService {
             regulatoryDam.setSecurityLevel(securityLevel);
         }
 
-        if (request.getSupervisoryBodyId() != null) {
-            SupervisoryBodyEntity supervisoryBody = supervisoryBodyRepository.findById(request.getSupervisoryBodyId())
-                    .orElseThrow(() -> new NotFoundException("Órgão fiscalizador não encontrado"));
-            regulatoryDam.setSupervisoryBody(supervisoryBody);
+        if (request.getSupervisoryBodyName() != null) {
+            regulatoryDam.setSupervisoryBodyName(request.getSupervisoryBodyName());
+
         }
 
         if (request.getRiskCategoryId() != null) {

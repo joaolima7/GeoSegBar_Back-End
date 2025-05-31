@@ -95,6 +95,8 @@ public class CreateDamCompleteRequest {
 
     private String technicalManagerName;
 
+    private String supervisoryBodyName;
+
     @Email(message = "Email do responsável técnico inválido!")
     private String technicalManagerEmail;
 
@@ -102,7 +104,6 @@ public class CreateDamCompleteRequest {
     private String technicalManagerPhone;
 
     private Long securityLevelId;
-    private Long supervisoryBodyId;
     private Long riskCategoryId;
     private Long potentialDamageId;
     private Long classificationDamId;

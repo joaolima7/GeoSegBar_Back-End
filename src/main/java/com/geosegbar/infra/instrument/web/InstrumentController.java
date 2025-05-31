@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.infra.instrument.dtos.CreateInstrumentRequest;
 import com.geosegbar.infra.instrument.dtos.InstrumentResponseDTO;
@@ -28,32 +29,36 @@ public class InstrumentController {
     private final InstrumentService instrumentService;
 
     @GetMapping
-    public ResponseEntity<List<InstrumentResponseDTO>> getAllInstruments() {
+    public ResponseEntity<WebResponseEntity<List<InstrumentResponseDTO>>> getAllInstruments() {
         List<InstrumentEntity> instruments = instrumentService.findAll();
-        return ResponseEntity.ok(instrumentService.mapToResponseDTOList(instruments));
+        List<InstrumentResponseDTO> dtos = instrumentService.mapToResponseDTOList(instruments);
+        return ResponseEntity.ok(WebResponseEntity.success(dtos, "Instrumentos obtidos com sucesso!"));
     }
 
     @GetMapping("/dam/{damId}")
-    public ResponseEntity<List<InstrumentResponseDTO>> getInstrumentsByDam(@PathVariable Long damId) {
+    public ResponseEntity<WebResponseEntity<List<InstrumentResponseDTO>>> getInstrumentsByDam(@PathVariable Long damId) {
         List<InstrumentEntity> instruments = instrumentService.findByDamId(damId);
-        return ResponseEntity.ok(instrumentService.mapToResponseDTOList(instruments));
+        List<InstrumentResponseDTO> dtos = instrumentService.mapToResponseDTOList(instruments);
+        return ResponseEntity.ok(WebResponseEntity.success(dtos, "Instrumentos da barragem obtidos com sucesso!"));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<InstrumentResponseDTO> getInstrumentById(@PathVariable Long id) {
+    public ResponseEntity<WebResponseEntity<InstrumentResponseDTO>> getInstrumentById(@PathVariable Long id) {
         InstrumentEntity instrument = instrumentService.findWithAllDetails(id);
-        return ResponseEntity.ok(instrumentService.mapToResponseDTO(instrument));
+        InstrumentResponseDTO dto = instrumentService.mapToResponseDTO(instrument);
+        return ResponseEntity.ok(WebResponseEntity.success(dto, "Instrumento obtido com sucesso!"));
     }
 
     @PostMapping
-    public ResponseEntity<InstrumentResponseDTO> createInstrument(@Valid @RequestBody CreateInstrumentRequest request) {
+    public ResponseEntity<WebResponseEntity<InstrumentResponseDTO>> createInstrument(@Valid @RequestBody CreateInstrumentRequest request) {
         InstrumentEntity createdInstrument = instrumentService.createComplete(request);
-        return new ResponseEntity<>(instrumentService.mapToResponseDTO(createdInstrument), HttpStatus.CREATED);
+        InstrumentResponseDTO dto = instrumentService.mapToResponseDTO(createdInstrument);
+        return new ResponseEntity<>(WebResponseEntity.success(dto, "Instrumento criado com sucesso!"), HttpStatus.CREATED);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteInstrument(@PathVariable Long id) {
+    public ResponseEntity<WebResponseEntity<Void>> deleteInstrument(@PathVariable Long id) {
         instrumentService.delete(id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(WebResponseEntity.success(null, "Instrumento excluído com sucesso!"));
     }
 }

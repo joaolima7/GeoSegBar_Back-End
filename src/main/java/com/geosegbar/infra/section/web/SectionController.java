@@ -3,6 +3,7 @@ package com.geosegbar.infra.section.web;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,10 +12,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.SectionEntity;
+import com.geosegbar.infra.section.dtos.CreateSectionDTO;
 import com.geosegbar.infra.section.services.SectionService;
 
 import jakarta.validation.Valid;
@@ -39,17 +43,51 @@ public class SectionController {
         return ResponseEntity.ok(WebResponseEntity.success(section, "Seção obtida com sucesso!"));
     }
 
-    @PostMapping
-    public ResponseEntity<WebResponseEntity<SectionEntity>> createSection(@Valid @RequestBody SectionEntity section) {
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<WebResponseEntity<SectionEntity>> createSectionJson(
+            @Valid @RequestBody CreateSectionDTO sectionDTO) {
+
+        SectionEntity section = new SectionEntity();
+        section.setName(sectionDTO.getName());
+        section.setFirstVertexLatitude(sectionDTO.getFirstVertexLatitude());
+        section.setSecondVertexLatitude(sectionDTO.getSecondVertexLatitude());
+        section.setFirstVertexLongitude(sectionDTO.getFirstVertexLongitude());
+        section.setSecondVertexLongitude(sectionDTO.getSecondVertexLongitude());
+
         SectionEntity createdSection = sectionService.create(section);
-        return new ResponseEntity<>(WebResponseEntity.success(createdSection, "Seção criada com sucesso!"), HttpStatus.CREATED);
+
+        return new ResponseEntity<>(
+                WebResponseEntity.success(createdSection, "Seção criada com sucesso!"),
+                HttpStatus.CREATED);
     }
 
-    @PutMapping("/{id}")
+    @PostMapping(path = "/with-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<WebResponseEntity<SectionEntity>> createSectionWithFile(
+            @RequestPart("section") @Valid CreateSectionDTO sectionDTO,
+            @RequestPart("file") MultipartFile file) {
+
+        SectionEntity createdSection = sectionService.createWithFile(sectionDTO, file);
+
+        return new ResponseEntity<>(
+                WebResponseEntity.success(createdSection, "Seção criada com sucesso!"),
+                HttpStatus.CREATED);
+    }
+
+    @PutMapping(value = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<WebResponseEntity<SectionEntity>> updateSection(
             @PathVariable Long id,
             @Valid @RequestBody SectionEntity section) {
         SectionEntity updatedSection = sectionService.update(id, section);
+        return ResponseEntity.ok(WebResponseEntity.success(updatedSection, "Seção atualizada com sucesso!"));
+    }
+
+    @PutMapping(value = "/{id}/with-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<WebResponseEntity<SectionEntity>> updateSectionWithFile(
+            @PathVariable Long id,
+            @RequestPart("section") @Valid CreateSectionDTO sectionDTO,
+            @RequestPart(value = "file", required = false) MultipartFile file) {
+
+        SectionEntity updatedSection = sectionService.updateWithFile(id, sectionDTO, file);
         return ResponseEntity.ok(WebResponseEntity.success(updatedSection, "Seção atualizada com sucesso!"));
     }
 

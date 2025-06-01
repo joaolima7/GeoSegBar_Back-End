@@ -313,6 +313,10 @@ public class InstrumentService {
             inputDTO.setName(input.getName());
             inputDTO.setPrecision(input.getPrecision());
             inputDTO.setMeasurementUnitId(input.getMeasurementUnit().getId());
+
+            inputDTO.setMeasurementUnitName(input.getMeasurementUnit().getName());
+            inputDTO.setMeasurementUnitAcronym(input.getMeasurementUnit().getAcronym());
+
             inputDTOs.add(inputDTO);
         }
         dto.setInputs(inputDTOs);
@@ -325,6 +329,9 @@ public class InstrumentService {
             constantDTO.setPrecision(constant.getPrecision());
             constantDTO.setValue(constant.getValue());
             constantDTO.setMeasurementUnitId(constant.getMeasurementUnit().getId());
+            constantDTO.setMeasurementUnitName(constant.getMeasurementUnit().getName());
+            constantDTO.setMeasurementUnitAcronym(constant.getMeasurementUnit().getAcronym());
+
             constantDTOs.add(constantDTO);
         }
         dto.setConstants(constantDTOs);
@@ -337,6 +344,9 @@ public class InstrumentService {
             outputDTO.setEquation(output.getEquation());
             outputDTO.setPrecision(output.getPrecision());
             outputDTO.setMeasurementUnitId(output.getMeasurementUnit().getId());
+            outputDTO.setMeasurementUnitName(output.getMeasurementUnit().getName());
+            outputDTO.setMeasurementUnitAcronym(output.getMeasurementUnit().getAcronym());
+
             outputDTOs.add(outputDTO);
         }
         dto.setOutputs(outputDTOs);

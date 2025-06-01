@@ -22,4 +22,7 @@ public class InputDTO {
 
     @NotNull(message = "ID da unidade de medida é obrigatório")
     private Long measurementUnitId;
+
+    private String measurementUnitName;
+    private String measurementUnitAcronym;
 }

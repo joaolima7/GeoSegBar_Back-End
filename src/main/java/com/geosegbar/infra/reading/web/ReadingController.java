@@ -1,8 +1,8 @@
 package com.geosegbar.infra.reading.web;
 
 import java.time.LocalDate;
+import java.util.List;
 
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.enums.LimitStatusEnum;
 import com.geosegbar.common.response.WebResponseEntity;
+import com.geosegbar.infra.reading.dtos.PagedReadingResponseDTO;
 import com.geosegbar.infra.reading.dtos.ReadingRequestDTO;
 import com.geosegbar.infra.reading.dtos.ReadingResponseDTO;
 import com.geosegbar.infra.reading.services.ReadingService;
@@ -33,15 +34,25 @@ public class ReadingController {
     private final ReadingService readingService;
 
     @GetMapping("/instrument/{instrumentId}")
-    public ResponseEntity<WebResponseEntity<Page<ReadingResponseDTO>>> getReadingsByInstrument(
+    public ResponseEntity<WebResponseEntity<PagedReadingResponseDTO<ReadingResponseDTO>>> getReadingsByInstrument(
             @PathVariable Long instrumentId,
+            @RequestParam(required = false) Long outputId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(required = false) LimitStatusEnum limitStatus,
             Pageable pageable) {
 
-        Page<ReadingResponseDTO> readings = readingService.findByFilters(
-                instrumentId, startDate, endDate, limitStatus, pageable);
+        PagedReadingResponseDTO<ReadingResponseDTO> readings = readingService.findByFilters(
+                instrumentId, outputId, startDate, endDate, limitStatus, pageable);
+
+        return ResponseEntity.ok(WebResponseEntity.success(readings, "Leituras obtidas com sucesso!"));
+    }
+
+    @GetMapping("/output/{outputId}")
+    public ResponseEntity<WebResponseEntity<List<ReadingResponseDTO>>> getReadingsByOutput(
+            @PathVariable Long outputId) {
+
+        List<ReadingResponseDTO> readings = readingService.findByOutputId(outputId);
 
         return ResponseEntity.ok(WebResponseEntity.success(readings, "Leituras obtidas com sucesso!"));
     }
@@ -53,11 +64,11 @@ public class ReadingController {
     }
 
     @PostMapping("/instrument/{instrumentId}")
-    public ResponseEntity<WebResponseEntity<ReadingResponseDTO>> createReading(
+    public ResponseEntity<WebResponseEntity<List<ReadingResponseDTO>>> createReading(
             @PathVariable Long instrumentId,
             @Valid @RequestBody ReadingRequestDTO request) {
-        ReadingResponseDTO created = readingService.create(instrumentId, request);
-        return new ResponseEntity<>(WebResponseEntity.success(created, "Leitura registrada com sucesso!"), HttpStatus.CREATED);
+        List<ReadingResponseDTO> created = readingService.create(instrumentId, request);
+        return new ResponseEntity<>(WebResponseEntity.success(created, "Leituras registradas com sucesso!"), HttpStatus.CREATED);
     }
 
     @DeleteMapping("/{id}")

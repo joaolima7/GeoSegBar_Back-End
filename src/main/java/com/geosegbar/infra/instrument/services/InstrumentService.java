@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -35,6 +37,7 @@ import com.geosegbar.infra.instrument.dtos.OutputDTO;
 import com.geosegbar.infra.instrument.dtos.StatisticalLimitDTO;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.instrument_type.persistence.jpa.InstrumentTypeRepository;
+import com.geosegbar.infra.math.ExpressionEvaluator;
 import com.geosegbar.infra.measurement_unit.persistence.jpa.MeasurementUnitRepository;
 import com.geosegbar.infra.output.persistence.jpa.OutputRepository;
 import com.geosegbar.infra.section.persistence.jpa.SectionRepository;
@@ -80,6 +83,10 @@ public class InstrumentService {
     @Transactional
     public InstrumentEntity createComplete(CreateInstrumentRequest request) {
         validateRequest(request);
+
+        if (instrumentRepository.existsByNameAndDamId(request.getName(), request.getDamId())) {
+            throw new DuplicateResourceException("Já existe um instrumento com o nome '" + request.getName() + "' na mesma barragem");
+        }
 
         DamEntity dam = damRepository.findById(request.getDamId())
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + request.getDamId()));
@@ -218,7 +225,7 @@ public class InstrumentService {
             constant.setAcronym(constantDTO.getAcronym());
             constant.setName(constantDTO.getName());
             constant.setPrecision(constantDTO.getPrecision());
-            constant.setValue(constantDTO.getValue()); // Adicionado
+            constant.setValue(constantDTO.getValue());
             constant.setMeasurementUnit(measurementUnit);
             constant.setInstrument(instrument);
 
@@ -231,7 +238,17 @@ public class InstrumentService {
         Set<String> acronyms = new HashSet<>();
         Set<String> names = new HashSet<>();
 
+        // Crie conjuntos de acrônimos disponíveis para validação
+        Set<String> inputAcronyms = instrument.getInputs().stream()
+                .map(InputEntity::getAcronym)
+                .collect(Collectors.toSet());
+
+        Set<String> constantAcronyms = instrument.getConstants().stream()
+                .map(ConstantEntity::getAcronym)
+                .collect(Collectors.toSet());
+
         for (OutputDTO outputDTO : outputDTOs) {
+            // Verificar duplicatas no payload atual
             if (!acronyms.add(outputDTO.getAcronym())) {
                 throw new DuplicateResourceException("Sigla de output duplicada: " + outputDTO.getAcronym());
             }
@@ -239,6 +256,9 @@ public class InstrumentService {
             if (!names.add(outputDTO.getName())) {
                 throw new DuplicateResourceException("Nome de output duplicado: " + outputDTO.getName());
             }
+
+            // Validar a equação para garantir que usa apenas inputs e constants existentes
+            validateEquation(outputDTO.getEquation(), inputAcronyms, constantAcronyms);
 
             MeasurementUnitEntity measurementUnit = measurementUnitRepository.findById(outputDTO.getMeasurementUnitId())
                     .orElseThrow(() -> new NotFoundException("Unidade de medida não encontrada com ID: " + outputDTO.getMeasurementUnitId()));
@@ -273,6 +293,42 @@ public class InstrumentService {
         }
 
         instrumentRepository.delete(instrument);
+    }
+
+    private void validateEquation(String equation, Set<String> inputAcronyms, Set<String> constantAcronyms) {
+        String cleanEquation = equation.replaceAll("\\s+", "");
+
+        Pattern pattern = Pattern.compile("[A-Za-z][A-Za-z0-9_]*");
+        Matcher matcher = pattern.matcher(cleanEquation);
+
+        Set<String> variablesInEquation = new HashSet<>();
+        while (matcher.find()) {
+            String var = matcher.group();
+            if (!isKnownMathFunction(var)) {
+                variablesInEquation.add(var);
+            }
+        }
+
+        for (String variable : variablesInEquation) {
+            if (!inputAcronyms.contains(variable) && !constantAcronyms.contains(variable)) {
+                throw new InvalidInputException("Variável '" + variable + "' na equação não existe como input ou constante");
+            }
+        }
+
+        try {
+            ExpressionEvaluator.validateSyntax(cleanEquation);
+        } catch (Exception e) {
+            throw new InvalidInputException("Erro de sintaxe na equação: " + e.getMessage());
+        }
+    }
+
+    private boolean isKnownMathFunction(String name) {
+        Set<String> mathFunctions = Set.of(
+                "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
+                "sinh", "cosh", "tanh", "exp", "log", "log10", "pow",
+                "sqrt", "cbrt", "abs", "min", "max", "floor", "ceil", "round"
+        );
+        return mathFunctions.contains(name.toLowerCase());
     }
 
     public InstrumentResponseDTO mapToResponseDTO(InstrumentEntity instrument) {

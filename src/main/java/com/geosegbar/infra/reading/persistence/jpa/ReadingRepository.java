@@ -20,18 +20,39 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
 
     Page<ReadingEntity> findByInstrumentId(Long instrumentId, Pageable pageable);
 
+    List<ReadingEntity> findByOutputId(Long outputId);
+
+    Page<ReadingEntity> findByOutputId(Long outputId, Pageable pageable);
+
     List<ReadingEntity> findByInstrumentIdAndDateBetween(Long instrumentId, LocalDate startDate, LocalDate endDate);
 
     Page<ReadingEntity> findByInstrumentIdAndDateBetween(Long instrumentId, LocalDate startDate, LocalDate endDate, Pageable pageable);
 
     List<ReadingEntity> findByInstrumentIdAndLimitStatus(Long instrumentId, LimitStatusEnum limitStatus);
 
+    List<ReadingEntity> findByInstrumentIdOrderByDateDescHourDesc(Long instrumentId);
+
+    Page<ReadingEntity> findByInstrumentIdOrderByDateDescHourDesc(Long instrumentId, Pageable pageable);
+
+    List<ReadingEntity> findByOutputIdOrderByDateDescHourDesc(Long outputId);
+
+    Page<ReadingEntity> findByOutputIdOrderByDateDescHourDesc(Long outputId, Pageable pageable);
+
+    List<ReadingEntity> findByInstrumentIdAndDateBetweenOrderByDateDescHourDesc(Long instrumentId, LocalDate startDate, LocalDate endDate);
+
+    Page<ReadingEntity> findByInstrumentIdAndDateBetweenOrderByDateDescHourDesc(Long instrumentId, LocalDate startDate, LocalDate endDate, Pageable pageable);
+
+    List<ReadingEntity> findByInstrumentIdAndLimitStatusOrderByDateDescHourDesc(Long instrumentId, LimitStatusEnum limitStatus);
+
     @Query("SELECT r FROM ReadingEntity r WHERE r.instrument.id = :instrumentId "
+            + "AND (:outputId IS NULL OR r.output.id = :outputId) "
             + "AND (:startDate IS NULL OR r.date >= :startDate) "
             + "AND (:endDate IS NULL OR r.date <= :endDate) "
-            + "AND (:limitStatus IS NULL OR r.limitStatus = :limitStatus)")
+            + "AND (:limitStatus IS NULL OR r.limitStatus = :limitStatus) "
+            + "ORDER BY r.date DESC, r.hour DESC")
     Page<ReadingEntity> findByFilters(
             @Param("instrumentId") Long instrumentId,
+            @Param("outputId") Long outputId,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate,
             @Param("limitStatus") LimitStatusEnum limitStatus,

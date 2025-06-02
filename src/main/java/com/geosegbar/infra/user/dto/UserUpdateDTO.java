@@ -7,7 +7,6 @@ import com.geosegbar.entities.StatusEntity;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -16,6 +15,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UserUpdateDTO {
+
     @NotBlank(message = "Nome é obrigatório!")
     private String name;
 
@@ -23,7 +23,6 @@ public class UserUpdateDTO {
     @Email(message = "Email inválido!")
     private String email;
 
-    @Pattern(regexp = "^(\\d{10,11})?$", message = "O telefone deve conter 10 ou 11 dígitos numéricos ou ser vazio!")
     private String phone;
 
     @NotNull(message = "O sexo deve ser informado!")

@@ -68,6 +68,10 @@ public class InstrumentEntity {
     @Column(name = "instrument_type", nullable = true)
     private String instrumentType;
 
+    @NotNull(message = "Campo 'Ativo' do Instrumento é obrigatório!")
+    @Column(nullable = false)
+    private Boolean active;
+
     @ManyToOne
     @JoinColumn(name = "section_id", nullable = false)
     private SectionEntity section;

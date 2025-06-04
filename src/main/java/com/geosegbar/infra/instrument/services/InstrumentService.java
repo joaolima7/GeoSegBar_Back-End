@@ -392,6 +392,17 @@ public class InstrumentService {
         instrumentRepository.delete(instrument);
     }
 
+    @Transactional
+    public InstrumentEntity toggleActiveInstrument(Long id, Boolean active) {
+        InstrumentEntity instrument = findById(id);
+        instrument.setActive(active);
+        return instrumentRepository.save(instrument);
+    }
+
+    public List<InstrumentEntity> findByFilters(Long damId, String instrumentType, Long sectionId, Boolean active) {
+        return instrumentRepository.findByFilters(damId, instrumentType, sectionId, active);
+    }
+
     private void validateEquation(String equation, Set<String> inputAcronyms, Set<String> constantAcronyms) {
         String cleanEquation = equation.replaceAll("\\s+", "");
 

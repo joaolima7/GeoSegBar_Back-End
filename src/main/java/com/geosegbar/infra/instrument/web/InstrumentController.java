@@ -6,11 +6,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
@@ -49,6 +51,27 @@ public class InstrumentController {
         InstrumentEntity instrument = instrumentService.findWithAllDetails(id);
         InstrumentResponseDTO dto = instrumentService.mapToResponseDTO(instrument);
         return ResponseEntity.ok(WebResponseEntity.success(dto, "Instrumento obtido com sucesso!"));
+    }
+
+    @GetMapping("/filter")
+    public ResponseEntity<WebResponseEntity<List<InstrumentResponseDTO>>> filterInstruments(
+            @RequestParam(required = false) Long damId,
+            @RequestParam(required = false) String instrumentType,
+            @RequestParam(required = false) Long sectionId,
+            @RequestParam(required = false) Boolean active) {
+
+        List<InstrumentEntity> instruments = instrumentService.findByFilters(damId, instrumentType, sectionId, active);
+        List<InstrumentResponseDTO> responseList = instrumentService.mapToResponseDTOList(instruments);
+
+        return ResponseEntity.ok(WebResponseEntity.success(responseList, "Instrumentos obtidos com sucesso!"));
+    }
+
+    @PatchMapping("/{id}/{active}")
+    public ResponseEntity<WebResponseEntity<InstrumentResponseDTO>> activateInstrument(@PathVariable Long id, @PathVariable Boolean active) {
+        InstrumentEntity instrument = instrumentService.toggleActiveInstrument(id, active);
+        InstrumentResponseDTO response = instrumentService.mapToResponseDTO(instrument);
+        String action = active ? "ativado" : "desativado";
+        return ResponseEntity.ok(WebResponseEntity.success(response, "Instrumento " + action + " com sucesso!"));
     }
 
     @PostMapping

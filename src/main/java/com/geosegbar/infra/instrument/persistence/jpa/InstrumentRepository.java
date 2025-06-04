@@ -44,9 +44,11 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
     @Query("SELECT i FROM InstrumentEntity i "
             + "WHERE (:damId IS NULL OR i.dam.id = :damId) "
             + "AND (:instrumentType IS NULL OR i.instrumentType = :instrumentType) "
-            + "AND (:sectionId IS NULL OR i.section.id = :sectionId)")
+            + "AND (:sectionId IS NULL OR i.section.id = :sectionId) "
+            + "AND (:active IS NULL OR i.active = :active)")
     List<InstrumentEntity> findByFilters(
             @Param("damId") Long damId,
             @Param("instrumentType") String instrumentType,
-            @Param("sectionId") Long sectionId);
+            @Param("sectionId") Long sectionId,
+            @Param("active") Boolean active);
 }

@@ -29,6 +29,7 @@ import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.dtos.CreateDamCompleteRequest;
 import com.geosegbar.infra.dam.dtos.LevelRequestDTO;
 import com.geosegbar.infra.dam.dtos.ReservoirRequestDTO;
+import com.geosegbar.infra.dam.dtos.UpdateDamRequest;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.documentation_dam.persistence.DocumentationDamRepository;
 import com.geosegbar.infra.file_storage.FileStorageService;
@@ -85,6 +86,8 @@ public class DamService {
         dam.setName(request.getName());
         dam.setLatitude(request.getLatitude());
         dam.setLongitude(request.getLongitude());
+        dam.setUpstreamId(request.getUpstreamId());
+        dam.setDownstreamId(request.getDownstreamId());
         dam.setStreet(request.getStreet());
         dam.setNeighborhood(request.getNeighborhood());
         dam.setNumberAddress(request.getNumberAddress());
@@ -269,21 +272,86 @@ public class DamService {
     }
 
     @Transactional
-    public DamEntity update(DamEntity damEntity) {
+    public DamEntity updateBasicInfo(Long damId, UpdateDamRequest request) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getAttributionsPermission().getEditDam()) {
                 throw new UnauthorizedException("Usuário não tem permissão para editar barragens!");
             }
         }
-        damRepository.findById(damEntity.getId())
-                .orElseThrow(() -> new NotFoundException("Endereço não encontrado para atualização!"));
 
-        if (damRepository.existsByNameAndIdNot(damEntity.getName(), damEntity.getId())) {
+        DamEntity existingDam = damRepository.findById(damId)
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + damId));
+
+        if (!existingDam.getName().equals(request.getName())
+                && damRepository.existsByNameAndIdNot(request.getName(), damId)) {
             throw new DuplicateResourceException("Já existe uma barragem com este nome!");
         }
 
-        DamEntity updatedDam = damRepository.save(damEntity);
+        ClientEntity client = clientRepository.findById(request.getClientId())
+                .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + request.getClientId()));
+
+        StatusEntity status = statusRepository.findById(request.getStatusId())
+                .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + request.getStatusId()));
+
+        existingDam.setName(request.getName());
+        existingDam.setLatitude(request.getLatitude());
+        existingDam.setLongitude(request.getLongitude());
+        existingDam.setUpstreamId(request.getUpstreamId());
+        existingDam.setDownstreamId(request.getDownstreamId());
+        existingDam.setStreet(request.getStreet());
+        existingDam.setNeighborhood(request.getNeighborhood());
+        existingDam.setNumberAddress(request.getNumberAddress());
+        existingDam.setCity(request.getCity());
+        existingDam.setState(request.getState());
+        existingDam.setZipCode(request.getZipCode());
+        existingDam.setClient(client);
+        existingDam.setStatus(status);
+        existingDam.setLinkPSB(request.getLinkPSB());
+        existingDam.setLinkLegislation(request.getLinkLegislation());
+
+        if (request.getLogoBase64() != null && !request.getLogoBase64().isEmpty()) {
+            if (existingDam.getLogoPath() != null) {
+                fileStorageService.deleteFile(existingDam.getLogoPath());
+            }
+
+            String base64Image = request.getLogoBase64();
+            if (base64Image.contains(",")) {
+                base64Image = base64Image.split(",")[1];
+            }
+
+            byte[] imageBytes = Base64.getDecoder().decode(base64Image);
+            String logoUrl = fileStorageService.storeFileFromBytes(
+                    imageBytes,
+                    "logo_" + damId + ".jpg",
+                    "image/jpeg",
+                    "logos"
+            );
+            existingDam.setLogoPath(logoUrl);
+        }
+
+        if (request.getDamImageBase64() != null && !request.getDamImageBase64().isEmpty()) {
+            if (existingDam.getDamImagePath() != null) {
+                fileStorageService.deleteFile(existingDam.getDamImagePath());
+            }
+
+            String base64Image = request.getDamImageBase64();
+            if (base64Image.contains(",")) {
+                base64Image = base64Image.split(",")[1];
+            }
+
+            byte[] imageBytes = Base64.getDecoder().decode(base64Image);
+            String damImageUrl = fileStorageService.storeFileFromBytes(
+                    imageBytes,
+                    "dam_image_" + damId + ".jpg",
+                    "image/jpeg",
+                    "dam_images"
+            );
+            existingDam.setDamImagePath(damImageUrl);
+        }
+
+        DamEntity updatedDam = damRepository.save(existingDam);
+
         return findById(updatedDam.getId());
     }
 

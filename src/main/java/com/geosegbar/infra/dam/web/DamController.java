@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.infra.dam.dtos.CreateDamCompleteRequest;
+import com.geosegbar.infra.dam.dtos.UpdateDamRequest;
 import com.geosegbar.infra.dam.services.DamService;
 
 import jakarta.validation.Valid;
@@ -78,11 +79,16 @@ public class DamController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<WebResponseEntity<DamEntity>> updateDam(@PathVariable Long id, @Valid @RequestBody DamEntity dam) {
-        dam.setId(id);
-        DamEntity updatedDam = damService.update(dam);
-        WebResponseEntity<DamEntity> response = WebResponseEntity.success(updatedDam, "Barragem atualizada com sucesso!");
-        return ResponseEntity.ok(response);
+    public ResponseEntity<WebResponseEntity<DamEntity>> updateDam(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateDamRequest request) {
+
+        DamEntity updatedDam = damService.updateBasicInfo(id, request);
+
+        return ResponseEntity.ok(WebResponseEntity.success(
+                updatedDam,
+                "Barragem atualizada com sucesso!"
+        ));
     }
 
     @DeleteMapping("/{id}")

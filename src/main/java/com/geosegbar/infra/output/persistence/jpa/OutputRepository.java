@@ -12,7 +12,7 @@ import com.geosegbar.entities.OutputEntity;
 @Repository
 public interface OutputRepository extends JpaRepository<OutputEntity, Long> {
 
-    List<OutputEntity> findByInstrumentId(Long instrumentId);
+    List<OutputEntity> findByInstrumentIdAndActiveTrue(Long instrumentId);
 
     List<OutputEntity> findByInstrument(InstrumentEntity instrument);
 

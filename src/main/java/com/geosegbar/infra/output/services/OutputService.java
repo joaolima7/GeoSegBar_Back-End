@@ -20,7 +20,7 @@ public class OutputService {
     private final OutputRepository outputRepository;
 
     public List<OutputEntity> findByInstrumentId(Long instrumentId) {
-        return outputRepository.findByInstrumentId(instrumentId);
+        return outputRepository.findByInstrumentIdAndActiveTrue(instrumentId);
     }
 
     public OutputEntity findById(Long id) {

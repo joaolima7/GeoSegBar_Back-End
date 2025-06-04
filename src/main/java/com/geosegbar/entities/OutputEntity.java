@@ -44,6 +44,9 @@ public class OutputEntity {
     @Column(nullable = false)
     private Integer precision;
 
+    @Column(nullable = false)
+    private Boolean active = true;
+
     @ManyToOne
     @JoinColumn(name = "measurement_unit_id", nullable = false)
     private MeasurementUnitEntity measurementUnit;

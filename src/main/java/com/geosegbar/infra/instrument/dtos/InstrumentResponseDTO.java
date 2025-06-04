@@ -20,8 +20,7 @@ public class InstrumentResponseDTO {
     private Boolean noLimit;
     private Long damId;
     private String damName;
-    private Long instrumentTypeId;
-    private String instrumentTypeName;
+    private String instrumentType;
     private Long sectionId;
     private String sectionName;
     private StatisticalLimitDTO statisticalLimit;

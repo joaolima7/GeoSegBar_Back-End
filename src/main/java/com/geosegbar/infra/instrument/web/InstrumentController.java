@@ -19,7 +19,6 @@ import com.geosegbar.infra.instrument.dtos.CreateInstrumentRequest;
 import com.geosegbar.infra.instrument.dtos.InstrumentResponseDTO;
 import com.geosegbar.infra.instrument.dtos.UpdateInstrumentRequest;
 import com.geosegbar.infra.instrument.services.InstrumentService;
-import com.geosegbar.infra.reading.persistence.jpa.ReadingRepository;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +29,6 @@ import lombok.RequiredArgsConstructor;
 public class InstrumentController {
 
     private final InstrumentService instrumentService;
-    private final ReadingRepository readingRepository;
 
     @GetMapping
     public ResponseEntity<WebResponseEntity<List<InstrumentResponseDTO>>> getAllInstruments() {

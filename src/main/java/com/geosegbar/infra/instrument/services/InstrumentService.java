@@ -17,7 +17,6 @@ import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.DeterministicLimitEntity;
 import com.geosegbar.entities.InputEntity;
 import com.geosegbar.entities.InstrumentEntity;
-import com.geosegbar.entities.InstrumentTypeEntity;
 import com.geosegbar.entities.MeasurementUnitEntity;
 import com.geosegbar.entities.OutputEntity;
 import com.geosegbar.entities.SectionEntity;
@@ -38,7 +37,6 @@ import com.geosegbar.infra.instrument.dtos.OutputDTO;
 import com.geosegbar.infra.instrument.dtos.StatisticalLimitDTO;
 import com.geosegbar.infra.instrument.dtos.UpdateInstrumentRequest;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
-import com.geosegbar.infra.instrument_type.persistence.jpa.InstrumentTypeRepository;
 import com.geosegbar.infra.math.ExpressionEvaluator;
 import com.geosegbar.infra.measurement_unit.persistence.jpa.MeasurementUnitRepository;
 import com.geosegbar.infra.output.persistence.jpa.OutputRepository;
@@ -55,7 +53,6 @@ public class InstrumentService {
 
     private final InstrumentRepository instrumentRepository;
     private final DamRepository damRepository;
-    private final InstrumentTypeRepository instrumentTypeRepository;
     private final SectionRepository sectionRepository;
     private final MeasurementUnitRepository measurementUnitRepository;
     private final StatisticalLimitRepository statisticalLimitRepository;
@@ -93,15 +90,8 @@ public class InstrumentService {
         DamEntity dam = damRepository.findById(request.getDamId())
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + request.getDamId()));
 
-        InstrumentTypeEntity instrumentType = instrumentTypeRepository.findById(request.getInstrumentTypeId())
-                .orElseThrow(() -> new NotFoundException("Tipo de instrumento não encontrado com ID: " + request.getInstrumentTypeId()));
-
         SectionEntity section = sectionRepository.findById(request.getSectionId())
                 .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + request.getSectionId()));
-
-        if (instrumentRepository.existsByNameAndDamId(request.getName(), request.getDamId())) {
-            throw new DuplicateResourceException("Já existe um instrumento com esse nome nesta barragem");
-        }
 
         InstrumentEntity instrument = new InstrumentEntity();
         instrument.setName(request.getName());
@@ -110,8 +100,8 @@ public class InstrumentService {
         instrument.setLatitude(request.getLatitude());
         instrument.setLongitude(request.getLongitude());
         instrument.setNoLimit(request.getNoLimit());
+        instrument.setInstrumentType(request.getInstrumentType());
         instrument.setDam(dam);
-        instrument.setInstrumentType(instrumentType);
         instrument.setSection(section);
 
         InstrumentEntity savedInstrument = instrumentRepository.save(instrument);
@@ -142,10 +132,8 @@ public class InstrumentService {
     }
 
     private void validateRequest(UpdateInstrumentRequest request) {
-        // Validações comuns
         validateLimits(request.getNoLimit(), request.getStatisticalLimit(), request.getDeterministicLimit());
 
-        // Validações específicas para UpdateInstrumentRequest
         if (request.getInputs() == null || request.getInputs().isEmpty()) {
             throw new InvalidInputException("Pelo menos um input é obrigatório");
         }
@@ -258,7 +246,6 @@ public class InstrumentService {
         Set<String> acronyms = new HashSet<>();
         Set<String> names = new HashSet<>();
 
-        // Crie conjuntos de acrônimos disponíveis para validação
         Set<String> inputAcronyms = instrument.getInputs().stream()
                 .map(InputEntity::getAcronym)
                 .collect(Collectors.toSet());
@@ -268,7 +255,6 @@ public class InstrumentService {
                 .collect(Collectors.toSet());
 
         for (OutputDTO outputDTO : outputDTOs) {
-            // Verificar duplicatas no payload atual
             if (!acronyms.add(outputDTO.getAcronym())) {
                 throw new DuplicateResourceException("Sigla de output duplicada: " + outputDTO.getAcronym());
             }
@@ -277,7 +263,6 @@ public class InstrumentService {
                 throw new DuplicateResourceException("Nome de output duplicado: " + outputDTO.getName());
             }
 
-            // Validar a equação para garantir que usa apenas inputs e constants existentes
             validateEquation(outputDTO.getEquation(), inputAcronyms, constantAcronyms);
 
             MeasurementUnitEntity measurementUnit = measurementUnitRepository.findById(outputDTO.getMeasurementUnitId())
@@ -301,16 +286,12 @@ public class InstrumentService {
     public InstrumentEntity update(Long id, UpdateInstrumentRequest request) {
         validateRequest(request);
 
-        // Verificar nome duplicado na mesma barragem
         if (instrumentRepository.existsByNameAndDamIdAndIdNot(request.getName(), request.getDamId(), id)) {
             throw new DuplicateResourceException("Já existe um instrumento com esse nome nesta barragem");
         }
 
-        // 1. Obter o instrumento existente
         InstrumentEntity oldInstrument = findById(id);
 
-        // 2. Mapear componentes existentes por acrônimo
-        // Modificado para lidar com possíveis duplicidades
         Map<String, InputEntity> existingInputsByAcronym = oldInstrument.getInputs().stream()
                 .collect(Collectors.toMap(
                         InputEntity::getAcronym,
@@ -318,7 +299,7 @@ public class InstrumentService {
                         (existing, replacement) -> {
                             log.warn("Encontrado input duplicado com acrônimo: {} (ids: {} e {})",
                                     existing.getAcronym(), existing.getId(), replacement.getId());
-                            return existing; // Manter o primeiro encontrado
+                            return existing;
                         }
                 ));
 
@@ -345,40 +326,31 @@ public class InstrumentService {
                         }
                 ));
 
-        // 3. Marcar todos outputs existentes como inativos inicialmente
-        // (reativaremos os que continuarem na atualização)
         for (OutputEntity output : oldInstrument.getOutputs()) {
             output.setActive(false);
             outputRepository.save(output);
         }
 
-        // 4. Atualizar campos básicos
         updateInstrumentBasicFields(oldInstrument, request);
 
-        // 5. Atualizar limites
         updateLimits(oldInstrument, request);
 
-        // 6. Salvar o instrumento atualizado
         InstrumentEntity savedInstrument = instrumentRepository.save(oldInstrument);
 
-        // 7. Limpar as coleções de componentes
         savedInstrument.getInputs().clear();
         savedInstrument.getConstants().clear();
         savedInstrument.getOutputs().clear();
 
-        // 8. Processar componentes (reutilizando existentes quando possível)
         processInputsForUpdate(savedInstrument, request.getInputs(), existingInputsByAcronym);
         if (request.getConstants() != null && !request.getConstants().isEmpty()) {
             processConstantsForUpdate(savedInstrument, request.getConstants(), existingConstantsByAcronym);
         }
         processOutputsForUpdate(savedInstrument, request.getOutputs(), existingOutputsByAcronym);
 
-        // 9. Excluir componentes antigos que não foram reutilizados
         deleteUnusedComponents(existingInputsByAcronym, existingConstantsByAcronym);
 
         log.info("Instrumento atualizado com sucesso");
 
-        // 10. Retornar o instrumento com todos os detalhes
         return instrumentRepository.findWithAllDetailsById(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após atualização"));
     }
@@ -386,9 +358,6 @@ public class InstrumentService {
     private void updateInstrumentBasicFields(InstrumentEntity instrument, UpdateInstrumentRequest request) {
         DamEntity dam = damRepository.findById(request.getDamId())
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + request.getDamId()));
-
-        InstrumentTypeEntity instrumentType = instrumentTypeRepository.findById(request.getInstrumentTypeId())
-                .orElseThrow(() -> new NotFoundException("Tipo de instrumento não encontrado com ID: " + request.getInstrumentTypeId()));
 
         SectionEntity section = sectionRepository.findById(request.getSectionId())
                 .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + request.getSectionId()));
@@ -399,8 +368,8 @@ public class InstrumentService {
         instrument.setLatitude(request.getLatitude());
         instrument.setLongitude(request.getLongitude());
         instrument.setNoLimit(request.getNoLimit());
+        instrument.setInstrumentType(request.getInstrumentType());
         instrument.setDam(dam);
-        instrument.setInstrumentType(instrumentType);
         instrument.setSection(section);
     }
 
@@ -464,12 +433,10 @@ public class InstrumentService {
         Set<String> acronyms = new HashSet<>();
         Set<String> names = new HashSet<>();
 
-        // Contador para logging
         int updatedCount = 0;
         int createdCount = 0;
 
         for (InputDTO inputDTO : inputDTOs) {
-            // Verificar duplicatas no payload atual
             if (!acronyms.add(inputDTO.getAcronym())) {
                 throw new DuplicateResourceException("Sigla de input duplicada: " + inputDTO.getAcronym());
             }
@@ -481,22 +448,18 @@ public class InstrumentService {
             MeasurementUnitEntity measurementUnit = measurementUnitRepository.findById(inputDTO.getMeasurementUnitId())
                     .orElseThrow(() -> new NotFoundException("Unidade de medida não encontrada com ID: " + inputDTO.getMeasurementUnitId()));
 
-            // Verificar se já existe um input com esse acrônimo
             InputEntity input = existingInputsByAcronym.get(inputDTO.getAcronym());
 
             if (input != null) {
-                // Atualizar o input existente
                 input.setName(inputDTO.getName());
                 input.setPrecision(inputDTO.getPrecision());
                 input.setMeasurementUnit(measurementUnit);
                 inputRepository.save(input);
                 instrument.getInputs().add(input);
 
-                // Remover do mapa de existentes para não ser excluído depois
                 existingInputsByAcronym.remove(inputDTO.getAcronym());
                 updatedCount++;
             } else {
-                // Criar um novo input
                 input = new InputEntity();
                 input.setAcronym(inputDTO.getAcronym());
                 input.setName(inputDTO.getName());
@@ -517,12 +480,10 @@ public class InstrumentService {
         Set<String> acronyms = new HashSet<>();
         Set<String> names = new HashSet<>();
 
-        // Contador para logging
         int updatedCount = 0;
         int createdCount = 0;
 
         for (ConstantDTO constantDTO : constantDTOs) {
-            // Verificar duplicatas no payload atual
             if (!acronyms.add(constantDTO.getAcronym())) {
                 throw new DuplicateResourceException("Sigla de constante duplicada: " + constantDTO.getAcronym());
             }
@@ -534,11 +495,9 @@ public class InstrumentService {
             MeasurementUnitEntity measurementUnit = measurementUnitRepository.findById(constantDTO.getMeasurementUnitId())
                     .orElseThrow(() -> new NotFoundException("Unidade de medida não encontrada com ID: " + constantDTO.getMeasurementUnitId()));
 
-            // Verificar se já existe uma constant com esse acrônimo
             ConstantEntity constant = existingConstantsByAcronym.get(constantDTO.getAcronym());
 
             if (constant != null) {
-                // Atualizar a constant existente
                 constant.setName(constantDTO.getName());
                 constant.setPrecision(constantDTO.getPrecision());
                 constant.setValue(constantDTO.getValue());
@@ -546,11 +505,9 @@ public class InstrumentService {
                 constantRepository.save(constant);
                 instrument.getConstants().add(constant);
 
-                // Remover do mapa de existentes para não ser excluído depois
                 existingConstantsByAcronym.remove(constantDTO.getAcronym());
                 updatedCount++;
             } else {
-                // Criar uma nova constant
                 constant = new ConstantEntity();
                 constant.setAcronym(constantDTO.getAcronym());
                 constant.setName(constantDTO.getName());
@@ -572,7 +529,6 @@ public class InstrumentService {
         Set<String> acronyms = new HashSet<>();
         Set<String> names = new HashSet<>();
 
-        // Criar um mapa adicional por nome para facilitar a busca
         Map<String, OutputEntity> existingOutputsByName = instrument.getOutputs().stream()
                 .filter(OutputEntity::getActive)
                 .collect(Collectors.toMap(
@@ -581,7 +537,6 @@ public class InstrumentService {
                         (existing, replacement) -> existing
                 ));
 
-        // Crie conjuntos de acrônimos disponíveis para validação
         Set<String> inputAcronyms = instrument.getInputs().stream()
                 .map(InputEntity::getAcronym)
                 .collect(Collectors.toSet());
@@ -590,12 +545,10 @@ public class InstrumentService {
                 .map(ConstantEntity::getAcronym)
                 .collect(Collectors.toSet());
 
-        // Contador para logging
         int updatedCount = 0;
         int createdCount = 0;
 
         for (OutputDTO outputDTO : outputDTOs) {
-            // Verificar duplicatas no payload atual
             if (!acronyms.add(outputDTO.getAcronym())) {
                 throw new DuplicateResourceException("Sigla de output duplicada: " + outputDTO.getAcronym());
             }
@@ -604,29 +557,23 @@ public class InstrumentService {
                 throw new DuplicateResourceException("Nome de output duplicado: " + outputDTO.getName());
             }
 
-            // Validar a equação para garantir que usa apenas inputs e constants existentes
             validateEquation(outputDTO.getEquation(), inputAcronyms, constantAcronyms);
 
             MeasurementUnitEntity measurementUnit = measurementUnitRepository.findById(outputDTO.getMeasurementUnitId())
                     .orElseThrow(() -> new NotFoundException("Unidade de medida não encontrada com ID: " + outputDTO.getMeasurementUnitId()));
 
-            // Verificar se já existe um output com esse acrônimo ou nome
             OutputEntity output = existingOutputsByAcronym.get(outputDTO.getAcronym());
 
-            // Se não encontrou pelo acrônimo, tenta pelo nome
             if (output == null) {
                 output = existingOutputsByName.get(outputDTO.getName());
-                // Se encontrou pelo nome, remova do mapa de acrônimos para não ser processado novamente
                 if (output != null) {
                     existingOutputsByAcronym.remove(output.getAcronym());
                 }
             } else {
-                // Se encontrou pelo acrônimo, remova do mapa de nomes para não ser processado novamente
                 existingOutputsByName.remove(output.getName());
             }
 
             if (output != null) {
-                // Atualizar o output existente
                 output.setName(outputDTO.getName());
                 output.setAcronym(outputDTO.getAcronym());
                 output.setEquation(outputDTO.getEquation());
@@ -639,7 +586,6 @@ public class InstrumentService {
                 log.debug("Output atualizado: {} (antigo acrônimo/nome: {}/{})",
                         outputDTO.getAcronym(), output.getAcronym(), output.getName());
             } else {
-                // Criar um novo output
                 output = new OutputEntity();
                 output.setAcronym(outputDTO.getAcronym());
                 output.setName(outputDTO.getName());
@@ -658,12 +604,10 @@ public class InstrumentService {
     }
 
     private void deleteUnusedComponents(Map<String, InputEntity> unusedInputs, Map<String, ConstantEntity> unusedConstants) {
-        // Excluir inputs não utilizados
         for (InputEntity input : unusedInputs.values()) {
             inputRepository.delete(input);
         }
 
-        // Excluir constants não utilizadas
         for (ConstantEntity constant : unusedConstants.values()) {
             constantRepository.delete(constant);
         }
@@ -673,15 +617,12 @@ public class InstrumentService {
     }
 
     private void updateLimits(InstrumentEntity instrument, UpdateInstrumentRequest request) {
-        // Para o limite estatístico
         if (!request.getNoLimit() && request.getStatisticalLimit() != null) {
             if (instrument.getStatisticalLimit() != null) {
-                // Atualizar o existente
                 instrument.getStatisticalLimit().setLowerValue(request.getStatisticalLimit().getLowerValue());
                 instrument.getStatisticalLimit().setUpperValue(request.getStatisticalLimit().getUpperValue());
                 statisticalLimitRepository.save(instrument.getStatisticalLimit());
             } else {
-                // Criar novo
                 StatisticalLimitEntity statisticalLimit = new StatisticalLimitEntity();
                 statisticalLimit.setInstrument(instrument);
                 statisticalLimit.setLowerValue(request.getStatisticalLimit().getLowerValue());
@@ -690,21 +631,17 @@ public class InstrumentService {
                 instrument.setStatisticalLimit(statisticalLimit);
             }
         } else if (instrument.getStatisticalLimit() != null) {
-            // Remover se não for mais necessário
             statisticalLimitRepository.delete(instrument.getStatisticalLimit());
             instrument.setStatisticalLimit(null);
         }
 
-        // Para o limite determinístico
         if (!request.getNoLimit() && request.getDeterministicLimit() != null) {
             if (instrument.getDeterministicLimit() != null) {
-                // Atualizar o existente
                 instrument.getDeterministicLimit().setAttentionValue(request.getDeterministicLimit().getAttentionValue());
                 instrument.getDeterministicLimit().setAlertValue(request.getDeterministicLimit().getAlertValue());
                 instrument.getDeterministicLimit().setEmergencyValue(request.getDeterministicLimit().getEmergencyValue());
                 deterministicLimitRepository.save(instrument.getDeterministicLimit());
             } else {
-                // Criar novo
                 DeterministicLimitEntity deterministicLimit = new DeterministicLimitEntity();
                 deterministicLimit.setInstrument(instrument);
                 deterministicLimit.setAttentionValue(request.getDeterministicLimit().getAttentionValue());
@@ -714,7 +651,6 @@ public class InstrumentService {
                 instrument.setDeterministicLimit(deterministicLimit);
             }
         } else if (instrument.getDeterministicLimit() != null) {
-            // Remover se não for mais necessário
             deterministicLimitRepository.delete(instrument.getDeterministicLimit());
             instrument.setDeterministicLimit(null);
         }
@@ -731,8 +667,7 @@ public class InstrumentService {
         dto.setNoLimit(instrument.getNoLimit());
         dto.setDamId(instrument.getDam().getId());
         dto.setDamName(instrument.getDam().getName());
-        dto.setInstrumentTypeId(instrument.getInstrumentType().getId());
-        dto.setInstrumentTypeName(instrument.getInstrumentType().getName());
+        dto.setInstrumentType(instrument.getInstrumentType());
         dto.setSectionId(instrument.getSection().getId());
         dto.setSectionName(instrument.getSection().getName());
 

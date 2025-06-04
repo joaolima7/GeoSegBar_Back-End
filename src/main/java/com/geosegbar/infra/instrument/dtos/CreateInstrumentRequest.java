@@ -34,8 +34,8 @@ public class CreateInstrumentRequest {
     @NotNull(message = "ID da barragem é obrigatório")
     private Long damId;
 
-    @NotNull(message = "ID do tipo de instrumento é obrigatório")
-    private Long instrumentTypeId;
+    @NotBlank(message = "Tipo de instrumento é obrigatório")
+    private String instrumentType;
 
     @NotNull(message = "ID da seção é obrigatório")
     private Long sectionId;

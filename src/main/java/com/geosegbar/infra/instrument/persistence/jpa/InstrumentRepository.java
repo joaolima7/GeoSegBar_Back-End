@@ -11,7 +11,6 @@ import org.springframework.stereotype.Repository;
 
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.InstrumentEntity;
-import com.geosegbar.entities.InstrumentTypeEntity;
 import com.geosegbar.entities.SectionEntity;
 
 @Repository
@@ -22,10 +21,6 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
     List<InstrumentEntity> findByDamId(Long damId);
 
     List<InstrumentEntity> findByDam(DamEntity dam);
-
-    List<InstrumentEntity> findByInstrumentTypeId(Long instrumentTypeId);
-
-    List<InstrumentEntity> findByInstrumentType(InstrumentTypeEntity instrumentType);
 
     List<InstrumentEntity> findBySectionId(Long sectionId);
 
@@ -48,10 +43,10 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
 
     @Query("SELECT i FROM InstrumentEntity i "
             + "WHERE (:damId IS NULL OR i.dam.id = :damId) "
-            + "AND (:typeId IS NULL OR i.instrumentType.id = :typeId) "
+            + "AND (:instrumentType IS NULL OR i.instrumentType = :instrumentType) "
             + "AND (:sectionId IS NULL OR i.section.id = :sectionId)")
     List<InstrumentEntity> findByFilters(
             @Param("damId") Long damId,
-            @Param("typeId") Long typeId,
+            @Param("instrumentType") String instrumentType,
             @Param("sectionId") Long sectionId);
 }

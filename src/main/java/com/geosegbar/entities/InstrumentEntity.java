@@ -64,9 +64,9 @@ public class InstrumentEntity {
     @JsonIgnoreProperties({"instruments"})
     private DamEntity dam;
 
-    @ManyToOne
-    @JoinColumn(name = "instrument_type_id", nullable = false)
-    private InstrumentTypeEntity instrumentType;
+    @NotBlank(message = "Tipo de Instrumento é obrigatório!")
+    @Column(name = "instrument_type", nullable = true)
+    private String instrumentType;
 
     @ManyToOne
     @JoinColumn(name = "section_id", nullable = false)

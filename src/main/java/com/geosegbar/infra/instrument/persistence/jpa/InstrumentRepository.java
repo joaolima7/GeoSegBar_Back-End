@@ -41,6 +41,13 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
     @EntityGraph(attributePaths = {"statisticalLimit", "deterministicLimit", "inputs", "constants", "outputs"})
     Optional<InstrumentEntity> findWithAllDetailsById(Long id);
 
+    @Query("SELECT i FROM InstrumentEntity i WHERE i.dam.client.id = :clientId")
+    List<InstrumentEntity> findByClientId(@Param("clientId") Long clientId);
+
+    @EntityGraph(attributePaths = {"statisticalLimit", "deterministicLimit", "inputs", "constants", "outputs"})
+    @Query("SELECT i FROM InstrumentEntity i WHERE i.dam.client.id = :clientId")
+    List<InstrumentEntity> findWithAllDetailsByClientId(@Param("clientId") Long clientId);
+
     @Query("SELECT i FROM InstrumentEntity i "
             + "WHERE (:damId IS NULL OR i.dam.id = :damId) "
             + "AND (:instrumentType IS NULL OR i.instrumentType = :instrumentType) "

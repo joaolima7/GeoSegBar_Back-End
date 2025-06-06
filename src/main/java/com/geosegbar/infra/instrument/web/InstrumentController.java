@@ -66,6 +66,17 @@ public class InstrumentController {
         return ResponseEntity.ok(WebResponseEntity.success(responseList, "Instrumentos obtidos com sucesso!"));
     }
 
+    @GetMapping("/client/{clientId}")
+    public ResponseEntity<WebResponseEntity<List<InstrumentResponseDTO>>> getInstrumentsByClient(@PathVariable Long clientId) {
+        List<InstrumentEntity> instruments = instrumentService.findByClientId(clientId);
+        List<InstrumentResponseDTO> dtos = instrumentService.mapToResponseDTOList(instruments);
+
+        return ResponseEntity.ok(WebResponseEntity.success(
+                dtos,
+                "Instrumentos do cliente obtidos com sucesso!"
+        ));
+    }
+
     @PatchMapping("/{id}/{active}")
     public ResponseEntity<WebResponseEntity<InstrumentResponseDTO>> activateInstrument(@PathVariable Long id, @PathVariable Boolean active) {
         InstrumentEntity instrument = instrumentService.toggleActiveInstrument(id, active);

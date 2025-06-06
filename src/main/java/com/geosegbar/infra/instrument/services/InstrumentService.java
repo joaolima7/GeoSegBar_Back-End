@@ -79,6 +79,11 @@ public class InstrumentService {
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
     }
 
+    public List<InstrumentEntity> findByClientId(Long clientId) {
+        List<InstrumentEntity> instruments = instrumentRepository.findWithAllDetailsByClientId(clientId);
+        return instruments;
+    }
+
     @Transactional
     public InstrumentEntity createComplete(CreateInstrumentRequest request) {
         validateRequest(request);

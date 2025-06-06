@@ -42,17 +42,21 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
     List<InstrumentEntity> findByClientId(@Param("clientId") Long clientId);
 
     @EntityGraph(attributePaths = {"inputs", "constants", "outputs", "outputs.statisticalLimit", "outputs.deterministicLimit"})
-    @Query("SELECT i FROM InstrumentEntity i WHERE i.dam.client.id = :clientId")
-    List<InstrumentEntity> findWithAllDetailsByClientId(@Param("clientId") Long clientId);
+    @Query("SELECT i FROM InstrumentEntity i WHERE i.dam.client.id = :clientId AND (:active IS NULL OR i.active = :active)")
+    List<InstrumentEntity> findWithAllDetailsByClientId(
+            @Param("clientId") Long clientId,
+            @Param("active") Boolean active);
 
     @Query("SELECT i FROM InstrumentEntity i "
             + "WHERE (:damId IS NULL OR i.dam.id = :damId) "
             + "AND (:instrumentType IS NULL OR i.instrumentType = :instrumentType) "
             + "AND (:sectionId IS NULL OR i.section.id = :sectionId) "
-            + "AND (:active IS NULL OR i.active = :active)")
+            + "AND (:active IS NULL OR i.active = :active) "
+            + "AND (:clientId IS NULL OR i.dam.client.id = :clientId)")
     List<InstrumentEntity> findByFilters(
             @Param("damId") Long damId,
             @Param("instrumentType") String instrumentType,
             @Param("sectionId") Long sectionId,
-            @Param("active") Boolean active);
+            @Param("active") Boolean active,
+            @Param("clientId") Long clientId);
 }

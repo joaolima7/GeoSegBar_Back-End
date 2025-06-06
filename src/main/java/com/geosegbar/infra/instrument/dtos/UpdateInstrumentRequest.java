@@ -39,10 +39,6 @@ public class UpdateInstrumentRequest {
     @NotNull(message = "ID da seção é obrigatório")
     private Long sectionId;
 
-    private StatisticalLimitDTO statisticalLimit;
-
-    private DeterministicLimitDTO deterministicLimit;
-
     @Valid
     @NotNull(message = "Lista de inputs é obrigatória")
     private List<InputDTO> inputs;

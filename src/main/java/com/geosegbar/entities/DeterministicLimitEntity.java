@@ -37,7 +37,7 @@ public class DeterministicLimitEntity {
     private Double emergencyValue;
 
     @OneToOne
-    @JoinColumn(name = "instrument_id", nullable = false)
+    @JoinColumn(name = "output_id", nullable = false)
     @JsonIgnoreProperties("deterministicLimit")
-    private InstrumentEntity instrument;
+    private OutputEntity output;
 }

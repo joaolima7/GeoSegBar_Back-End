@@ -108,10 +108,10 @@ public class InstrumentService {
         instrument.setInstrumentType(request.getInstrumentType());
         instrument.setDam(dam);
         instrument.setSection(section);
+        instrument.setActive(true);
 
         InstrumentEntity savedInstrument = instrumentRepository.save(instrument);
 
-        processLimits(savedInstrument, request);
         processInputs(savedInstrument, request.getInputs());
 
         if (request.getConstants() != null && !request.getConstants().isEmpty()) {
@@ -125,20 +125,40 @@ public class InstrumentService {
     }
 
     private void validateRequest(CreateInstrumentRequest request) {
-        validateLimits(request.getNoLimit(), request.getStatisticalLimit(), request.getDeterministicLimit());
-
         if (request.getInputs() == null || request.getInputs().isEmpty()) {
             throw new InvalidInputException("Pelo menos um input é obrigatório");
         }
 
         if (request.getOutputs() == null || request.getOutputs().isEmpty()) {
             throw new InvalidInputException("Pelo menos um output é obrigatório");
+        }
+
+        // Validar que quando noLimit = false, todos os outputs têm o mesmo tipo de limite
+        if (!request.getNoLimit() && request.getOutputs().size() > 1) {
+            boolean hasStatistical = request.getOutputs().get(0).getStatisticalLimit() != null;
+            String firstLimitType = hasStatistical ? "estatístico" : "determinístico";
+
+            for (int i = 1; i < request.getOutputs().size(); i++) {
+                OutputDTO output = request.getOutputs().get(i);
+                boolean currentHasStatistical = output.getStatisticalLimit() != null;
+
+                if (hasStatistical != currentHasStatistical) {
+                    throw new InvalidInputException(
+                            "Todos os outputs de um instrumento devem ter o mesmo tipo de limite. "
+                            + "O primeiro output usa limite " + firstLimitType + ", mas o output '"
+                            + output.getName() + "' usa um tipo diferente."
+                    );
+                }
+            }
+        }
+
+        // Validar cada output individualmente
+        for (OutputDTO outputDTO : request.getOutputs()) {
+            validateOutputRequest(outputDTO, request.getNoLimit());
         }
     }
 
     private void validateRequest(UpdateInstrumentRequest request) {
-        validateLimits(request.getNoLimit(), request.getStatisticalLimit(), request.getDeterministicLimit());
-
         if (request.getInputs() == null || request.getInputs().isEmpty()) {
             throw new InvalidInputException("Pelo menos um input é obrigatório");
         }
@@ -146,50 +166,72 @@ public class InstrumentService {
         if (request.getOutputs() == null || request.getOutputs().isEmpty()) {
             throw new InvalidInputException("Pelo menos um output é obrigatório");
         }
+
+        // Validar que quando noLimit = false, todos os outputs têm o mesmo tipo de limite
+        if (!request.getNoLimit() && request.getOutputs().size() > 1) {
+            boolean hasStatistical = request.getOutputs().get(0).getStatisticalLimit() != null;
+            String firstLimitType = hasStatistical ? "estatístico" : "determinístico";
+
+            for (int i = 1; i < request.getOutputs().size(); i++) {
+                OutputDTO output = request.getOutputs().get(i);
+                boolean currentHasStatistical = output.getStatisticalLimit() != null;
+
+                if (hasStatistical != currentHasStatistical) {
+                    throw new InvalidInputException(
+                            "Todos os outputs de um instrumento devem ter o mesmo tipo de limite. "
+                            + "O primeiro output usa limite " + firstLimitType + ", mas o output '"
+                            + output.getName() + "' usa um tipo diferente."
+                    );
+                }
+            }
+        }
+
+        // Validar cada output individualmente
+        for (OutputDTO outputDTO : request.getOutputs()) {
+            validateOutputRequest(outputDTO, request.getNoLimit());
+        }
     }
 
-    private void validateLimits(Boolean noLimit, StatisticalLimitDTO statisticalLimit, DeterministicLimitDTO deterministicLimit) {
-        if (Boolean.TRUE.equals(noLimit)) {
-            if (statisticalLimit != null || deterministicLimit != null) {
-                throw new InvalidInputException("Quando 'Sem Limites' está marcado, não deve haver limites estatísticos ou determinísticos");
+    private void validateOutputRequest(OutputDTO outputDTO, Boolean instrumentNoLimit) {
+        if (Boolean.TRUE.equals(instrumentNoLimit)) {
+            if (outputDTO.getStatisticalLimit() != null || outputDTO.getDeterministicLimit() != null) {
+                throw new InvalidInputException("Quando o instrumento está marcado como 'Sem Limites', seus outputs não devem ter limites estatísticos ou determinísticos");
             }
         } else {
-            boolean hasStatistical = statisticalLimit != null;
-            boolean hasDeterministic = deterministicLimit != null;
+            boolean hasStatistical = outputDTO.getStatisticalLimit() != null;
+            boolean hasDeterministic = outputDTO.getDeterministicLimit() != null;
 
             if (!hasStatistical && !hasDeterministic) {
-                throw new InvalidInputException("Quando 'Sem Limites' não está marcado, deve haver um tipo de limite");
+                throw new InvalidInputException("Quando o instrumento não está marcado como 'Sem Limites', cada output deve ter um tipo de limite");
             }
 
             if (hasStatistical && hasDeterministic) {
-                throw new InvalidInputException("Apenas um tipo de limite (estatístico ou determinístico) deve ser fornecido, não ambos");
+                throw new InvalidInputException("Apenas um tipo de limite (estatístico ou determinístico) deve ser fornecido para um output, não ambos");
             }
         }
     }
 
-    private void processLimits(InstrumentEntity instrument, CreateInstrumentRequest request) {
-        if (!request.getNoLimit()) {
-            if (request.getStatisticalLimit() != null) {
-                StatisticalLimitEntity statisticalLimit = new StatisticalLimitEntity();
-                statisticalLimit.setInstrument(instrument);
-                statisticalLimit.setLowerValue(request.getStatisticalLimit().getLowerValue());
-                statisticalLimit.setUpperValue(request.getStatisticalLimit().getUpperValue());
-                statisticalLimitRepository.save(statisticalLimit);
-                instrument.setStatisticalLimit(statisticalLimit);
-            }
-
-            if (request.getDeterministicLimit() != null) {
-                DeterministicLimitEntity deterministicLimit = new DeterministicLimitEntity();
-                deterministicLimit.setInstrument(instrument);
-                deterministicLimit.setAttentionValue(request.getDeterministicLimit().getAttentionValue());
-                deterministicLimit.setAlertValue(request.getDeterministicLimit().getAlertValue());
-                deterministicLimit.setEmergencyValue(request.getDeterministicLimit().getEmergencyValue());
-                deterministicLimitRepository.save(deterministicLimit);
-                instrument.setDeterministicLimit(deterministicLimit);
-            }
-        }
-    }
-
+    // private void processLimits(InstrumentEntity instrument, CreateInstrumentRequest request) {
+    //     if (!request.getNoLimit()) {
+    //         if (request.getStatisticalLimit() != null) {
+    //             StatisticalLimitEntity statisticalLimit = new StatisticalLimitEntity();
+    //             statisticalLimit.setInstrument(instrument);
+    //             statisticalLimit.setLowerValue(request.getStatisticalLimit().getLowerValue());
+    //             statisticalLimit.setUpperValue(request.getStatisticalLimit().getUpperValue());
+    //             statisticalLimitRepository.save(statisticalLimit);
+    //             instrument.setStatisticalLimit(statisticalLimit);
+    //         }
+    //         if (request.getDeterministicLimit() != null) {
+    //             DeterministicLimitEntity deterministicLimit = new DeterministicLimitEntity();
+    //             deterministicLimit.setInstrument(instrument);
+    //             deterministicLimit.setAttentionValue(request.getDeterministicLimit().getAttentionValue());
+    //             deterministicLimit.setAlertValue(request.getDeterministicLimit().getAlertValue());
+    //             deterministicLimit.setEmergencyValue(request.getDeterministicLimit().getEmergencyValue());
+    //             deterministicLimitRepository.save(deterministicLimit);
+    //             instrument.setDeterministicLimit(deterministicLimit);
+    //         }
+    //     }
+    // }
     private void processInputs(InstrumentEntity instrument, List<InputDTO> inputDTOs) {
         Set<String> acronyms = new HashSet<>();
         Set<String> names = new HashSet<>();
@@ -260,6 +302,7 @@ public class InstrumentService {
                 .collect(Collectors.toSet());
 
         for (OutputDTO outputDTO : outputDTOs) {
+            // Validações existentes
             if (!acronyms.add(outputDTO.getAcronym())) {
                 throw new DuplicateResourceException("Sigla de output duplicada: " + outputDTO.getAcronym());
             }
@@ -269,6 +312,7 @@ public class InstrumentService {
             }
 
             validateEquation(outputDTO.getEquation(), inputAcronyms, constantAcronyms);
+            validateOutputRequest(outputDTO, instrument.getNoLimit());
 
             MeasurementUnitEntity measurementUnit = measurementUnitRepository.findById(outputDTO.getMeasurementUnitId())
                     .orElseThrow(() -> new NotFoundException("Unidade de medida não encontrada com ID: " + outputDTO.getMeasurementUnitId()));
@@ -282,8 +326,31 @@ public class InstrumentService {
             output.setActive(true);
             output.setInstrument(instrument);
 
-            outputRepository.save(output);
-            instrument.getOutputs().add(output);
+            OutputEntity savedOutput = outputRepository.save(output);
+
+            // Criar os limites para o output apenas se o instrumento não for noLimit
+            if (!instrument.getNoLimit()) {
+                if (outputDTO.getStatisticalLimit() != null) {
+                    StatisticalLimitEntity statisticalLimit = new StatisticalLimitEntity();
+                    statisticalLimit.setOutput(savedOutput);
+                    statisticalLimit.setLowerValue(outputDTO.getStatisticalLimit().getLowerValue());
+                    statisticalLimit.setUpperValue(outputDTO.getStatisticalLimit().getUpperValue());
+                    statisticalLimitRepository.save(statisticalLimit);
+                    savedOutput.setStatisticalLimit(statisticalLimit);
+                }
+
+                if (outputDTO.getDeterministicLimit() != null) {
+                    DeterministicLimitEntity deterministicLimit = new DeterministicLimitEntity();
+                    deterministicLimit.setOutput(savedOutput);
+                    deterministicLimit.setAttentionValue(outputDTO.getDeterministicLimit().getAttentionValue());
+                    deterministicLimit.setAlertValue(outputDTO.getDeterministicLimit().getAlertValue());
+                    deterministicLimit.setEmergencyValue(outputDTO.getDeterministicLimit().getEmergencyValue());
+                    deterministicLimitRepository.save(deterministicLimit);
+                    savedOutput.setDeterministicLimit(deterministicLimit);
+                }
+            }
+
+            instrument.getOutputs().add(savedOutput);
         }
     }
 
@@ -338,8 +405,7 @@ public class InstrumentService {
 
         updateInstrumentBasicFields(oldInstrument, request);
 
-        updateLimits(oldInstrument, request);
-
+        //updateLimits(oldInstrument, request);
         InstrumentEntity savedInstrument = instrumentRepository.save(oldInstrument);
 
         savedInstrument.getInputs().clear();
@@ -382,17 +448,18 @@ public class InstrumentService {
     public void delete(Long id) {
         InstrumentEntity instrument = findById(id);
 
+        for (OutputEntity output : instrument.getOutputs()) {
+            if (output.getStatisticalLimit() != null) {
+                statisticalLimitRepository.delete(output.getStatisticalLimit());
+            }
+            if (output.getDeterministicLimit() != null) {
+                deterministicLimitRepository.delete(output.getDeterministicLimit());
+            }
+        }
+
         inputRepository.deleteByInstrumentId(id);
         constantRepository.deleteByInstrumentId(id);
         outputRepository.deleteByInstrumentId(id);
-
-        if (statisticalLimitRepository.existsByInstrumentId(id)) {
-            statisticalLimitRepository.deleteByInstrumentId(id);
-        }
-
-        if (deterministicLimitRepository.existsByInstrumentId(id)) {
-            deterministicLimitRepository.deleteByInstrumentId(id);
-        }
 
         instrumentRepository.delete(instrument);
     }
@@ -632,48 +699,47 @@ public class InstrumentService {
                 unusedInputs.size(), unusedConstants.size());
     }
 
-    private void updateLimits(InstrumentEntity instrument, UpdateInstrumentRequest request) {
-        if (!request.getNoLimit() && request.getStatisticalLimit() != null) {
-            if (instrument.getStatisticalLimit() != null) {
-                instrument.getStatisticalLimit().setLowerValue(request.getStatisticalLimit().getLowerValue());
-                instrument.getStatisticalLimit().setUpperValue(request.getStatisticalLimit().getUpperValue());
-                statisticalLimitRepository.save(instrument.getStatisticalLimit());
-            } else {
-                StatisticalLimitEntity statisticalLimit = new StatisticalLimitEntity();
-                statisticalLimit.setInstrument(instrument);
-                statisticalLimit.setLowerValue(request.getStatisticalLimit().getLowerValue());
-                statisticalLimit.setUpperValue(request.getStatisticalLimit().getUpperValue());
-                statisticalLimitRepository.save(statisticalLimit);
-                instrument.setStatisticalLimit(statisticalLimit);
-            }
-        } else if (instrument.getStatisticalLimit() != null) {
-            statisticalLimitRepository.delete(instrument.getStatisticalLimit());
-            instrument.setStatisticalLimit(null);
-        }
-
-        if (!request.getNoLimit() && request.getDeterministicLimit() != null) {
-            if (instrument.getDeterministicLimit() != null) {
-                instrument.getDeterministicLimit().setAttentionValue(request.getDeterministicLimit().getAttentionValue());
-                instrument.getDeterministicLimit().setAlertValue(request.getDeterministicLimit().getAlertValue());
-                instrument.getDeterministicLimit().setEmergencyValue(request.getDeterministicLimit().getEmergencyValue());
-                deterministicLimitRepository.save(instrument.getDeterministicLimit());
-            } else {
-                DeterministicLimitEntity deterministicLimit = new DeterministicLimitEntity();
-                deterministicLimit.setInstrument(instrument);
-                deterministicLimit.setAttentionValue(request.getDeterministicLimit().getAttentionValue());
-                deterministicLimit.setAlertValue(request.getDeterministicLimit().getAlertValue());
-                deterministicLimit.setEmergencyValue(request.getDeterministicLimit().getEmergencyValue());
-                deterministicLimitRepository.save(deterministicLimit);
-                instrument.setDeterministicLimit(deterministicLimit);
-            }
-        } else if (instrument.getDeterministicLimit() != null) {
-            deterministicLimitRepository.delete(instrument.getDeterministicLimit());
-            instrument.setDeterministicLimit(null);
-        }
-    }
-
+    // private void updateLimits(InstrumentEntity instrument, UpdateInstrumentRequest request) {
+    //     if (!request.getNoLimit() && request.getStatisticalLimit() != null) {
+    //         if (instrument.getStatisticalLimit() != null) {
+    //             instrument.getStatisticalLimit().setLowerValue(request.getStatisticalLimit().getLowerValue());
+    //             instrument.getStatisticalLimit().setUpperValue(request.getStatisticalLimit().getUpperValue());
+    //             statisticalLimitRepository.save(instrument.getStatisticalLimit());
+    //         } else {
+    //             StatisticalLimitEntity statisticalLimit = new StatisticalLimitEntity();
+    //             statisticalLimit.setInstrument(instrument);
+    //             statisticalLimit.setLowerValue(request.getStatisticalLimit().getLowerValue());
+    //             statisticalLimit.setUpperValue(request.getStatisticalLimit().getUpperValue());
+    //             statisticalLimitRepository.save(statisticalLimit);
+    //             instrument.setStatisticalLimit(statisticalLimit);
+    //         }
+    //     } else if (instrument.getStatisticalLimit() != null) {
+    //         statisticalLimitRepository.delete(instrument.getStatisticalLimit());
+    //         instrument.setStatisticalLimit(null);
+    //     }
+    //     if (!request.getNoLimit() && request.getDeterministicLimit() != null) {
+    //         if (instrument.getDeterministicLimit() != null) {
+    //             instrument.getDeterministicLimit().setAttentionValue(request.getDeterministicLimit().getAttentionValue());
+    //             instrument.getDeterministicLimit().setAlertValue(request.getDeterministicLimit().getAlertValue());
+    //             instrument.getDeterministicLimit().setEmergencyValue(request.getDeterministicLimit().getEmergencyValue());
+    //             deterministicLimitRepository.save(instrument.getDeterministicLimit());
+    //         } else {
+    //             DeterministicLimitEntity deterministicLimit = new DeterministicLimitEntity();
+    //             deterministicLimit.setInstrument(instrument);
+    //             deterministicLimit.setAttentionValue(request.getDeterministicLimit().getAttentionValue());
+    //             deterministicLimit.setAlertValue(request.getDeterministicLimit().getAlertValue());
+    //             deterministicLimit.setEmergencyValue(request.getDeterministicLimit().getEmergencyValue());
+    //             deterministicLimitRepository.save(deterministicLimit);
+    //             instrument.setDeterministicLimit(deterministicLimit);
+    //         }
+    //     } else if (instrument.getDeterministicLimit() != null) {
+    //         deterministicLimitRepository.delete(instrument.getDeterministicLimit());
+    //         instrument.setDeterministicLimit(null);
+    //     }
+    // }
     public InstrumentResponseDTO mapToResponseDTO(InstrumentEntity instrument) {
         InstrumentResponseDTO dto = new InstrumentResponseDTO();
+        // Campos básicos
         dto.setId(instrument.getId());
         dto.setName(instrument.getName());
         dto.setLocation(instrument.getLocation());
@@ -687,21 +753,7 @@ public class InstrumentService {
         dto.setSectionId(instrument.getSection().getId());
         dto.setSectionName(instrument.getSection().getName());
 
-        if (instrument.getStatisticalLimit() != null) {
-            StatisticalLimitDTO limitDTO = new StatisticalLimitDTO();
-            limitDTO.setLowerValue(instrument.getStatisticalLimit().getLowerValue());
-            limitDTO.setUpperValue(instrument.getStatisticalLimit().getUpperValue());
-            dto.setStatisticalLimit(limitDTO);
-        }
-
-        if (instrument.getDeterministicLimit() != null) {
-            DeterministicLimitDTO limitDTO = new DeterministicLimitDTO();
-            limitDTO.setAttentionValue(instrument.getDeterministicLimit().getAttentionValue());
-            limitDTO.setAlertValue(instrument.getDeterministicLimit().getAlertValue());
-            limitDTO.setEmergencyValue(instrument.getDeterministicLimit().getEmergencyValue());
-            dto.setDeterministicLimit(limitDTO);
-        }
-
+        // Inputs
         List<InputDTO> inputDTOs = new ArrayList<>();
         for (InputEntity input : instrument.getInputs()) {
             InputDTO inputDTO = new InputDTO();
@@ -709,14 +761,13 @@ public class InstrumentService {
             inputDTO.setName(input.getName());
             inputDTO.setPrecision(input.getPrecision());
             inputDTO.setMeasurementUnitId(input.getMeasurementUnit().getId());
-
             inputDTO.setMeasurementUnitName(input.getMeasurementUnit().getName());
             inputDTO.setMeasurementUnitAcronym(input.getMeasurementUnit().getAcronym());
-
             inputDTOs.add(inputDTO);
         }
         dto.setInputs(inputDTOs);
 
+        // Constants
         List<ConstantDTO> constantDTOs = new ArrayList<>();
         for (ConstantEntity constant : instrument.getConstants()) {
             ConstantDTO constantDTO = new ConstantDTO();
@@ -727,11 +778,11 @@ public class InstrumentService {
             constantDTO.setMeasurementUnitId(constant.getMeasurementUnit().getId());
             constantDTO.setMeasurementUnitName(constant.getMeasurementUnit().getName());
             constantDTO.setMeasurementUnitAcronym(constant.getMeasurementUnit().getAcronym());
-
             constantDTOs.add(constantDTO);
         }
         dto.setConstants(constantDTOs);
 
+        // Outputs with their limits
         List<OutputDTO> outputDTOs = new ArrayList<>();
         for (OutputEntity output : instrument.getOutputs()) {
             if (output.getActive()) {
@@ -743,6 +794,25 @@ public class InstrumentService {
                 outputDTO.setMeasurementUnitId(output.getMeasurementUnit().getId());
                 outputDTO.setMeasurementUnitName(output.getMeasurementUnit().getName());
                 outputDTO.setMeasurementUnitAcronym(output.getMeasurementUnit().getAcronym());
+
+                // Não definimos mais noLimit no output
+                // outputDTO.setNoLimit(output.getNoLimit());
+                // Add statistical limit
+                if (output.getStatisticalLimit() != null) {
+                    StatisticalLimitDTO limitDTO = new StatisticalLimitDTO();
+                    limitDTO.setLowerValue(output.getStatisticalLimit().getLowerValue());
+                    limitDTO.setUpperValue(output.getStatisticalLimit().getUpperValue());
+                    outputDTO.setStatisticalLimit(limitDTO);
+                }
+
+                // Add deterministic limit
+                if (output.getDeterministicLimit() != null) {
+                    DeterministicLimitDTO limitDTO = new DeterministicLimitDTO();
+                    limitDTO.setAttentionValue(output.getDeterministicLimit().getAttentionValue());
+                    limitDTO.setAlertValue(output.getDeterministicLimit().getAlertValue());
+                    limitDTO.setEmergencyValue(output.getDeterministicLimit().getEmergencyValue());
+                    outputDTO.setDeterministicLimit(limitDTO);
+                }
 
                 outputDTOs.add(outputDTO);
             }

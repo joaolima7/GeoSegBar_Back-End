@@ -26,6 +26,9 @@ public class OutputDTO {
     @NotNull(message = "ID da unidade de medida é obrigatório")
     private Long measurementUnitId;
 
+    private StatisticalLimitDTO statisticalLimit;
+    private DeterministicLimitDTO deterministicLimit;
+
     private String measurementUnitName;
     private String measurementUnitAcronym;
 }

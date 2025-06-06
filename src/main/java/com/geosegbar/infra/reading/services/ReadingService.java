@@ -150,7 +150,7 @@ public class ReadingService {
             reading.setOutput(output);
 
             // Determinar o status do limite com base no valor calculado
-            LimitStatusEnum limitStatus = determineLimitStatus(instrument, calculatedValue);
+            LimitStatusEnum limitStatus = determineLimitStatus(instrument, calculatedValue, output);
             reading.setLimitStatus(limitStatus);
 
             // Salvar a leitura
@@ -227,12 +227,14 @@ public class ReadingService {
         log.info("Leitura excluída: ID {}", id);
     }
 
-    private LimitStatusEnum determineLimitStatus(InstrumentEntity instrument, Double value) {
+    private LimitStatusEnum determineLimitStatus(InstrumentEntity instrument, Double value, OutputEntity output) {
+        // Verificamos se o instrumento está marcado como noLimit
         if (Boolean.TRUE.equals(instrument.getNoLimit())) {
             return LimitStatusEnum.NORMAL;
         }
 
-        StatisticalLimitEntity statisticalLimit = instrument.getStatisticalLimit();
+        // Verificar o limite estatístico do output
+        StatisticalLimitEntity statisticalLimit = output.getStatisticalLimit();
         if (statisticalLimit != null) {
             if (statisticalLimit.getLowerValue() != null && value < statisticalLimit.getLowerValue()) {
                 return LimitStatusEnum.INFERIOR;
@@ -243,7 +245,8 @@ public class ReadingService {
             return LimitStatusEnum.NORMAL;
         }
 
-        DeterministicLimitEntity deterministicLimit = instrument.getDeterministicLimit();
+        // Verificar o limite determinístico do output
+        DeterministicLimitEntity deterministicLimit = output.getDeterministicLimit();
         if (deterministicLimit != null) {
             if (deterministicLimit.getEmergencyValue() != null && value >= deterministicLimit.getEmergencyValue()) {
                 return LimitStatusEnum.EMERGENCIA;

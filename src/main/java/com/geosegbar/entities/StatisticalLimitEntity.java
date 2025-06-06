@@ -34,7 +34,7 @@ public class StatisticalLimitEntity {
     private Double upperValue;
 
     @OneToOne
-    @JoinColumn(name = "instrument_id", nullable = false)
+    @JoinColumn(name = "output_id", nullable = false)
     @JsonIgnoreProperties("statisticalLimit")
-    private InstrumentEntity instrument;
+    private OutputEntity output;
 }

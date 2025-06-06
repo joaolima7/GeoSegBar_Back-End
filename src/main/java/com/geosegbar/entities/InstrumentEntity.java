@@ -15,7 +15,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
-import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -75,14 +74,6 @@ public class InstrumentEntity {
     @ManyToOne
     @JoinColumn(name = "section_id", nullable = false)
     private SectionEntity section;
-
-    @OneToOne(mappedBy = "instrument", cascade = CascadeType.ALL, orphanRemoval = true)
-    @JsonIgnoreProperties("instrument")
-    private StatisticalLimitEntity statisticalLimit;
-
-    @OneToOne(mappedBy = "instrument", cascade = CascadeType.ALL, orphanRemoval = true)
-    @JsonIgnoreProperties("instrument")
-    private DeterministicLimitEntity deterministicLimit;
 
     @OneToMany(mappedBy = "instrument", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnoreProperties("instrument")

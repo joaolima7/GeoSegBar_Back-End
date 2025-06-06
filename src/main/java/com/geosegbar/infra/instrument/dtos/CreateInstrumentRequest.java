@@ -40,10 +40,6 @@ public class CreateInstrumentRequest {
     @NotNull(message = "ID da seção é obrigatório")
     private Long sectionId;
 
-    private StatisticalLimitDTO statisticalLimit;
-
-    private DeterministicLimitDTO deterministicLimit;
-
     @NotEmpty(message = "Pelo menos um input é obrigatório")
     @Valid
     private List<InputDTO> inputs;

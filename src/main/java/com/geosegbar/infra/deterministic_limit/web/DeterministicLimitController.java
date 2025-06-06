@@ -1,7 +1,5 @@
 package com.geosegbar.infra.deterministic_limit.web;
 
-import java.util.Optional;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -26,13 +24,6 @@ import lombok.RequiredArgsConstructor;
 public class DeterministicLimitController {
 
     private final DeterministicLimitService deterministicLimitService;
-
-    @GetMapping("/instrument/{instrumentId}")
-    public ResponseEntity<WebResponseEntity<DeterministicLimitEntity>> getByInstrumentId(@PathVariable Long instrumentId) {
-        Optional<DeterministicLimitEntity> limit = deterministicLimitService.findByInstrumentId(instrumentId);
-        return limit.map(l -> ResponseEntity.ok(WebResponseEntity.success(l, "Limite determinístico obtido com sucesso!")))
-                .orElseGet(() -> ResponseEntity.ok(WebResponseEntity.success(null, "Instrumento não possui limite determinístico")));
-    }
 
     @GetMapping("/{id}")
     public ResponseEntity<WebResponseEntity<DeterministicLimitEntity>> getById(@PathVariable Long id) {

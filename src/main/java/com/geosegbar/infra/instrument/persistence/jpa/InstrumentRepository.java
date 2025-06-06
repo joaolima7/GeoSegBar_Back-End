@@ -32,19 +32,16 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
 
     boolean existsByNameAndDamIdAndIdNot(String name, Long damId, Long id);
 
-    @EntityGraph(attributePaths = {"statisticalLimit", "deterministicLimit"})
-    Optional<InstrumentEntity> findWithLimitsById(Long id);
-
     @EntityGraph(attributePaths = {"inputs", "constants", "outputs"})
     Optional<InstrumentEntity> findWithIOCById(Long id);
 
-    @EntityGraph(attributePaths = {"statisticalLimit", "deterministicLimit", "inputs", "constants", "outputs"})
+    @EntityGraph(attributePaths = {"inputs", "constants", "outputs", "outputs.statisticalLimit", "outputs.deterministicLimit"})
     Optional<InstrumentEntity> findWithAllDetailsById(Long id);
 
     @Query("SELECT i FROM InstrumentEntity i WHERE i.dam.client.id = :clientId")
     List<InstrumentEntity> findByClientId(@Param("clientId") Long clientId);
 
-    @EntityGraph(attributePaths = {"statisticalLimit", "deterministicLimit", "inputs", "constants", "outputs"})
+    @EntityGraph(attributePaths = {"inputs", "constants", "outputs", "outputs.statisticalLimit", "outputs.deterministicLimit"})
     @Query("SELECT i FROM InstrumentEntity i WHERE i.dam.client.id = :clientId")
     List<InstrumentEntity> findWithAllDetailsByClientId(@Param("clientId") Long clientId);
 

@@ -1,7 +1,5 @@
 package com.geosegbar.infra.statistical_limit.web;
 
-import java.util.Optional;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -26,13 +24,6 @@ import lombok.RequiredArgsConstructor;
 public class StatisticalLimitController {
 
     private final StatisticalLimitService statisticalLimitService;
-
-    @GetMapping("/instrument/{instrumentId}")
-    public ResponseEntity<WebResponseEntity<StatisticalLimitEntity>> getByInstrumentId(@PathVariable Long instrumentId) {
-        Optional<StatisticalLimitEntity> limit = statisticalLimitService.findByInstrumentId(instrumentId);
-        return limit.map(l -> ResponseEntity.ok(WebResponseEntity.success(l, "Limite estatístico obtido com sucesso!")))
-                .orElseGet(() -> ResponseEntity.ok(WebResponseEntity.success(null, "Instrumento não possui limite estatístico")));
-    }
 
     @GetMapping("/{id}")
     public ResponseEntity<WebResponseEntity<StatisticalLimitEntity>> getById(@PathVariable Long id) {

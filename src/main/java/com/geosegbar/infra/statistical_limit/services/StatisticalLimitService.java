@@ -6,9 +6,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.entities.InstrumentEntity;
+import com.geosegbar.entities.OutputEntity;
 import com.geosegbar.entities.StatisticalLimitEntity;
 import com.geosegbar.exceptions.NotFoundException;
-import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
+import com.geosegbar.infra.output.persistence.jpa.OutputRepository;
 import com.geosegbar.infra.statistical_limit.persistence.jpa.StatisticalLimitRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -20,10 +21,10 @@ import lombok.extern.slf4j.Slf4j;
 public class StatisticalLimitService {
 
     private final StatisticalLimitRepository statisticalLimitRepository;
-    private final InstrumentRepository instrumentRepository;
+    private final OutputRepository outputRepository;
 
-    public Optional<StatisticalLimitEntity> findByInstrumentId(Long instrumentId) {
-        return statisticalLimitRepository.findByInstrumentId(instrumentId);
+    public Optional<StatisticalLimitEntity> findByOutputId(Long outputId) {
+        return statisticalLimitRepository.findByOutputId(outputId);
     }
 
     public StatisticalLimitEntity findById(Long id) {
@@ -32,19 +33,24 @@ public class StatisticalLimitService {
     }
 
     @Transactional
-    public StatisticalLimitEntity createOrUpdate(Long instrumentId, StatisticalLimitEntity limit) {
-        InstrumentEntity instrument = instrumentRepository.findById(instrumentId)
-                .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + instrumentId));
+    public StatisticalLimitEntity createOrUpdate(Long outputId, StatisticalLimitEntity limit) {
+        OutputEntity output = outputRepository.findById(outputId)
+                .orElseThrow(() -> new NotFoundException("Output não encontrado com ID: " + outputId));
+
+        InstrumentEntity instrument = output.getInstrument();
+        if (instrument == null) {
+            throw new IllegalStateException("Output sem instrumento associado");
+        }
 
         if (Boolean.TRUE.equals(instrument.getNoLimit())) {
-            throw new IllegalStateException("Não é possível adicionar limites a um instrumento marcado como 'Sem Limites'");
+            throw new IllegalStateException("Não é possível adicionar limites a um output de um instrumento marcado como 'Sem Limites'");
         }
 
-        if (instrument.getDeterministicLimit() != null) {
-            throw new IllegalStateException("Este instrumento já possui limite determinístico. Não é possível ter ambos os tipos de limite");
+        if (output.getDeterministicLimit() != null) {
+            throw new IllegalStateException("Este output já possui limite determinístico. Não é possível ter ambos os tipos de limite");
         }
 
-        Optional<StatisticalLimitEntity> existingLimit = statisticalLimitRepository.findByInstrumentId(instrumentId);
+        Optional<StatisticalLimitEntity> existingLimit = statisticalLimitRepository.findByOutputId(outputId);
 
         if (existingLimit.isPresent()) {
             StatisticalLimitEntity existingEntity = existingLimit.get();
@@ -52,10 +58,10 @@ public class StatisticalLimitService {
             existingEntity.setUpperValue(limit.getUpperValue());
             return statisticalLimitRepository.save(existingEntity);
         } else {
-            limit.setInstrument(instrument);
+            limit.setOutput(output);
             StatisticalLimitEntity savedLimit = statisticalLimitRepository.save(limit);
-            instrument.setStatisticalLimit(savedLimit);
-            instrumentRepository.save(instrument);
+            output.setStatisticalLimit(savedLimit);
+            outputRepository.save(output);
             return savedLimit;
         }
     }
@@ -63,15 +69,15 @@ public class StatisticalLimitService {
     @Transactional
     public void deleteById(Long id) {
         StatisticalLimitEntity limit = findById(id);
-        InstrumentEntity instrument = limit.getInstrument();
+        OutputEntity output = limit.getOutput();
 
-        if (instrument != null) {
-            instrument.setStatisticalLimit(null);
-            instrumentRepository.save(instrument);
+        if (output != null) {
+            output.setStatisticalLimit(null);
+            outputRepository.save(output);
         }
 
         statisticalLimitRepository.delete(limit);
-        log.info("Limite estatístico excluído para o instrumento ID: {}",
-                instrument != null ? instrument.getId() : "desconhecido");
+        log.info("Limite estatístico excluído para o output ID: {}",
+                output != null ? output.getId() : "desconhecido");
     }
 }

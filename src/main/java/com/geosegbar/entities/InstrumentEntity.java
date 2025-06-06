@@ -71,6 +71,9 @@ public class InstrumentEntity {
     @Column(nullable = false)
     private Boolean active;
 
+    @Column(nullable = false)
+    private Boolean activeForSection = true;
+
     @ManyToOne
     @JoinColumn(name = "section_id", nullable = false)
     private SectionEntity section;

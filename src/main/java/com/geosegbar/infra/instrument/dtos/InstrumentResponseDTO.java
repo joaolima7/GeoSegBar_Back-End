@@ -18,6 +18,7 @@ public class InstrumentResponseDTO {
     private Double latitude;
     private Double longitude;
     private Boolean noLimit;
+    private Boolean activeForSection;
     private Long damId;
     private String damName;
     private String instrumentType;

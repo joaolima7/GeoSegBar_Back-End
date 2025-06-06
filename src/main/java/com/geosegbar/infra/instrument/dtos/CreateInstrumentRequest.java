@@ -31,6 +31,8 @@ public class CreateInstrumentRequest {
     @NotNull(message = "Campo 'Sem limites' é obrigatório")
     private Boolean noLimit;
 
+    private Boolean activeForSection = true;
+
     @NotNull(message = "ID da barragem é obrigatório")
     private Long damId;
 

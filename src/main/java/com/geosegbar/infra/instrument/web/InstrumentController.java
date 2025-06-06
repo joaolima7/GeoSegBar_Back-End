@@ -101,6 +101,19 @@ public class InstrumentController {
         return ResponseEntity.ok(WebResponseEntity.success(instrumentService.mapToResponseDTO(updated), "Instrumento atualizado com sucesso!"));
     }
 
+    @PatchMapping("/{id}/section-visibility/{active}")
+    public ResponseEntity<WebResponseEntity<InstrumentResponseDTO>> toggleSectionVisibility(
+            @PathVariable Long id,
+            @PathVariable Boolean active) {
+        InstrumentEntity instrument = instrumentService.toggleSectionVisibility(id, active);
+        InstrumentResponseDTO response = instrumentService.mapToResponseDTO(instrument);
+        String action = active ? "visível" : "oculto";
+        return ResponseEntity.ok(WebResponseEntity.success(
+                response,
+                "Instrumento " + action + " na aba de seções com sucesso!"
+        ));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<WebResponseEntity<Void>> deleteInstrument(@PathVariable Long id) {
         instrumentService.delete(id);

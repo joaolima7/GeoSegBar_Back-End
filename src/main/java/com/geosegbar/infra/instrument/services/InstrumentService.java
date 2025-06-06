@@ -109,6 +109,7 @@ public class InstrumentService {
         instrument.setDam(dam);
         instrument.setSection(section);
         instrument.setActive(true);
+        instrument.setActiveForSection(request.getActiveForSection());
 
         InstrumentEntity savedInstrument = instrumentRepository.save(instrument);
 
@@ -417,6 +418,8 @@ public class InstrumentService {
         instrument.setInstrumentType(request.getInstrumentType());
         instrument.setDam(dam);
         instrument.setSection(section);
+        instrument.setActiveForSection(request.getActiveForSection());
+
     }
 
     @Transactional
@@ -764,6 +767,13 @@ public class InstrumentService {
                 unusedInputs.size(), unusedConstants.size());
     }
 
+    @Transactional
+    public InstrumentEntity toggleSectionVisibility(Long id, Boolean active) {
+        InstrumentEntity instrument = findById(id);
+        instrument.setActiveForSection(active);
+        return instrumentRepository.save(instrument);
+    }
+
     public InstrumentResponseDTO mapToResponseDTO(InstrumentEntity instrument) {
         InstrumentResponseDTO dto = new InstrumentResponseDTO();
         // Campos básicos
@@ -779,6 +789,7 @@ public class InstrumentService {
         dto.setInstrumentType(instrument.getInstrumentType());
         dto.setSectionId(instrument.getSection().getId());
         dto.setSectionName(instrument.getSection().getName());
+        dto.setActiveForSection(instrument.getActiveForSection());
 
         // Inputs
         List<InputDTO> inputDTOs = new ArrayList<>();

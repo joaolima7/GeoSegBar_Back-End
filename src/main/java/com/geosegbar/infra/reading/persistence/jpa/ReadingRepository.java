@@ -57,4 +57,11 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             @Param("endDate") LocalDate endDate,
             @Param("limitStatus") LimitStatusEnum limitStatus,
             Pageable pageable);
+
+    @Query("SELECT r FROM ReadingEntity r WHERE r.instrument.id = :instrumentId ORDER BY r.date DESC, r.hour DESC")
+    List<ReadingEntity> findTopNByInstrumentIdOrderByDateDescHourDesc(
+            @Param("instrumentId") Long instrumentId, Pageable pageable);
+
+    @Query("SELECT DISTINCT r.instrument.id FROM ReadingEntity r WHERE r.instrument.dam.client.id = :clientId")
+    List<Long> findDistinctInstrumentIdsByClientId(@Param("clientId") Long clientId);
 }

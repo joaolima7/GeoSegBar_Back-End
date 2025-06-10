@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.enums.LimitStatusEnum;
 import com.geosegbar.common.response.WebResponseEntity;
+import com.geosegbar.infra.reading.dtos.InstrumentLimitStatusDTO;
 import com.geosegbar.infra.reading.dtos.PagedReadingResponseDTO;
 import com.geosegbar.infra.reading.dtos.ReadingRequestDTO;
 import com.geosegbar.infra.reading.dtos.ReadingResponseDTO;
@@ -61,6 +62,32 @@ public class ReadingController {
     public ResponseEntity<WebResponseEntity<ReadingResponseDTO>> getReadingById(@PathVariable Long id) {
         ReadingResponseDTO reading = readingService.mapToResponseDTO(readingService.findById(id));
         return ResponseEntity.ok(WebResponseEntity.success(reading, "Leitura obtida com sucesso!"));
+    }
+
+    @GetMapping("/instrument/{instrumentId}/limit-status")
+    public ResponseEntity<WebResponseEntity<InstrumentLimitStatusDTO>> getInstrumentLimitStatus(
+            @PathVariable Long instrumentId,
+            @RequestParam(defaultValue = "10") int limit) {
+
+        InstrumentLimitStatusDTO status = readingService.getInstrumentLimitStatus(instrumentId, limit);
+
+        return ResponseEntity.ok(WebResponseEntity.success(
+                status,
+                "Status do limite do instrumento obtido com sucesso!"
+        ));
+    }
+
+    @GetMapping("/client/{clientId}/instruments-limit-status")
+    public ResponseEntity<WebResponseEntity<List<InstrumentLimitStatusDTO>>> getAllInstrumentLimitStatusesByClientId(
+            @PathVariable Long clientId,
+            @RequestParam(defaultValue = "10") int limit) {
+
+        List<InstrumentLimitStatusDTO> statuses = readingService.getAllInstrumentLimitStatusesByClientId(clientId, limit);
+
+        return ResponseEntity.ok(WebResponseEntity.success(
+                statuses,
+                "Status dos limites dos instrumentos do cliente obtidos com sucesso!"
+        ));
     }
 
     @PostMapping("/instrument/{instrumentId}")

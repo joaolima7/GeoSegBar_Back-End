@@ -25,7 +25,9 @@ import com.geosegbar.entities.ReadingInputValueEntity;
 import com.geosegbar.entities.StatisticalLimitEntity;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
+import com.geosegbar.infra.reading.dtos.InstrumentLimitStatusDTO;
 import com.geosegbar.infra.reading.dtos.PagedReadingResponseDTO;
 import com.geosegbar.infra.reading.dtos.ReadingRequestDTO;
 import com.geosegbar.infra.reading.dtos.ReadingResponseDTO;
@@ -45,12 +47,117 @@ public class ReadingService {
     private final ReadingInputValueRepository readingInputValueRepository;
     private final InstrumentRepository instrumentRepository;
     private final OutputCalculationService outputCalculationService;
+    private final ClientRepository clientRepository;
 
     public List<ReadingResponseDTO> findByInstrumentId(Long instrumentId) {
         List<ReadingEntity> readings = readingRepository.findByInstrumentIdOrderByDateDescHourDesc(instrumentId);
         return readings.stream()
                 .map(this::mapToResponseDTO)
                 .collect(Collectors.toList());
+    }
+
+    public InstrumentLimitStatusDTO getInstrumentLimitStatus(Long instrumentId, int limit) {
+        InstrumentEntity instrument = instrumentRepository.findById(instrumentId)
+                .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + instrumentId));
+
+        Pageable pageable = PageRequest.of(0, limit);
+        List<ReadingEntity> recentReadings = readingRepository.findTopNByInstrumentIdOrderByDateDescHourDesc(instrumentId, pageable);
+
+        if (recentReadings.isEmpty()) {
+            return createInstrumentLimitStatusDTO(instrument, LimitStatusEnum.NORMAL, null);
+        }
+
+        LimitStatusEnum mostCriticalStatus = findMostCriticalStatus(recentReadings);
+
+        ReadingEntity mostRecentReading = recentReadings.get(0);
+        String formattedDateTime = mostRecentReading.getDate() + " " + mostRecentReading.getHour();
+
+        return createInstrumentLimitStatusDTO(instrument, mostCriticalStatus, formattedDateTime);
+    }
+
+    public List<InstrumentLimitStatusDTO> getAllInstrumentLimitStatusesByClientId(Long clientId, int limit) {
+        clientRepository.findById(clientId)
+                .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + clientId));
+
+        List<InstrumentLimitStatusDTO> results = new ArrayList<>();
+
+        List<InstrumentEntity> activeInstruments = instrumentRepository.findByFilters(
+                null,
+                null,
+                null,
+                true,
+                clientId
+        );
+
+        for (InstrumentEntity instrument : activeInstruments) {
+            Pageable pageable = PageRequest.of(0, limit);
+            List<ReadingEntity> recentReadings = readingRepository.findTopNByInstrumentIdOrderByDateDescHourDesc(
+                    instrument.getId(), pageable);
+
+            if (recentReadings.isEmpty()) {
+                results.add(createInstrumentLimitStatusDTO(instrument, LimitStatusEnum.NORMAL, null));
+            } else {
+                Map<LocalDate, List<ReadingEntity>> readingsByDate = recentReadings.stream()
+                        .collect(Collectors.groupingBy(ReadingEntity::getDate));
+
+                LocalDate mostRecentDate = readingsByDate.keySet().stream()
+                        .max(LocalDate::compareTo)
+                        .orElse(null);
+
+                if (mostRecentDate != null) {
+                    List<ReadingEntity> latestReadings = readingsByDate.get(mostRecentDate);
+
+                    LimitStatusEnum mostCriticalStatus = findMostCriticalStatus(latestReadings);
+
+                    ReadingEntity mostRecentReading = latestReadings.stream()
+                            .max((r1, r2) -> r1.getHour().compareTo(r2.getHour()))
+                            .orElse(latestReadings.get(0));
+
+                    String formattedDateTime = mostRecentReading.getDate() + " " + mostRecentReading.getHour();
+
+                    results.add(createInstrumentLimitStatusDTO(
+                            instrument, mostCriticalStatus, formattedDateTime));
+                }
+            }
+        }
+
+        return results;
+    }
+
+    private LimitStatusEnum findMostCriticalStatus(List<ReadingEntity> readings) {
+        if (readings.stream().anyMatch(r -> r.getLimitStatus() == LimitStatusEnum.EMERGENCIA)) {
+            return LimitStatusEnum.EMERGENCIA;
+        }
+        if (readings.stream().anyMatch(r -> r.getLimitStatus() == LimitStatusEnum.ALERTA)) {
+            return LimitStatusEnum.ALERTA;
+        }
+        if (readings.stream().anyMatch(r -> r.getLimitStatus() == LimitStatusEnum.ATENCAO)) {
+            return LimitStatusEnum.ATENCAO;
+        }
+        if (readings.stream().anyMatch(r -> r.getLimitStatus() == LimitStatusEnum.INFERIOR)) {
+            return LimitStatusEnum.INFERIOR;
+        }
+        if (readings.stream().anyMatch(r -> r.getLimitStatus() == LimitStatusEnum.SUPERIOR)) {
+            return LimitStatusEnum.SUPERIOR;
+        }
+        return LimitStatusEnum.NORMAL;
+    }
+
+    private InstrumentLimitStatusDTO createInstrumentLimitStatusDTO(
+            InstrumentEntity instrument, LimitStatusEnum status, String lastReadingDate) {
+
+        InstrumentLimitStatusDTO dto = new InstrumentLimitStatusDTO();
+        dto.setInstrumentId(instrument.getId());
+        dto.setInstrumentName(instrument.getName());
+        dto.setInstrumentType(instrument.getInstrumentType());
+        dto.setDamId(instrument.getDam().getId());
+        dto.setDamName(instrument.getDam().getName());
+        dto.setClientId(instrument.getDam().getClient().getId());
+        dto.setClientName(instrument.getDam().getClient().getName());
+        dto.setLimitStatus(status);
+        dto.setLastReadingDate(lastReadingDate);
+
+        return dto;
     }
 
     public PagedReadingResponseDTO<ReadingResponseDTO> findByInstrumentId(Long instrumentId, Pageable pageable) {

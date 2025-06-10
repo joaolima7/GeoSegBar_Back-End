@@ -1,6 +1,7 @@
 package com.geosegbar.infra.reading.services;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -67,12 +68,39 @@ public class ReadingService {
             return createInstrumentLimitStatusDTO(instrument, LimitStatusEnum.NORMAL, null);
         }
 
-        LimitStatusEnum mostCriticalStatus = findMostCriticalStatus(recentReadings);
+        LocalDate mostRecentDate = recentReadings.stream()
+                .map(ReadingEntity::getDate)
+                .max(LocalDate::compareTo)
+                .orElse(null);
 
-        ReadingEntity mostRecentReading = recentReadings.get(0);
-        String formattedDateTime = mostRecentReading.getDate() + " " + mostRecentReading.getHour();
+        if (mostRecentDate != null) {
+            List<ReadingEntity> readingsOfMostRecentDate = recentReadings.stream()
+                    .filter(r -> r.getDate().equals(mostRecentDate))
+                    .collect(Collectors.toList());
 
-        return createInstrumentLimitStatusDTO(instrument, mostCriticalStatus, formattedDateTime);
+            LocalTime mostRecentHour = readingsOfMostRecentDate.stream()
+                    .map(ReadingEntity::getHour)
+                    .max(LocalTime::compareTo)
+                    .orElse(null);
+
+            if (mostRecentHour != null) {
+                List<ReadingEntity> mostRecentReadings = readingsOfMostRecentDate.stream()
+                        .filter(r -> r.getHour().equals(mostRecentHour))
+                        .collect(Collectors.toList());
+
+                LimitStatusEnum mostCriticalStatus = findMostCriticalStatus(mostRecentReadings);
+
+                String formattedDateTime = mostRecentDate + " " + mostRecentHour;
+
+                return createInstrumentLimitStatusDTO(instrument, mostCriticalStatus, formattedDateTime);
+            }
+        }
+
+        ReadingEntity firstReading = recentReadings.get(0);
+        return createInstrumentLimitStatusDTO(
+                instrument,
+                firstReading.getLimitStatus(),
+                firstReading.getDate() + " " + firstReading.getHour());
     }
 
     public List<InstrumentLimitStatusDTO> getAllInstrumentLimitStatusesByClientId(Long clientId, int limit) {
@@ -97,26 +125,33 @@ public class ReadingService {
             if (recentReadings.isEmpty()) {
                 results.add(createInstrumentLimitStatusDTO(instrument, LimitStatusEnum.NORMAL, null));
             } else {
-                Map<LocalDate, List<ReadingEntity>> readingsByDate = recentReadings.stream()
-                        .collect(Collectors.groupingBy(ReadingEntity::getDate));
-
-                LocalDate mostRecentDate = readingsByDate.keySet().stream()
+                LocalDate mostRecentDate = recentReadings.stream()
+                        .map(ReadingEntity::getDate)
                         .max(LocalDate::compareTo)
                         .orElse(null);
 
                 if (mostRecentDate != null) {
-                    List<ReadingEntity> latestReadings = readingsByDate.get(mostRecentDate);
+                    List<ReadingEntity> readingsOfMostRecentDate = recentReadings.stream()
+                            .filter(r -> r.getDate().equals(mostRecentDate))
+                            .collect(Collectors.toList());
 
-                    LimitStatusEnum mostCriticalStatus = findMostCriticalStatus(latestReadings);
+                    LocalTime mostRecentHour = readingsOfMostRecentDate.stream()
+                            .map(ReadingEntity::getHour)
+                            .max(LocalTime::compareTo)
+                            .orElse(null);
 
-                    ReadingEntity mostRecentReading = latestReadings.stream()
-                            .max((r1, r2) -> r1.getHour().compareTo(r2.getHour()))
-                            .orElse(latestReadings.get(0));
+                    if (mostRecentHour != null) {
+                        List<ReadingEntity> mostRecentReadings = readingsOfMostRecentDate.stream()
+                                .filter(r -> r.getHour().equals(mostRecentHour))
+                                .collect(Collectors.toList());
 
-                    String formattedDateTime = mostRecentReading.getDate() + " " + mostRecentReading.getHour();
+                        LimitStatusEnum mostCriticalStatus = findMostCriticalStatus(mostRecentReadings);
 
-                    results.add(createInstrumentLimitStatusDTO(
-                            instrument, mostCriticalStatus, formattedDateTime));
+                        String formattedDateTime = mostRecentDate + " " + mostRecentHour;
+
+                        results.add(createInstrumentLimitStatusDTO(
+                                instrument, mostCriticalStatus, formattedDateTime));
+                    }
                 }
             }
         }

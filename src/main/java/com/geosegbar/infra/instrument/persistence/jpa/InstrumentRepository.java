@@ -36,7 +36,8 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
     Optional<InstrumentEntity> findWithIOCById(Long id);
 
     @EntityGraph(attributePaths = {"inputs", "constants", "outputs", "outputs.statisticalLimit", "outputs.deterministicLimit"})
-    Optional<InstrumentEntity> findWithAllDetailsById(Long id);
+    @Query("SELECT i FROM InstrumentEntity i LEFT JOIN FETCH i.outputs o WHERE i.id = :id AND (o.active = true OR o IS NULL)")
+    Optional<InstrumentEntity> findWithActiveOutputsById(@Param("id") Long id);
 
     @Query("SELECT i FROM InstrumentEntity i WHERE i.dam.client.id = :clientId")
     List<InstrumentEntity> findByClientId(@Param("clientId") Long clientId);

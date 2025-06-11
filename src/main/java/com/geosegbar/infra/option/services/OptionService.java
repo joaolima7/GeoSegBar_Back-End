@@ -23,7 +23,7 @@ public class OptionService {
     @Transactional
     public void initializeDefaultOptions() {
 
-        createIfNotExists("NO", "Não Observado", 1);
+        createIfNotExists("NE", "Não Existe", 1);
         createIfNotExists("PV", "Primeira Vez", 2);
         createIfNotExists("AU", "Aumentou", 3);
         createIfNotExists("DM", "Diminuiu", 4);

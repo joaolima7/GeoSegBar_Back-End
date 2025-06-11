@@ -75,7 +75,7 @@ public class InstrumentService {
     }
 
     public InstrumentEntity findWithAllDetails(Long id) {
-        return instrumentRepository.findWithAllDetailsById(id)
+        return instrumentRepository.findWithActiveOutputsById(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
     }
 
@@ -121,7 +121,7 @@ public class InstrumentService {
 
         processOutputs(savedInstrument, request.getOutputs());
 
-        return instrumentRepository.findWithAllDetailsById(savedInstrument.getId())
+        return instrumentRepository.findWithActiveOutputsById(savedInstrument.getId())
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após criação"));
     }
 
@@ -398,7 +398,7 @@ public class InstrumentService {
 
         log.info("Instrumento atualizado com sucesso");
 
-        return instrumentRepository.findWithAllDetailsById(id)
+        return instrumentRepository.findWithActiveOutputsById(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após atualização"));
     }
 

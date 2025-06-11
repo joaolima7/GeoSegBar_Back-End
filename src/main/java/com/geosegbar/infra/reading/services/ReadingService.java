@@ -260,7 +260,7 @@ public class ReadingService {
 
     @Transactional
     public List<ReadingResponseDTO> create(Long instrumentId, ReadingRequestDTO request) {
-        InstrumentEntity instrument = instrumentRepository.findWithAllDetailsById(instrumentId)
+        InstrumentEntity instrument = instrumentRepository.findWithActiveOutputsById(instrumentId)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + instrumentId));
 
         // Verificar se o instrumento possui outputs

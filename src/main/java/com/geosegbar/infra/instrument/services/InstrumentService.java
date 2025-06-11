@@ -1,6 +1,7 @@
 package com.geosegbar.infra.instrument.services;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -87,6 +88,12 @@ public class InstrumentService {
     @Transactional
     public InstrumentEntity createComplete(CreateInstrumentRequest request) {
         validateRequest(request);
+
+        validateUniqueAcronymsAcrossComponents(
+                request.getInputs(),
+                request.getConstants(),
+                request.getOutputs()
+        );
 
         if (instrumentRepository.existsByNameAndDamId(request.getName(), request.getDamId())) {
             throw new DuplicateResourceException("Já existe um instrumento com o nome '" + request.getName() + "' na mesma barragem");
@@ -338,6 +345,12 @@ public class InstrumentService {
     public InstrumentEntity update(Long id, UpdateInstrumentRequest request) {
         validateRequest(request);
 
+        validateUniqueAcronymsAcrossComponents(
+                request.getInputs(),
+                request.getConstants(),
+                request.getOutputs()
+        );
+
         if (instrumentRepository.existsByNameAndDamIdAndIdNot(request.getName(), request.getDamId(), id)) {
             throw new DuplicateResourceException("Já existe um instrumento com esse nome nesta barragem");
         }
@@ -400,6 +413,46 @@ public class InstrumentService {
 
         return instrumentRepository.findWithActiveOutputsById(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após atualização"));
+    }
+
+    private void validateUniqueAcronymsAcrossComponents(List<InputDTO> inputs, List<ConstantDTO> constants, List<OutputDTO> outputs) {
+        Map<String, String> acronymMap = new HashMap<>();
+
+        if (inputs != null) {
+            for (InputDTO input : inputs) {
+                String acronym = input.getAcronym();
+                if (acronymMap.containsKey(acronym)) {
+                    throw new DuplicateResourceException(
+                            "Acrônimo '" + acronym + "' duplicado: já existe como " + acronymMap.get(acronym)
+                    );
+                }
+                acronymMap.put(acronym, "input");
+            }
+        }
+
+        if (constants != null) {
+            for (ConstantDTO constant : constants) {
+                String acronym = constant.getAcronym();
+                if (acronymMap.containsKey(acronym)) {
+                    throw new DuplicateResourceException(
+                            "Acrônimo '" + acronym + "' duplicado: já existe como " + acronymMap.get(acronym)
+                    );
+                }
+                acronymMap.put(acronym, "constant");
+            }
+        }
+
+        if (outputs != null) {
+            for (OutputDTO output : outputs) {
+                String acronym = output.getAcronym();
+                if (acronymMap.containsKey(acronym)) {
+                    throw new DuplicateResourceException(
+                            "Acrônimo '" + acronym + "' duplicado: já existe como " + acronymMap.get(acronym)
+                    );
+                }
+                acronymMap.put(acronym, "output");
+            }
+        }
     }
 
     private void updateInstrumentBasicFields(InstrumentEntity instrument, UpdateInstrumentRequest request) {

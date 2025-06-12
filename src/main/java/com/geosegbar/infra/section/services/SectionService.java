@@ -7,10 +7,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.SectionEntity;
+import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.file_storage.FileStorageService;
 import com.geosegbar.infra.section.dtos.CreateSectionDTO;
 import com.geosegbar.infra.section.persistence.jpa.SectionRepository;
@@ -27,20 +30,44 @@ public class SectionService {
     private final FileStorageService fileStorageService;
 
     public List<SectionEntity> findAll() {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getViewSections()) {
+                throw new UnauthorizedException("Usuário não autorizado a visualizar seções!");
+            }
+        }
         return sectionRepository.findAllByOrderByNameAsc();
     }
 
     public SectionEntity findById(Long id) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getViewSections()) {
+                throw new UnauthorizedException("Usuário não autorizado a visualizar seções!");
+            }
+        }
         return sectionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + id));
     }
 
     public Optional<SectionEntity> findByName(String name) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getViewSections()) {
+                throw new UnauthorizedException("Usuário não autorizado a visualizar seções!");
+            }
+        }
         return sectionRepository.findByName(name);
     }
 
     @Transactional
     public SectionEntity create(SectionEntity section) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getEditSections()) {
+                throw new UnauthorizedException("Usuário não autorizado a criar seções!");
+            }
+        }
         if (sectionRepository.findByName(section.getName()).isPresent()) {
             throw new DuplicateResourceException("Seção com nome '" + section.getName() + "' já existe");
         }
@@ -83,6 +110,12 @@ public class SectionService {
 
     @Transactional
     public SectionEntity updateWithFile(Long id, CreateSectionDTO dto, MultipartFile file) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getEditSections()) {
+                throw new UnauthorizedException("Usuário não autorizado a editar seções!");
+            }
+        }
         SectionEntity existingSection = findById(id);
 
         if (sectionRepository.findByName(dto.getName()).isPresent()
@@ -122,6 +155,12 @@ public class SectionService {
 
     @Transactional
     public SectionEntity update(Long id, SectionEntity section) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getEditSections()) {
+                throw new UnauthorizedException("Usuário não autorizado a editar seções!");
+            }
+        }
         SectionEntity existingSection = findById(id);
 
         if (sectionRepository.findByName(section.getName()).isPresent()
@@ -143,6 +182,12 @@ public class SectionService {
 
     @Transactional
     public void delete(Long id) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getEditSections()) {
+                throw new UnauthorizedException("Usuário não autorizado a excluir seções!");
+            }
+        }
         SectionEntity section = findById(id);
 
         if (!section.getInstruments().isEmpty()) {

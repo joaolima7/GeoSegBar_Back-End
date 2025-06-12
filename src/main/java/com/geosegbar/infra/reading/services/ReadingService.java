@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.common.enums.LimitStatusEnum;
+import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.DeterministicLimitEntity;
 import com.geosegbar.entities.InputEntity;
 import com.geosegbar.entities.InstrumentEntity;
@@ -24,8 +25,10 @@ import com.geosegbar.entities.OutputEntity;
 import com.geosegbar.entities.ReadingEntity;
 import com.geosegbar.entities.ReadingInputValueEntity;
 import com.geosegbar.entities.StatisticalLimitEntity;
+import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.reading.dtos.InstrumentLimitStatusDTO;
@@ -218,6 +221,12 @@ public class ReadingService {
     }
 
     public List<ReadingResponseDTO> findByOutputId(Long outputId) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getViewRead()) {
+                throw new UnauthorizedException("Usuário não autorizado a visualizar leituras!");
+            }
+        }
         List<ReadingEntity> readings = readingRepository.findByOutputIdOrderByDateDescHourDesc(outputId);
         return readings.stream()
                 .map(this::mapToResponseDTO)
@@ -226,6 +235,12 @@ public class ReadingService {
 
     public PagedReadingResponseDTO<ReadingResponseDTO> findByFilters(Long instrumentId, Long outputId, LocalDate startDate, LocalDate endDate,
             LimitStatusEnum limitStatus, Pageable pageable) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getViewRead()) {
+                throw new UnauthorizedException("Usuário não autorizado a visualizar leituras!");
+            }
+        }
         if (pageable.getSort().isUnsorted()) {
             pageable = PageRequest.of(
                     pageable.getPageNumber(),
@@ -248,6 +263,12 @@ public class ReadingService {
     }
 
     public ReadingEntity findById(Long id) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getViewRead()) {
+                throw new UnauthorizedException("Usuário não autorizado a visualizar leituras!");
+            }
+        }
         ReadingEntity reading = readingRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
 
@@ -260,6 +281,15 @@ public class ReadingService {
 
     @Transactional
     public List<ReadingResponseDTO> create(Long instrumentId, ReadingRequestDTO request) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getEditRead()) {
+                throw new UnauthorizedException("Usuário não autorizado a criar leituras!");
+            }
+        }
+
+        UserEntity currentUser = AuthenticatedUserUtil.getCurrentUser();
+
         InstrumentEntity instrument = instrumentRepository.findWithActiveOutputsById(instrumentId)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + instrumentId));
 
@@ -290,6 +320,7 @@ public class ReadingService {
             reading.setCalculatedValue(calculatedValue);  // Valor calculado usando a equação do output
             reading.setInstrument(instrument);
             reading.setOutput(output);
+            reading.setUser(currentUser);
 
             // Determinar o status do limite com base no valor calculado
             LimitStatusEnum limitStatus = determineLimitStatus(instrument, calculatedValue, output);
@@ -363,6 +394,12 @@ public class ReadingService {
 
     @Transactional
     public void delete(Long id) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getEditRead()) {
+                throw new UnauthorizedException("Usuário não autorizado a excluir leituras!");
+            }
+        }
         ReadingEntity reading = findById(id);
         readingInputValueRepository.deleteByReadingId(id);
         readingRepository.delete(reading);
@@ -417,6 +454,14 @@ public class ReadingService {
         dto.setOutputId(reading.getOutput().getId());
         dto.setOutputName(reading.getOutput().getName());
         dto.setOutputAcronym(reading.getOutput().getAcronym());
+
+        if (reading.getUser() != null) {
+            dto.setCreatedBy(new ReadingResponseDTO.UserInfoDTO(
+                    reading.getUser().getId(),
+                    reading.getUser().getName(),
+                    reading.getUser().getEmail()
+            ));
+        }
 
         // Carregar e adicionar os valores de input
         dto.setInputValues(getInputValuesForReading(reading));

@@ -54,6 +54,13 @@ public class ReadingEntity {
     @Column(nullable = false)
     private LimitStatusEnum limitStatus;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    @JsonIgnoreProperties({"readings", "password", "damPermissions", "createdUsers", "psbFoldersCreated",
+        "psbFilesUploaded", "sharedFolders", "attributionsPermission",
+        "documentationPermission", "instrumentationPermission", "routineInspectionPermission"})
+    private UserEntity user;
+
     @ManyToOne
     @JoinColumn(name = "instrument_id", nullable = false)
     @JsonIgnoreProperties({"readings", "inputs", "outputs", "constants", "statisticalLimit", "deterministicLimit"})

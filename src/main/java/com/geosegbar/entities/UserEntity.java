@@ -79,6 +79,10 @@ public class UserEntity {
     @Column(name = "is_first_access")
     private Boolean isFirstAccess = false;
 
+    @JsonIgnore
+    @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
+    private Set<ReadingEntity> readings = new HashSet<>();
+
     @ManyToMany
     @JoinTable(
             name = "user_client",

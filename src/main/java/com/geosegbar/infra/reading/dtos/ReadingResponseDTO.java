@@ -27,4 +27,15 @@ public class ReadingResponseDTO {
     private String outputName;
     private String outputAcronym;
     private List<ReadingInputValueDTO> inputValues;
+    private UserInfoDTO createdBy;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class UserInfoDTO {
+
+        private Long id;
+        private String name;
+        private String email;
+    }
 }

@@ -26,6 +26,7 @@ public class AnomalyStatusService {
         createIfNotExists("Em andamento", "Anomalia em processo de tratamento");
         createIfNotExists("Concluído", "Tratamento da anomalia finalizado");
         createIfNotExists("Em monitoramento", "Anomalia tratada mas sob observação");
+        createIfNotExists("--", "Ainda não foi definido um status para a anomalia");
     }
 
     private void createIfNotExists(String name, String description) {

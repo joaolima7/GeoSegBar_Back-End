@@ -22,10 +22,11 @@ public class DangerLevelService {
     @PostConstruct
     @Transactional
     public void initializeDefaultDangerLevels() {
-        createIfNotExists("0 - Normal", "Condições normais de operação");
-        createIfNotExists("1 - Atenção", "Anomalia que requer atenção e verificação periódica");
-        createIfNotExists("2 - Alerta", "Anomalia com risco potencial que requer intervenção");
-        createIfNotExists("3 - Emergência", "Anomalia crítica que requer ação imediata");
+        createIfNotExists("Normal", "Condições normais de operação");
+        createIfNotExists("Atenção", "Anomalia que requer atenção e verificação periódica");
+        createIfNotExists("Alerta", "Anomalia com risco potencial que requer intervenção");
+        createIfNotExists("Emergência", "Anomalia crítica que requer ação imediata");
+        createIfNotExists("--", "Ainda não foi definido um nível de perigo");
     }
 
     private void createIfNotExists(String name, String description) {

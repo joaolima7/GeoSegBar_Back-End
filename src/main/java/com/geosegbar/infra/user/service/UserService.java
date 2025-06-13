@@ -394,7 +394,7 @@ public class UserService {
     }
 
     @Transactional
-    public void initiateLogin(LoginRequestDTO userDTO) {
+    public Object initiateLogin(LoginRequestDTO userDTO) {
         UserEntity user = userRepository.findByEmail(userDTO.email())
                 .orElseThrow(() -> new NotFoundException("Credenciais incorretas!"));
 
@@ -404,6 +404,22 @@ public class UserService {
 
         if (!passwordEncoder.matches(userDTO.password(), user.getPassword())) {
             throw new InvalidInputException("Credenciais incorretas!");
+        }
+
+        if (user.getLastToken() != null && user.getTokenExpiryDate() != null
+                && LocalDateTime.now().isBefore(user.getTokenExpiryDate())
+                && tokenService.isTokenValid(user.getLastToken())) {
+
+            return new LoginResponseDTO(
+                    user.getId(),
+                    user.getName(),
+                    user.getEmail(),
+                    user.getPhone(),
+                    user.getSex(),
+                    user.getRole().getName(),
+                    user.getIsFirstAccess(),
+                    user.getLastToken()
+            );
         }
 
         String verificationCode = GenerateRandomCode.generateRandomCode();
@@ -417,6 +433,8 @@ public class UserService {
         verificationCodeRepository.save(codeEntity);
 
         emailService.sendVerificationCode(user.getEmail(), verificationCode);
+
+        return null;
     }
 
     @Transactional
@@ -440,6 +458,9 @@ public class UserService {
         verificationCodeRepository.save(codeEntity);
 
         String token = tokenService.generateToken(user);
+
+        userRepository.save(user);
+
         return new LoginResponseDTO(
                 user.getId(),
                 user.getName(),

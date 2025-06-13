@@ -83,11 +83,16 @@ public class UserController {
     }
 
     @PostMapping("/login/initiate")
-    public ResponseEntity<WebResponseEntity<Void>> initiateLogin(@Valid @RequestBody LoginRequestDTO userDTO) {
-        userService.initiateLogin(userDTO);
-        WebResponseEntity<Void> response = WebResponseEntity.success(null,
-                "Código de verificação enviado para seu email, verifique também a caixa de spam!");
-        return ResponseEntity.ok(response);
+    public ResponseEntity<WebResponseEntity<?>> initiateLogin(@Valid @RequestBody LoginRequestDTO userDTO) {
+        Object result = userService.initiateLogin(userDTO);
+
+        if (result instanceof LoginResponseDTO loginResponse) {
+            return ResponseEntity.ok(WebResponseEntity.success(loginResponse,
+                    "Usuário autenticado com sucesso!"));
+        } else {
+            return ResponseEntity.ok(WebResponseEntity.success(null,
+                    "Código de verificação enviado para seu email, verifique também a caixa de spam!"));
+        }
     }
 
     @PostMapping("/login/verify")

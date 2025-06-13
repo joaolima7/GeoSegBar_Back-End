@@ -1,5 +1,6 @@
 package com.geosegbar.entities;
 
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -78,6 +79,14 @@ public class UserEntity {
 
     @Column(name = "is_first_access")
     private Boolean isFirstAccess = false;
+
+    @JsonProperty(access = Access.WRITE_ONLY)
+    @Column(columnDefinition = "TEXT")
+    private String lastToken;
+
+    @JsonProperty(access = Access.WRITE_ONLY)
+    @Column
+    private LocalDateTime tokenExpiryDate;
 
     @JsonIgnore
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)

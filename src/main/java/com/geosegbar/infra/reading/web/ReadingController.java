@@ -9,8 +9,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -22,6 +24,8 @@ import com.geosegbar.infra.reading.dtos.InstrumentLimitStatusDTO;
 import com.geosegbar.infra.reading.dtos.PagedReadingResponseDTO;
 import com.geosegbar.infra.reading.dtos.ReadingRequestDTO;
 import com.geosegbar.infra.reading.dtos.ReadingResponseDTO;
+import com.geosegbar.infra.reading.dtos.UpdateCommentRequestDTO;
+import com.geosegbar.infra.reading.dtos.UpdateReadingRequestDTO;
 import com.geosegbar.infra.reading.services.ReadingService;
 
 import jakarta.validation.Valid;
@@ -41,10 +45,11 @@ public class ReadingController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(required = false) LimitStatusEnum limitStatus,
+            @RequestParam(required = false) Boolean active,
             Pageable pageable) {
 
         PagedReadingResponseDTO<ReadingResponseDTO> readings = readingService.findByFilters(
-                instrumentId, outputId, startDate, endDate, limitStatus, pageable);
+                instrumentId, outputId, startDate, endDate, limitStatus, active, pageable);
 
         return ResponseEntity.ok(WebResponseEntity.success(readings, "Leituras obtidas com sucesso!"));
     }
@@ -88,6 +93,36 @@ public class ReadingController {
                 statuses,
                 "Status dos limites dos instrumentos do cliente obtidos com sucesso!"
         ));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<WebResponseEntity<ReadingResponseDTO>> updateReading(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateReadingRequestDTO request) {
+
+        ReadingResponseDTO updated = readingService.updateReading(id, request);
+
+        return ResponseEntity.ok(WebResponseEntity.success(updated, "Leitura atualizada com sucesso!"));
+    }
+
+    @PatchMapping("/{id}/deactivate")
+    public ResponseEntity<WebResponseEntity<Void>> deactivateReading(@PathVariable Long id) {
+        readingService.deactivate(id);
+        return ResponseEntity.ok(WebResponseEntity.success(null, "Leitura desativada com sucesso!"));
+    }
+
+    @PatchMapping("/{id}/comment")
+    public ResponseEntity<WebResponseEntity<ReadingResponseDTO>> updateComment(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateCommentRequestDTO request) {
+
+        ReadingResponseDTO updated = readingService.updateComment(id, request.getComment());
+
+        String message = request.getComment() != null
+                ? "Comentário atualizado com sucesso!"
+                : "Comentário removido com sucesso!";
+
+        return ResponseEntity.ok(WebResponseEntity.success(updated, message));
     }
 
     @PostMapping("/instrument/{instrumentId}")

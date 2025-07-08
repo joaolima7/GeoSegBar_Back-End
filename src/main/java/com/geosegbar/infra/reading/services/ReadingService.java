@@ -35,9 +35,11 @@ import com.geosegbar.infra.reading.dtos.InstrumentLimitStatusDTO;
 import com.geosegbar.infra.reading.dtos.PagedReadingResponseDTO;
 import com.geosegbar.infra.reading.dtos.ReadingRequestDTO;
 import com.geosegbar.infra.reading.dtos.ReadingResponseDTO;
+import com.geosegbar.infra.reading.dtos.UpdateReadingRequestDTO;
 import com.geosegbar.infra.reading.persistence.jpa.ReadingRepository;
 import com.geosegbar.infra.reading_input_value.dtos.ReadingInputValueDTO;
 import com.geosegbar.infra.reading_input_value.persistence.jpa.ReadingInputValueRepository;
+import com.geosegbar.infra.user.persistence.jpa.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -52,6 +54,7 @@ public class ReadingService {
     private final InstrumentRepository instrumentRepository;
     private final OutputCalculationService outputCalculationService;
     private final ClientRepository clientRepository;
+    private final UserRepository userRepository;
 
     public List<ReadingResponseDTO> findByInstrumentId(Long instrumentId) {
         List<ReadingEntity> readings = readingRepository.findByInstrumentIdOrderByDateDescHourDesc(instrumentId);
@@ -234,7 +237,7 @@ public class ReadingService {
     }
 
     public PagedReadingResponseDTO<ReadingResponseDTO> findByFilters(Long instrumentId, Long outputId, LocalDate startDate, LocalDate endDate,
-            LimitStatusEnum limitStatus, Pageable pageable) {
+            LimitStatusEnum limitStatus, Boolean active, Pageable pageable) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getInstrumentationPermission().getViewRead()) {
@@ -248,7 +251,11 @@ public class ReadingService {
                     Sort.by(Sort.Direction.DESC, "date", "hour")
             );
         }
-        Page<ReadingEntity> readings = readingRepository.findByFilters(instrumentId, outputId, startDate, endDate, limitStatus, pageable);
+
+        // Se active não for fornecido, por padrão buscar apenas readings ativas
+        Boolean activeFilter = active != null ? active : true;
+
+        Page<ReadingEntity> readings = readingRepository.findByFilters(instrumentId, outputId, startDate, endDate, limitStatus, activeFilter, pageable);
         Page<ReadingResponseDTO> dtoPage = readings.map(this::mapToResponseDTO);
 
         return new PagedReadingResponseDTO<>(
@@ -281,21 +288,24 @@ public class ReadingService {
 
     @Transactional
     public List<ReadingResponseDTO> create(Long instrumentId, ReadingRequestDTO request) {
+        UserEntity currentUser = AuthenticatedUserUtil.getCurrentUser();
+
         if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getEditRead()) {
+            if (!currentUser.getInstrumentationPermission().getEditRead()) {
                 throw new UnauthorizedException("Usuário não autorizado a criar leituras!");
             }
         }
 
-        UserEntity currentUser = AuthenticatedUserUtil.getCurrentUser();
-
         InstrumentEntity instrument = instrumentRepository.findWithActiveOutputsById(instrumentId)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + instrumentId));
 
-        // Verificar se o instrumento possui outputs
-        if (instrument.getOutputs() == null || instrument.getOutputs().isEmpty()) {
-            throw new NotFoundException("O instrumento não possui outputs para calcular leituras");
+        // Filtrar apenas outputs ativos
+        List<OutputEntity> activeOutputs = instrument.getOutputs().stream()
+                .filter(OutputEntity::getActive)
+                .collect(Collectors.toList());
+
+        if (activeOutputs.isEmpty()) {
+            throw new NotFoundException("O instrumento não possui outputs ativos para calcular leituras");
         }
 
         // Validar se foram fornecidos valores para todos os inputs
@@ -308,8 +318,8 @@ public class ReadingService {
         Map<String, String> inputNames = instrument.getInputs().stream()
                 .collect(Collectors.toMap(InputEntity::getAcronym, InputEntity::getName));
 
-        // Processar cada output do instrumento
-        for (OutputEntity output : instrument.getOutputs()) {
+        // Processar cada output ativo do instrumento
+        for (OutputEntity output : activeOutputs) {
             // Calcular o valor para este output usando a equação
             Double calculatedValue = outputCalculationService.calculateOutput(output, request, request.getInputValues());
 
@@ -317,10 +327,12 @@ public class ReadingService {
             ReadingEntity reading = new ReadingEntity();
             reading.setDate(request.getDate());
             reading.setHour(request.getHour());
-            reading.setCalculatedValue(calculatedValue);  // Valor calculado usando a equação do output
+            reading.setCalculatedValue(calculatedValue);
             reading.setInstrument(instrument);
             reading.setOutput(output);
             reading.setUser(currentUser);
+            reading.setActive(true);
+            reading.setComment(request.getComment()); // Adicionar comentário
 
             // Determinar o status do limite com base no valor calculado
             LimitStatusEnum limitStatus = determineLimitStatus(instrument, calculatedValue, output);
@@ -342,9 +354,6 @@ public class ReadingService {
             }
 
             createdReadings.add(savedReading);
-
-            log.info("Leitura criada para o instrumento {} e output {}: calculado={}, status={}",
-                    instrument.getName(), output.getAcronym(), calculatedValue, limitStatus);
         }
 
         // Mapear as entidades para DTOs e retornar
@@ -384,12 +393,120 @@ public class ReadingService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional
+    public ReadingResponseDTO updateReading(Long id, UpdateReadingRequestDTO request) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getEditRead()) {
+                throw new UnauthorizedException("Usuário não autorizado a editar leituras!");
+            }
+        }
+
+        ReadingEntity reading = readingRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
+
+        // Verificar se a leitura está ativa
+        if (!reading.getActive()) {
+            throw new InvalidInputException("Não é possível editar uma leitura inativa");
+        }
+
+        // Armazenar valores originais para comparação
+        LocalDate originalDate = reading.getDate();
+        LocalTime originalHour = reading.getHour();
+        UserEntity originalUser = reading.getUser();
+
+        // Atualizar data se fornecida
+        if (request.getDate() != null) {
+            reading.setDate(request.getDate());
+        }
+
+        // Atualizar hora se fornecida
+        if (request.getHour() != null) {
+            reading.setHour(request.getHour());
+        }
+
+        // Atualizar usuário se fornecido
+        UserEntity newUser = null;
+        if (request.getUserId() != null) {
+            newUser = userRepository.findById(request.getUserId())
+                    .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + request.getUserId()));
+            reading.setUser(newUser);
+        }
+
+        // Salvar a leitura atual
+        ReadingEntity savedReading = readingRepository.save(reading);
+
+        // Se o usuário foi alterado, atualizar todas as leituras relacionadas
+        if (newUser != null && !newUser.equals(originalUser)) {
+            updateRelatedReadingsUser(savedReading, newUser);
+        }
+
+        return mapToResponseDTO(savedReading);
+    }
+
+    private void updateRelatedReadingsUser(ReadingEntity baseReading, UserEntity newUser) {
+        // Buscar todas as leituras que foram criadas com os mesmos inputValues
+        // Isso significa: mesmo instrumento, mesma data, mesma hora, mesmo usuário original
+        List<ReadingEntity> relatedReadings = readingRepository.findByInstrumentAndDateAndHourAndUser(
+                baseReading.getInstrument().getId(),
+                baseReading.getDate(),
+                baseReading.getHour(),
+                baseReading.getUser().getId()
+        );
+
+        // Atualizar o usuário em todas as leituras relacionadas
+        for (ReadingEntity relatedReading : relatedReadings) {
+            if (!relatedReading.getId().equals(baseReading.getId())) { // Evitar atualizar a mesma leitura novamente
+                relatedReading.setUser(newUser);
+                readingRepository.save(relatedReading);
+            }
+        }
+    }
+
     private ReadingInputValueDTO mapToInputValueDTO(ReadingInputValueEntity entity) {
         ReadingInputValueDTO dto = new ReadingInputValueDTO();
         dto.setInputAcronym(entity.getInputAcronym());
         dto.setInputName(entity.getInputName());
         dto.setValue(entity.getValue());
         return dto;
+    }
+
+    @Transactional
+    public void deactivate(Long id) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getEditRead()) {
+                throw new UnauthorizedException("Usuário não autorizado a desativar leituras!");
+            }
+        }
+        ReadingEntity reading = readingRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
+
+        reading.setActive(false);
+        readingRepository.save(reading);
+    }
+
+    @Transactional
+    public ReadingResponseDTO updateComment(Long id, String comment) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getEditRead()) {
+                throw new UnauthorizedException("Usuário não autorizado a editar leituras!");
+            }
+        }
+
+        ReadingEntity reading = readingRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
+
+        // Verificar se a leitura está ativa
+        if (!reading.getActive()) {
+            throw new InvalidInputException("Não é possível editar comentário de uma leitura inativa");
+        }
+
+        reading.setComment(comment);
+        ReadingEntity savedReading = readingRepository.save(reading);
+
+        return mapToResponseDTO(savedReading);
     }
 
     @Transactional
@@ -454,6 +571,7 @@ public class ReadingService {
         dto.setOutputId(reading.getOutput().getId());
         dto.setOutputName(reading.getOutput().getName());
         dto.setOutputAcronym(reading.getOutput().getAcronym());
+        dto.setComment(reading.getComment());
 
         if (reading.getUser() != null) {
             dto.setCreatedBy(new ReadingResponseDTO.UserInfoDTO(

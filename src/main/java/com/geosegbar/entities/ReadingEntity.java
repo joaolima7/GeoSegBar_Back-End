@@ -54,6 +54,12 @@ public class ReadingEntity {
     @Column(nullable = false)
     private LimitStatusEnum limitStatus;
 
+    @Column(nullable = false)
+    private Boolean active;
+
+    @Column(columnDefinition = "TEXT")
+    private String comment;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     @JsonIgnoreProperties({"readings", "password", "damPermissions", "createdUsers", "psbFoldersCreated",

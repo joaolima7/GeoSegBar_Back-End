@@ -22,5 +22,7 @@ public class ReadingRequestDTO {
     private LocalTime hour;
 
     @NotEmpty(message = "É necessário fornecer valores para todos os inputs")
-    private Map<String, Double> inputValues; // Mapa de acrônimo do input -> valor
+    private Map<String, Double> inputValues;
+
+    private String comment;
 }

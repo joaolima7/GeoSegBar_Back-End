@@ -28,6 +28,7 @@ public class ReadingResponseDTO {
     private String outputAcronym;
     private List<ReadingInputValueDTO> inputValues;
     private UserInfoDTO createdBy;
+    private String comment;
 
     @Data
     @NoArgsConstructor

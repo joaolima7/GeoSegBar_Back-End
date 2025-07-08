@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.enums.LimitStatusEnum;
 import com.geosegbar.common.response.WebResponseEntity;
+import com.geosegbar.infra.reading.dtos.BulkToggleActiveRequestDTO;
+import com.geosegbar.infra.reading.dtos.BulkToggleActiveResponseDTO;
 import com.geosegbar.infra.reading.dtos.InstrumentLimitStatusDTO;
 import com.geosegbar.infra.reading.dtos.PagedReadingResponseDTO;
 import com.geosegbar.infra.reading.dtos.ReadingRequestDTO;
@@ -109,6 +111,37 @@ public class ReadingController {
     public ResponseEntity<WebResponseEntity<Void>> deactivateReading(@PathVariable Long id) {
         readingService.deactivate(id);
         return ResponseEntity.ok(WebResponseEntity.success(null, "Leitura desativada com sucesso!"));
+    }
+
+    @PatchMapping("/bulk-toggle-active")
+    public ResponseEntity<WebResponseEntity<BulkToggleActiveResponseDTO>> bulkToggleActive(
+            @Valid @RequestBody BulkToggleActiveRequestDTO request) {
+
+        BulkToggleActiveResponseDTO result = readingService.bulkToggleActive(
+                request.getActive(),
+                request.getReadingIds()
+        );
+
+        String action = request.getActive() ? "ativação" : "desativação";
+        String message;
+
+        if (result.getFailureCount() == 0) {
+            message = String.format("Todas as %d leituras foram %s com sucesso!",
+                    result.getSuccessCount(),
+                    request.getActive() ? "ativadas" : "desativadas");
+        } else if (result.getSuccessCount() == 0) {
+            message = String.format("Falha na %s de todas as %d leituras!",
+                    action,
+                    result.getTotalProcessed());
+        } else {
+            message = String.format("Operação de %s concluída: %d sucessos, %d falhas de %d total",
+                    action,
+                    result.getSuccessCount(),
+                    result.getFailureCount(),
+                    result.getTotalProcessed());
+        }
+
+        return ResponseEntity.ok(WebResponseEntity.success(result, message));
     }
 
     @PatchMapping("/{id}/comment")

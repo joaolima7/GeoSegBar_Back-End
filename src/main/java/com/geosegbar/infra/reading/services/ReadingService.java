@@ -31,6 +31,7 @@ import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
+import com.geosegbar.infra.reading.dtos.BulkToggleActiveResponseDTO;
 import com.geosegbar.infra.reading.dtos.InstrumentLimitStatusDTO;
 import com.geosegbar.infra.reading.dtos.PagedReadingResponseDTO;
 import com.geosegbar.infra.reading.dtos.ReadingRequestDTO;
@@ -469,6 +470,50 @@ public class ReadingService {
         dto.setInputName(entity.getInputName());
         dto.setValue(entity.getValue());
         return dto;
+    }
+
+    @Transactional
+    public BulkToggleActiveResponseDTO bulkToggleActive(Boolean active, List<Long> readingIds) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getEditRead()) {
+                throw new UnauthorizedException("Usuário não autorizado a alterar status de leituras!");
+            }
+        }
+
+        List<Long> successfulIds = new ArrayList<>();
+        List<BulkToggleActiveResponseDTO.FailedOperation> failedOperations = new ArrayList<>();
+
+        for (Long readingId : readingIds) {
+            try {
+                ReadingEntity reading = readingRepository.findById(readingId)
+                        .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + readingId));
+
+                reading.setActive(active);
+                readingRepository.save(reading);
+                successfulIds.add(readingId);
+
+            } catch (Exception e) {
+                String errorMessage = e.getMessage();
+                if (errorMessage == null || errorMessage.isEmpty()) {
+                    errorMessage = "Erro interno do servidor";
+                }
+
+                failedOperations.add(new BulkToggleActiveResponseDTO.FailedOperation(
+                        readingId,
+                        errorMessage
+                ));
+            }
+        }
+
+        BulkToggleActiveResponseDTO response = new BulkToggleActiveResponseDTO();
+        response.setSuccessfulIds(successfulIds);
+        response.setFailedOperations(failedOperations);
+        response.setTotalProcessed(readingIds.size());
+        response.setSuccessCount(successfulIds.size());
+        response.setFailureCount(failedOperations.size());
+
+        return response;
     }
 
     @Transactional

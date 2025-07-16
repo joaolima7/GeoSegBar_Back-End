@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,8 +18,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.ChecklistResponseEntity;
@@ -91,52 +91,52 @@ public class ChecklistResponseController {
     @GetMapping("/dam/{damId}/detail")
     public ResponseEntity<WebResponseEntity<List<ChecklistResponseDetailDTO>>> getDetailedDamChecklistResponses(@PathVariable Long damId) {
         List<ChecklistResponseDetailDTO> responses = checklistResponseService.findChecklistResponsesByDamId(damId);
-        
+
         WebResponseEntity<List<ChecklistResponseDetailDTO>> response = WebResponseEntity.success(
-                responses, 
+                responses,
                 "Respostas de checklist da barragem obtidas com sucesso!"
         );
-        
+
         return ResponseEntity.ok(response);
     }
-    
+
     @GetMapping("/{id}/detail")
     public ResponseEntity<WebResponseEntity<ChecklistResponseDetailDTO>> getDetailedChecklistResponse(@PathVariable Long id) {
         ChecklistResponseDetailDTO response = checklistResponseService.findChecklistResponseById(id);
-        
+
         WebResponseEntity<ChecklistResponseDetailDTO> webResponse = WebResponseEntity.success(
-                response, 
+                response,
                 "Detalhes da resposta de checklist obtidos com sucesso!"
         );
-        
+
         return ResponseEntity.ok(webResponse);
     }
 
     @GetMapping("/user/{userId}/detail")
     public ResponseEntity<WebResponseEntity<List<ChecklistResponseDetailDTO>>> getDetailedUserChecklistResponses(@PathVariable Long userId) {
-    List<ChecklistResponseDetailDTO> responses = checklistResponseService.findChecklistResponsesByUserId(userId);
-    
-    WebResponseEntity<List<ChecklistResponseDetailDTO>> response = WebResponseEntity.success(
-            responses, 
-            "Respostas de checklist do usuário obtidas com sucesso!"
-    );
-    
-    return ResponseEntity.ok(response);
+        List<ChecklistResponseDetailDTO> responses = checklistResponseService.findChecklistResponsesByUserId(userId);
+
+        WebResponseEntity<List<ChecklistResponseDetailDTO>> response = WebResponseEntity.success(
+                responses,
+                "Respostas de checklist do usuário obtidas com sucesso!"
+        );
+
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/date-range/detail")
     public ResponseEntity<WebResponseEntity<List<ChecklistResponseDetailDTO>>> getDetailedChecklistResponsesByDateRange(
-        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
-        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
-    
-    List<ChecklistResponseDetailDTO> responses = checklistResponseService.findChecklistResponsesByDateRange(startDate, endDate);
-    
-    WebResponseEntity<List<ChecklistResponseDetailDTO>> response = WebResponseEntity.success(
-            responses, 
-            "Respostas de checklist no período especificado obtidas com sucesso!"
-    );
-    
-    return ResponseEntity.ok(response);
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
+
+        List<ChecklistResponseDetailDTO> responses = checklistResponseService.findChecklistResponsesByDateRange(startDate, endDate);
+
+        WebResponseEntity<List<ChecklistResponseDetailDTO>> response = WebResponseEntity.success(
+                responses,
+                "Respostas de checklist no período especificado obtidas com sucesso!"
+        );
+
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/paged")
@@ -145,18 +145,18 @@ public class ChecklistResponseController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDirection) {
-        
+
         Sort.Direction direction = sortDirection.equalsIgnoreCase("asc") ? Sort.Direction.ASC : Sort.Direction.DESC;
         Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
-        
-        PagedChecklistResponseDTO<ChecklistResponseDetailDTO> responses = 
-                checklistResponseService.findAllChecklistResponsesPaged(pageable);
-        
+
+        PagedChecklistResponseDTO<ChecklistResponseDetailDTO> responses
+                = checklistResponseService.findAllChecklistResponsesPaged(pageable);
+
         WebResponseEntity<PagedChecklistResponseDTO<ChecklistResponseDetailDTO>> response = WebResponseEntity.success(
-                responses, 
+                responses,
                 "Respostas de checklist paginadas obtidas com sucesso!"
         );
-        
+
         return ResponseEntity.ok(response);
     }
 
@@ -167,18 +167,18 @@ public class ChecklistResponseController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDirection) {
-        
+
         Sort.Direction direction = sortDirection.equalsIgnoreCase("asc") ? Sort.Direction.ASC : Sort.Direction.DESC;
         Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
-        
-        PagedChecklistResponseDTO<ChecklistResponseDetailDTO> responses = 
-                checklistResponseService.findChecklistResponsesByDamIdPaged(damId, pageable);
-        
+
+        PagedChecklistResponseDTO<ChecklistResponseDetailDTO> responses
+                = checklistResponseService.findChecklistResponsesByDamIdPaged(damId, pageable);
+
         WebResponseEntity<PagedChecklistResponseDTO<ChecklistResponseDetailDTO>> response = WebResponseEntity.success(
-                responses, 
+                responses,
                 "Respostas de checklist da barragem paginadas obtidas com sucesso!"
         );
-        
+
         return ResponseEntity.ok(response);
     }
 
@@ -189,18 +189,18 @@ public class ChecklistResponseController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDirection) {
-        
+
         Sort.Direction direction = sortDirection.equalsIgnoreCase("asc") ? Sort.Direction.ASC : Sort.Direction.DESC;
         Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
-        
-        PagedChecklistResponseDTO<ChecklistResponseDetailDTO> responses = 
-                checklistResponseService.findChecklistResponsesByClientIdPaged(clientId, pageable);
-        
+
+        PagedChecklistResponseDTO<ChecklistResponseDetailDTO> responses
+                = checklistResponseService.findChecklistResponsesByClientIdPaged(clientId, pageable);
+
         WebResponseEntity<PagedChecklistResponseDTO<ChecklistResponseDetailDTO>> response = WebResponseEntity.success(
-                responses, 
+                responses,
                 "Respostas de checklist para barragens do cliente paginadas obtidas com sucesso!"
         );
-        
+
         return ResponseEntity.ok(response);
     }
 
@@ -211,18 +211,18 @@ public class ChecklistResponseController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDirection) {
-        
+
         Sort.Direction direction = sortDirection.equalsIgnoreCase("asc") ? Sort.Direction.ASC : Sort.Direction.DESC;
         Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
-        
-        PagedChecklistResponseDTO<ChecklistResponseDetailDTO> responses = 
-                checklistResponseService.findChecklistResponsesByUserIdPaged(userId, pageable);
-        
+
+        PagedChecklistResponseDTO<ChecklistResponseDetailDTO> responses
+                = checklistResponseService.findChecklistResponsesByUserIdPaged(userId, pageable);
+
         WebResponseEntity<PagedChecklistResponseDTO<ChecklistResponseDetailDTO>> response = WebResponseEntity.success(
-                responses, 
+                responses,
                 "Respostas de checklist do usuário paginadas obtidas com sucesso!"
         );
-        
+
         return ResponseEntity.ok(response);
     }
 
@@ -234,18 +234,18 @@ public class ChecklistResponseController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDirection) {
-        
+
         Sort.Direction direction = sortDirection.equalsIgnoreCase("asc") ? Sort.Direction.ASC : Sort.Direction.DESC;
         Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
-        
-        PagedChecklistResponseDTO<ChecklistResponseDetailDTO> responses = 
-                checklistResponseService.findChecklistResponsesByDateRangePaged(startDate, endDate, pageable);
-        
+
+        PagedChecklistResponseDTO<ChecklistResponseDetailDTO> responses
+                = checklistResponseService.findChecklistResponsesByDateRangePaged(startDate, endDate, pageable);
+
         WebResponseEntity<PagedChecklistResponseDTO<ChecklistResponseDetailDTO>> response = WebResponseEntity.success(
-                responses, 
+                responses,
                 "Respostas de checklist no período especificado paginadas obtidas com sucesso!"
         );
-        
+
         return ResponseEntity.ok(response);
     }
 }

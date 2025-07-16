@@ -26,7 +26,7 @@ public class HydrotelemetricDataCollectionJob {
     private final DamRepository damRepository;
     private final HydrotelemetricReadingRepository hydrotelemetricReadingRepository;
 
-    @Scheduled(cron = "0 30 23 * * ?")
+    @Scheduled(cron = "0 30 0 * * ?")
     @Transactional
     public void collectHydrotelemetricData() {
         log.info("Iniciando coleta de dados hidrotelemétricos");

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import com.geosegbar.entities.AnswerEntity;
 import com.geosegbar.entities.ChecklistEntity;
 import com.geosegbar.entities.ChecklistResponseEntity;
+import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.OptionEntity;
 import com.geosegbar.entities.QuestionEntity;
 import com.geosegbar.entities.QuestionnaireResponseEntity;
@@ -17,6 +18,7 @@ import com.geosegbar.entities.TemplateQuestionnaireEntity;
 import com.geosegbar.entities.TemplateQuestionnaireQuestionEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersAndDamDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersDTO;
 import com.geosegbar.infra.checklist.dtos.OptionDTO;
 import com.geosegbar.infra.checklist.dtos.QuestionWithLastAnswerDTO;
@@ -163,6 +165,136 @@ public class ChecklistService {
         }
 
         return result;
+    }
+
+    public List<ChecklistWithLastAnswersAndDamDTO> findAllChecklistsWithLastAnswersByClientId(Long clientId) {
+        // Buscar todas as barragens do cliente
+        List<DamEntity> clientDams = damService.findDamsByClientId(clientId);
+
+        if (clientDams.isEmpty()) {
+            throw new NotFoundException("Nenhuma barragem encontrada para o Cliente com ID: " + clientId);
+        }
+
+        List<ChecklistWithLastAnswersAndDamDTO> allChecklists = new ArrayList<>();
+
+        // Para cada barragem do cliente
+        for (DamEntity dam : clientDams) {
+            // Buscar todos os checklists desta barragem
+            List<ChecklistEntity> damChecklists = checklistRepository.findByDams_Id(dam.getId());
+
+            // Para cada checklist da barragem
+            for (ChecklistEntity checklist : damChecklists) {
+                // Criar um DTO para este checklist
+                ChecklistWithLastAnswersAndDamDTO checklistDTO = new ChecklistWithLastAnswersAndDamDTO();
+                checklistDTO.setId(checklist.getId());
+                checklistDTO.setName(checklist.getName());
+                checklistDTO.setCreatedAt(checklist.getCreatedAt());
+
+                // Adicionar informações da barragem
+                ChecklistWithLastAnswersAndDamDTO.DamInfoDTO damInfo
+                        = new ChecklistWithLastAnswersAndDamDTO.DamInfoDTO(
+                                dam.getId(),
+                                dam.getName(),
+                                dam.getCity(),
+                                dam.getState(),
+                                dam.getLatitude(),
+                                dam.getLongitude()
+                        );
+                checklistDTO.setDam(damInfo);
+
+                // Buscar todas as respostas para este checklist específico nesta barragem
+                List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository
+                        .findByDamIdAndChecklistIdOrderByCreatedAtDesc(dam.getId(), checklist.getId());
+
+                // Lista de template questionnaires para este checklist
+                List<TemplateQuestionnaireWithAnswersDTO> templateDTOs = new ArrayList<>();
+
+                // Para cada template de questionário no checklist
+                for (TemplateQuestionnaireEntity template : checklist.getTemplateQuestionnaires()) {
+                    TemplateQuestionnaireWithAnswersDTO templateDTO = new TemplateQuestionnaireWithAnswersDTO();
+                    templateDTO.setId(template.getId());
+                    templateDTO.setName(template.getName());
+
+                    // Lista de perguntas para este template
+                    List<QuestionWithLastAnswerDTO> questionDTOs = new ArrayList<>();
+
+                    // Para cada pergunta no template
+                    for (TemplateQuestionnaireQuestionEntity tqQuestion : template.getTemplateQuestions()) {
+                        QuestionEntity question = tqQuestion.getQuestion();
+
+                        // Criar um DTO para esta pergunta
+                        QuestionWithLastAnswerDTO questionDTO = new QuestionWithLastAnswerDTO();
+                        questionDTO.setId(question.getId());
+                        questionDTO.setQuestionText(question.getQuestionText());
+                        questionDTO.setType(question.getType());
+
+                        // Converter todas as opções disponíveis para esta pergunta
+                        List<OptionDTO> allOptionDTOs = question.getOptions().stream()
+                                .map(opt -> new OptionDTO(opt.getId(), opt.getLabel(), opt.getValue()))
+                                .collect(Collectors.toList());
+
+                        questionDTO.setAllOptions(allOptionDTOs);
+
+                        // Apenas buscar a última resposta não-NI se houver respostas para este checklist
+                        if (!checklistResponses.isEmpty()) {
+                            // Encontrar a última resposta não-NI para esta pergunta
+                            Optional<OptionEntity> lastNonNIOption = findLastNonNIOption(
+                                    checklistResponses, template.getId(), question.getId());
+
+                            if (lastNonNIOption.isPresent()) {
+                                OptionEntity option = lastNonNIOption.get();
+                                OptionDTO optionDTO = new OptionDTO(option.getId(), option.getLabel(), option.getValue());
+                                questionDTO.setLastSelectedOption(optionDTO);
+
+                                // Encontrar o ID da resposta que contém esta opção
+                                for (ChecklistResponseEntity response : checklistResponses) {
+                                    boolean found = false;
+                                    for (QuestionnaireResponseEntity qResponse : response.getQuestionnaireResponses()) {
+                                        if (qResponse.getTemplateQuestionnaire().getId().equals(template.getId())) {
+                                            for (AnswerEntity answer : qResponse.getAnswers()) {
+                                                if (answer.getQuestion().getId().equals(question.getId())
+                                                        && answer.getSelectedOptions().stream()
+                                                                .anyMatch(opt -> opt.getId().equals(option.getId()))) {
+                                                    questionDTO.setAnswerResponseId(answer.getId());
+                                                    found = true;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        if (found) {
+                                            break;
+                                        }
+                                    }
+                                    if (found) {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        questionDTOs.add(questionDTO);
+                    }
+
+                    templateDTO.setQuestions(questionDTOs);
+                    templateDTOs.add(templateDTO);
+                }
+
+                checklistDTO.setTemplateQuestionnaires(templateDTOs);
+                allChecklists.add(checklistDTO);
+            }
+        }
+
+        if (allChecklists.isEmpty()) {
+            throw new NotFoundException("Nenhum checklist encontrado para as barragens do Cliente com ID: " + clientId);
+        }
+
+        // Ordenar por nome da barragem e depois por nome do checklist
+        allChecklists.sort((a, b) -> {
+            int damComparison = a.getDam().getName().compareTo(b.getDam().getName());
+            return damComparison != 0 ? damComparison : a.getName().compareTo(b.getName());
+        });
+
+        return allChecklists;
     }
 
     private Optional<OptionEntity> findLastNonNIOption(

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.ChecklistEntity;
+import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersAndDamDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersDTO;
 import com.geosegbar.infra.checklist.services.ChecklistService;
 
@@ -46,6 +47,20 @@ public class ChecklistController {
     public ResponseEntity<WebResponseEntity<ChecklistEntity>> getChecklistById(@PathVariable Long id) {
         ChecklistEntity checklist = checklistService.findById(id);
         WebResponseEntity<ChecklistEntity> response = WebResponseEntity.success(checklist, "Checklist obtida com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/client/{clientId}/with-last-answers")
+    public ResponseEntity<WebResponseEntity<List<ChecklistWithLastAnswersAndDamDTO>>> getAllChecklistsWithLastAnswersByClientId(
+            @PathVariable Long clientId) {
+
+        List<ChecklistWithLastAnswersAndDamDTO> checklists = checklistService.findAllChecklistsWithLastAnswersByClientId(clientId);
+
+        WebResponseEntity<List<ChecklistWithLastAnswersAndDamDTO>> response = WebResponseEntity.success(
+                checklists,
+                "Todos os checklists com últimas respostas do cliente obtidos com sucesso!"
+        );
+
         return ResponseEntity.ok(response);
     }
 

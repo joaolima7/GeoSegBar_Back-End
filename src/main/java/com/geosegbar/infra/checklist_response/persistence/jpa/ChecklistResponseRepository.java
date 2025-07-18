@@ -6,7 +6,10 @@ import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.geosegbar.entities.ChecklistResponseEntity;
@@ -35,4 +38,13 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
 
     List<ChecklistResponseEntity> findByDamIdAndChecklistIdOrderByCreatedAtDesc(Long damId, Long checklistId);
 
+    @EntityGraph(attributePaths = {"user", "dam"})
+    @Query("SELECT cr FROM ChecklistResponseEntity cr WHERE cr.dam.id = :damId ORDER BY cr.createdAt DESC")
+    List<ChecklistResponseEntity> findByDamIdWithUserAndDam(@Param("damId") Long damId);
+
+    @EntityGraph(attributePaths = {"user", "dam"})
+    Page<ChecklistResponseEntity> findByDamIdWithUserAndDam(@Param("damId") Long damId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"user", "dam"})
+    Page<ChecklistResponseEntity> findByDamIdInWithUserAndDam(Collection<Long> damIds, Pageable pageable);
 }

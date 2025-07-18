@@ -108,7 +108,6 @@ public class ChecklistResponseService {
             Long clientId, Pageable pageable) {
 
         List<DamEntity> clientDams = damService.findDamsByClientId(clientId);
-
         if (clientDams.isEmpty()) {
             throw new NotFoundException("Nenhuma barragem encontrada para o Cliente com ID: " + clientId);
         }
@@ -117,7 +116,8 @@ public class ChecklistResponseService {
                 .map(DamEntity::getId)
                 .collect(Collectors.toList());
 
-        Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdIn(damIds, pageable);
+        // ✅ Usar consulta otimizada com EntityGraph
+        Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdInWithUserAndDam(damIds, pageable);
 
         List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
                 .map(this::convertToDetailDto)
@@ -152,19 +152,16 @@ public class ChecklistResponseService {
         DamInfoDTO damInfo = new DamInfoDTO();
         damInfo.setId(dam.getId());
         damInfo.setName(dam.getName());
-
         dto.setDam(damInfo);
 
-        List<QuestionnaireResponseEntity> questionnaireResponses = questionnaireResponseRepository
-                .findByChecklistResponseId(checklistResponse.getId());
+        // ✅ Usar consulta otimizada com EntityGraph
+        List<QuestionnaireResponseEntity> questionnaireResponses
+                = questionnaireResponseRepository.findByChecklistResponseIdOptimized(checklistResponse.getId());
 
-        if (questionnaireResponses == null || questionnaireResponses.isEmpty()) {
-            questionnaireResponses = questionnaireResponseRepository
-                    .findByDamIdAndCreatedAtBetween(
-                            checklistResponse.getDam().getId(),
-                            checklistResponse.getCreatedAt().minusMinutes(5),
-                            checklistResponse.getCreatedAt().plusHours(1)
-                    );
+        // ✅ REMOVER ou simplificar drasticamente o fallback
+        if (questionnaireResponses.isEmpty()) {
+            dto.setTemplates(new ArrayList<>());
+            return dto;
         }
 
         Map<Long, TemplateWithAnswersDTO> templateMap = new HashMap<>();
@@ -245,7 +242,8 @@ public class ChecklistResponseService {
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByDamIdPaged(Long damId, Pageable pageable) {
         damService.findById(damId);
 
-        Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamId(damId, pageable);
+        // ✅ Usar consulta otimizada com EntityGraph
+        Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdWithUserAndDam(damId, pageable);
         if (page.isEmpty()) {
             throw new NotFoundException("Nenhuma resposta de checklist encontrada para a Barragem com id: " + damId);
         }

@@ -16,6 +16,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
@@ -28,11 +29,18 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
+@Table(name = "checklist_responses", indexes = {
+    @Index(name = "idx_checklist_response_dam_id", columnList = "dam_id"),
+    @Index(name = "idx_checklist_response_user_id", columnList = "user_id"),
+    @Index(name = "idx_checklist_response_checklist_id", columnList = "checklist_id"),
+    @Index(name = "idx_checklist_response_created_at", columnList = "created_at"),
+    @Index(name = "idx_checklist_response_dam_created_desc", columnList = "dam_id, created_at"),
+    @Index(name = "idx_checklist_response_dam_checklist_created", columnList = "dam_id, checklist_id, created_at")
+})
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "checklist_responses")
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class ChecklistResponseEntity {
 

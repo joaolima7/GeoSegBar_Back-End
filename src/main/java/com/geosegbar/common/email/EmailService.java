@@ -3,6 +3,7 @@ package com.geosegbar.common.email;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
@@ -26,6 +27,7 @@ public class EmailService {
     @Value("${application.frontend-url:https://geometrisa-prod.com.br}")
     private String frontendUrl;
 
+    @Async
     public void sendVerificationCode(String toEmail, String code) {
         try {
             Context context = new Context();
@@ -48,6 +50,7 @@ public class EmailService {
         }
     }
 
+    @Async
     public void sendPasswordResetCode(String toEmail, String code) {
         try {
             Context context = new Context();
@@ -70,6 +73,7 @@ public class EmailService {
         }
     }
 
+    @Async
     public void sendFirstAccessPassword(String toEmail, String password, String userName) {
         try {
             Context context = new Context();
@@ -94,6 +98,7 @@ public class EmailService {
         }
     }
 
+    @Async
     public void sendShareFolderEmail(String to, String sharedByName, String folderName, String token) {
         try {
             MimeMessage mimeMessage = mailSender.createMimeMessage();

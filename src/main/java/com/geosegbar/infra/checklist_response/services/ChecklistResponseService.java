@@ -13,14 +13,12 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.AnswerEntity;
-import com.geosegbar.entities.AnswerPhotoEntity;
 import com.geosegbar.entities.ChecklistResponseEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.QuestionEntity;
 import com.geosegbar.entities.QuestionnaireResponseEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
 import com.geosegbar.exceptions.NotFoundException;
-import com.geosegbar.infra.answer_photo.persistence.jpa.AnswerPhotoRepository;
 import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseDetailDTO;
 import com.geosegbar.infra.checklist_response.dtos.DamInfoDTO;
 import com.geosegbar.infra.checklist_response.dtos.DamLastChecklistDTO;
@@ -42,7 +40,6 @@ public class ChecklistResponseService {
 
     private final ChecklistResponseRepository checklistResponseRepository;
     private final QuestionnaireResponseRepository questionnaireResponseRepository;
-    private final AnswerPhotoRepository answerPhotoRepository;
     private final DamService damService;
 
     public List<ChecklistResponseEntity> findAll() {
@@ -117,7 +114,7 @@ public class ChecklistResponseService {
                 .collect(Collectors.toList());
 
         // ✅ Usar consulta otimizada com EntityGraph
-        Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdInWithUserAndDam(damIds, pageable);
+        Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdsWithUserAndDam(damIds, pageable);
 
         List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
                 .map(this::convertToDetailDto)
@@ -185,8 +182,7 @@ public class ChecklistResponseService {
                         .map(opt -> new OptionInfoDTO(opt.getId(), opt.getLabel()))
                         .collect(Collectors.toList());
 
-                List<AnswerPhotoEntity> photos = answerPhotoRepository.findByAnswerId(answer.getId());
-                List<PhotoInfoDTO> photoDtos = photos.stream()
+                List<PhotoInfoDTO> photoDtos = answer.getPhotos().stream()
                         .map(photo -> new PhotoInfoDTO(photo.getId(), photo.getImagePath()))
                         .collect(Collectors.toList());
 

@@ -113,8 +113,8 @@ public class ChecklistResponseService {
                 .map(DamEntity::getId)
                 .collect(Collectors.toList());
 
-        // ✅ Usar consulta otimizada com EntityGraph
-        Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdsWithUserAndDam(damIds, pageable);
+        // ✅ Usar método com nome correto
+        Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdsOptimized(damIds, pageable);
 
         List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
                 .map(this::convertToDetailDto)
@@ -239,7 +239,7 @@ public class ChecklistResponseService {
         damService.findById(damId);
 
         // ✅ Usar consulta otimizada com EntityGraph
-        Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdWithUserAndDam(damId, pageable);
+        Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdOptimized(damId, pageable);
         if (page.isEmpty()) {
             throw new NotFoundException("Nenhuma resposta de checklist encontrada para a Barragem com id: " + damId);
         }

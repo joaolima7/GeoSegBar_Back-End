@@ -76,13 +76,12 @@ public class InstrumentService {
     }
 
     public InstrumentEntity findWithAllDetails(Long id) {
-        return instrumentRepository.findWithActiveOutputsById(id)
+        return instrumentRepository.findWithCompleteDetailsById(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
     }
 
     public List<InstrumentEntity> findByClientId(Long clientId, Boolean active) {
-        List<InstrumentEntity> instruments = instrumentRepository.findWithAllDetailsByClientId(clientId, active);
-        return instruments;
+        return instrumentRepository.findByClientIdOptimized(clientId, active);
     }
 
     @Transactional
@@ -503,7 +502,7 @@ public class InstrumentService {
     }
 
     public List<InstrumentEntity> findByFilters(Long damId, String instrumentType, Long sectionId, Boolean active, Long clientId) {
-        return instrumentRepository.findByFilters(damId, instrumentType, sectionId, active, clientId);
+        return instrumentRepository.findByFiltersOptimized(damId, instrumentType, sectionId, active, clientId);
     }
 
     private void validateEquation(String equation, Set<String> inputAcronyms, Set<String> constantAcronyms) {

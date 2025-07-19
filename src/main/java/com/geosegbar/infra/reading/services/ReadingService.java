@@ -58,9 +58,10 @@ public class ReadingService {
     private final UserRepository userRepository;
 
     public List<ReadingResponseDTO> findByInstrumentId(Long instrumentId) {
-        List<ReadingEntity> readings = readingRepository.findByInstrumentIdOrderByDateDescHourDesc(instrumentId);
+        // ✅ Usar método otimizado
+        List<ReadingEntity> readings = readingRepository.findByInstrumentIdOptimized(instrumentId);
         return readings.stream()
-                .map(this::mapToResponseDTO)
+                .map(this::mapToResponseDTOOptimized)
                 .collect(Collectors.toList());
     }
 
@@ -69,7 +70,7 @@ public class ReadingService {
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + instrumentId));
 
         Pageable pageable = PageRequest.of(0, limit);
-        List<ReadingEntity> recentReadings = readingRepository.findTopNByInstrumentIdOrderByDateDescHourDesc(instrumentId, pageable);
+        List<ReadingEntity> recentReadings = readingRepository.findTopNByInstrumentIdOptimized(instrumentId, pageable);
 
         if (recentReadings.isEmpty()) {
             return createInstrumentLimitStatusDTO(instrument, LimitStatusEnum.NORMAL, null);
@@ -210,8 +211,9 @@ public class ReadingService {
                     Sort.by(Sort.Direction.DESC, "date", "hour")
             );
         }
-        Page<ReadingEntity> readings = readingRepository.findByInstrumentId(instrumentId, pageable);
-        Page<ReadingResponseDTO> dtoPage = readings.map(this::mapToResponseDTO);
+        // ✅ Usar método otimizado
+        Page<ReadingEntity> readings = readingRepository.findByInstrumentIdOptimized(instrumentId, pageable);
+        Page<ReadingResponseDTO> dtoPage = readings.map(this::mapToResponseDTOOptimized);
 
         return new PagedReadingResponseDTO<>(
                 dtoPage.getContent(),
@@ -231,9 +233,10 @@ public class ReadingService {
                 throw new UnauthorizedException("Usuário não autorizado a visualizar leituras!");
             }
         }
-        List<ReadingEntity> readings = readingRepository.findByOutputIdOrderByDateDescHourDesc(outputId);
+        // ✅ Usar método otimizado
+        List<ReadingEntity> readings = readingRepository.findByOutputIdOptimized(outputId);
         return readings.stream()
-                .map(this::mapToResponseDTO)
+                .map(this::mapToResponseDTOOptimized)
                 .collect(Collectors.toList());
     }
 
@@ -253,11 +256,11 @@ public class ReadingService {
             );
         }
 
-        // Se active não for fornecido, por padrão buscar apenas readings ativas
         Boolean activeFilter = active != null ? active : true;
 
-        Page<ReadingEntity> readings = readingRepository.findByFilters(instrumentId, outputId, startDate, endDate, limitStatus, activeFilter, pageable);
-        Page<ReadingResponseDTO> dtoPage = readings.map(this::mapToResponseDTO);
+        // ✅ Usar método otimizado
+        Page<ReadingEntity> readings = readingRepository.findByFiltersOptimized(instrumentId, outputId, startDate, endDate, limitStatus, activeFilter, pageable);
+        Page<ReadingResponseDTO> dtoPage = readings.map(this::mapToResponseDTOOptimized);
 
         return new PagedReadingResponseDTO<>(
                 dtoPage.getContent(),
@@ -628,6 +631,37 @@ public class ReadingService {
 
         // Carregar e adicionar os valores de input
         dto.setInputValues(getInputValuesForReading(reading));
+
+        return dto;
+    }
+
+    private ReadingResponseDTO mapToResponseDTOOptimized(ReadingEntity reading) {
+        ReadingResponseDTO dto = new ReadingResponseDTO();
+        dto.setId(reading.getId());
+        dto.setDate(reading.getDate());
+        dto.setHour(reading.getHour());
+        dto.setCalculatedValue(reading.getCalculatedValue());
+        dto.setLimitStatus(reading.getLimitStatus());
+        dto.setInstrumentId(reading.getInstrument().getId());
+        dto.setInstrumentName(reading.getInstrument().getName());
+        dto.setOutputId(reading.getOutput().getId());
+        dto.setOutputName(reading.getOutput().getName());
+        dto.setOutputAcronym(reading.getOutput().getAcronym());
+        dto.setComment(reading.getComment());
+
+        if (reading.getUser() != null) {
+            dto.setCreatedBy(new ReadingResponseDTO.UserInfoDTO(
+                    reading.getUser().getId(),
+                    reading.getUser().getName(),
+                    reading.getUser().getEmail()
+            ));
+        }
+
+        // ✅ Usar inputValues já carregados pelo EntityGraph - SEM consulta adicional
+        List<ReadingInputValueDTO> inputValueDTOs = reading.getInputValues().stream()
+                .map(this::mapToInputValueDTO)
+                .collect(Collectors.toList());
+        dto.setInputValues(inputValueDTOs);
 
         return dto;
     }

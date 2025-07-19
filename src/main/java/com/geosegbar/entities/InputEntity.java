@@ -7,6 +7,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -18,7 +19,11 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "input")
+@Table(name = "input", indexes = {
+    @Index(name = "idx_input_instrument_id", columnList = "instrument_id"),
+    @Index(name = "idx_input_acronym", columnList = "acronym"),
+    @Index(name = "idx_input_instrument_acronym", columnList = "instrument_id, acronym")
+})
 @Getter
 @Setter
 @NoArgsConstructor

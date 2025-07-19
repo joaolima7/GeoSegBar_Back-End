@@ -6,6 +6,7 @@ import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -77,4 +78,37 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
 
     @Query("SELECT DISTINCT r.instrument.id FROM ReadingEntity r WHERE r.instrument.dam.client.id = :clientId AND r.active = true")
     List<Long> findDistinctInstrumentIdsByClientId(@Param("clientId") Long clientId);
+
+    @EntityGraph(attributePaths = {"user", "instrument", "output", "inputValues"})
+    @Query("SELECT r FROM ReadingEntity r WHERE r.instrument.id = :instrumentId AND r.active = true ORDER BY r.date DESC, r.hour DESC")
+    List<ReadingEntity> findByInstrumentIdOptimized(@Param("instrumentId") Long instrumentId);
+
+    @EntityGraph(attributePaths = {"user", "instrument", "output", "inputValues"})
+    @Query("SELECT r FROM ReadingEntity r WHERE r.instrument.id = :instrumentId AND r.active = true ORDER BY r.date DESC, r.hour DESC")
+    Page<ReadingEntity> findByInstrumentIdOptimized(@Param("instrumentId") Long instrumentId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"user", "instrument", "output", "inputValues"})
+    @Query("SELECT r FROM ReadingEntity r WHERE r.output.id = :outputId AND r.active = true ORDER BY r.date DESC, r.hour DESC")
+    List<ReadingEntity> findByOutputIdOptimized(@Param("outputId") Long outputId);
+
+    @EntityGraph(attributePaths = {"user", "instrument", "output", "inputValues"})
+    @Query("SELECT r FROM ReadingEntity r WHERE r.instrument.id = :instrumentId "
+            + "AND (:outputId IS NULL OR r.output.id = :outputId) "
+            + "AND (:startDate IS NULL OR r.date >= :startDate) "
+            + "AND (:endDate IS NULL OR r.date <= :endDate) "
+            + "AND (:limitStatus IS NULL OR r.limitStatus = :limitStatus) "
+            + "AND (:active IS NULL OR r.active = :active) "
+            + "ORDER BY r.date DESC, r.hour DESC")
+    Page<ReadingEntity> findByFiltersOptimized(
+            @Param("instrumentId") Long instrumentId,
+            @Param("outputId") Long outputId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("limitStatus") LimitStatusEnum limitStatus,
+            @Param("active") Boolean active,
+            Pageable pageable);
+
+    @EntityGraph(attributePaths = {"user", "instrument", "output", "inputValues"})
+    @Query("SELECT r FROM ReadingEntity r WHERE r.instrument.id = :instrumentId AND r.active = true ORDER BY r.date DESC, r.hour DESC")
+    List<ReadingEntity> findTopNByInstrumentIdOptimized(@Param("instrumentId") Long instrumentId, Pageable pageable);
 }

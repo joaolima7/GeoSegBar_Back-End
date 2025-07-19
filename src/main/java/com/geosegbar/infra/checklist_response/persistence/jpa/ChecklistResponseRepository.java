@@ -49,4 +49,11 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
     @EntityGraph(attributePaths = {"user", "dam"})
     @Query("SELECT cr FROM ChecklistResponseEntity cr WHERE cr.dam.id = :damId ORDER BY cr.createdAt DESC")
     List<ChecklistResponseEntity> findByDamIdOptimizedList(@Param("damId") Long damId);
+
+    @EntityGraph(attributePaths = {"user", "dam"})
+    @Query("SELECT cr FROM ChecklistResponseEntity cr "
+            + "JOIN FETCH cr.dam d "
+            + "WHERE d.client.id = :clientId "
+            + "ORDER BY cr.createdAt DESC")
+    Page<ChecklistResponseEntity> findByClientIdOptimized(@Param("clientId") Long clientId, Pageable pageable);
 }

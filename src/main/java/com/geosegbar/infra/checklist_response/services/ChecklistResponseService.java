@@ -104,17 +104,12 @@ public class ChecklistResponseService {
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByClientIdPaged(
             Long clientId, Pageable pageable) {
 
-        List<DamEntity> clientDams = damService.findDamsByClientId(clientId);
-        if (clientDams.isEmpty()) {
-            throw new NotFoundException("Nenhuma barragem encontrada para o Cliente com ID: " + clientId);
+        // ✅ SUBSTITUIR todo o método por esta consulta direta:
+        Page<ChecklistResponseEntity> page = checklistResponseRepository.findByClientIdOptimized(clientId, pageable);
+
+        if (page.isEmpty()) {
+            throw new NotFoundException("Nenhuma resposta encontrada para o Cliente com ID: " + clientId);
         }
-
-        List<Long> damIds = clientDams.stream()
-                .map(DamEntity::getId)
-                .collect(Collectors.toList());
-
-        // ✅ Usar método com nome correto
-        Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdsOptimized(damIds, pageable);
 
         List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
                 .map(this::convertToDetailDto)

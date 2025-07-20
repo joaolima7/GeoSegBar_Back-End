@@ -56,6 +56,14 @@ public class ReadingController {
         return ResponseEntity.ok(WebResponseEntity.success(readings, "Leituras obtidas com sucesso!"));
     }
 
+    @GetMapping("/instrument/{instrumentId}/grouped")
+    public ResponseEntity<WebResponseEntity<PagedReadingResponseDTO<ReadingResponseDTO>>> getGroupedReadingsByInstrument(
+            @PathVariable Long instrumentId,
+            Pageable pageable) {
+        PagedReadingResponseDTO<ReadingResponseDTO> result = readingService.findGroupedReadingsFlatByInstrument(instrumentId, pageable);
+        return ResponseEntity.ok(WebResponseEntity.success(result, "Leituras agrupadas obtidas com sucesso!"));
+    }
+
     @GetMapping("/output/{outputId}")
     public ResponseEntity<WebResponseEntity<List<ReadingResponseDTO>>> getReadingsByOutput(
             @PathVariable Long outputId) {

@@ -635,6 +635,29 @@ public class ReadingService {
         return dto;
     }
 
+    public PagedReadingResponseDTO<ReadingResponseDTO> findGroupedReadingsFlatByInstrument(Long instrumentId, Pageable pageable) {
+        Page<Object[]> dateHourPage = readingRepository.findDistinctDateHourByInstrumentId(instrumentId, pageable);
+
+        List<ReadingResponseDTO> allReadings = new ArrayList<>();
+        for (Object[] dh : dateHourPage.getContent()) {
+            LocalDate date = (LocalDate) dh[0];
+            LocalTime hour = (LocalTime) dh[1];
+            List<ReadingEntity> readings = readingRepository.findByInstrumentIdAndDateAndHourAndActiveTrue(instrumentId, date, hour);
+            List<ReadingResponseDTO> dtos = readings.stream().map(this::mapToResponseDTO).collect(Collectors.toList());
+            allReadings.addAll(dtos);
+        }
+
+        return new PagedReadingResponseDTO<>(
+                allReadings,
+                dateHourPage.getNumber(),
+                dateHourPage.getSize(),
+                dateHourPage.getTotalElements(),
+                dateHourPage.getTotalPages(),
+                dateHourPage.isLast(),
+                dateHourPage.isFirst()
+        );
+    }
+
     private ReadingResponseDTO mapToResponseDTOOptimized(ReadingEntity reading) {
         ReadingResponseDTO dto = new ReadingResponseDTO();
         dto.setId(reading.getId());

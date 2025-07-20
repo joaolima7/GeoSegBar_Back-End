@@ -48,6 +48,13 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
 
     List<ReadingEntity> findByInstrumentIdAndLimitStatusOrderByDateDescHourDesc(Long instrumentId, LimitStatusEnum limitStatus);
 
+    @Query("SELECT r.date, r.hour FROM ReadingEntity r WHERE r.instrument.id = :instrumentId AND r.active = true GROUP BY r.date, r.hour ORDER BY r.date DESC, r.hour DESC")
+    Page<Object[]> findDistinctDateHourByInstrumentId(@Param("instrumentId") Long instrumentId, Pageable pageable);
+
+    List<ReadingEntity> findByInstrumentIdAndDateAndHourAndActiveTrue(Long instrumentId, LocalDate date, LocalTime hour);
+
+    List<ReadingEntity> findByInstrumentIdAndDateAndHour(Long instrumentId, LocalDate date, LocalTime hour);
+
     @Query("SELECT r FROM ReadingEntity r WHERE r.instrument.id = :instrumentId "
             + "AND r.date = :date AND r.hour = :hour AND r.user.id = :userId AND r.active = true")
     List<ReadingEntity> findByInstrumentAndDateAndHourAndUser(

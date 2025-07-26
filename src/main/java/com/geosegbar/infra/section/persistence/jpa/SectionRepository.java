@@ -16,6 +16,10 @@ public interface SectionRepository extends JpaRepository<SectionEntity, Long> {
 
     Optional<SectionEntity> findByName(String name);
 
+    List<SectionEntity> findAllByDamId(Long damId);
+
+    Optional<SectionEntity> findByDamIdAndName(Long damId, String name);
+
     @Query("SELECT s FROM SectionEntity s WHERE "
             + "s.firstVertexLatitude = :lat1 AND "
             + "s.secondVertexLatitude = :lat2 AND "

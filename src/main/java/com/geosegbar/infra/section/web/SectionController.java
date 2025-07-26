@@ -18,6 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.SectionEntity;
+import com.geosegbar.infra.dam.services.DamService;
 import com.geosegbar.infra.section.dtos.CreateSectionDTO;
 import com.geosegbar.infra.section.services.SectionService;
 
@@ -30,6 +31,7 @@ import lombok.RequiredArgsConstructor;
 public class SectionController {
 
     private final SectionService sectionService;
+    private final DamService damService;
 
     @GetMapping
     public ResponseEntity<WebResponseEntity<List<SectionEntity>>> getAllSections() {
@@ -53,6 +55,7 @@ public class SectionController {
         section.setSecondVertexLatitude(sectionDTO.getSecondVertexLatitude());
         section.setFirstVertexLongitude(sectionDTO.getFirstVertexLongitude());
         section.setSecondVertexLongitude(sectionDTO.getSecondVertexLongitude());
+        section.setDam(damService.findById(sectionDTO.getDamId()));
 
         SectionEntity createdSection = sectionService.create(section);
 

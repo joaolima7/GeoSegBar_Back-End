@@ -134,6 +134,10 @@ public class DamEntity {
     @JsonIgnore
     private Set<ChecklistResponseEntity> checklistResponses = new HashSet<>();
 
+    @OneToMany(mappedBy = "dam", cascade = CascadeType.ALL, orphanRemoval = false, fetch = FetchType.LAZY)
+    @JsonIgnoreProperties("dam")
+    private Set<SectionEntity> sections = new HashSet<>();
+
     @JsonIgnore
     @OneToMany(mappedBy = "dam", fetch = FetchType.LAZY)
     private Set<DamPermissionEntity> damPermissions = new HashSet<>();

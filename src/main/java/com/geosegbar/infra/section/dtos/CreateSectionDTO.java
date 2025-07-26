@@ -25,4 +25,7 @@ public class CreateSectionDTO {
 
     @NotNull(message = "Segundo vértice da Longitude é obrigatório!")
     private Double secondVertexLongitude;
+
+    @NotNull(message = "ID da barragem é obrigatório")
+    private Long damId;
 }

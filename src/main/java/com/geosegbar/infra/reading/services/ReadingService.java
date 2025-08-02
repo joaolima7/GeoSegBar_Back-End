@@ -414,9 +414,6 @@ public class ReadingService {
             throw new InvalidInputException("Não é possível editar uma leitura inativa");
         }
 
-        // Armazenar valores originais para comparação
-        LocalDate originalDate = reading.getDate();
-        LocalTime originalHour = reading.getHour();
         UserEntity originalUser = reading.getUser();
 
         // Atualizar data se fornecida

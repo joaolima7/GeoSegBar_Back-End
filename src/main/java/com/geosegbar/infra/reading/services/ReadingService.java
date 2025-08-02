@@ -117,7 +117,7 @@ public class ReadingService {
 
         List<InstrumentLimitStatusDTO> results = new ArrayList<>();
 
-        List<InstrumentEntity> activeInstruments = instrumentRepository.findByFilters(
+        List<InstrumentEntity> activeInstruments = instrumentRepository.findByFiltersOptimized(
                 null,
                 null,
                 null,

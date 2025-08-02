@@ -1,0 +1,225 @@
+package com.geosegbar.infra.instrument_graph_pattern.services;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.geosegbar.entities.InstrumentEntity;
+import com.geosegbar.entities.InstrumentGraphAxesEntity;
+import com.geosegbar.entities.InstrumentGraphCustomizationPropertiesEntity;
+import com.geosegbar.entities.InstrumentGraphPatternEntity;
+import com.geosegbar.exceptions.DuplicateResourceException;
+import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.instrument.services.InstrumentService;
+import com.geosegbar.infra.instrument_graph_axes.persistence.jpa.InstrumentGraphAxesRepository;
+import com.geosegbar.infra.instrument_graph_pattern.dtos.CreateGraphPatternRequest;
+import com.geosegbar.infra.instrument_graph_pattern.dtos.GraphPatternDetailResponseDTO;
+import com.geosegbar.infra.instrument_graph_pattern.dtos.GraphPatternResponseDTO;
+import com.geosegbar.infra.instrument_graph_pattern.persistence.jpa.InstrumentGraphPatternRepository;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class InstrumentGraphPatternService {
+
+    private final InstrumentService instrumentService;
+    private final InstrumentGraphPatternRepository patternRepository;
+    private final InstrumentGraphAxesRepository axesRepository;
+
+    public List<GraphPatternResponseDTO> findByInstrument(Long instrumentId) {
+        return patternRepository.findByInstrumentId(instrumentId)
+                .stream()
+                .map(this::mapToResponseDTO)
+                .collect(Collectors.toList());
+    }
+
+    public List<GraphPatternDetailResponseDTO> findByInstrumentWithDetails(Long instrumentId) {
+        return patternRepository.findByInstrumentIdWithAllDetails(instrumentId)
+                .stream()
+                .map(this::mapToDetailResponseDTO)
+                .collect(Collectors.toList());
+    }
+
+    public InstrumentGraphPatternEntity findById(Long id) {
+        return patternRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Padrão de Gráfico não encontrado com ID: " + id + "."));
+    }
+
+    public GraphPatternDetailResponseDTO updateNameGraphPattern(Long id, String newName) {
+        InstrumentGraphPatternEntity pattern = findById(id);
+        if (patternRepository.existsByNameAndInstrumentId(newName, pattern.getInstrument().getId())) {
+            throw new DuplicateResourceException(
+                    "Já existe um Padrão de Gráfico com o nome '" + newName + "' para este instrumento!");
+        }
+        pattern.setName(newName);
+        return mapToDetailResponseDTO(patternRepository.save(pattern));
+    }
+
+    public GraphPatternDetailResponseDTO findByIdWithDetails(Long id) {
+        InstrumentGraphPatternEntity pattern = patternRepository.findByIdWithAllDetails(id)
+                .orElseThrow(() -> new NotFoundException("Padrão de Gráfico não encontrado com ID: " + id + "."));
+
+        return mapToDetailResponseDTO(pattern);
+    }
+
+    @Transactional
+    public void deleteById(Long patternId) {
+        findById(patternId);
+        patternRepository.deleteById(patternId);
+        log.info("Pattern excluído: id={}", patternId);
+    }
+
+    @Transactional
+    public GraphPatternResponseDTO create(CreateGraphPatternRequest request) {
+        if (patternRepository.existsByNameAndInstrumentId(request.getName(), request.getInstrumentId())) {
+            throw new DuplicateResourceException(
+                    "Já existe um Padrão de Gráfico com o nome '" + request.getName() + "' para este instrumento!");
+        }
+
+        InstrumentEntity instrument = instrumentService.findById(request.getInstrumentId());
+
+        InstrumentGraphPatternEntity pattern = new InstrumentGraphPatternEntity();
+        pattern.setName(request.getName());
+        pattern.setInstrument(instrument);
+        pattern = patternRepository.save(pattern);
+
+        InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
+        axes.setPattern(pattern);
+        axes.setAbscissaPx(14);
+        axes.setPrimaryOrdinatePx(14);
+        axes.setSecondaryOrdinatePx(14);
+        axes.setAbscissaGridLinesEnable(true);
+        axes.setPrimaryOrdinateGridLinesEnable(true);
+        axesRepository.save(axes);
+        pattern.setAxes(axes);
+
+        patternRepository.save(pattern);
+
+        log.info("Pattern criado: id={}, name={}, instrumentId={}",
+                pattern.getId(), pattern.getName(), instrument.getId());
+
+        return mapToResponseDTO(pattern);
+    }
+
+    public GraphPatternResponseDTO mapToResponseDTO(InstrumentGraphPatternEntity pattern) {
+        GraphPatternResponseDTO dto = new GraphPatternResponseDTO();
+        dto.setId(pattern.getId());
+        dto.setName(pattern.getName());
+        dto.setInstrumentId(pattern.getInstrument().getId());
+        return dto;
+    }
+
+    public GraphPatternDetailResponseDTO mapToDetailResponseDTO(InstrumentGraphPatternEntity pattern) {
+        GraphPatternDetailResponseDTO dto = new GraphPatternDetailResponseDTO();
+        dto.setId(pattern.getId());
+        dto.setName(pattern.getName());
+
+        if (pattern.getInstrument() != null) {
+            dto.setInstrument(new GraphPatternDetailResponseDTO.InstrumentDetailDTO(
+                    pattern.getInstrument().getId(),
+                    pattern.getInstrument().getName(),
+                    pattern.getInstrument().getLocation()
+            ));
+        }
+
+        if (pattern.getAxes() != null) {
+            InstrumentGraphAxesEntity axes = pattern.getAxes();
+            dto.setAxes(new GraphPatternDetailResponseDTO.AxesDetailDTO(
+                    axes.getId(),
+                    axes.getAbscissaPx(),
+                    axes.getAbscissaGridLinesEnable(),
+                    axes.getPrimaryOrdinatePx(),
+                    axes.getSecondaryOrdinatePx(),
+                    axes.getPrimaryOrdinateGridLinesEnable(),
+                    axes.getPrimaryOrdinateTitle(),
+                    axes.getSecondaryOrdinateTitle(),
+                    axes.getPrimaryOrdinateSpacing(),
+                    axes.getSecondaryOrdinateSpacing(),
+                    axes.getPrimaryOrdinateInitialValue(),
+                    axes.getSecondaryOrdinateInitialValue(),
+                    axes.getPrimaryOrdinateMaximumValue(),
+                    axes.getSecondaryOrdinateMaximumValue()
+            ));
+        }
+
+        if (pattern.getProperties() != null) {
+            List<GraphPatternDetailResponseDTO.PropertyDetailDTO> properties = pattern.getProperties().stream()
+                    .map(this::mapToPropertyDetailDTO)
+                    .collect(Collectors.toList());
+            dto.setProperties(properties);
+        }
+
+        return dto;
+    }
+
+    private GraphPatternDetailResponseDTO.PropertyDetailDTO mapToPropertyDetailDTO(InstrumentGraphCustomizationPropertiesEntity property) {
+        GraphPatternDetailResponseDTO.PropertyDetailDTO dto = new GraphPatternDetailResponseDTO.PropertyDetailDTO();
+        dto.setId(property.getId());
+        dto.setName(property.getName());
+        dto.setCustomizationType(property.getCustomizationType());
+        dto.setFillColor(property.getFillColor());
+        dto.setLineType(property.getLineType());
+        dto.setLabelEnable(property.getLabelEnable());
+        dto.setIsPrimaryOrdinate(property.getIsPrimaryOrdinate());
+
+        if (property.getInstrument() != null) {
+            dto.setInstrument(new GraphPatternDetailResponseDTO.RelatedInstrumentDTO(
+                    property.getInstrument().getId(),
+                    property.getInstrument().getName(),
+                    property.getInstrument().getLocation()
+            ));
+        }
+
+        if (property.getOutput() != null) {
+            dto.setOutput(new GraphPatternDetailResponseDTO.RelatedOutputDTO(
+                    property.getOutput().getId(),
+                    property.getOutput().getAcronym(),
+                    property.getOutput().getName()
+            ));
+        }
+
+        if (property.getStatisticalLimit() != null) {
+            var statLimit = property.getStatisticalLimit();
+            GraphPatternDetailResponseDTO.RelatedOutputDTO outputDto = null;
+            if (statLimit.getOutput() != null) {
+                outputDto = new GraphPatternDetailResponseDTO.RelatedOutputDTO(
+                        statLimit.getOutput().getId(),
+                        statLimit.getOutput().getAcronym(),
+                        statLimit.getOutput().getName()
+                );
+            }
+            dto.setStatisticalLimit(new GraphPatternDetailResponseDTO.RelatedStatisticalLimitDTO(
+                    statLimit.getId(),
+                    statLimit.getLowerValue(),
+                    statLimit.getUpperValue(),
+                    outputDto
+            ));
+        }
+
+        if (property.getDeterministicLimit() != null) {
+            var detLimit = property.getDeterministicLimit();
+            GraphPatternDetailResponseDTO.RelatedOutputDTO outputDto = null;
+            if (detLimit.getOutput() != null) {
+                outputDto = new GraphPatternDetailResponseDTO.RelatedOutputDTO(
+                        detLimit.getOutput().getId(),
+                        detLimit.getOutput().getAcronym(),
+                        detLimit.getOutput().getName()
+                );
+            }
+            dto.setDeterministicLimit(new GraphPatternDetailResponseDTO.RelatedDeterministicLimitDTO(
+                    detLimit.getId(),
+                    detLimit.getAttentionValue(),
+                    detLimit.getAlertValue(),
+                    detLimit.getEmergencyValue(),
+                    outputDto
+            ));
+        }
+
+        return dto;
+    }
+}

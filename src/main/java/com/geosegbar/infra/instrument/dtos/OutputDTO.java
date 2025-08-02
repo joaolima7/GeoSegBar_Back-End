@@ -11,6 +11,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class OutputDTO {
 
+    private Long id;
+
     @NotBlank(message = "Sigla do Output é obrigatória")
     private String acronym;
 

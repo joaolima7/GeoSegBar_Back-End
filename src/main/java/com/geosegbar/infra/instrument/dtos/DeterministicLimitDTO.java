@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class DeterministicLimitDTO {
 
+    private Long id;
     private Double attentionValue;
     private Double alertValue;
     private Double emergencyValue;

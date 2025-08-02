@@ -11,6 +11,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ConstantDTO {
 
+    private Long id;
+
     @NotBlank(message = "Sigla da Constante é obrigatória")
     private String acronym;
 

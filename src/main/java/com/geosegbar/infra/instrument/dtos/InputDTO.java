@@ -11,6 +11,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class InputDTO {
 
+    private Long id;
+
     @NotBlank(message = "Sigla do Input é obrigatória")
     private String acronym;
 

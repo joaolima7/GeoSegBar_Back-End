@@ -48,19 +48,6 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
             @Param("clientId") Long clientId,
             @Param("active") Boolean active);
 
-    @Query("SELECT i FROM InstrumentEntity i "
-            + "WHERE (:damId IS NULL OR i.dam.id = :damId) "
-            + "AND (:instrumentType IS NULL OR i.instrumentType = :instrumentType) "
-            + "AND (:sectionId IS NULL OR i.section.id = :sectionId) "
-            + "AND (:active IS NULL OR i.active = :active) "
-            + "AND (:clientId IS NULL OR i.dam.client.id = :clientId)")
-    List<InstrumentEntity> findByFilters(
-            @Param("damId") Long damId,
-            @Param("instrumentType") String instrumentType,
-            @Param("sectionId") Long sectionId,
-            @Param("active") Boolean active,
-            @Param("clientId") Long clientId);
-
     @EntityGraph(attributePaths = {
         "inputs", "inputs.measurementUnit",
         "constants", "constants.measurementUnit",
@@ -79,7 +66,12 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
     @Query("SELECT i FROM InstrumentEntity i WHERE i.dam.client.id = :clientId AND (:active IS NULL OR i.active = :active)")
     List<InstrumentEntity> findByClientIdOptimized(@Param("clientId") Long clientId, @Param("active") Boolean active);
 
-    @EntityGraph(attributePaths = {"dam", "dam.client", "section"})
+    @EntityGraph(attributePaths = {
+        "inputs", "inputs.measurementUnit",
+        "constants", "constants.measurementUnit",
+        "outputs", "outputs.measurementUnit", "outputs.statisticalLimit", "outputs.deterministicLimit",
+        "dam", "dam.client", "section"
+    })
     @Query("SELECT i FROM InstrumentEntity i "
             + "WHERE (:damId IS NULL OR i.dam.id = :damId) "
             + "AND (:instrumentType IS NULL OR i.instrumentType = :instrumentType) "

@@ -239,12 +239,14 @@ public class BulkInstrumentImportService {
             if ("Estatistico".equalsIgnoreCase(type)) {
                 ld.isStatistical = true;
                 ld.statDTO = new StatisticalLimitDTO(
+                        null,
                         getDouble(row, idx, "Valor Inferior"),
                         getDouble(row, idx, "Valor Superior")
                 );
             } else {
                 ld.isStatistical = false;
                 ld.detDTO = new DeterministicLimitDTO(
+                        null,
                         getDouble(row, idx, "Valor de Atenção"),
                         getDouble(row, idx, "Valor de Alerta"),
                         getDouble(row, idx, "Valor de Emergência")

@@ -847,6 +847,7 @@ public class InstrumentService {
         List<InputDTO> inputDTOs = new ArrayList<>();
         for (InputEntity input : instrument.getInputs()) {
             InputDTO inputDTO = new InputDTO();
+            inputDTO.setId(input.getId()); // Adicionado
             inputDTO.setAcronym(input.getAcronym());
             inputDTO.setName(input.getName());
             inputDTO.setPrecision(input.getPrecision());
@@ -861,6 +862,7 @@ public class InstrumentService {
         List<ConstantDTO> constantDTOs = new ArrayList<>();
         for (ConstantEntity constant : instrument.getConstants()) {
             ConstantDTO constantDTO = new ConstantDTO();
+            constantDTO.setId(constant.getId()); // Adicionado
             constantDTO.setAcronym(constant.getAcronym());
             constantDTO.setName(constant.getName());
             constantDTO.setPrecision(constant.getPrecision());
@@ -877,6 +879,7 @@ public class InstrumentService {
         for (OutputEntity output : instrument.getOutputs()) {
             if (output.getActive()) {
                 OutputDTO outputDTO = new OutputDTO();
+                outputDTO.setId(output.getId()); // Adicionado
                 outputDTO.setAcronym(output.getAcronym());
                 outputDTO.setName(output.getName());
                 outputDTO.setEquation(output.getEquation());
@@ -885,11 +888,10 @@ public class InstrumentService {
                 outputDTO.setMeasurementUnitName(output.getMeasurementUnit().getName());
                 outputDTO.setMeasurementUnitAcronym(output.getMeasurementUnit().getAcronym());
 
-                // Não definimos mais noLimit no output
-                // outputDTO.setNoLimit(output.getNoLimit());
                 // Add statistical limit
                 if (output.getStatisticalLimit() != null) {
                     StatisticalLimitDTO limitDTO = new StatisticalLimitDTO();
+                    limitDTO.setId(output.getStatisticalLimit().getId()); // Adicionado
                     limitDTO.setLowerValue(output.getStatisticalLimit().getLowerValue());
                     limitDTO.setUpperValue(output.getStatisticalLimit().getUpperValue());
                     outputDTO.setStatisticalLimit(limitDTO);
@@ -898,6 +900,7 @@ public class InstrumentService {
                 // Add deterministic limit
                 if (output.getDeterministicLimit() != null) {
                     DeterministicLimitDTO limitDTO = new DeterministicLimitDTO();
+                    limitDTO.setId(output.getDeterministicLimit().getId()); // Adicionado
                     limitDTO.setAttentionValue(output.getDeterministicLimit().getAttentionValue());
                     limitDTO.setAlertValue(output.getDeterministicLimit().getAlertValue());
                     limitDTO.setEmergencyValue(output.getDeterministicLimit().getEmergencyValue());

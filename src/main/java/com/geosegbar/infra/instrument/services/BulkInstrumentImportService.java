@@ -274,22 +274,22 @@ public class BulkInstrumentImportService {
         if (c == null) {
             return null;
         }
-        switch (c.getCellType()) {
-            case STRING:
-                return c.getStringCellValue();
-            case NUMERIC:
-                return BigDecimal.valueOf(c.getNumericCellValue())
-                        .stripTrailingZeros()
-                        .toPlainString();
-            case BOOLEAN:
-                return Boolean.toString(c.getBooleanCellValue());
-            case FORMULA:
-                return c.getCachedFormulaResultType() == CellType.STRING
-                        ? c.getStringCellValue()
-                        : String.valueOf(c.getNumericCellValue());
-            default:
-                return null;
-        }
+        return switch (c.getCellType()) {
+            case STRING ->
+                c.getStringCellValue();
+            case NUMERIC ->
+                BigDecimal.valueOf(c.getNumericCellValue())
+                .stripTrailingZeros()
+                .toPlainString();
+            case BOOLEAN ->
+                Boolean.toString(c.getBooleanCellValue());
+            case FORMULA ->
+                c.getCachedFormulaResultType() == CellType.STRING
+                ? c.getStringCellValue()
+                : String.valueOf(c.getNumericCellValue());
+            default ->
+                null;
+        };
     }
 
     private Double getDouble(Row r, Map<String, Integer> ix, String col) {

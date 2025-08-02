@@ -262,20 +262,16 @@ public class InstrumentGraphCustomizationPropertiesService {
         property.setIsPrimaryOrdinate(type != CustomizationTypeEnum.LINIMETRIC_RULER);
 
         switch (type) {
-            case OUTPUT:
+            case OUTPUT ->
                 property.setOutput(output);
-                break;
-            case STATISTICAL_LIMIT:
+            case STATISTICAL_LIMIT ->
                 property.setStatisticalLimit(statLimit);
-                break;
-            case DETERMINISTIC_LIMIT:
+            case DETERMINISTIC_LIMIT ->
                 property.setDeterministicLimit(detLimit);
-                break;
-            case INSTRUMENT:
+            case INSTRUMENT ->
                 property.setInstrument(instrument);
-                break;
-            case LINIMETRIC_RULER:
-                break;
+            case LINIMETRIC_RULER -> {
+            }
         }
 
         propertiesRepository.save(property);

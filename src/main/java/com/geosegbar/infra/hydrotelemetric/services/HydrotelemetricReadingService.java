@@ -2,6 +2,7 @@ package com.geosegbar.infra.hydrotelemetric.services;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -25,6 +26,10 @@ public class HydrotelemetricReadingService {
 
     public List<HydrotelemetricReadingEntity> getAllReadings() {
         return hydrotelemetricReadingRepository.findAll(Sort.by(Sort.Direction.DESC, "date"));
+    }
+
+    public Optional<Double> getLatestUpstreamAverageByDamId(Long damId) {
+        return hydrotelemetricReadingRepository.findLatestUpstreamAverageByDamId(damId);
     }
 
     public Page<HydrotelemetricReadingEntity> getAllReadingsPaginated(int page, int size) {

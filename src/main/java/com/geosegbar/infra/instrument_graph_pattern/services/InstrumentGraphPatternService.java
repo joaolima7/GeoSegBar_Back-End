@@ -1,17 +1,20 @@
 package com.geosegbar.infra.instrument_graph_pattern.services;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.geosegbar.common.enums.CustomizationTypeEnum;
 import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.entities.InstrumentGraphAxesEntity;
 import com.geosegbar.entities.InstrumentGraphCustomizationPropertiesEntity;
 import com.geosegbar.entities.InstrumentGraphPatternEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.hydrotelemetric.services.HydrotelemetricReadingService;
 import com.geosegbar.infra.instrument.services.InstrumentService;
 import com.geosegbar.infra.instrument_graph_axes.persistence.jpa.InstrumentGraphAxesRepository;
 import com.geosegbar.infra.instrument_graph_pattern.dtos.CreateGraphPatternRequest;
@@ -30,6 +33,7 @@ public class InstrumentGraphPatternService {
     private final InstrumentService instrumentService;
     private final InstrumentGraphPatternRepository patternRepository;
     private final InstrumentGraphAxesRepository axesRepository;
+    private final HydrotelemetricReadingService hydrotelemetricReadingService;
 
     public List<GraphPatternResponseDTO> findByInstrument(Long instrumentId) {
         return patternRepository.findByInstrumentId(instrumentId)
@@ -149,7 +153,7 @@ public class InstrumentGraphPatternService {
 
         if (pattern.getProperties() != null) {
             List<GraphPatternDetailResponseDTO.PropertyDetailDTO> properties = pattern.getProperties().stream()
-                    .map(this::mapToPropertyDetailDTO)
+                    .map(property -> mapToPropertyDetailDTO(property, pattern.getInstrument()))
                     .collect(Collectors.toList());
             dto.setProperties(properties);
         }
@@ -157,7 +161,10 @@ public class InstrumentGraphPatternService {
         return dto;
     }
 
-    private GraphPatternDetailResponseDTO.PropertyDetailDTO mapToPropertyDetailDTO(InstrumentGraphCustomizationPropertiesEntity property) {
+    private GraphPatternDetailResponseDTO.PropertyDetailDTO mapToPropertyDetailDTO(
+            InstrumentGraphCustomizationPropertiesEntity property,
+            InstrumentEntity instrument) {
+
         GraphPatternDetailResponseDTO.PropertyDetailDTO dto = new GraphPatternDetailResponseDTO.PropertyDetailDTO();
         dto.setId(property.getId());
         dto.setName(property.getName());
@@ -166,6 +173,18 @@ public class InstrumentGraphPatternService {
         dto.setLineType(property.getLineType());
         dto.setLabelEnable(property.getLabelEnable());
         dto.setIsPrimaryOrdinate(property.getIsPrimaryOrdinate());
+
+        if (property.getCustomizationType() == CustomizationTypeEnum.LINIMETRIC_RULER) {
+            if (instrument != null && instrument.getDam() != null) {
+                Long damId = instrument.getDam().getId();
+                Optional<Double> linimetricRulerValue = hydrotelemetricReadingService
+                        .getLatestUpstreamAverageByDamId(damId);
+
+                dto.setLinimetricRulerValue(linimetricRulerValue.orElse(null));
+            } else {
+                dto.setLinimetricRulerValue(null);
+            }
+        }
 
         if (property.getInstrument() != null) {
             dto.setInstrument(new GraphPatternDetailResponseDTO.RelatedInstrumentDTO(

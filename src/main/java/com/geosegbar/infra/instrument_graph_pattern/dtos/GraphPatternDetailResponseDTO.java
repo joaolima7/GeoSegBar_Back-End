@@ -64,6 +64,8 @@ public class GraphPatternDetailResponseDTO {
         private Boolean labelEnable;
         private Boolean isPrimaryOrdinate;
 
+        private Double linimetricRulerValue;
+
         private RelatedInstrumentDTO instrument;
         private RelatedOutputDTO output;
         private RelatedStatisticalLimitDTO statisticalLimit;

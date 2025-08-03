@@ -12,6 +12,7 @@ import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.entities.InstrumentGraphAxesEntity;
 import com.geosegbar.entities.InstrumentGraphCustomizationPropertiesEntity;
 import com.geosegbar.entities.InstrumentGraphPatternEntity;
+import com.geosegbar.entities.InstrumentGraphPatternFolder;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.hydrotelemetric.services.HydrotelemetricReadingService;
@@ -21,6 +22,7 @@ import com.geosegbar.infra.instrument_graph_pattern.dtos.CreateGraphPatternReque
 import com.geosegbar.infra.instrument_graph_pattern.dtos.GraphPatternDetailResponseDTO;
 import com.geosegbar.infra.instrument_graph_pattern.dtos.GraphPatternResponseDTO;
 import com.geosegbar.infra.instrument_graph_pattern.persistence.jpa.InstrumentGraphPatternRepository;
+import com.geosegbar.infra.instrument_graph_pattern_folder.persistence.jpa.InstrumentGraphPatternFolderRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +36,7 @@ public class InstrumentGraphPatternService {
     private final InstrumentGraphPatternRepository patternRepository;
     private final InstrumentGraphAxesRepository axesRepository;
     private final HydrotelemetricReadingService hydrotelemetricReadingService;
+    private final InstrumentGraphPatternFolderRepository folderRepository;
 
     public List<GraphPatternResponseDTO> findByInstrument(Long instrumentId) {
         return patternRepository.findByInstrumentId(instrumentId)
@@ -87,9 +90,16 @@ public class InstrumentGraphPatternService {
 
         InstrumentEntity instrument = instrumentService.findById(request.getInstrumentId());
 
+        InstrumentGraphPatternFolder folder = null;
+        if (request.getFolderId() != null) {
+            folder = folderRepository.findById(request.getFolderId())
+                    .orElseThrow(() -> new NotFoundException("Pasta não encontrada com ID: " + request.getFolderId()));
+        }
+
         InstrumentGraphPatternEntity pattern = new InstrumentGraphPatternEntity();
         pattern.setName(request.getName());
         pattern.setInstrument(instrument);
+        pattern.setFolder(folder);
         pattern = patternRepository.save(pattern);
 
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
@@ -104,8 +114,9 @@ public class InstrumentGraphPatternService {
 
         patternRepository.save(pattern);
 
-        log.info("Pattern criado: id={}, name={}, instrumentId={}",
-                pattern.getId(), pattern.getName(), instrument.getId());
+        log.info("Pattern criado: id={}, name={}, instrumentId={}, folderId={}",
+                pattern.getId(), pattern.getName(), instrument.getId(),
+                folder != null ? folder.getId() : null);
 
         return mapToResponseDTO(pattern);
     }
@@ -115,6 +126,14 @@ public class InstrumentGraphPatternService {
         dto.setId(pattern.getId());
         dto.setName(pattern.getName());
         dto.setInstrumentId(pattern.getInstrument().getId());
+
+        if (pattern.getFolder() != null) {
+            dto.setFolder(new GraphPatternResponseDTO.FolderSummaryDTO(
+                    pattern.getFolder().getId(),
+                    pattern.getFolder().getName()
+            ));
+        }
+
         return dto;
     }
 
@@ -128,6 +147,13 @@ public class InstrumentGraphPatternService {
                     pattern.getInstrument().getId(),
                     pattern.getInstrument().getName(),
                     pattern.getInstrument().getLocation()
+            ));
+        }
+
+        if (pattern.getFolder() != null) {
+            dto.setFolder(new GraphPatternDetailResponseDTO.FolderDetailDTO(
+                    pattern.getFolder().getId(),
+                    pattern.getFolder().getName()
             ));
         }
 

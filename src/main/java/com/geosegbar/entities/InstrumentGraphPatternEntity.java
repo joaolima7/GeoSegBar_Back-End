@@ -28,7 +28,9 @@ import lombok.Setter;
 @Table(name = "instrument_graph_pattern", indexes = {
     @Index(name = "idx_graph_pattern_instrument", columnList = "instrument_id"),
     @Index(name = "idx_graph_pattern_name", columnList = "name"),
-    @Index(name = "idx_graph_pattern_instrument_name", columnList = "instrument_id, name")
+    @Index(name = "idx_graph_pattern_folder", columnList = "folder_id"),
+    @Index(name = "idx_graph_pattern_instrument_name", columnList = "instrument_id, name"),
+    @Index(name = "idx_graph_pattern_folder_name", columnList = "folder_id, name")
 })
 @Getter
 @Setter
@@ -49,6 +51,11 @@ public class InstrumentGraphPatternEntity {
     @JoinColumn(name = "instrument_id", nullable = false)
     @JsonIgnoreProperties({"readings", "inputs", "constants", "outputs"})
     private InstrumentEntity instrument;
+
+    @ManyToOne
+    @JoinColumn(name = "folder_id", nullable = true)
+    @JsonIgnoreProperties({"patterns"})
+    private InstrumentGraphPatternFolder folder;
 
     @OneToMany(mappedBy = "pattern", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     @JsonIgnoreProperties("pattern")

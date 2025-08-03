@@ -17,8 +17,18 @@ public class GraphPatternDetailResponseDTO {
     private Long id;
     private String name;
     private InstrumentDetailDTO instrument;
+    private FolderDetailDTO folder;
     private AxesDetailDTO axes;
     private List<PropertyDetailDTO> properties;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class FolderDetailDTO {
+
+        private Long id;
+        private String name;
+    }
 
     @Data
     @NoArgsConstructor
@@ -63,9 +73,7 @@ public class GraphPatternDetailResponseDTO {
         private LineTypeEnum lineType;
         private Boolean labelEnable;
         private Boolean isPrimaryOrdinate;
-
         private Double linimetricRulerValue;
-
         private RelatedInstrumentDTO instrument;
         private RelatedOutputDTO output;
         private RelatedStatisticalLimitDTO statisticalLimit;

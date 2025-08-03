@@ -16,4 +16,6 @@ public class CreateGraphPatternRequest {
 
     @NotBlank(message = "Nome do Padrão de Gráfico é obrigatório!")
     private String name;
+
+    private Long folderId;
 }

@@ -157,4 +157,8 @@ public class DamEntity {
     @OneToMany(mappedBy = "dam", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnoreProperties("dam")
     private Set<HydrotelemetricReadingEntity> hydrotelemetricReadings = new HashSet<>();
+
+    @OneToMany(mappedBy = "dam", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnoreProperties("dam")
+    private Set<InstrumentGraphPatternFolder> patternFolders = new HashSet<>();
 }

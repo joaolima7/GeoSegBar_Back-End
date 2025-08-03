@@ -90,4 +90,20 @@ public interface InstrumentGraphPatternRepository extends JpaRepository<Instrume
             + "WHERE p.folder.id = :folderId "
             + "ORDER BY p.name ASC")
     List<InstrumentGraphPatternEntity> findByFolderIdWithAllDetails(@Param("folderId") Long folderId);
+
+    @Query("SELECT DISTINCT p FROM InstrumentGraphPatternEntity p "
+            + "LEFT JOIN FETCH p.instrument i "
+            + "LEFT JOIN FETCH i.dam "
+            + "LEFT JOIN FETCH p.folder f "
+            + "LEFT JOIN FETCH p.axes a "
+            + "LEFT JOIN FETCH p.properties prop "
+            + "LEFT JOIN FETCH prop.instrument "
+            + "LEFT JOIN FETCH prop.output "
+            + "LEFT JOIN FETCH prop.statisticalLimit sl "
+            + "LEFT JOIN FETCH sl.output "
+            + "LEFT JOIN FETCH prop.deterministicLimit dl "
+            + "LEFT JOIN FETCH dl.output "
+            + "WHERE p.instrument.dam.id = :damId "
+            + "ORDER BY p.instrument.name ASC, p.name ASC")
+    List<InstrumentGraphPatternEntity> findByInstrumentDamIdWithAllDetails(@Param("damId") Long damId);
 }

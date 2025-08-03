@@ -15,6 +15,7 @@ import com.geosegbar.entities.InstrumentGraphPatternEntity;
 import com.geosegbar.entities.InstrumentGraphPatternFolder;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.dam.services.DamService;
 import com.geosegbar.infra.hydrotelemetric.services.HydrotelemetricReadingService;
 import com.geosegbar.infra.instrument.services.InstrumentService;
 import com.geosegbar.infra.instrument_graph_axes.persistence.jpa.InstrumentGraphAxesRepository;
@@ -37,6 +38,7 @@ public class InstrumentGraphPatternService {
     private final InstrumentGraphAxesRepository axesRepository;
     private final HydrotelemetricReadingService hydrotelemetricReadingService;
     private final InstrumentGraphPatternFolderRepository folderRepository;
+    private final DamService damService;
 
     public List<GraphPatternResponseDTO> findByInstrument(Long instrumentId) {
         return patternRepository.findByInstrumentId(instrumentId)
@@ -55,6 +57,23 @@ public class InstrumentGraphPatternService {
     public InstrumentGraphPatternEntity findById(Long id) {
         return patternRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Padrão de Gráfico não encontrado com ID: " + id + "."));
+    }
+
+    public List<GraphPatternDetailResponseDTO> findAllPatternsByDam(Long damId) {
+        // Verificar se a dam existe
+        damService.findById(damId);
+
+        // Buscar todos os patterns de todos os instrumentos da dam com detalhes completos
+        List<InstrumentGraphPatternEntity> patterns = patternRepository.findByInstrumentDamIdWithAllDetails(damId);
+
+        // Converter para DTOs usando o método existente
+        List<GraphPatternDetailResponseDTO> patternDTOs = patterns.stream()
+                .map(this::mapToDetailResponseDTO)
+                .collect(Collectors.toList());
+
+        log.info("Patterns de barragem obtidos: damId={}, totalPatterns={}", damId, patternDTOs.size());
+
+        return patternDTOs;
     }
 
     public GraphPatternDetailResponseDTO updateNameGraphPattern(Long id, String newName) {

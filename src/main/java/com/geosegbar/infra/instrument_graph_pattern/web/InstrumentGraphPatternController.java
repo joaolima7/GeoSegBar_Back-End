@@ -54,6 +54,14 @@ public class InstrumentGraphPatternController {
                 WebResponseEntity.success(null, "Padrão de Gráfico excluído com sucesso!"));
     }
 
+    @GetMapping("/dam/{damId}")
+    public ResponseEntity<WebResponseEntity<List<GraphPatternDetailResponseDTO>>> getPatternsByDam(
+            @PathVariable Long damId) {
+        List<GraphPatternDetailResponseDTO> list = patternService.findAllPatternsByDam(damId);
+        return ResponseEntity.ok(
+                WebResponseEntity.success(list, "Padrões de Gráfico da barragem obtidos com sucesso!"));
+    }
+
     @GetMapping("/simple/instrument/{instrumentId}")
     public ResponseEntity<WebResponseEntity<List<GraphPatternResponseDTO>>> getSimpleByInstrument(
             @PathVariable Long instrumentId) {

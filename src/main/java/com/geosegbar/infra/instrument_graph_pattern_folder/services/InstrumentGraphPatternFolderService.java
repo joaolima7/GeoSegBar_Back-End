@@ -64,7 +64,6 @@ public class InstrumentGraphPatternFolderService {
     public FolderResponseDTO update(Long folderId, UpdateFolderRequestDTO request) {
         InstrumentGraphPatternFolder folder = findById(folderId);
 
-        // Verificar se o novo nome já existe na mesma dam (excluindo a própria pasta)
         boolean nameExists = folderRepository.existsByNameAndDamId(request.getName(), folder.getDam().getId())
                 && !folder.getName().equals(request.getName());
 
@@ -73,10 +72,8 @@ public class InstrumentGraphPatternFolderService {
                     "Já existe uma pasta com o nome '" + request.getName() + "' nesta barragem!");
         }
 
-        // Atualizar nome
         folder.setName(request.getName());
 
-        // Gerenciar associações de patterns se patternIds foi fornecido
         if (request.getPatternIds() != null) {
             updatePatternAssociations(folder, request.getPatternIds());
         }
@@ -93,35 +90,30 @@ public class InstrumentGraphPatternFolderService {
      * Atualiza as associações de patterns com a pasta
      */
     private void updatePatternAssociations(InstrumentGraphPatternFolder folder, List<Long> newPatternIds) {
-        // Buscar patterns atualmente associados à pasta
+
         List<InstrumentGraphPatternEntity> currentPatterns = patternRepository.findByFolderId(folder.getId());
         Set<Long> currentPatternIds = currentPatterns.stream()
                 .map(InstrumentGraphPatternEntity::getId)
                 .collect(Collectors.toSet());
 
-        // Se lista está vazia, remover todos os patterns da pasta
         if (newPatternIds.isEmpty()) {
             removeAllPatternsFromFolder(currentPatterns);
             log.info("Removidos todos {} patterns da pasta {}", currentPatterns.size(), folder.getId());
             return;
         }
 
-        // Validar se todos os patterns existem e pertencem à mesma dam
         validatePatternsForFolder(folder, newPatternIds);
 
         Set<Long> newPatternIdsSet = newPatternIds.stream().collect(Collectors.toSet());
 
-        // Patterns a serem removidos (estão na pasta mas não na nova lista)
         List<Long> patternsToRemove = currentPatternIds.stream()
                 .filter(id -> !newPatternIdsSet.contains(id))
                 .collect(Collectors.toList());
 
-        // Patterns a serem adicionados (estão na nova lista mas não na pasta)
         List<Long> patternsToAdd = newPatternIdsSet.stream()
                 .filter(id -> !currentPatternIds.contains(id))
                 .collect(Collectors.toList());
 
-        // Remover patterns da pasta
         if (!patternsToRemove.isEmpty()) {
             List<InstrumentGraphPatternEntity> patternsToRemoveEntities = patternRepository.findAllById(patternsToRemove);
             patternsToRemoveEntities.forEach(pattern -> pattern.setFolder(null));
@@ -129,7 +121,6 @@ public class InstrumentGraphPatternFolderService {
             log.info("Removidos {} patterns da pasta {}: {}", patternsToRemove.size(), folder.getId(), patternsToRemove);
         }
 
-        // Adicionar patterns à pasta
         if (!patternsToAdd.isEmpty()) {
             List<InstrumentGraphPatternEntity> patternsToAddEntities = patternRepository.findAllById(patternsToAdd);
             patternsToAddEntities.forEach(pattern -> pattern.setFolder(folder));
@@ -148,14 +139,12 @@ public class InstrumentGraphPatternFolderService {
 
         List<InstrumentGraphPatternEntity> patterns = patternRepository.findAllById(patternIds);
 
-        // Verificar se todos os IDs foram encontrados
         if (patterns.size() != patternIds.size()) {
             Set<Long> foundIds = patterns.stream().map(InstrumentGraphPatternEntity::getId).collect(Collectors.toSet());
             List<Long> notFoundIds = patternIds.stream().filter(id -> !foundIds.contains(id)).collect(Collectors.toList());
             throw new NotFoundException("Patterns não encontrados: " + notFoundIds);
         }
 
-        // Verificar se todos os patterns pertencem à mesma dam da pasta
         List<Long> invalidPatterns = patterns.stream()
                 .filter(pattern -> !pattern.getInstrument().getDam().getId().equals(folder.getDam().getId()))
                 .map(InstrumentGraphPatternEntity::getId)
@@ -307,9 +296,11 @@ public class InstrumentGraphPatternFolderService {
 
         List<InstrumentGraphPatternFolder> folders = folderRepository.findByDamIdWithDamDetails(damId);
 
-        List<InstrumentGraphPatternEntity> allPatterns = patternRepository.findByFolderDamIdWithAllDetails(damId);
+        List<InstrumentGraphPatternEntity> patternsInFolders = patternRepository.findByFolderDamIdWithAllDetails(damId);
 
-        Map<Long, List<InstrumentGraphPatternEntity>> patternsByFolder = allPatterns.stream()
+        List<InstrumentGraphPatternEntity> patternsWithoutFolder = patternRepository.findByInstrumentDamIdWithoutFolderWithAllDetails(damId);
+
+        Map<Long, List<InstrumentGraphPatternEntity>> patternsByFolder = patternsInFolders.stream()
                 .collect(Collectors.groupingBy(p -> p.getFolder().getId()));
 
         List<FolderWithPatternsDetailResponseDTO> folderDTOs = folders.stream()
@@ -340,19 +331,18 @@ public class InstrumentGraphPatternFolderService {
                 })
                 .collect(Collectors.toList());
 
+        List<com.geosegbar.infra.instrument_graph_pattern.dtos.GraphPatternDetailResponseDTO> patternsWithoutFolderDTOs
+                = patternsWithoutFolder.stream()
+                        .map(patternService::mapToDetailResponseDTO)
+                        .collect(Collectors.toList());
+
         DamFoldersWithPatternsDetailResponseDTO responseDTO = new DamFoldersWithPatternsDetailResponseDTO();
         responseDTO.setDamId(dam.getId());
         responseDTO.setDamName(dam.getName());
         responseDTO.setDamCity(dam.getCity());
         responseDTO.setDamState(dam.getState());
         responseDTO.setFolders(folderDTOs);
-
-        int totalPatterns = folderDTOs.stream()
-                .mapToInt(f -> f.getPatterns().size())
-                .sum();
-
-        log.debug("Pastas com patterns detalhados obtidas para dam {}: {} pastas, {} patterns total",
-                damId, folderDTOs.size(), totalPatterns);
+        responseDTO.setPatternsWithoutFolder(patternsWithoutFolderDTOs);
 
         return responseDTO;
     }

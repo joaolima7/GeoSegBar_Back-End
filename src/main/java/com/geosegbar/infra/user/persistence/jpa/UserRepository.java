@@ -13,6 +13,12 @@ import com.geosegbar.entities.UserEntity;
 @Repository
 public interface UserRepository extends JpaRepository<UserEntity, Long> {
 
+    @Query("SELECT u FROM UserEntity u "
+            + "LEFT JOIN FETCH u.clients "
+            + "LEFT JOIN FETCH u.createdBy "
+            + "WHERE u.id = :id")
+    Optional<UserEntity> findByIdWithClients(@Param("id") Long id);
+
     List<UserEntity> findAllByOrderByIdAsc();
 
     Optional<UserEntity> findByEmail(String email);

@@ -385,11 +385,8 @@ public class UserService {
     }
 
     public UserEntity findById(Long id) {
-        UserEntity user = userRepository.findById(id)
+        UserEntity user = userRepository.findByIdWithClients(id)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
-
-        user.getClients().size();
-
         return user;
     }
 

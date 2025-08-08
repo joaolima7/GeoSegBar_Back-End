@@ -3,6 +3,7 @@ package com.geosegbar.infra.instrument_tabulate_pattern.services;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -49,44 +50,37 @@ public class InstrumentTabulatePatternService {
     @Transactional
     @CacheEvict(value = {"tabulatePatterns", "tabulatePatternsByDam"}, allEntries = true)
     public TabulatePatternResponseDTO create(CreateTabulatePatternRequestDTO request) {
-        // Verificar se já existe um padrão com o mesmo nome na barragem
+
         if (patternRepository.existsByNameAndDamId(request.getName(), request.getDamId())) {
             throw new DuplicateResourceException(
                     "Já existe um padrão de tabela com o nome '" + request.getName() + "' nesta barragem!");
         }
 
-        // Verificar se a barragem existe
         DamEntity dam = damService.findById(request.getDamId());
 
-        // Verificar se a pasta existe (se fornecida)
         InstrumentTabulatePatternFolder folder = null;
         if (request.getFolderId() != null) {
             folder = folderService.findById(request.getFolderId());
 
-            // Verificar se a pasta pertence à mesma barragem
             if (!folder.getDam().getId().equals(dam.getId())) {
                 throw new InvalidInputException(
                         "A pasta selecionada não pertence à barragem informada!");
             }
         }
 
-        // Criar o padrão
         InstrumentTabulatePatternEntity pattern = new InstrumentTabulatePatternEntity();
         pattern.setName(request.getName());
         pattern.setDam(dam);
         pattern.setFolder(folder);
         pattern.setIsLinimetricRulerEnable(request.getIsLinimetricRulerEnable());
 
-        // Salvar primeiro para obter o ID
         pattern = patternRepository.save(pattern);
 
-        // Adicionar associações de instrumentos
         Set<InstrumentTabulateAssociationEntity> associations = new HashSet<>();
         validateAndProcessInstrumentAssociations(request.getAssociations(), pattern, associations);
 
         pattern.setAssociations(associations);
 
-        // Salvar novamente com as associações
         pattern = patternRepository.save(pattern);
 
         log.info("Padrão de tabela criado: id={}, name={}, damId={}, folderId={}",
@@ -108,7 +102,6 @@ public class InstrumentTabulatePatternService {
                 pattern.getDam() != null ? pattern.getDam().getId() : null,
                 pattern.getFolder() != null ? pattern.getFolder().getId() : null);
 
-        // Cascade remove automaticamente as associações e outputs por causa do orphanRemoval = true
         patternRepository.delete(pattern);
 
         log.info("Padrão de tabela excluído com sucesso: id={}", patternId);
@@ -117,49 +110,40 @@ public class InstrumentTabulatePatternService {
     @Transactional
     @CacheEvict(value = {"tabulatePatterns", "tabulatePatternsByDam"}, allEntries = true)
     public TabulatePatternResponseDTO update(Long patternId, UpdateTabulatePatternRequestDTO request) {
-        // Buscar o padrão com todos os detalhes
+
         InstrumentTabulatePatternEntity pattern = findEntityByIdWithAllDetails(patternId);
 
-        // Verificar se o nome já existe para outro padrão na mesma barragem
         if (!pattern.getName().equals(request.getName())
                 && patternRepository.existsByNameAndDamIdAndIdNot(request.getName(), pattern.getDam().getId(), patternId)) {
             throw new DuplicateResourceException(
                     "Já existe um padrão de tabela com o nome '" + request.getName() + "' nesta barragem!");
         }
 
-        // Verificar se a pasta existe (se fornecida)
         InstrumentTabulatePatternFolder folder = null;
         if (request.getFolderId() != null) {
             folder = folderService.findById(request.getFolderId());
 
-            // Verificar se a pasta pertence à mesma barragem
             if (!folder.getDam().getId().equals(pattern.getDam().getId())) {
                 throw new InvalidInputException(
                         "A pasta selecionada não pertence à barragem do padrão!");
             }
         }
 
-        // Atualizar campos básicos
         pattern.setName(request.getName());
-        pattern.setFolder(folder); // Pode ser null para remover da pasta
+        pattern.setFolder(folder);
         pattern.setIsLinimetricRulerEnable(request.getIsLinimetricRulerEnable());
 
-        // Atualizar associações de instrumentos
         Set<InstrumentTabulateAssociationEntity> currentAssociations = pattern.getAssociations();
         Set<InstrumentTabulateAssociationEntity> newAssociations = new HashSet<>();
 
-        // Mapear IDs das associações atuais para fácil acesso
         Map<Long, InstrumentTabulateAssociationEntity> associationsMap = currentAssociations.stream()
                 .collect(Collectors.toMap(InstrumentTabulateAssociationEntity::getId, a -> a));
 
-        // Processar associações atualizadas
         validateAndUpdateInstrumentAssociations(request.getAssociations(), pattern, newAssociations, associationsMap);
 
-        // Substituir todas as associações
         pattern.getAssociations().clear();
         pattern.getAssociations().addAll(newAssociations);
 
-        // Salvar as alterações
         pattern = patternRepository.save(pattern);
 
         log.info("Padrão de tabela atualizado: id={}, name={}, damId={}, folderId={}",
@@ -180,7 +164,7 @@ public class InstrumentTabulatePatternService {
     @Transactional(readOnly = true)
     @Cacheable(value = "tabulatePatternsByDam", key = "#damId")
     public List<TabulatePatternResponseDTO> findByDamId(Long damId) {
-        // Verificar se a barragem existe
+
         damService.findById(damId);
 
         List<InstrumentTabulatePatternEntity> patterns = patternRepository.findByDamIdWithAllDetails(damId);
@@ -191,7 +175,7 @@ public class InstrumentTabulatePatternService {
 
     @Transactional(readOnly = true)
     public List<TabulatePatternResponseDTO> findByFolderId(Long folderId) {
-        // Verificar se a pasta existe
+
         folderService.findById(folderId);
 
         List<InstrumentTabulatePatternEntity> patterns = patternRepository.findByFolderIdWithAllDetails(folderId);
@@ -200,40 +184,34 @@ public class InstrumentTabulatePatternService {
                 .collect(Collectors.toList());
     }
 
-    // Método para buscar entidade com todos os detalhes carregados
     public InstrumentTabulatePatternEntity findEntityByIdWithAllDetails(Long patternId) {
         return patternRepository.findByIdWithAllDetails(patternId)
                 .orElseThrow(() -> new NotFoundException("Padrão de tabela não encontrado com ID: " + patternId));
     }
 
-    // Métodos auxiliares privados
     private void validateAndProcessInstrumentAssociations(
             List<CreateTabulatePatternRequestDTO.InstrumentAssociationDTO> associationDTOs,
             InstrumentTabulatePatternEntity pattern,
             Set<InstrumentTabulateAssociationEntity> associations) {
 
-        // Mapa para verificar índices únicos
         Set<Integer> usedIndices = new HashSet<>();
-        int nextAvailableIndex = 1; // Começar do índice 1
+        int nextAvailableIndex = 1;
 
         for (CreateTabulatePatternRequestDTO.InstrumentAssociationDTO dto : associationDTOs) {
-            // Verificar se o instrumento existe e pertence à mesma barragem
+
             InstrumentEntity instrument = instrumentService.findById(dto.getInstrumentId());
             if (!instrument.getDam().getId().equals(pattern.getDam().getId())) {
                 throw new InvalidInputException(
                         "O instrumento com ID " + dto.getInstrumentId() + " não pertence à barragem do padrão!");
             }
 
-            // Criar associação de instrumento
             InstrumentTabulateAssociationEntity association = new InstrumentTabulateAssociationEntity();
             association.setPattern(pattern);
             association.setInstrument(instrument);
 
-            // Configurar colunas base
             configureBaseColumns(dto, association, usedIndices, nextAvailableIndex);
             nextAvailableIndex = getNextAvailableIndex(usedIndices);
 
-            // Processar associações de output
             processOutputAssociations(dto.getOutputAssociations(), association, instrument, usedIndices, nextAvailableIndex);
             nextAvailableIndex = getNextAvailableIndex(usedIndices);
 
@@ -247,21 +225,18 @@ public class InstrumentTabulatePatternService {
             Set<InstrumentTabulateAssociationEntity> newAssociations,
             Map<Long, InstrumentTabulateAssociationEntity> existingAssociationsMap) {
 
-        // Mapa para verificar índices únicos
         Set<Integer> usedIndices = new HashSet<>();
-        int nextAvailableIndex = 1; // Começar do índice 1
+        int nextAvailableIndex = 1;
 
         for (UpdateTabulatePatternRequestDTO.InstrumentAssociationDTO dto : associationDTOs) {
             InstrumentTabulateAssociationEntity association;
 
-            // Verificar se é atualização ou nova associação
             if (dto.getId() != null && existingAssociationsMap.containsKey(dto.getId())) {
-                // Atualizar associação existente
+
                 association = existingAssociationsMap.get(dto.getId());
 
-                // Verificar se o instrumento foi alterado
                 if (!association.getInstrument().getId().equals(dto.getInstrumentId())) {
-                    // Instrumento alterado, verificar o novo
+
                     InstrumentEntity newInstrument = instrumentService.findById(dto.getInstrumentId());
                     if (!newInstrument.getDam().getId().equals(pattern.getDam().getId())) {
                         throw new InvalidInputException(
@@ -270,14 +245,12 @@ public class InstrumentTabulatePatternService {
                     association.setInstrument(newInstrument);
                 }
 
-                // Limpar associações de output existentes
                 association.getOutputAssociations().clear();
             } else {
-                // Criar nova associação
+
                 association = new InstrumentTabulateAssociationEntity();
                 association.setPattern(pattern);
 
-                // Verificar se o instrumento existe e pertence à mesma barragem
                 InstrumentEntity instrument = instrumentService.findById(dto.getInstrumentId());
                 if (!instrument.getDam().getId().equals(pattern.getDam().getId())) {
                     throw new InvalidInputException(
@@ -286,11 +259,9 @@ public class InstrumentTabulatePatternService {
                 association.setInstrument(instrument);
             }
 
-            // Configurar colunas base
             configureBaseColumnsForUpdate(dto, association, usedIndices, nextAvailableIndex);
             nextAvailableIndex = getNextAvailableIndex(usedIndices);
 
-            // Processar associações de output
             processOutputAssociationsForUpdate(dto.getOutputAssociations(), association, association.getInstrument(), usedIndices, nextAvailableIndex);
             nextAvailableIndex = getNextAvailableIndex(usedIndices);
 
@@ -304,7 +275,6 @@ public class InstrumentTabulatePatternService {
             Set<Integer> usedIndices,
             int nextAvailableIndex) {
 
-        // Configurar data
         if (Boolean.TRUE.equals(dto.getIsDateEnable())) {
             association.setIsDateEnable(true);
             if (dto.getDateIndex() != null) {
@@ -323,7 +293,6 @@ public class InstrumentTabulatePatternService {
             association.setDateIndex(null);
         }
 
-        // Configurar hora
         if (Boolean.TRUE.equals(dto.getIsHourEnable())) {
             association.setIsHourEnable(true);
             if (dto.getHourIndex() != null) {
@@ -342,7 +311,6 @@ public class InstrumentTabulatePatternService {
             association.setHourIndex(null);
         }
 
-        // Configurar usuário
         if (Boolean.TRUE.equals(dto.getIsUserEnable())) {
             association.setIsUserEnable(true);
             if (dto.getUserIndex() != null) {
@@ -361,7 +329,6 @@ public class InstrumentTabulatePatternService {
             association.setUserIndex(null);
         }
 
-        // Configurar leitura
         association.setIsReadEnable(dto.getIsReadEnable());
     }
 
@@ -371,8 +338,6 @@ public class InstrumentTabulatePatternService {
             Set<Integer> usedIndices,
             int nextAvailableIndex) {
 
-        // Mesmo padrão que configureBaseColumns, mas para DTOs de atualização
-        // Configurar data
         if (Boolean.TRUE.equals(dto.getIsDateEnable())) {
             association.setIsDateEnable(true);
             if (dto.getDateIndex() != null) {
@@ -391,7 +356,6 @@ public class InstrumentTabulatePatternService {
             association.setDateIndex(null);
         }
 
-        // Configurar hora
         if (Boolean.TRUE.equals(dto.getIsHourEnable())) {
             association.setIsHourEnable(true);
             if (dto.getHourIndex() != null) {
@@ -410,7 +374,6 @@ public class InstrumentTabulatePatternService {
             association.setHourIndex(null);
         }
 
-        // Configurar usuário
         if (Boolean.TRUE.equals(dto.getIsUserEnable())) {
             association.setIsUserEnable(true);
             if (dto.getUserIndex() != null) {
@@ -429,7 +392,6 @@ public class InstrumentTabulatePatternService {
             association.setUserIndex(null);
         }
 
-        // Configurar leitura
         association.setIsReadEnable(dto.getIsReadEnable());
     }
 
@@ -440,40 +402,34 @@ public class InstrumentTabulatePatternService {
             Set<Integer> usedIndices,
             int nextAvailableIndex) {
 
-        // Validar se há pelo menos uma associação de output
         if (outputDTOs.isEmpty()) {
             throw new InvalidInputException("Pelo menos uma associação de output é obrigatória para o instrumento "
                     + instrument.getName());
         }
 
-        // Criar um mapa para verificar outputs duplicados
         Set<Long> processedOutputIds = new HashSet<>();
 
-        // Criar as associações de output
         Set<InstrumentTabulateOutputAssociationEntity> outputAssociations = new HashSet<>();
 
         for (CreateTabulatePatternRequestDTO.OutputAssociationDTO dto : outputDTOs) {
-            // Verificar se o output existe e pertence ao instrumento
+
             OutputEntity output = outputService.findById(dto.getOutputId());
             if (!output.getInstrument().getId().equals(instrument.getId())) {
                 throw new InvalidInputException(
                         "O output com ID " + dto.getOutputId() + " não pertence ao instrumento com ID " + instrument.getId());
             }
 
-            // Verificar se o output já foi processado
             if (processedOutputIds.contains(dto.getOutputId())) {
                 throw new InvalidInputException("Output duplicado: " + output.getName());
             }
             processedOutputIds.add(dto.getOutputId());
 
-            // Verificar índice do output
-            int outputIndex = dto.getOutputIndex() != null ? dto.getOutputIndex() : nextAvailableIndex;
+            int outputIndex = Optional.ofNullable(dto.getOutputIndex()).orElse(nextAvailableIndex);
             if (usedIndices.contains(outputIndex)) {
                 throw new InvalidInputException("Índice duplicado: " + outputIndex);
             }
             usedIndices.add(outputIndex);
 
-            // Criar associação de output
             InstrumentTabulateOutputAssociationEntity outputAssociation = new InstrumentTabulateOutputAssociationEntity();
             outputAssociation.setAssociation(association);
             outputAssociation.setOutput(output);
@@ -481,11 +437,9 @@ public class InstrumentTabulatePatternService {
 
             outputAssociations.add(outputAssociation);
 
-            // Incrementar o próximo índice disponível
             nextAvailableIndex = getNextAvailableIndex(usedIndices);
         }
 
-        // Associar as outputs à associação do instrumento
         association.setOutputAssociations(outputAssociations);
     }
 
@@ -496,53 +450,45 @@ public class InstrumentTabulatePatternService {
             Set<Integer> usedIndices,
             int nextAvailableIndex) {
 
-        // Validar se há pelo menos uma associação de output
         if (outputDTOs.isEmpty()) {
             throw new InvalidInputException("Pelo menos uma associação de output é obrigatória para o instrumento "
                     + instrument.getName());
         }
 
-        // Criar um mapa para verificar outputs duplicados
         Set<Long> processedOutputIds = new HashSet<>();
 
-        // Criar as associações de output
         Set<InstrumentTabulateOutputAssociationEntity> outputAssociations = new HashSet<>();
 
         for (UpdateTabulatePatternRequestDTO.OutputAssociationDTO dto : outputDTOs) {
-            // Verificar se o output existe e pertence ao instrumento
+
             OutputEntity output = outputService.findById(dto.getOutputId());
             if (!output.getInstrument().getId().equals(instrument.getId())) {
                 throw new InvalidInputException(
                         "O output com ID " + dto.getOutputId() + " não pertence ao instrumento com ID " + instrument.getId());
             }
 
-            // Verificar se o output já foi processado
             if (processedOutputIds.contains(dto.getOutputId())) {
                 throw new InvalidInputException("Output duplicado: " + output.getName());
             }
             processedOutputIds.add(dto.getOutputId());
 
-            // Verificar índice do output
-            int outputIndex = dto.getOutputIndex() != null ? dto.getOutputIndex() : nextAvailableIndex;
+            int outputIndex = Optional.ofNullable(dto.getOutputIndex()).orElse(nextAvailableIndex);
             if (usedIndices.contains(outputIndex)) {
                 throw new InvalidInputException("Índice duplicado: " + outputIndex);
             }
             usedIndices.add(outputIndex);
 
-            // Criar associação de output
             InstrumentTabulateOutputAssociationEntity outputAssociation = new InstrumentTabulateOutputAssociationEntity();
-            outputAssociation.setId(dto.getId()); // Pode ser null para novas associações
+            outputAssociation.setId(dto.getId());
             outputAssociation.setAssociation(association);
             outputAssociation.setOutput(output);
             outputAssociation.setOutputIndex(outputIndex);
 
             outputAssociations.add(outputAssociation);
 
-            // Incrementar o próximo índice disponível
             nextAvailableIndex = getNextAvailableIndex(usedIndices);
         }
 
-        // Associar as outputs à associação do instrumento
         association.setOutputAssociations(outputAssociations);
     }
 

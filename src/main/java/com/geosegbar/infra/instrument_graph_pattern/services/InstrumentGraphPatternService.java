@@ -60,13 +60,11 @@ public class InstrumentGraphPatternService {
     }
 
     public List<GraphPatternDetailResponseDTO> findAllPatternsByDam(Long damId) {
-        // Verificar se a dam existe
+
         damService.findById(damId);
 
-        // Buscar todos os patterns de todos os instrumentos da dam com detalhes completos
         List<InstrumentGraphPatternEntity> patterns = patternRepository.findByInstrumentDamIdWithAllDetails(damId);
 
-        // Converter para DTOs usando o método existente
         List<GraphPatternDetailResponseDTO> patternDTOs = patterns.stream()
                 .map(this::mapToDetailResponseDTO)
                 .collect(Collectors.toList());

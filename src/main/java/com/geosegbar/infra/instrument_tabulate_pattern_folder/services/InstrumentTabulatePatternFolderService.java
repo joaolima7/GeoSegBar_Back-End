@@ -37,16 +37,14 @@ public class InstrumentTabulatePatternFolderService {
 
     @Transactional
     public TabulateFolderResponseDTO create(CreateTabulateFolderRequestDTO request) {
-        // Verificar se já existe uma pasta com o mesmo nome na barragem
+
         if (folderRepository.existsByNameAndDamId(request.getName(), request.getDamId())) {
             throw new DuplicateResourceException(
                     "Já existe uma pasta de padrões de tabela com o nome '" + request.getName() + "' nesta barragem!");
         }
 
-        // Verificar se a barragem existe
         DamEntity dam = damService.findById(request.getDamId());
 
-        // Criar a pasta
         InstrumentTabulatePatternFolder folder = new InstrumentTabulatePatternFolder();
         folder.setName(request.getName());
         folder.setDam(dam);
@@ -59,37 +57,29 @@ public class InstrumentTabulatePatternFolderService {
         return mapToResponseDTO(folder);
     }
 
-    // Adicione este método ao InstrumentTabulatePatternFolderService
     @Transactional(readOnly = true)
     public DamTabulateFoldersWithPatternsDetailResponseDTO findFoldersWithPatternsDetailsByDam(Long damId) {
-        // Verificar se a barragem existe
+
         DamEntity dam = damService.findById(damId);
 
-        // 1. Buscar todas as pastas da barragem (mesmo as vazias)
         List<InstrumentTabulatePatternFolder> folders = folderRepository.findByDamIdWithDamDetails(damId);
 
-        // 2. Buscar patterns que estão em pastas (com todos os detalhes)
         List<InstrumentTabulatePatternEntity> patternsInFolders = patternRepository.findByFolderDamIdWithAllDetails(damId);
 
-        // 3. Buscar patterns que NÃO estão em pastas (com todos os detalhes)
         List<InstrumentTabulatePatternEntity> patternsWithoutFolder = patternRepository.findByDamIdWithoutFolderWithAllDetails(damId);
 
-        // Agrupar patterns por folder ID para performance
         Map<Long, List<InstrumentTabulatePatternEntity>> patternsByFolder = patternsInFolders.stream()
                 .collect(Collectors.groupingBy(p -> p.getFolder().getId()));
 
-        // Mapear pastas para DTOs (incluindo pastas vazias)
         List<TabulateFolderWithPatternsDetailResponseDTO> folderDTOs = folders.stream()
                 .map(folder -> {
-                    // Buscar patterns desta pasta (pode ser lista vazia)
+
                     List<InstrumentTabulatePatternEntity> folderPatterns = patternsByFolder.getOrDefault(folder.getId(), List.of());
 
-                    // Converter patterns para DTOs
                     List<TabulatePatternResponseDTO> patternDTOs = folderPatterns.stream()
                             .map(mapper::mapToResponseDTO)
                             .collect(Collectors.toList());
 
-                    // Criar DTO da pasta
                     TabulateFolderWithPatternsDetailResponseDTO folderDTO = new TabulateFolderWithPatternsDetailResponseDTO();
                     folderDTO.setId(folder.getId());
                     folderDTO.setName(folder.getName());
@@ -108,12 +98,10 @@ public class InstrumentTabulatePatternFolderService {
                 })
                 .collect(Collectors.toList());
 
-        // Mapear patterns sem pasta
         List<TabulatePatternResponseDTO> patternsWithoutFolderDTOs = patternsWithoutFolder.stream()
                 .map(mapper::mapToResponseDTO)
                 .collect(Collectors.toList());
 
-        // Criar resposta final
         DamTabulateFoldersWithPatternsDetailResponseDTO responseDTO = new DamTabulateFoldersWithPatternsDetailResponseDTO();
         responseDTO.setDamId(dam.getId());
         responseDTO.setDamName(dam.getName());
@@ -122,7 +110,6 @@ public class InstrumentTabulatePatternFolderService {
         responseDTO.setFolders(folderDTOs);
         responseDTO.setPatternsWithoutFolder(patternsWithoutFolderDTOs);
 
-        // Logs para debug
         int totalPatternsInFolders = folderDTOs.stream()
                 .mapToInt(f -> f.getPatterns().size())
                 .sum();
@@ -138,21 +125,17 @@ public class InstrumentTabulatePatternFolderService {
     public void delete(Long folderId) {
         InstrumentTabulatePatternFolder folder = findById(folderId);
 
-        // Buscar todos os padrões associados à pasta
         List<InstrumentTabulatePatternEntity> patterns = patternRepository.findByFolderId(folderId);
 
-        // Remover a referência da pasta dos padrões (não excluir os padrões)
         for (InstrumentTabulatePatternEntity pattern : patterns) {
             pattern.setFolder(null);
         }
 
-        // Salvar as alterações nos padrões
         if (!patterns.isEmpty()) {
             patternRepository.saveAll(patterns);
             log.info("Removida referência da pasta de {} padrões de tabela", patterns.size());
         }
 
-        // Excluir a pasta
         folderRepository.delete(folder);
 
         log.info("Pasta de padrões de tabela excluída: id={}, name={}, padrões afetados={}",
@@ -184,7 +167,7 @@ public class InstrumentTabulatePatternFolderService {
     }
 
     public List<TabulateFolderResponseDTO> findByDamId(Long damId) {
-        // Verificar se a barragem existe
+
         damService.findById(damId);
 
         List<InstrumentTabulatePatternFolder> folders = folderRepository.findByDamIdWithDamDetails(damId);

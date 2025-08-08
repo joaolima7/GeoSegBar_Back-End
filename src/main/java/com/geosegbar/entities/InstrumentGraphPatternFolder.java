@@ -25,7 +25,6 @@ import lombok.Setter;
 
 @Entity
 @Table(name = "instrument_graph_pattern_folder", indexes = {
-    @Index(name = "idx_graph_pattern_folder_name", columnList = "name"),
     @Index(name = "idx_graph_pattern_folder_dam", columnList = "dam_id"),
     @Index(name = "idx_graph_pattern_folder_dam_name", columnList = "dam_id, name")
 })

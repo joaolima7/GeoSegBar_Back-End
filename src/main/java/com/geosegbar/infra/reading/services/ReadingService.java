@@ -58,7 +58,7 @@ public class ReadingService {
     private final UserRepository userRepository;
 
     public List<ReadingResponseDTO> findByInstrumentId(Long instrumentId) {
-        // ✅ Usar método otimizado
+
         List<ReadingEntity> readings = readingRepository.findByInstrumentIdOptimized(instrumentId);
         return readings.stream()
                 .map(this::mapToResponseDTOOptimized)
@@ -109,6 +109,96 @@ public class ReadingService {
                 instrument,
                 firstReading.getLimitStatus(),
                 firstReading.getDate() + " " + firstReading.getHour());
+    }
+
+    @Transactional(readOnly = true)
+    public PagedReadingResponseDTO<ReadingResponseDTO> findByMultipleInstruments(
+            List<Long> instrumentIds,
+            LocalDate startDate,
+            LocalDate endDate,
+            LimitStatusEnum limitStatus,
+            Boolean active,
+            Pageable pageable) {
+
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getViewRead()) {
+                throw new UnauthorizedException("Usuário não tem permissão para visualizar leituras");
+            }
+        }
+
+        if (instrumentIds == null || instrumentIds.isEmpty()) {
+            throw new InvalidInputException("É necessário fornecer pelo menos um ID de instrumento");
+        }
+
+        if (pageable.getSort().isUnsorted()) {
+            pageable = PageRequest.of(
+                    pageable.getPageNumber(),
+                    pageable.getPageSize(),
+                    Sort.by(Sort.Direction.DESC, "date", "hour")
+            );
+        }
+
+        Boolean activeFilter = active != null ? active : true;
+
+        Page<ReadingEntity> readings = readingRepository.findByMultipleInstrumentsWithFilters(
+                instrumentIds, startDate, endDate, limitStatus, activeFilter, pageable);
+
+        Page<ReadingResponseDTO> dtoPage = readings.map(this::mapToResponseDTOOptimized);
+
+        return new PagedReadingResponseDTO<>(
+                dtoPage.getContent(),
+                dtoPage.getNumber(),
+                dtoPage.getSize(),
+                dtoPage.getTotalElements(),
+                dtoPage.getTotalPages(),
+                dtoPage.isLast(),
+                dtoPage.isFirst()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public PagedReadingResponseDTO<ReadingResponseDTO> findGroupedReadingsFlatByMultipleInstruments(
+            List<Long> instrumentIds, Pageable pageable) {
+
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getViewRead()) {
+                throw new UnauthorizedException("Usuário não tem permissão para visualizar leituras");
+            }
+        }
+
+        if (instrumentIds == null || instrumentIds.isEmpty()) {
+            throw new InvalidInputException("É necessário fornecer pelo menos um ID de instrumento");
+        }
+
+        Page<Object[]> dateHourPage = readingRepository.findDistinctDateHourByMultipleInstrumentIds(instrumentIds, pageable);
+
+        List<ReadingResponseDTO> allReadings = new ArrayList<>();
+
+        for (Object[] dh : dateHourPage.getContent()) {
+            LocalDate date = (LocalDate) dh[0];
+            LocalTime hour = (LocalTime) dh[1];
+
+            List<ReadingEntity> readings = readingRepository.findByMultipleInstrumentIdsAndDateAndHourAndActiveTrue(
+                    instrumentIds, date, hour);
+
+            List<ReadingResponseDTO> dtos = readings.stream()
+                    .map(this::mapToResponseDTOOptimized)
+                    .collect(Collectors.toList());
+
+            allReadings.addAll(dtos);
+        }
+
+        return new PagedReadingResponseDTO<>(
+                allReadings,
+                dateHourPage.getNumber(),
+                dateHourPage.getSize(),
+                dateHourPage.getTotalElements(),
+                dateHourPage.getTotalPages(),
+                dateHourPage.isLast(),
+                dateHourPage.isFirst()
+        );
     }
 
     public List<InstrumentLimitStatusDTO> getAllInstrumentLimitStatusesByClientId(Long clientId, int limit) {
@@ -211,7 +301,7 @@ public class ReadingService {
                     Sort.by(Sort.Direction.DESC, "date", "hour")
             );
         }
-        // ✅ Usar método otimizado
+
         Page<ReadingEntity> readings = readingRepository.findByInstrumentIdOptimized(instrumentId, pageable);
         Page<ReadingResponseDTO> dtoPage = readings.map(this::mapToResponseDTOOptimized);
 
@@ -233,7 +323,7 @@ public class ReadingService {
                 throw new UnauthorizedException("Usuário não autorizado a visualizar leituras!");
             }
         }
-        // ✅ Usar método otimizado
+
         List<ReadingEntity> readings = readingRepository.findByOutputIdOptimized(outputId);
         return readings.stream()
                 .map(this::mapToResponseDTOOptimized)
@@ -258,7 +348,6 @@ public class ReadingService {
 
         Boolean activeFilter = active != null ? active : true;
 
-        // ✅ Usar método otimizado
         Page<ReadingEntity> readings = readingRepository.findByFiltersOptimized(instrumentId, outputId, startDate, endDate, limitStatus, activeFilter, pageable);
         Page<ReadingResponseDTO> dtoPage = readings.map(this::mapToResponseDTOOptimized);
 
@@ -283,7 +372,6 @@ public class ReadingService {
         ReadingEntity reading = readingRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
 
-        // Carregar os valores de input explicitamente (se eles não forem carregados automaticamente)
         List<ReadingInputValueEntity> inputValues = readingInputValueRepository.findByReadingId(id);
         reading.setInputValues(new HashSet<>(inputValues));
 
@@ -303,7 +391,6 @@ public class ReadingService {
         InstrumentEntity instrument = instrumentRepository.findWithActiveOutputsById(instrumentId)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + instrumentId));
 
-        // Filtrar apenas outputs ativos
         List<OutputEntity> activeOutputs = instrument.getOutputs().stream()
                 .filter(OutputEntity::getActive)
                 .collect(Collectors.toList());
@@ -312,22 +399,17 @@ public class ReadingService {
             throw new NotFoundException("O instrumento não possui outputs ativos para calcular leituras");
         }
 
-        // Validar se foram fornecidos valores para todos os inputs
         validateInputValues(instrument, request.getInputValues());
 
-        // Lista para armazenar todas as leituras criadas
         List<ReadingEntity> createdReadings = new ArrayList<>();
 
-        // Obter mapa de inputs do instrumento para nomes
         Map<String, String> inputNames = instrument.getInputs().stream()
                 .collect(Collectors.toMap(InputEntity::getAcronym, InputEntity::getName));
 
-        // Processar cada output ativo do instrumento
         for (OutputEntity output : activeOutputs) {
-            // Calcular o valor para este output usando a equação
+
             Double calculatedValue = outputCalculationService.calculateOutput(output, request, request.getInputValues());
 
-            // Criar a entidade de leitura
             ReadingEntity reading = new ReadingEntity();
             reading.setDate(request.getDate());
             reading.setHour(request.getHour());
@@ -336,16 +418,13 @@ public class ReadingService {
             reading.setOutput(output);
             reading.setUser(currentUser);
             reading.setActive(true);
-            reading.setComment(request.getComment()); // Adicionar comentário
+            reading.setComment(request.getComment());
 
-            // Determinar o status do limite com base no valor calculado
             LimitStatusEnum limitStatus = determineLimitStatus(instrument, calculatedValue, output);
             reading.setLimitStatus(limitStatus);
 
-            // Salvar a leitura
             ReadingEntity savedReading = readingRepository.save(reading);
 
-            // Salvar os valores de cada input
             for (Map.Entry<String, Double> entry : request.getInputValues().entrySet()) {
                 ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
                 inputValue.setReading(savedReading);
@@ -360,7 +439,6 @@ public class ReadingService {
             createdReadings.add(savedReading);
         }
 
-        // Mapear as entidades para DTOs e retornar
         return createdReadings.stream()
                 .map(this::mapToResponseDTO)
                 .collect(Collectors.toList());
@@ -371,7 +449,6 @@ public class ReadingService {
             throw new InvalidInputException("É necessário fornecer valores para os inputs");
         }
 
-        // Verifica se todos os inputs do instrumento têm um valor correspondente
         Set<String> requiredInputs = instrument.getInputs().stream()
                 .map(InputEntity::getAcronym)
                 .collect(Collectors.toSet());
@@ -382,7 +459,6 @@ public class ReadingService {
             }
         }
 
-        // Verifica se não foram fornecidos inputs inexistentes
         for (String providedInput : inputValues.keySet()) {
             if (!requiredInputs.contains(providedInput)) {
                 throw new InvalidInputException("Input '" + providedInput + "' não existe neste instrumento");
@@ -409,24 +485,20 @@ public class ReadingService {
         ReadingEntity reading = readingRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
 
-        // Verificar se a leitura está ativa
         if (!reading.getActive()) {
             throw new InvalidInputException("Não é possível editar uma leitura inativa");
         }
 
         UserEntity originalUser = reading.getUser();
 
-        // Atualizar data se fornecida
         if (request.getDate() != null) {
             reading.setDate(request.getDate());
         }
 
-        // Atualizar hora se fornecida
         if (request.getHour() != null) {
             reading.setHour(request.getHour());
         }
 
-        // Atualizar usuário se fornecido
         UserEntity newUser = null;
         if (request.getUserId() != null) {
             newUser = userRepository.findById(request.getUserId())
@@ -434,10 +506,8 @@ public class ReadingService {
             reading.setUser(newUser);
         }
 
-        // Salvar a leitura atual
         ReadingEntity savedReading = readingRepository.save(reading);
 
-        // Se o usuário foi alterado, atualizar todas as leituras relacionadas
         if (newUser != null && !newUser.equals(originalUser)) {
             updateRelatedReadingsUser(savedReading, newUser);
         }
@@ -446,8 +516,7 @@ public class ReadingService {
     }
 
     private void updateRelatedReadingsUser(ReadingEntity baseReading, UserEntity newUser) {
-        // Buscar todas as leituras que foram criadas com os mesmos inputValues
-        // Isso significa: mesmo instrumento, mesma data, mesma hora, mesmo usuário original
+
         List<ReadingEntity> relatedReadings = readingRepository.findByInstrumentAndDateAndHourAndUser(
                 baseReading.getInstrument().getId(),
                 baseReading.getDate(),
@@ -455,9 +524,8 @@ public class ReadingService {
                 baseReading.getUser().getId()
         );
 
-        // Atualizar o usuário em todas as leituras relacionadas
         for (ReadingEntity relatedReading : relatedReadings) {
-            if (!relatedReading.getId().equals(baseReading.getId())) { // Evitar atualizar a mesma leitura novamente
+            if (!relatedReading.getId().equals(baseReading.getId())) {
                 relatedReading.setUser(newUser);
                 readingRepository.save(relatedReading);
             }
@@ -543,7 +611,6 @@ public class ReadingService {
         ReadingEntity reading = readingRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
 
-        // Verificar se a leitura está ativa
         if (!reading.getActive()) {
             throw new InvalidInputException("Não é possível editar comentário de uma leitura inativa");
         }
@@ -569,12 +636,11 @@ public class ReadingService {
     }
 
     private LimitStatusEnum determineLimitStatus(InstrumentEntity instrument, Double value, OutputEntity output) {
-        // Verificamos se o instrumento está marcado como noLimit
+
         if (Boolean.TRUE.equals(instrument.getNoLimit())) {
             return LimitStatusEnum.NORMAL;
         }
 
-        // Verificar o limite estatístico do output
         StatisticalLimitEntity statisticalLimit = output.getStatisticalLimit();
         if (statisticalLimit != null) {
             if (statisticalLimit.getLowerValue() != null && value < statisticalLimit.getLowerValue()) {
@@ -586,7 +652,6 @@ public class ReadingService {
             return LimitStatusEnum.NORMAL;
         }
 
-        // Verificar o limite determinístico do output
         DeterministicLimitEntity deterministicLimit = output.getDeterministicLimit();
         if (deterministicLimit != null) {
             if (deterministicLimit.getEmergencyValue() != null && value >= deterministicLimit.getEmergencyValue()) {
@@ -626,7 +691,6 @@ public class ReadingService {
             ));
         }
 
-        // Carregar e adicionar os valores de input
         dto.setInputValues(getInputValuesForReading(reading));
 
         return dto;
@@ -677,7 +741,6 @@ public class ReadingService {
             ));
         }
 
-        // ✅ Usar inputValues já carregados pelo EntityGraph - SEM consulta adicional
         List<ReadingInputValueDTO> inputValueDTOs = reading.getInputValues().stream()
                 .map(this::mapToInputValueDTO)
                 .collect(Collectors.toList());

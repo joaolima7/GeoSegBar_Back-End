@@ -105,6 +105,32 @@ public class ReadingController {
         ));
     }
 
+    @GetMapping("/instruments")
+    public ResponseEntity<WebResponseEntity<PagedReadingResponseDTO<ReadingResponseDTO>>> getReadingsByMultipleInstruments(
+            @RequestParam List<Long> instrumentIds,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) LimitStatusEnum limitStatus,
+            @RequestParam(required = false) Boolean active,
+            Pageable pageable) {
+
+        PagedReadingResponseDTO<ReadingResponseDTO> readings = readingService.findByMultipleInstruments(
+                instrumentIds, startDate, endDate, limitStatus, active, pageable);
+
+        return ResponseEntity.ok(WebResponseEntity.success(readings, "Leituras obtidas com sucesso!"));
+    }
+
+    @GetMapping("/instruments/grouped")
+    public ResponseEntity<WebResponseEntity<PagedReadingResponseDTO<ReadingResponseDTO>>> getGroupedReadingsByMultipleInstruments(
+            @RequestParam List<Long> instrumentIds,
+            Pageable pageable) {
+
+        PagedReadingResponseDTO<ReadingResponseDTO> result
+                = readingService.findGroupedReadingsFlatByMultipleInstruments(instrumentIds, pageable);
+
+        return ResponseEntity.ok(WebResponseEntity.success(result, "Leituras agrupadas obtidas com sucesso!"));
+    }
+
     @PutMapping("/{id}")
     public ResponseEntity<WebResponseEntity<ReadingResponseDTO>> updateReading(
             @PathVariable Long id,

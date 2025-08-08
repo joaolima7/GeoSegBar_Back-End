@@ -3,22 +3,35 @@ package com.geosegbar.common.utils;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.stereotype.Component;
 
 import com.geosegbar.entities.InstrumentTabulateAssociationEntity;
 import com.geosegbar.entities.InstrumentTabulateOutputAssociationEntity;
 import com.geosegbar.entities.InstrumentTabulatePatternEntity;
+import com.geosegbar.infra.hydrotelemetric.services.HydrotelemetricReadingService;
 import com.geosegbar.infra.instrument_tabulate_pattern.dtos.TabulatePatternResponseDTO;
 
+import lombok.RequiredArgsConstructor;
+
 @Component
+@RequiredArgsConstructor
 public class InstrumentTabulatePatternMapper {
+
+    private final HydrotelemetricReadingService hydrotelemetricReadingService;
 
     public TabulatePatternResponseDTO mapToResponseDTO(InstrumentTabulatePatternEntity pattern) {
         TabulatePatternResponseDTO dto = new TabulatePatternResponseDTO();
         dto.setId(pattern.getId());
         dto.setName(pattern.getName());
         dto.setIsLinimetricRulerEnable(pattern.getIsLinimetricRulerEnable());
+
+        if (Boolean.TRUE.equals(pattern.getIsLinimetricRulerEnable()) && pattern.getDam() != null) {
+            Long damId = pattern.getDam().getId();
+            Optional<Double> linimetricRulerValue = hydrotelemetricReadingService.getLatestUpstreamAverageByDamId(damId);
+            dto.setLinimetricRulerValue(linimetricRulerValue.orElse(null));
+        }
 
         // Dam
         if (pattern.getDam() != null) {

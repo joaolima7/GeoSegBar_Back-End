@@ -14,6 +14,7 @@ public class TabulatePatternResponseDTO {
     private Long id;
     private String name;
     private Boolean isLinimetricRulerEnable;
+    private Double linimetricRulerValue;
     private DamSummaryDTO dam;
     private FolderSummaryDTO folder;
     private List<InstrumentAssociationDTO> associations;

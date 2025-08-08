@@ -118,4 +118,33 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
     @EntityGraph(attributePaths = {"user", "instrument", "output", "inputValues"})
     @Query("SELECT r FROM ReadingEntity r WHERE r.instrument.id = :instrumentId AND r.active = true ORDER BY r.date DESC, r.hour DESC")
     List<ReadingEntity> findTopNByInstrumentIdOptimized(@Param("instrumentId") Long instrumentId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"user", "instrument", "output", "inputValues"})
+    @Query("SELECT r FROM ReadingEntity r WHERE r.instrument.id IN :instrumentIds "
+            + "AND (:startDate IS NULL OR r.date >= :startDate) "
+            + "AND (:endDate IS NULL OR r.date <= :endDate) "
+            + "AND (:limitStatus IS NULL OR r.limitStatus = :limitStatus) "
+            + "AND (:active IS NULL OR r.active = :active) "
+            + "ORDER BY r.date DESC, r.hour DESC")
+    Page<ReadingEntity> findByMultipleInstrumentsWithFilters(
+            @Param("instrumentIds") List<Long> instrumentIds,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("limitStatus") LimitStatusEnum limitStatus,
+            @Param("active") Boolean active,
+            Pageable pageable);
+
+    @Query("SELECT DISTINCT r.date, r.hour FROM ReadingEntity r WHERE r.instrument.id IN :instrumentIds AND r.active = true "
+            + "ORDER BY r.date DESC, r.hour DESC")
+    Page<Object[]> findDistinctDateHourByMultipleInstrumentIds(
+            @Param("instrumentIds") List<Long> instrumentIds, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"user", "instrument", "output", "inputValues"})
+    @Query("SELECT r FROM ReadingEntity r WHERE r.instrument.id IN :instrumentIds "
+            + "AND r.date = :date AND r.hour = :hour AND r.active = true "
+            + "ORDER BY r.instrument.id, r.output.id")
+    List<ReadingEntity> findByMultipleInstrumentIdsAndDateAndHourAndActiveTrue(
+            @Param("instrumentIds") List<Long> instrumentIds,
+            @Param("date") LocalDate date,
+            @Param("hour") LocalTime hour);
 }

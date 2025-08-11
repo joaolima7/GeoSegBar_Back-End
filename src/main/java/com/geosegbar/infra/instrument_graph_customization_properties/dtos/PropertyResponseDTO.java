@@ -1,6 +1,7 @@
 package com.geosegbar.infra.instrument_graph_customization_properties.dtos;
 
 import com.geosegbar.common.enums.CustomizationTypeEnum;
+import com.geosegbar.common.enums.LimitValueTypeEnum;
 import com.geosegbar.common.enums.LineTypeEnum;
 
 import lombok.AllArgsConstructor;
@@ -20,6 +21,7 @@ public class PropertyResponseDTO {
     private Boolean labelEnable;
     private Boolean isPrimaryOrdinate;
     private Long patternId;
+    private LimitValueTypeEnum limitValueType;
 
     private Long instrumentId;
     private Long outputId;

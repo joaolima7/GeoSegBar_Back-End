@@ -2,6 +2,9 @@ package com.geosegbar.infra.instrument_graph_customization_properties.dtos;
 
 import java.util.List;
 
+import com.geosegbar.common.enums.LimitValueTypeEnum;
+import com.geosegbar.common.enums.LineTypeEnum;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -31,12 +34,14 @@ public class UpdatePropertiesBatchRequestDTO {
         @jakarta.validation.constraints.Pattern(regexp = "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$", message = "Cor deve estar no formato hexadecimal válido!")
         private String fillColor;
 
-        private com.geosegbar.common.enums.LineTypeEnum lineType;
+        private LineTypeEnum lineType;
 
         @NotNull(message = "Campo 'Exibir Label' é obrigatório!")
         private Boolean labelEnable;
 
         @NotNull(message = "Campo 'Ordinária Primária' é obrigatório!")
         private Boolean isPrimaryOrdinate;
+
+        private LimitValueTypeEnum limitValueType;
     }
 }

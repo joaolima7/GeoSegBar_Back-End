@@ -32,6 +32,9 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
 
     boolean existsByNameAndDamIdAndIdNot(String name, Long damId, Long id);
 
+    @Query("SELECT i.id FROM InstrumentEntity i WHERE i.dam.id = :damId")
+    List<Long> findInstrumentIdsByDamId(@Param("damId") Long damId);
+
     @EntityGraph(attributePaths = {"inputs", "constants", "outputs"})
     Optional<InstrumentEntity> findWithIOCById(Long id);
 

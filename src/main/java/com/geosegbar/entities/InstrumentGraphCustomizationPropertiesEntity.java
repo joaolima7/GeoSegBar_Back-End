@@ -2,6 +2,7 @@ package com.geosegbar.entities;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.geosegbar.common.enums.CustomizationTypeEnum;
+import com.geosegbar.common.enums.LimitValueTypeEnum;
 import com.geosegbar.common.enums.LineTypeEnum;
 
 import jakarta.persistence.Column;
@@ -28,7 +29,8 @@ import lombok.Setter;
     @Index(name = "idx_graph_custom_props_output", columnList = "output_id"),
     @Index(name = "idx_graph_custom_props_stat_limit", columnList = "statistical_limit_id"),
     @Index(name = "idx_graph_custom_props_det_limit", columnList = "deterministic_limit_id"),
-    @Index(name = "idx_graph_custom_props_name", columnList = "name")
+    @Index(name = "idx_graph_custom_props_name", columnList = "name"),
+    @Index(name = "idx_graph_custom_props_limit_value_type", columnList = "limit_value_type")
 })
 @Getter
 @Setter
@@ -89,4 +91,8 @@ public class InstrumentGraphCustomizationPropertiesEntity {
     @JoinColumn(name = "instrument_id", nullable = true)
     @JsonIgnoreProperties({"inputs", "constants", "outputs", "readings"})
     private InstrumentEntity instrument;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "limit_value_type", nullable = true)
+    private LimitValueTypeEnum limitValueType;
 }

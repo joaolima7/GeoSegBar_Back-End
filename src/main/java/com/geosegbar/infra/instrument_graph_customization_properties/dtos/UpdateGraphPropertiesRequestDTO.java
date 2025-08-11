@@ -2,6 +2,8 @@ package com.geosegbar.infra.instrument_graph_customization_properties.dtos;
 
 import java.util.List;
 
+import com.geosegbar.common.enums.LimitValueTypeEnum;
+
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -18,12 +20,30 @@ public class UpdateGraphPropertiesRequestDTO {
     @NotNull(message = "IDs de outputs são obrigatórios.")
     private List<Long> outputIds;
 
-    @NotNull(message = "IDs de limites estatísticos são obrigatórios.")
-    private List<Long> statisticalLimitIds;
+    @NotNull(message = "Valores de limites estatísticos são obrigatórios.")
+    private List<StatisticalLimitValueReference> statisticalLimitValues;
 
-    @NotNull(message = "IDs de limites determinísticos são obrigatórios.")
-    private List<Long> deterministicLimitIds;
+    @NotNull(message = "Valores de limites determinísticos são obrigatórios.")
+    private List<DeterministicLimitValueReference> deterministicLimitValues;
 
     @NotNull(message = "Campo 'linimetricRulerEnable' é obrigatório")
     private Boolean linimetricRulerEnable;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class StatisticalLimitValueReference {
+
+        private Long limitId;
+        private LimitValueTypeEnum valueType;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class DeterministicLimitValueReference {
+
+        private Long limitId;
+        private LimitValueTypeEnum valueType;
+    }
 }

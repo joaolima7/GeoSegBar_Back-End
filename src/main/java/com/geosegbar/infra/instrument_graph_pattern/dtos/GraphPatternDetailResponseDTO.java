@@ -3,6 +3,7 @@ package com.geosegbar.infra.instrument_graph_pattern.dtos;
 import java.util.List;
 
 import com.geosegbar.common.enums.CustomizationTypeEnum;
+import com.geosegbar.common.enums.LimitValueTypeEnum;
 import com.geosegbar.common.enums.LineTypeEnum;
 
 import lombok.AllArgsConstructor;
@@ -73,6 +74,7 @@ public class GraphPatternDetailResponseDTO {
         private LineTypeEnum lineType;
         private Boolean labelEnable;
         private Boolean isPrimaryOrdinate;
+        private LimitValueTypeEnum limitValueType;
         private Double linimetricRulerValue;
         private RelatedInstrumentDTO instrument;
         private RelatedOutputDTO output;

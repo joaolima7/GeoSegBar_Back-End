@@ -1,5 +1,6 @@
 package com.geosegbar.infra.deterministic_limit.services;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
@@ -25,6 +26,10 @@ public class DeterministicLimitService {
 
     public Optional<DeterministicLimitEntity> findByOutputId(Long outputId) {
         return deterministicLimitRepository.findByOutputId(outputId);
+    }
+
+    public List<Long> findDeterministicLimitIdsByOutputInstrumentDamId(Long damId) {
+        return deterministicLimitRepository.findLimitIdsByOutputInstrumentDamId(damId);
     }
 
     public DeterministicLimitEntity findById(Long id) {

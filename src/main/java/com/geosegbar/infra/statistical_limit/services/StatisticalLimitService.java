@@ -1,5 +1,6 @@
 package com.geosegbar.infra.statistical_limit.services;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
@@ -25,6 +26,10 @@ public class StatisticalLimitService {
 
     public Optional<StatisticalLimitEntity> findByOutputId(Long outputId) {
         return statisticalLimitRepository.findByOutputId(outputId);
+    }
+
+    public List<Long> findStatisticalLimitIdsByOutputInstrumentDamId(Long damId) {
+        return statisticalLimitRepository.findLimitIdsByOutputInstrumentDamId(damId);
     }
 
     public StatisticalLimitEntity findById(Long id) {

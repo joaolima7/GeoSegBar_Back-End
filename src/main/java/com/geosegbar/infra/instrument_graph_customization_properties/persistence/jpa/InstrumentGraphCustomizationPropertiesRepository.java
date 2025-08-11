@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.geosegbar.common.enums.CustomizationTypeEnum;
+import com.geosegbar.common.enums.LimitValueTypeEnum;
 import com.geosegbar.common.enums.LineTypeEnum;
 import com.geosegbar.entities.InstrumentGraphCustomizationPropertiesEntity;
 
@@ -53,4 +54,22 @@ public interface InstrumentGraphCustomizationPropertiesRepository extends JpaRep
     List<InstrumentGraphCustomizationPropertiesEntity> findByPatternInstrumentId(@Param("instrumentId") Long instrumentId);
 
     void deleteByPatternId(Long patternId);
+
+    List<InstrumentGraphCustomizationPropertiesEntity> findByPatternIdAndStatisticalLimitIdAndLimitValueType(
+            Long patternId, Long statisticalLimitId, LimitValueTypeEnum limitValueType);
+
+    List<InstrumentGraphCustomizationPropertiesEntity> findByPatternIdAndDeterministicLimitIdAndLimitValueType(
+            Long patternId, Long deterministicLimitId, LimitValueTypeEnum limitValueType);
+
+    @Query("SELECT p FROM InstrumentGraphCustomizationPropertiesEntity p "
+            + "WHERE p.pattern.id = :patternId AND p.customizationType = 'STATISTICAL_LIMIT' "
+            + "AND p.statisticalLimit.id = :limitId")
+    List<InstrumentGraphCustomizationPropertiesEntity> findStatisticalLimitPropertiesByPatternAndLimit(
+            @Param("patternId") Long patternId, @Param("limitId") Long limitId);
+
+    @Query("SELECT p FROM InstrumentGraphCustomizationPropertiesEntity p "
+            + "WHERE p.pattern.id = :patternId AND p.customizationType = 'DETERMINISTIC_LIMIT' "
+            + "AND p.deterministicLimit.id = :limitId")
+    List<InstrumentGraphCustomizationPropertiesEntity> findDeterministicLimitPropertiesByPatternAndLimit(
+            @Param("patternId") Long patternId, @Param("limitId") Long limitId);
 }

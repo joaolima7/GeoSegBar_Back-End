@@ -216,6 +216,7 @@ public class InstrumentGraphPatternService {
         dto.setLineType(property.getLineType());
         dto.setLabelEnable(property.getLabelEnable());
         dto.setIsPrimaryOrdinate(property.getIsPrimaryOrdinate());
+        dto.setLimitValueType(property.getLimitValueType());
 
         if (property.getCustomizationType() == CustomizationTypeEnum.LINIMETRIC_RULER) {
             if (instrument != null && instrument.getDam() != null) {

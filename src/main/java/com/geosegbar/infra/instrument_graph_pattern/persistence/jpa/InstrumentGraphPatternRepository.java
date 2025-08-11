@@ -5,10 +5,13 @@ import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.geosegbar.entities.InstrumentGraphPatternEntity;
+
+import jakarta.persistence.QueryHint;
 
 @Repository
 public interface InstrumentGraphPatternRepository extends JpaRepository<InstrumentGraphPatternEntity, Long> {
@@ -55,7 +58,10 @@ public interface InstrumentGraphPatternRepository extends JpaRepository<Instrume
             + "WHERE p.instrument.section.id = :sectionId")
     List<InstrumentGraphPatternEntity> findByInstrumentSectionId(@Param("sectionId") Long sectionId);
 
+    @QueryHints(
+            @QueryHint(name = "org.hibernate.cacheable", value = "true"))
     @Query("SELECT p FROM InstrumentGraphPatternEntity p "
+            + "LEFT JOIN FETCH p.instrument "
             + "WHERE p.instrument.dam.id = :damId")
     List<InstrumentGraphPatternEntity> findByInstrumentDamId(@Param("damId") Long damId);
 
@@ -91,20 +97,18 @@ public interface InstrumentGraphPatternRepository extends JpaRepository<Instrume
             + "ORDER BY p.name ASC")
     List<InstrumentGraphPatternEntity> findByFolderIdWithAllDetails(@Param("folderId") Long folderId);
 
+    @QueryHints(
+            @QueryHint(name = "org.hibernate.cacheable", value = "true"))
     @Query("SELECT DISTINCT p FROM InstrumentGraphPatternEntity p "
             + "LEFT JOIN FETCH p.instrument i "
-            + "LEFT JOIN FETCH i.dam "
             + "LEFT JOIN FETCH p.folder f "
             + "LEFT JOIN FETCH p.axes a "
-            + "LEFT JOIN FETCH p.properties prop "
-            + "LEFT JOIN FETCH prop.instrument "
-            + "LEFT JOIN FETCH prop.output "
-            + "LEFT JOIN FETCH prop.statisticalLimit sl "
-            + "LEFT JOIN FETCH sl.output "
-            + "LEFT JOIN FETCH prop.deterministicLimit dl "
-            + "LEFT JOIN FETCH dl.output "
-            + "WHERE p.instrument.dam.id = :damId "
-            + "ORDER BY p.instrument.name ASC, p.name ASC")
+            + "LEFT JOIN FETCH p.properties props "
+            + "LEFT JOIN FETCH props.output o "
+            + "LEFT JOIN FETCH props.statisticalLimit sl "
+            + "LEFT JOIN FETCH props.deterministicLimit dl "
+            + "LEFT JOIN FETCH props.instrument pi "
+            + "WHERE i.dam.id = :damId")
     List<InstrumentGraphPatternEntity> findByInstrumentDamIdWithAllDetails(@Param("damId") Long damId);
 
     @Query("SELECT DISTINCT p FROM InstrumentGraphPatternEntity p "

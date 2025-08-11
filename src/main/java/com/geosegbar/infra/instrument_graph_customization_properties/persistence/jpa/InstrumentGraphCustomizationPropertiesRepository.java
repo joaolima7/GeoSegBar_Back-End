@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -13,10 +14,20 @@ import com.geosegbar.common.enums.LimitValueTypeEnum;
 import com.geosegbar.common.enums.LineTypeEnum;
 import com.geosegbar.entities.InstrumentGraphCustomizationPropertiesEntity;
 
+import jakarta.persistence.QueryHint;
+
 @Repository
 public interface InstrumentGraphCustomizationPropertiesRepository extends JpaRepository<InstrumentGraphCustomizationPropertiesEntity, Long> {
 
-    List<InstrumentGraphCustomizationPropertiesEntity> findByPatternId(Long patternId);
+    @QueryHints(
+            @QueryHint(name = "org.hibernate.cacheable", value = "true"))
+    @Query("SELECT DISTINCT p FROM InstrumentGraphCustomizationPropertiesEntity p "
+            + "LEFT JOIN FETCH p.output o "
+            + "LEFT JOIN FETCH p.statisticalLimit sl "
+            + "LEFT JOIN FETCH p.deterministicLimit dl "
+            + "LEFT JOIN FETCH p.instrument i "
+            + "WHERE p.pattern.id = :patternId")
+    List<InstrumentGraphCustomizationPropertiesEntity> findByPatternId(@Param("patternId") Long patternId);
 
     List<InstrumentGraphCustomizationPropertiesEntity> findByCustomizationType(CustomizationTypeEnum customizationType);
 

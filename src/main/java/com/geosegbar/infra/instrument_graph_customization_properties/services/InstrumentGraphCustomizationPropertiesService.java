@@ -8,6 +8,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,6 +59,8 @@ public class InstrumentGraphCustomizationPropertiesService {
     private final DeterministicLimitService detLimitService;
 
     @Transactional
+    @CacheEvict(value = {"graphProperties", "graphPatternById", "graphPatternsByInstrument", "graphPatternsByDam", "folderWithPatterns", "damFoldersWithPatterns"},
+            allEntries = true, cacheManager = "instrumentGraphCacheManager")
     public void updateProperties(Long patternId, UpdateGraphPropertiesRequestDTO req) {
         InstrumentGraphPatternEntity pattern = patternService.findById(patternId);
         List<InstrumentGraphCustomizationPropertiesEntity> existingProperties = propertiesRepository.findByPatternId(patternId);
@@ -170,6 +174,8 @@ public class InstrumentGraphCustomizationPropertiesService {
     }
 
     @Transactional
+    @CacheEvict(value = {"graphProperties", "graphPatternById", "graphPatternsByInstrument", "graphPatternsByDam", "folderWithPatterns", "damFoldersWithPatterns"},
+            allEntries = true, cacheManager = "instrumentGraphCacheManager")
     public PropertyResponseDTO updateProperty(Long propertyId, UpdatePropertyRequestDTO req) {
         InstrumentGraphCustomizationPropertiesEntity property = propertiesRepository.findById(propertyId)
                 .orElseThrow(() -> new NotFoundException("Propriedade não encontrada com ID: " + propertyId));
@@ -187,6 +193,8 @@ public class InstrumentGraphCustomizationPropertiesService {
     }
 
     @Transactional
+    @CacheEvict(value = {"graphProperties", "graphPatternById", "graphPatternsByInstrument", "graphPatternsByDam", "folderWithPatterns", "damFoldersWithPatterns"},
+            allEntries = true, cacheManager = "instrumentGraphCacheManager")
     public UpdatePropertiesBatchResponseDTO updatePropertiesBatch(Long patternId, UpdatePropertiesBatchRequestDTO req) {
         patternService.findById(patternId);
 
@@ -291,6 +299,7 @@ public class InstrumentGraphCustomizationPropertiesService {
         );
     }
 
+    @Cacheable(value = "graphProperties", key = "'property-' + #propertyId", cacheManager = "instrumentGraphCacheManager")
     public PropertyResponseDTO findPropertyById(Long propertyId) {
         InstrumentGraphCustomizationPropertiesEntity property = propertiesRepository.findById(propertyId)
                 .orElseThrow(() -> new NotFoundException("Propriedade não encontrada com ID: " + propertyId));
@@ -298,6 +307,7 @@ public class InstrumentGraphCustomizationPropertiesService {
         return mapToPropertyResponseDTO(property);
     }
 
+    @Cacheable(value = "graphProperties", key = "'pattern-properties-' + #patternId", cacheManager = "instrumentGraphCacheManager")
     public List<PropertyResponseDTO> findPropertiesByPatternId(Long patternId) {
         List<InstrumentGraphCustomizationPropertiesEntity> properties = propertiesRepository.findByPatternId(patternId);
 
@@ -306,6 +316,7 @@ public class InstrumentGraphCustomizationPropertiesService {
                 .toList();
     }
 
+    @Cacheable(value = "graphProperties", key = "'pattern-' + #patternId", cacheManager = "instrumentGraphCacheManager")
     public GraphPropertiesResponseDTO findByPatternId(Long patternId) {
         patternService.findById(patternId);
         List<InstrumentGraphCustomizationPropertiesEntity> properties = propertiesRepository.findByPatternId(patternId);

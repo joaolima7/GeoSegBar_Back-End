@@ -23,7 +23,6 @@ import com.geosegbar.entities.StatusEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.entities.VerificationCodeEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
-import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.exceptions.UnauthorizedException;
@@ -396,7 +395,7 @@ public class UserService {
                 .orElseThrow(() -> new NotFoundException("Credenciais incorretas!"));
 
         if (user.getStatus().getStatus() == StatusEnum.DISABLED) {
-            throw new ForbiddenException("Usuário desativado!");
+            throw new UnauthorizedException("Usuário desativado!");
         }
 
         if (!passwordEncoder.matches(userDTO.password(), user.getPassword())) {

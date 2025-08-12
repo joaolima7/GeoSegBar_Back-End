@@ -107,10 +107,6 @@ public class ChecklistResponseService {
         // ✅ SUBSTITUIR todo o método por esta consulta direta:
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByClientIdOptimized(clientId, pageable);
 
-        if (page.isEmpty()) {
-            throw new NotFoundException("Nenhuma resposta encontrada para o Cliente com ID: " + clientId);
-        }
-
         List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
                 .map(this::convertToDetailDto)
                 .collect(Collectors.toList());

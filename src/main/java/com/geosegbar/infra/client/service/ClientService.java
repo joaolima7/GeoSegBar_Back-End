@@ -128,7 +128,7 @@ public class ClientService {
 
     public List<ClientEntity> findByStatus(Long statusId) {
         if (statusId == null) {
-            return findAll();
+            throw new NotFoundException("Status não informado para filtro de clientes!");
         }
 
         List<ClientEntity> clients = clientRepository.findByStatus(statusId);

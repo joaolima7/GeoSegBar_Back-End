@@ -18,4 +18,8 @@ public interface ChecklistRepository extends JpaRepository<ChecklistEntity, Long
     boolean existsByName(String name);
 
     boolean existsByNameAndIdNot(String name, Long id);
+
+    boolean existsByNameAndDams_Id(String name, Long damId);
+
+    boolean existsByNameAndDams_IdAndIdNot(String name, Long damId, Long id);
 }

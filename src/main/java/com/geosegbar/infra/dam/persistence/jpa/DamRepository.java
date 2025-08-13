@@ -25,6 +25,10 @@ public interface DamRepository extends JpaRepository<DamEntity, Long> {
 
     boolean existsByNameAndIdNot(String name, Long id);
 
+    boolean existsByNameAndClientId(String name, Long clientId);
+
+    boolean existsByNameAndClientIdAndIdNot(String name, Long clientId, Long id);
+
     @EntityGraph(attributePaths = {"psbFolders"})
     Optional<DamEntity> findWithPsbFoldersById(Long id);
 

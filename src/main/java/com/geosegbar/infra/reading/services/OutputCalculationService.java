@@ -5,10 +5,10 @@ import java.util.Map;
 
 import org.springframework.stereotype.Service;
 
+import com.geosegbar.common.utils.ExpressionEvaluator;
 import com.geosegbar.entities.ConstantEntity;
 import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.entities.OutputEntity;
-import com.geosegbar.infra.math.ExpressionEvaluator;
 import com.geosegbar.infra.reading.dtos.ReadingRequestDTO;
 
 import lombok.RequiredArgsConstructor;

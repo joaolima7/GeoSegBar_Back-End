@@ -29,7 +29,7 @@ public class TemplateQuestionnaireService {
     @Transactional
     public void deleteById(Long id) {
         templateQuestionnaireRepository.findById(id)
-            .orElseThrow(() -> new NotFoundException("Template não encontrado para exclusão!"));
+                .orElseThrow(() -> new NotFoundException("Template não encontrado para exclusão!"));
         templateQuestionnaireRepository.deleteById(id);
     }
 
@@ -41,7 +41,7 @@ public class TemplateQuestionnaireService {
     @Transactional
     public TemplateQuestionnaireEntity update(TemplateQuestionnaireEntity template) {
         templateQuestionnaireRepository.findById(template.getId())
-            .orElseThrow(() -> new NotFoundException("Template não encontrado para atualização!"));
+                .orElseThrow(() -> new NotFoundException("Template não encontrado para atualização!"));
         return templateQuestionnaireRepository.save(template);
     }
 
@@ -50,28 +50,28 @@ public class TemplateQuestionnaireService {
         TemplateQuestionnaireEntity template = new TemplateQuestionnaireEntity();
         template.setName(dto.getName());
         template.setTemplateQuestions(new HashSet<>());
-        
+
         template = templateQuestionnaireRepository.save(template);
-        
+
         for (TemplateQuestionDTO questionDto : dto.getQuestions()) {
             QuestionEntity question = questionRepository.findById(questionDto.getQuestionId())
-                .orElseThrow(() -> new NotFoundException(
+                    .orElseThrow(() -> new NotFoundException(
                     "Questão não encontrada com ID: " + questionDto.getQuestionId()));
-            
+
             TemplateQuestionnaireQuestionEntity templateQuestion = new TemplateQuestionnaireQuestionEntity();
             templateQuestion.setTemplateQuestionnaire(template);
             templateQuestion.setQuestion(question);
             templateQuestion.setOrderIndex(questionDto.getOrderIndex());
-            
+
             template.getTemplateQuestions().add(templateQuestion);
         }
-        
+
         return templateQuestionnaireRepository.save(template);
     }
 
     public TemplateQuestionnaireEntity findById(Long id) {
         return templateQuestionnaireRepository.findById(id)
-            .orElseThrow(() -> new NotFoundException("Template não encontrado!"));
+                .orElseThrow(() -> new NotFoundException("Template não encontrado!"));
     }
 
     public List<TemplateQuestionnaireEntity> findAll() {
@@ -80,11 +80,8 @@ public class TemplateQuestionnaireService {
 
     public List<TemplateQuestionnaireEntity> findByChecklistId(Long checklistId) {
         checklistService.findById(checklistId);
-        
+
         List<TemplateQuestionnaireEntity> templates = templateQuestionnaireRepository.findByChecklistsId(checklistId);
-        if (templates.isEmpty()) {
-            throw new NotFoundException("Nenhum modelo de questionário encontrado para o Checklist com id: " + checklistId);
-        }
         return templates;
     }
 }

@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.geosegbar.entities.DeterministicLimitEntity;
 import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.entities.OutputEntity;
+import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.deterministic_limit.persistence.jpa.DeterministicLimitRepository;
 import com.geosegbar.infra.output.persistence.jpa.OutputRepository;
@@ -44,15 +45,15 @@ public class DeterministicLimitService {
 
         InstrumentEntity instrument = output.getInstrument();
         if (instrument == null) {
-            throw new IllegalStateException("Output sem instrumento associado");
+            throw new InvalidInputException("Output sem instrumento associado!");
         }
 
         if (Boolean.TRUE.equals(instrument.getNoLimit())) {
-            throw new IllegalStateException("Não é possível adicionar limites a um output de um instrumento marcado como 'Sem Limites'");
+            throw new InvalidInputException("Não é possível adicionar limites a um output de um instrumento marcado como 'Sem Limites'!");
         }
 
         if (output.getStatisticalLimit() != null) {
-            throw new IllegalStateException("Este output já possui limite estatístico. Não é possível ter ambos os tipos de limite");
+            throw new InvalidInputException("Este output já possui limite estatístico. Não é possível ter ambos os tipos de limite!");
         }
 
         Optional<DeterministicLimitEntity> existingLimit = deterministicLimitRepository.findByOutputId(outputId);

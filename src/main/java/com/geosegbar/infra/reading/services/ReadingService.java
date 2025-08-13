@@ -123,12 +123,12 @@ public class ReadingService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getInstrumentationPermission().getViewRead()) {
-                throw new UnauthorizedException("Usuário não tem permissão para visualizar leituras");
+                throw new UnauthorizedException("Usuário não tem permissão para visualizar leituras!");
             }
         }
 
         if (instrumentIds == null || instrumentIds.isEmpty()) {
-            throw new InvalidInputException("É necessário fornecer pelo menos um ID de instrumento");
+            throw new InvalidInputException("É necessário fornecer pelo menos um ID de instrumento!");
         }
 
         if (pageable.getSort().isUnsorted()) {

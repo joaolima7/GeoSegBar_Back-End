@@ -68,8 +68,11 @@ public class SectionService {
                 throw new UnauthorizedException("Usuário não autorizado a criar seções!");
             }
         }
-        if (sectionRepository.findByName(section.getName()).isPresent()) {
-            throw new DuplicateResourceException("Seção com nome '" + section.getName() + "' já existe");
+        if (section.getDam() == null || section.getDam().getId() == null) {
+            throw new InvalidInputException("Barragem da seção é obrigatória.");
+        }
+        if (sectionRepository.findByDamIdAndName(section.getDam().getId(), section.getName()).isPresent()) {
+            throw new DuplicateResourceException("Já existe uma seção com esse nome para esta barragem.");
         }
 
         SectionEntity savedSection = sectionRepository.save(section);
@@ -79,8 +82,11 @@ public class SectionService {
 
     @Transactional
     public SectionEntity createWithFile(CreateSectionDTO dto, MultipartFile file) {
-        if (sectionRepository.findByName(dto.getName()).isPresent()) {
-            throw new DuplicateResourceException("Seção com nome '" + dto.getName() + "' já existe");
+        if (dto.getDamId() == null) {
+            throw new InvalidInputException("Barragem da seção é obrigatória.");
+        }
+        if (sectionRepository.findByDamIdAndName(dto.getDamId(), dto.getName()).isPresent()) {
+            throw new DuplicateResourceException("Já existe uma seção com esse nome para esta barragem.");
         }
 
         String originalFilename = file.getOriginalFilename();
@@ -118,11 +124,14 @@ public class SectionService {
         }
         SectionEntity existingSection = findById(id);
 
-        if (sectionRepository.findByName(dto.getName()).isPresent()
-                && !existingSection.getName().equals(dto.getName())) {
-            throw new DuplicateResourceException("Seção com nome '" + dto.getName() + "' já existe");
+        if (dto.getDamId() == null) {
+            throw new InvalidInputException("Barragem da seção é obrigatória.");
         }
-
+        if ((!existingSection.getName().equals(dto.getName())
+                || !existingSection.getDam().getId().equals(dto.getDamId()))
+                && sectionRepository.findByDamIdAndName(dto.getDamId(), dto.getName()).isPresent()) {
+            throw new DuplicateResourceException("Já existe uma seção com esse nome para esta barragem.");
+        }
         if (existingSection.getFilePath() != null && !existingSection.getFilePath().isEmpty()) {
             fileStorageService.deleteFile(existingSection.getFilePath());
         }
@@ -163,9 +172,13 @@ public class SectionService {
         }
         SectionEntity existingSection = findById(id);
 
-        if (sectionRepository.findByName(section.getName()).isPresent()
-                && !existingSection.getName().equals(section.getName())) {
-            throw new DuplicateResourceException("Seção com nome '" + section.getName() + "' já existe");
+        if (section.getDam() == null || section.getDam().getId() == null) {
+            throw new InvalidInputException("Barragem da seção é obrigatória.");
+        }
+        if ((!existingSection.getName().equals(section.getName())
+                || !existingSection.getDam().getId().equals(section.getDam().getId()))
+                && sectionRepository.findByDamIdAndName(section.getDam().getId(), section.getName()).isPresent()) {
+            throw new DuplicateResourceException("Já existe uma seção com esse nome para esta barragem.");
         }
 
         existingSection.setName(section.getName());

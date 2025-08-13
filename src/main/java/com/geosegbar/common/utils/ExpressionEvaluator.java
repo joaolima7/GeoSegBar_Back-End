@@ -1,4 +1,4 @@
-package com.geosegbar.infra.math;
+package com.geosegbar.common.utils;
 
 import java.util.Map;
 

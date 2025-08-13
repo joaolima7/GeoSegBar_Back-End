@@ -13,6 +13,7 @@ import com.geosegbar.entities.RiskCategoryEntity;
 import com.geosegbar.entities.SecurityLevelEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.classification_dam.peristence.ClassificationDamRepository;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.potential_damage.persistence.PotentialDamageRepository;
@@ -62,7 +63,7 @@ public class RegulatoryDamService {
                     .orElseThrow(() -> new NotFoundException("Informação regulatória da barragem não encontrada com ID: " + regulatoryDamDTO.getId()));
 
             if (!regulatoryDam.getDam().getId().equals(regulatoryDamDTO.getDamId())) {
-                throw new IllegalArgumentException("Não é permitido mudar a barragem associada à informação regulatória");
+                throw new UnauthorizedException("Não é permitido mudar a barragem associada à informação regulatória");
             }
         } else {
             if (regulatoryDamRepository.existsByDam(dam)) {

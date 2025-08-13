@@ -48,7 +48,7 @@ public class DamEntity {
 
     @NotBlank(message = "Nome é obrigatório!")
     @Pattern(regexp = "^[A-Za-zÀ-ÿ\\s]+$", message = "O campo não pode conter números!")
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String name;
 
     @Column(nullable = false)

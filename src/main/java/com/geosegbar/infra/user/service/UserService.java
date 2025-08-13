@@ -112,12 +112,12 @@ public class UserService {
 
     @Transactional
     public UserEntity save(UserCreateDTO userDTO) {
-        // if (!AuthenticatedUserUtil.isAdmin()) {
-        //     UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-        //     if (!userLogged.getAttributionsPermission().getEditUser()) {
-        //         throw new UnauthorizedException("Usuário não tem permissão para editar/criar usuários!");
-        //     }
-        // }
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getAttributionsPermission().getEditUser()) {
+                throw new UnauthorizedException("Usuário não tem permissão para editar/criar usuários!");
+            }
+        }
         UserEntity userEntity = new UserEntity();
         userEntity.setName(userDTO.getName());
         userEntity.setEmail(userDTO.getEmail());

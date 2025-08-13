@@ -17,6 +17,7 @@ import com.geosegbar.entities.QuestionnaireResponseEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
 import com.geosegbar.entities.TemplateQuestionnaireQuestionEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
+import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersAndDamDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersDTO;
@@ -47,10 +48,16 @@ public class ChecklistService {
                 .orElseThrow(() -> new NotFoundException("Checklist não encontrada para id: " + id));
     }
 
-    @Transactional
     public ChecklistEntity save(ChecklistEntity checklist) {
-        if (checklistRepository.existsByName(checklist.getName())) {
-            throw new DuplicateResourceException("Já existe um checklist com este nome!");
+        if (checklist.getDams() == null || checklist.getDams().isEmpty()) {
+            throw new InvalidInputException("Checklist deve estar vinculado a uma barragem.");
+        }
+        if (checklist.getDams().size() > 1) {
+            throw new InvalidInputException("Checklist só pode estar vinculado a uma única barragem.");
+        }
+        Long damId = checklist.getDams().iterator().next().getId();
+        if (checklistRepository.existsByNameAndDams_Id(checklist.getName(), damId)) {
+            throw new DuplicateResourceException("Já existe um checklist com esse nome para esta barragem.");
         }
         return checklistRepository.save(checklist);
     }
@@ -61,9 +68,6 @@ public class ChecklistService {
 
         // Buscar todos os checklists associados à barragem
         List<ChecklistEntity> checklists = checklistRepository.findByDams_Id(damId);
-        if (checklists.isEmpty()) {
-            throw new NotFoundException("Nenhum checklist encontrado para a Barragem com id: " + damId);
-        }
 
         // Lista de DTOs a serem retornados
         List<ChecklistWithLastAnswersDTO> result = new ArrayList<>();
@@ -170,10 +174,6 @@ public class ChecklistService {
     public List<ChecklistWithLastAnswersAndDamDTO> findAllChecklistsWithLastAnswersByClientId(Long clientId) {
         // Buscar todas as barragens do cliente
         List<DamEntity> clientDams = damService.findDamsByClientId(clientId);
-
-        if (clientDams.isEmpty()) {
-            throw new NotFoundException("Nenhuma barragem encontrada para o Cliente com ID: " + clientId);
-        }
 
         List<ChecklistWithLastAnswersAndDamDTO> allChecklists = new ArrayList<>();
 
@@ -284,10 +284,6 @@ public class ChecklistService {
             }
         }
 
-        if (allChecklists.isEmpty()) {
-            throw new NotFoundException("Nenhum checklist encontrado para as barragens do Cliente com ID: " + clientId);
-        }
-
         // Ordenar por nome da barragem e depois por nome do checklist
         allChecklists.sort((a, b) -> {
             int damComparison = a.getDam().getName().compareTo(b.getDam().getName());
@@ -325,15 +321,17 @@ public class ChecklistService {
         return Optional.empty();
     }
 
-    @Transactional
     public ChecklistEntity update(ChecklistEntity checklist) {
-        checklistRepository.findById(checklist.getId())
-                .orElseThrow(() -> new NotFoundException("Checklist não encontrada para atualização!"));
-
-        if (checklistRepository.existsByNameAndIdNot(checklist.getName(), checklist.getId())) {
-            throw new DuplicateResourceException("Já existe um checklist com este nome!");
+        if (checklist.getDams() == null || checklist.getDams().isEmpty()) {
+            throw new InvalidInputException("Checklist deve estar vinculado a uma barragem.");
         }
-
+        if (checklist.getDams().size() > 1) {
+            throw new InvalidInputException("Checklist só pode estar vinculado a uma única barragem.");
+        }
+        Long damId = checklist.getDams().iterator().next().getId();
+        if (checklistRepository.existsByNameAndDams_IdAndIdNot(checklist.getName(), damId, checklist.getId())) {
+            throw new DuplicateResourceException("Já existe um checklist com esse nome para esta barragem.");
+        }
         return checklistRepository.save(checklist);
     }
 
@@ -345,11 +343,7 @@ public class ChecklistService {
     }
 
     public List<ChecklistEntity> findByDamId(Long damId) {
-        List<ChecklistEntity> checklists = checklistRepository.findByDams_Id(damId);
-        if (checklists.isEmpty()) {
-            throw new NotFoundException("Nenhum checklist encontrado para a Barragem com id: " + damId);
-        }
-        return checklists;
+        return checklistRepository.findByDams_Id(damId);
     }
 
     public ChecklistEntity findChecklistForDam(Long damId, Long checklistId) {

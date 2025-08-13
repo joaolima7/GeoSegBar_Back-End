@@ -72,8 +72,8 @@ public class DamService {
             }
         }
 
-        if (damRepository.existsByName(request.getName())) {
-            throw new DuplicateResourceException("Já existe uma barragem com este nome!");
+        if (damRepository.existsByNameAndClientId(request.getName(), request.getClientId())) {
+            throw new DuplicateResourceException("Já existe uma barragem com este nome para este cliente!");
         }
 
         ClientEntity client = clientRepository.findById(request.getClientId())
@@ -240,10 +240,6 @@ public class DamService {
     public List<DamEntity> findByClientAndStatus(Long clientId, Long statusId) {
         List<DamEntity> dams = damRepository.findWithDetailsByClientAndStatus(clientId, statusId);
 
-        if ((clientId == null && statusId == null) && dams.isEmpty()) {
-            return findAll();
-        }
-
         return dams;
     }
 
@@ -263,8 +259,8 @@ public class DamService {
                 throw new UnauthorizedException("Usuário não tem permissão para criar barragens!");
             }
         }
-        if (damRepository.existsByName(damEntity.getName())) {
-            throw new DuplicateResourceException("Já existe uma barragem com este nome!");
+        if (damRepository.existsByNameAndClientId(damEntity.getName(), damEntity.getClient().getId())) {
+            throw new DuplicateResourceException("Já existe uma barragem com este nome para este cliente!");
         }
 
         DamEntity savedDam = damRepository.save(damEntity);
@@ -283,13 +279,14 @@ public class DamService {
         DamEntity existingDam = damRepository.findById(damId)
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + damId));
 
-        if (!existingDam.getName().equals(request.getName())
-                && damRepository.existsByNameAndIdNot(request.getName(), damId)) {
-            throw new DuplicateResourceException("Já existe uma barragem com este nome!");
-        }
-
         ClientEntity client = clientRepository.findById(request.getClientId())
                 .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + request.getClientId()));
+
+        if (!existingDam.getName().equals(request.getName()) || !existingDam.getClient().getId().equals(client.getId())) {
+            if (damRepository.existsByNameAndClientIdAndIdNot(request.getName(), client.getId(), damId)) {
+                throw new DuplicateResourceException("Já existe uma barragem com este nome para este cliente!");
+            }
+        }
 
         StatusEntity status = statusRepository.findById(request.getStatusId())
                 .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + request.getStatusId()));
@@ -357,10 +354,6 @@ public class DamService {
 
     public List<DamEntity> findDamsByClientId(Long clientId) {
         List<DamEntity> damsWithFolders = damRepository.findWithPsbFoldersByClientId(clientId);
-        if (damsWithFolders.isEmpty()) {
-            throw new NotFoundException("Nenhuma barragem encontrada para o cliente com ID: " + clientId);
-        }
-
         List<DamEntity> damsWithReservoirs = damRepository.findWithReservoirsByClientId(clientId);
 
         for (DamEntity dam : damsWithFolders) {

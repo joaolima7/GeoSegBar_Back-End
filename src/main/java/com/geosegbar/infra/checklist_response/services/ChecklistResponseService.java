@@ -54,9 +54,6 @@ public class ChecklistResponseService {
     public List<ChecklistResponseEntity> findByDamId(Long damId) {
         damService.findById(damId);
         List<ChecklistResponseEntity> responses = checklistResponseRepository.findByDamId(damId);
-        if (responses.isEmpty()) {
-            throw new NotFoundException("Nenhuma resposta de checklist encontrada para a Barragem com id: " + damId);
-        }
         return responses;
     }
 
@@ -92,9 +89,6 @@ public class ChecklistResponseService {
         DamEntity dam = damService.findById(damId);
 
         List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByDamId(damId);
-        if (checklistResponses.isEmpty()) {
-            throw new NotFoundException("Nenhuma resposta de checklist encontrada para a Barragem: " + dam.getName());
-        }
 
         return checklistResponses.stream()
                 .map(this::convertToDetailDto)
@@ -206,9 +200,6 @@ public class ChecklistResponseService {
 
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByUserId(Long userId) {
         List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByUserId(userId);
-        if (checklistResponses.isEmpty()) {
-            throw new NotFoundException("Nenhuma resposta de checklist encontrada para o Usuário com id: " + userId);
-        }
 
         return checklistResponses.stream()
                 .map(this::convertToDetailDto)
@@ -217,9 +208,6 @@ public class ChecklistResponseService {
 
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByDateRange(LocalDateTime startDate, LocalDateTime endDate) {
         List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByCreatedAtBetween(startDate, endDate);
-        if (checklistResponses.isEmpty()) {
-            throw new NotFoundException("Nenhuma resposta de checklist encontrada no período especificado");
-        }
 
         return checklistResponses.stream()
                 .map(this::convertToDetailDto)
@@ -231,9 +219,6 @@ public class ChecklistResponseService {
 
         // ✅ Usar consulta otimizada com EntityGraph
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdOptimized(damId, pageable);
-        if (page.isEmpty()) {
-            throw new NotFoundException("Nenhuma resposta de checklist encontrada para a Barragem com id: " + damId);
-        }
 
         List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
                 .map(this::convertToDetailDto)
@@ -252,9 +237,6 @@ public class ChecklistResponseService {
 
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByUserIdPaged(Long userId, Pageable pageable) {
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByUserId(userId, pageable);
-        if (page.isEmpty()) {
-            throw new NotFoundException("Nenhuma resposta de checklist encontrada para o Usuário com id: " + userId);
-        }
 
         List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
                 .map(this::convertToDetailDto)
@@ -274,9 +256,6 @@ public class ChecklistResponseService {
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByDateRangePaged(
             LocalDateTime startDate, LocalDateTime endDate, Pageable pageable) {
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByCreatedAtBetween(startDate, endDate, pageable);
-        if (page.isEmpty()) {
-            throw new NotFoundException("Nenhuma resposta de checklist encontrada no período especificado");
-        }
 
         List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
                 .map(this::convertToDetailDto)
@@ -295,9 +274,6 @@ public class ChecklistResponseService {
 
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findAllChecklistResponsesPaged(Pageable pageable) {
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findAll(pageable);
-        if (page.isEmpty()) {
-            throw new NotFoundException("Nenhuma resposta de checklist encontrada");
-        }
 
         List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
                 .map(this::convertToDetailDto)

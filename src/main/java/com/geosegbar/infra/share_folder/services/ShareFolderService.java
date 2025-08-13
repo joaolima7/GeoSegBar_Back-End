@@ -93,12 +93,12 @@ public class ShareFolderService {
     @Transactional
     public ShareFolderEntity registerAccess(String token) {
         ShareFolderEntity shareFolder = shareFolderRepository.findByToken(token)
-                .orElseThrow(() -> new NotFoundException("Link de compartilhamento não encontrado"));
+                .orElseThrow(() -> new NotFoundException("Link de compartilhamento não encontrado!"));
 
         if (shareFolder.getExpiresAt() != null
                 && LocalDateTime.now().isAfter(shareFolder.getExpiresAt())) {
             shareFolderRepository.save(shareFolder);
-            throw new ShareFolderException("Este link de compartilhamento expirou");
+            throw new ShareFolderException("Este link de compartilhamento expirou!");
         }
 
         shareFolder.incrementAccessCount();
@@ -122,7 +122,7 @@ public class ShareFolderService {
     @Transactional(readOnly = true)
     public List<ShareFolderEntity> findAllByDamId(Long damId) {
         if (!damRepository.existsById(damId)) {
-            throw new NotFoundException("Barragem não encontrada");
+            throw new NotFoundException("Barragem não encontrada!");
         }
 
         return shareFolderRepository.findByPsbFolderDamIdOrderByCreatedAtDesc(damId);

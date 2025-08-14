@@ -5,10 +5,13 @@ import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.geosegbar.entities.InstrumentTabulatePatternFolder;
+
+import jakarta.persistence.QueryHint;
 
 @Repository
 public interface InstrumentTabulatePatternFolderRepository extends JpaRepository<InstrumentTabulatePatternFolder, Long> {
@@ -38,11 +41,15 @@ public interface InstrumentTabulatePatternFolderRepository extends JpaRepository
             + "WHERE a.instrument.id = :instrumentId")
     List<InstrumentTabulatePatternFolder> findByPatternInstrumentId(@Param("instrumentId") Long instrumentId);
 
+    @QueryHints(
+            @QueryHint(name = "org.hibernate.cacheable", value = "true"))
     @Query("SELECT f FROM InstrumentTabulatePatternFolder f "
             + "LEFT JOIN FETCH f.dam d "
             + "WHERE f.id = :folderId")
     Optional<InstrumentTabulatePatternFolder> findByIdWithDam(@Param("folderId") Long folderId);
 
+    @QueryHints(
+            @QueryHint(name = "org.hibernate.cacheable", value = "true"))
     @Query("SELECT f FROM InstrumentTabulatePatternFolder f "
             + "LEFT JOIN FETCH f.dam d "
             + "WHERE f.dam.id = :damId "

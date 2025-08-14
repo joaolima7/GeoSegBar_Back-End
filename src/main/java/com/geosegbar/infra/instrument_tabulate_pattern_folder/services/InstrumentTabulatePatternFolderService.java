@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +38,8 @@ public class InstrumentTabulatePatternFolderService {
     private final InstrumentTabulatePatternMapper mapper;
 
     @Transactional
+    @CacheEvict(value = {"tabulateFolderWithPatterns", "damTabulateFoldersWithPatterns", "tabulatePatternsByDam"},
+            allEntries = true, cacheManager = "instrumentTabulateCacheManager")
     public TabulateFolderResponseDTO create(CreateTabulateFolderRequestDTO request) {
 
         if (folderRepository.existsByNameAndDamId(request.getName(), request.getDamId())) {
@@ -58,6 +62,7 @@ public class InstrumentTabulatePatternFolderService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "damTabulateFoldersWithPatterns", key = "#damId", cacheManager = "instrumentTabulateCacheManager")
     public DamTabulateFoldersWithPatternsDetailResponseDTO findFoldersWithPatternsDetailsByDam(Long damId) {
 
         DamEntity dam = damService.findById(damId);
@@ -122,6 +127,9 @@ public class InstrumentTabulatePatternFolderService {
     }
 
     @Transactional
+    @CacheEvict(value = {"tabulateFolderWithPatterns", "damTabulateFoldersWithPatterns", "tabulatePatternsByDam",
+        "tabulatePatternsByFolder"},
+            allEntries = true, cacheManager = "instrumentTabulateCacheManager")
     public void delete(Long folderId) {
         InstrumentTabulatePatternFolder folder = findById(folderId);
 
@@ -147,6 +155,9 @@ public class InstrumentTabulatePatternFolderService {
         return mapToResponseDTO(folder);
     }
 
+    @Transactional
+    @CacheEvict(value = {"tabulateFolderWithPatterns", "damTabulateFoldersWithPatterns"},
+            allEntries = true, cacheManager = "instrumentTabulateCacheManager")
     public TabulateFolderResponseDTO updateFolderName(Long folderId, String newName) {
         InstrumentTabulatePatternFolder folder = findById(folderId);
 
@@ -166,6 +177,7 @@ public class InstrumentTabulatePatternFolderService {
                 .orElseThrow(() -> new NotFoundException("Pasta de padrões de tabela não encontrada com ID: " + folderId));
     }
 
+    @Cacheable(value = "tabulateFoldersByDam", key = "#damId", cacheManager = "instrumentTabulateCacheManager")
     public List<TabulateFolderResponseDTO> findByDamId(Long damId) {
 
         damService.findById(damId);

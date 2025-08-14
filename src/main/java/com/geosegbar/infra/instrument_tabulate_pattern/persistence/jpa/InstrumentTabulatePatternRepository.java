@@ -5,10 +5,13 @@ import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.geosegbar.entities.InstrumentTabulatePatternEntity;
+
+import jakarta.persistence.QueryHint;
 
 @Repository
 public interface InstrumentTabulatePatternRepository extends JpaRepository<InstrumentTabulatePatternEntity, Long> {
@@ -28,6 +31,8 @@ public interface InstrumentTabulatePatternRepository extends JpaRepository<Instr
             + "ORDER BY p.name ASC")
     List<InstrumentTabulatePatternEntity> findByDamIdWithoutFolder(@Param("damId") Long damId);
 
+    @QueryHints(
+            @QueryHint(name = "org.hibernate.cacheable", value = "true"))
     @Query("SELECT DISTINCT p FROM InstrumentTabulatePatternEntity p "
             + "LEFT JOIN FETCH p.dam "
             + "LEFT JOIN FETCH p.folder "
@@ -40,6 +45,8 @@ public interface InstrumentTabulatePatternRepository extends JpaRepository<Instr
             + "ORDER BY p.name ASC")
     List<InstrumentTabulatePatternEntity> findByFolderDamIdWithAllDetails(@Param("damId") Long damId);
 
+    @QueryHints(
+            @QueryHint(name = "org.hibernate.cacheable", value = "true"))
     @Query("SELECT DISTINCT p FROM InstrumentTabulatePatternEntity p "
             + "LEFT JOIN FETCH p.dam "
             + "LEFT JOIN FETCH p.associations a "
@@ -52,6 +59,8 @@ public interface InstrumentTabulatePatternRepository extends JpaRepository<Instr
             + "ORDER BY p.name ASC")
     List<InstrumentTabulatePatternEntity> findByDamIdWithoutFolderWithAllDetails(@Param("damId") Long damId);
 
+    @QueryHints(
+            @QueryHint(name = "org.hibernate.cacheable", value = "true"))
     @Query("SELECT DISTINCT p FROM InstrumentTabulatePatternEntity p "
             + "LEFT JOIN FETCH p.dam "
             + "LEFT JOIN FETCH p.folder "
@@ -63,12 +72,16 @@ public interface InstrumentTabulatePatternRepository extends JpaRepository<Instr
             + "WHERE p.id = :patternId")
     Optional<InstrumentTabulatePatternEntity> findByIdWithAllDetails(@Param("patternId") Long patternId);
 
+    @QueryHints(
+            @QueryHint(name = "org.hibernate.cacheable", value = "true"))
     @Query("SELECT DISTINCT p FROM InstrumentTabulatePatternEntity p "
             + "LEFT JOIN FETCH p.dam "
             + "LEFT JOIN FETCH p.folder "
             + "WHERE p.id = :patternId")
     Optional<InstrumentTabulatePatternEntity> findByIdWithBasicDetails(@Param("patternId") Long patternId);
 
+    @QueryHints(
+            @QueryHint(name = "org.hibernate.cacheable", value = "true"))
     @Query("SELECT DISTINCT p FROM InstrumentTabulatePatternEntity p "
             + "LEFT JOIN FETCH p.dam "
             + "LEFT JOIN FETCH p.folder "
@@ -81,6 +94,8 @@ public interface InstrumentTabulatePatternRepository extends JpaRepository<Instr
             + "ORDER BY p.name ASC")
     List<InstrumentTabulatePatternEntity> findByDamIdWithAllDetails(@Param("damId") Long damId);
 
+    @QueryHints(
+            @QueryHint(name = "org.hibernate.cacheable", value = "true"))
     @Query("SELECT DISTINCT p FROM InstrumentTabulatePatternEntity p "
             + "LEFT JOIN FETCH p.dam "
             + "LEFT JOIN FETCH p.folder "

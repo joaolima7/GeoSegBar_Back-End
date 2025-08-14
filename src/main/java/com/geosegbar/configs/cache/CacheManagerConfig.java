@@ -9,39 +9,33 @@ import org.springframework.cache.caffeine.CaffeineCache;
 import org.springframework.cache.support.SimpleCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 import com.github.benmanes.caffeine.cache.Caffeine;
 
-import lombok.extern.slf4j.Slf4j;
-
 @Configuration
 @EnableCaching
-@Slf4j
 public class CacheManagerConfig {
 
     @Bean("instrumentGraphCacheManager")
+    @Primary
     public CacheManager instrumentGraphCacheManager() {
         SimpleCacheManager cacheManager = new SimpleCacheManager();
         cacheManager.setCaches(Arrays.asList(
-                // Cache para consultas por barragem (dados grandes, menos frequentes)
                 new CaffeineCache("graphPatternsByDam",
                         Caffeine.newBuilder()
-                                .maximumSize(50) // Reduzido - dados grandes por barragem
-                                .expireAfterWrite(Duration.ofMinutes(20)) // TTL maior para dados estáveis
-                                .expireAfterAccess(Duration.ofMinutes(10)) // Remove se não acessado
+                                .maximumSize(50)
+                                .expireAfterWrite(Duration.ofMinutes(20))
+                                .expireAfterAccess(Duration.ofMinutes(10))
                                 .recordStats()
-                                .removalListener((key, value, cause)
-                                        -> log.debug("Cache eviction - graphPatternsByDam: key={}, cause={}", key, cause))
                                 .build()),
-                // Cache para padrões individuais (acesso frequente)
                 new CaffeineCache("graphPatternById",
                         Caffeine.newBuilder()
-                                .maximumSize(300) // Aumentado para padrões individuais
+                                .maximumSize(300)
                                 .expireAfterWrite(Duration.ofMinutes(15))
                                 .expireAfterAccess(Duration.ofMinutes(8))
                                 .recordStats()
                                 .build()),
-                // Cache para consultas por instrumento
                 new CaffeineCache("graphPatternsByInstrument",
                         Caffeine.newBuilder()
                                 .maximumSize(100)
@@ -49,33 +43,27 @@ public class CacheManagerConfig {
                                 .expireAfterAccess(Duration.ofMinutes(8))
                                 .recordStats()
                                 .build()),
-                // Cache para pastas com padrões (dados médios)
                 new CaffeineCache("folderWithPatterns",
                         Caffeine.newBuilder()
-                                .maximumSize(80) // Ajustado para uso real
+                                .maximumSize(80)
                                 .expireAfterWrite(Duration.ofMinutes(18))
                                 .expireAfterAccess(Duration.ofMinutes(10))
                                 .recordStats()
                                 .build()),
-                // Cache para pastas por barragem (dados grandes, menos frequentes)
                 new CaffeineCache("damFoldersWithPatterns",
                         Caffeine.newBuilder()
-                                .maximumSize(25) // Limitado - dados muito grandes
+                                .maximumSize(25)
                                 .expireAfterWrite(Duration.ofMinutes(25))
                                 .expireAfterAccess(Duration.ofMinutes(12))
                                 .recordStats()
-                                .removalListener((key, value, cause)
-                                        -> log.debug("Cache eviction - damFoldersWithPatterns: key={}, cause={}", key, cause))
                                 .build()),
-                // Cache para propriedades (acesso muito frequente)
                 new CaffeineCache("graphProperties",
                         Caffeine.newBuilder()
-                                .maximumSize(400) // Aumentado - dados pequenos, acesso frequente
+                                .maximumSize(400)
                                 .expireAfterWrite(Duration.ofMinutes(12))
                                 .expireAfterAccess(Duration.ofMinutes(6))
                                 .recordStats()
                                 .build()),
-                // Cache para eixos (dados pequenos, estáveis)
                 new CaffeineCache("graphAxes",
                         Caffeine.newBuilder()
                                 .maximumSize(200)
@@ -84,9 +72,49 @@ public class CacheManagerConfig {
                                 .recordStats()
                                 .build())
         ));
+        return cacheManager;
+    }
 
-        log.info("Cache manager 'instrumentGraphCacheManager' configurado com {} caches",
-                cacheManager.getCacheNames().size());
+    @Bean("instrumentTabulateCacheManager")
+    public CacheManager instrumentTabulateCacheManager() {
+        SimpleCacheManager cacheManager = new SimpleCacheManager();
+        cacheManager.setCaches(Arrays.asList(
+                new CaffeineCache("tabulatePatterns",
+                        Caffeine.newBuilder()
+                                .maximumSize(300)
+                                .expireAfterWrite(Duration.ofMinutes(15))
+                                .expireAfterAccess(Duration.ofMinutes(8))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("tabulatePatternsByDam",
+                        Caffeine.newBuilder()
+                                .maximumSize(50)
+                                .expireAfterWrite(Duration.ofMinutes(20))
+                                .expireAfterAccess(Duration.ofMinutes(10))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("tabulatePatternsByFolder",
+                        Caffeine.newBuilder()
+                                .maximumSize(80)
+                                .expireAfterWrite(Duration.ofMinutes(15))
+                                .expireAfterAccess(Duration.ofMinutes(8))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("tabulateFolderWithPatterns",
+                        Caffeine.newBuilder()
+                                .maximumSize(80)
+                                .expireAfterWrite(Duration.ofMinutes(18))
+                                .expireAfterAccess(Duration.ofMinutes(10))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("damTabulateFoldersWithPatterns",
+                        Caffeine.newBuilder()
+                                .maximumSize(25)
+                                .expireAfterWrite(Duration.ofMinutes(25))
+                                .expireAfterAccess(Duration.ofMinutes(12))
+                                .recordStats()
+                                .build())
+        ));
 
         return cacheManager;
     }

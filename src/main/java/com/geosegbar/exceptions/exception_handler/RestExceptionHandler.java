@@ -29,7 +29,7 @@ import jakarta.validation.ConstraintViolationException;
 
 @RestControllerAdvice
 public class RestExceptionHandler {
-    
+
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<WebResponseEntity<String>> handleNotFoundException(NotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -76,46 +76,46 @@ public class RestExceptionHandler {
     public ResponseEntity<WebResponseEntity<String>> handleFileStorageException(FileStorageException ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(WebResponseEntity.error(ex.getMessage()));
-    }    
+    }
 
     @ExceptionHandler(InvalidTokenException.class)
     public ResponseEntity<WebResponseEntity<String>> handleInvalidTokenException(InvalidTokenException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(WebResponseEntity.error(ex.getMessage()));
-    }   
+    }
 
     @ExceptionHandler(TokenExpiredException.class)
     public ResponseEntity<WebResponseEntity<String>> handleTokenException(TokenExpiredException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(WebResponseEntity.error(ex.getMessage()));
-    }  
+    }
 
     @ExceptionHandler(UnsupportedFileTypeException.class)
     public ResponseEntity<WebResponseEntity<String>> handleUnsupportedFileTypeException(UnsupportedFileTypeException ex) {
         return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
                 .body(WebResponseEntity.error(ex.getMessage()));
-    }  
-    
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-public ResponseEntity<WebResponseEntity<Map<String, String>>> handleValidationExceptions(MethodArgumentNotValidException ex) {
-    Map<String, String> errors = new HashMap<>();
-    
-    for (FieldError error : ex.getBindingResult().getFieldErrors()) {
-        errors.put(error.getField(), error.getDefaultMessage());
     }
 
-    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-            .body(WebResponseEntity.errorValidation("Erro de validação", errors));
-}
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<WebResponseEntity<Map<String, String>>> handleValidationExceptions(MethodArgumentNotValidException ex) {
+        Map<String, String> errors = new HashMap<>();
+
+        for (FieldError error : ex.getBindingResult().getFieldErrors()) {
+            errors.put(error.getField(), error.getDefaultMessage());
+        }
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(WebResponseEntity.errorValidation("Erro de validação", errors));
+    }
 
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<WebResponseEntity<Map<String, String>>> handleConstraintViolationException(ConstraintViolationException ex) {
         Map<String, String> errors = new HashMap<>();
-        
+
         for (ConstraintViolation<?> violation : ex.getConstraintViolations()) {
             String propertyPath = violation.getPropertyPath().toString();
-            String field = propertyPath.contains(".") ? 
-                propertyPath.substring(propertyPath.lastIndexOf('.') + 1) : propertyPath;
+            String field = propertyPath.contains(".")
+                    ? propertyPath.substring(propertyPath.lastIndexOf('.') + 1) : propertyPath;
             errors.put(field, violation.getMessage());
         }
 
@@ -125,29 +125,29 @@ public ResponseEntity<WebResponseEntity<Map<String, String>>> handleValidationEx
 
     @ExceptionHandler(TransactionSystemException.class)
     public ResponseEntity<WebResponseEntity<?>> handleTransactionSystemException(TransactionSystemException ex) {
-    Throwable cause = ex.getRootCause();
-    
-    if (cause instanceof jakarta.validation.ConstraintViolationException) {
-        jakarta.validation.ConstraintViolationException violationException = 
-            (jakarta.validation.ConstraintViolationException) cause;
-            
-        Map<String, String> errors = new HashMap<>();
-        
-        for (ConstraintViolation<?> violation : violationException.getConstraintViolations()) {
-            String propertyPath = violation.getPropertyPath().toString();
-            String field = propertyPath.contains(".") ? 
-                propertyPath.substring(propertyPath.lastIndexOf('.') + 1) : propertyPath;
-            errors.put(field, violation.getMessage());
+        Throwable cause = ex.getRootCause();
+
+        if (cause instanceof jakarta.validation.ConstraintViolationException) {
+            jakarta.validation.ConstraintViolationException violationException
+                    = (jakarta.validation.ConstraintViolationException) cause;
+
+            Map<String, String> errors = new HashMap<>();
+
+            for (ConstraintViolation<?> violation : violationException.getConstraintViolations()) {
+                String propertyPath = violation.getPropertyPath().toString();
+                String field = propertyPath.contains(".")
+                        ? propertyPath.substring(propertyPath.lastIndexOf('.') + 1) : propertyPath;
+                errors.put(field, violation.getMessage());
+            }
+
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(WebResponseEntity.errorValidation("Inválido!", errors));
         }
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(WebResponseEntity.errorValidation("Inválido!", errors));
+                .body(WebResponseEntity.error("Erro na transação: "
+                        + (cause != null ? cause.getMessage() : ex.getMessage())));
     }
-    
-    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-            .body(WebResponseEntity.error("Erro na transação: " + 
-                  (cause != null ? cause.getMessage() : ex.getMessage())));
-}
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<WebResponseEntity<String>> handleGeneralException(Exception ex) {

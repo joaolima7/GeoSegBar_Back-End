@@ -105,7 +105,7 @@ public class InstrumentService {
                 .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + request.getSectionId()));
 
         InstrumentEntity instrument = new InstrumentEntity();
-        instrument.setName(request.getName());
+        instrument.setName(request.getName().toUpperCase());
         instrument.setLocation(request.getLocation());
         instrument.setDistanceOffset(request.getDistanceOffset());
         instrument.setLatitude(request.getLatitude());
@@ -235,7 +235,7 @@ public class InstrumentService {
                     .orElseThrow(() -> new NotFoundException("Unidade de medida não encontrada com ID: " + inputDTO.getMeasurementUnitId()));
 
             InputEntity input = new InputEntity();
-            input.setAcronym(inputDTO.getAcronym());
+            input.setAcronym(inputDTO.getAcronym().toUpperCase());
             input.setName(inputDTO.getName());
             input.setPrecision(inputDTO.getPrecision());
             input.setMeasurementUnit(measurementUnit);
@@ -263,7 +263,7 @@ public class InstrumentService {
                     .orElseThrow(() -> new NotFoundException("Unidade de medida não encontrada com ID: " + constantDTO.getMeasurementUnitId()));
 
             ConstantEntity constant = new ConstantEntity();
-            constant.setAcronym(constantDTO.getAcronym());
+            constant.setAcronym(constantDTO.getAcronym().toUpperCase());
             constant.setName(constantDTO.getName());
             constant.setPrecision(constantDTO.getPrecision());
             constant.setValue(constantDTO.getValue());
@@ -304,7 +304,7 @@ public class InstrumentService {
                     .orElseThrow(() -> new NotFoundException("Unidade de medida não encontrada com ID: " + outputDTO.getMeasurementUnitId()));
 
             OutputEntity output = new OutputEntity();
-            output.setAcronym(outputDTO.getAcronym());
+            output.setAcronym(outputDTO.getAcronym().toUpperCase());
             output.setName(outputDTO.getName());
             output.setEquation(outputDTO.getEquation());
             output.setPrecision(outputDTO.getPrecision());
@@ -461,7 +461,7 @@ public class InstrumentService {
         SectionEntity section = sectionRepository.findById(request.getSectionId())
                 .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + request.getSectionId()));
 
-        instrument.setName(request.getName());
+        instrument.setName(request.getName().toUpperCase());
         instrument.setLocation(request.getLocation());
         instrument.setDistanceOffset(request.getDistanceOffset());
         instrument.setLatitude(request.getLatitude());
@@ -574,7 +574,7 @@ public class InstrumentService {
                 updatedCount++;
             } else {
                 input = new InputEntity();
-                input.setAcronym(inputDTO.getAcronym());
+                input.setAcronym(inputDTO.getAcronym().toUpperCase());
                 input.setName(inputDTO.getName());
                 input.setPrecision(inputDTO.getPrecision());
                 input.setMeasurementUnit(measurementUnit);
@@ -622,7 +622,7 @@ public class InstrumentService {
                 updatedCount++;
             } else {
                 constant = new ConstantEntity();
-                constant.setAcronym(constantDTO.getAcronym());
+                constant.setAcronym(constantDTO.getAcronym().toUpperCase());
                 constant.setName(constantDTO.getName());
                 constant.setPrecision(constantDTO.getPrecision());
                 constant.setValue(constantDTO.getValue());
@@ -692,7 +692,7 @@ public class InstrumentService {
             if (output == null) {
                 // Criar novo output
                 output = new OutputEntity();
-                output.setAcronym(outputDTO.getAcronym());
+                output.setAcronym(outputDTO.getAcronym().toUpperCase());
                 output.setName(outputDTO.getName());
                 output.setEquation(outputDTO.getEquation());
                 output.setPrecision(outputDTO.getPrecision());

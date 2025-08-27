@@ -25,22 +25,18 @@ public class MeasurementUnitService {
     @PostConstruct
     public void initDefaultUnits() {
         if (measurementUnitRepository.count() == 0) {
-            log.info("Inicializando unidades de medida padrão...");
-
-            createDefaultUnit("Metros", "m");
-            createDefaultUnit("Centímetros", "cm");
-            createDefaultUnit("Milímetros", "mm");
-            createDefaultUnit("Metros cúbicos", "m³");
-            createDefaultUnit("Metros cúbicos por segundo", "m³/s");
-            createDefaultUnit("Litros por segundo", "L/s");
-            createDefaultUnit("Quilopascal", "kPa");
-            createDefaultUnit("Megapascal", "MPa");
+            createDefaultUnit("Metros", "M");
+            createDefaultUnit("Centímetros", "CM");
+            createDefaultUnit("Milímetros", "MM");
+            createDefaultUnit("Metros cúbicos", "M³");
+            createDefaultUnit("Metros cúbicos por segundo", "M³/S");
+            createDefaultUnit("Litros por segundo", "L/S");
+            createDefaultUnit("Quilopascal", "KPA");
+            createDefaultUnit("Megapascal", "MPA");
             createDefaultUnit("Graus Celsius", "°C");
             createDefaultUnit("Percentual", "%");
-            createDefaultUnit("Metros por segundo", "m/s");
+            createDefaultUnit("Metros por segundo", "M/S");
             createDefaultUnit("Graus", "°");
-
-            log.info("Unidades de medida padrão inicializadas com sucesso.");
         }
     }
 
@@ -49,7 +45,6 @@ public class MeasurementUnitService {
         unit.setName(name);
         unit.setAcronym(acronym);
         measurementUnitRepository.save(unit);
-        log.debug("Unidade de medida criada: {} ({})", name, acronym);
     }
 
     public List<MeasurementUnitEntity> findAll() {
@@ -71,6 +66,10 @@ public class MeasurementUnitService {
 
     @Transactional
     public MeasurementUnitEntity create(MeasurementUnitEntity measurementUnit) {
+
+        measurementUnit.setName(formatName(measurementUnit.getName()));
+        measurementUnit.setAcronym(formatAcronym(measurementUnit.getAcronym()));
+
         if (measurementUnitRepository.existsByName(measurementUnit.getName())) {
             throw new DuplicateResourceException("Unidade de medida com nome '" + measurementUnit.getName() + "' já existe");
         }
@@ -80,7 +79,6 @@ public class MeasurementUnitService {
         }
 
         MeasurementUnitEntity savedUnit = measurementUnitRepository.save(measurementUnit);
-        log.info("Nova unidade de medida criada: {} ({})", savedUnit.getName(), savedUnit.getAcronym());
         return savedUnit;
     }
 
@@ -88,19 +86,21 @@ public class MeasurementUnitService {
     public MeasurementUnitEntity update(Long id, MeasurementUnitEntity measurementUnit) {
         MeasurementUnitEntity existingUnit = findById(id);
 
-        if (measurementUnitRepository.existsByNameAndIdNot(measurementUnit.getName(), id)) {
-            throw new DuplicateResourceException("Unidade de medida com nome '" + measurementUnit.getName() + "' já existe");
+        String normalizedName = formatName(measurementUnit.getName());
+        String normalizedAcronym = formatAcronym(measurementUnit.getAcronym());
+
+        if (measurementUnitRepository.existsByNameAndIdNot(normalizedName, id)) {
+            throw new DuplicateResourceException("Unidade de medida com nome '" + normalizedName + "' já existe");
         }
 
-        if (measurementUnitRepository.existsByAcronymAndIdNot(measurementUnit.getAcronym(), id)) {
-            throw new DuplicateResourceException("Unidade de medida com sigla '" + measurementUnit.getAcronym() + "' já existe");
+        if (measurementUnitRepository.existsByAcronymAndIdNot(normalizedAcronym, id)) {
+            throw new DuplicateResourceException("Unidade de medida com sigla '" + normalizedAcronym + "' já existe");
         }
 
-        existingUnit.setName(measurementUnit.getName());
-        existingUnit.setAcronym(measurementUnit.getAcronym());
+        existingUnit.setName(normalizedName);
+        existingUnit.setAcronym(normalizedAcronym);
 
         MeasurementUnitEntity updatedUnit = measurementUnitRepository.save(existingUnit);
-        log.info("Unidade de medida atualizada: {} ({})", updatedUnit.getName(), updatedUnit.getAcronym());
         return updatedUnit;
     }
 
@@ -108,6 +108,17 @@ public class MeasurementUnitService {
     public void delete(Long id) {
         MeasurementUnitEntity measurementUnit = findById(id);
         measurementUnitRepository.delete(measurementUnit);
-        log.info("Unidade de medida excluída: {} ({})", measurementUnit.getName(), measurementUnit.getAcronym());
+    }
+
+    private String formatName(String name) {
+        if (name == null || name.isBlank()) {
+            return name;
+        }
+        String trimmed = name.trim();
+        return trimmed.substring(0, 1).toUpperCase() + trimmed.substring(1).toLowerCase();
+    }
+
+    private String formatAcronym(String acronym) {
+        return acronym == null ? null : acronym.trim().toUpperCase();
     }
 }

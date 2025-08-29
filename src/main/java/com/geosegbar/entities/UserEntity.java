@@ -50,7 +50,12 @@ import lombok.Setter;
     @Index(name = "idx_user_sex", columnList = "sex_id"),
     @Index(name = "idx_user_first_access", columnList = "is_first_access"),
     @Index(name = "idx_user_token_expiry", columnList = "token_expiry_date"),
-    @Index(name = "idx_user_id_name", columnList = "id, name")
+    @Index(name = "idx_user_id_name", columnList = "id, name"),
+    @Index(name = "idx_user_status_role", columnList = "status_id, role_id"),
+    @Index(name = "idx_user_created_by_status", columnList = "created_by_id, status_id"),
+    @Index(name = "idx_user_first_access_status", columnList = "is_first_access, status_id"),
+    @Index(name = "idx_user_name_id", columnList = "name, id"),
+    @Index(name = "idx_user_name_status", columnList = "name, status_id")
 })
 public class UserEntity {
 

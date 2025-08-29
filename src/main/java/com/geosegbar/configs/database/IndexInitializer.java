@@ -36,7 +36,23 @@ public class IndexInitializer {
             "CREATE INDEX IF NOT EXISTS idx_answer_options_option_id ON answer_options(option_id)",
             // Índices para checklist_template_questionnaire
             "CREATE INDEX IF NOT EXISTS idx_ck_template_checklist_id ON checklist_template_questionnaire(checklist_id)",
-            "CREATE INDEX IF NOT EXISTS idx_ck_template_template_id ON checklist_template_questionnaire(template_questionnaire_id)",};
+            "CREATE INDEX IF NOT EXISTS idx_ck_template_template_id ON checklist_template_questionnaire(template_questionnaire_id)",
+            "CREATE INDEX IF NOT EXISTS idx_anomaly_photo_path ON anomaly_photos(image_path)",
+            "CREATE INDEX IF NOT EXISTS idx_anomaly_geo_bounds ON anomalies(latitude, longitude) WHERE latitude IS NOT NULL AND longitude IS NOT NULL",
+            "CREATE INDEX IF NOT EXISTS idx_anomaly_dam_status_created ON anomalies(dam_id, status_id, created_at DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_anomaly_user_dam_created ON anomalies(user_id, dam_id, created_at DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_anomaly_danger_status ON anomalies(danger_level_id, status_id)",
+            "CREATE INDEX IF NOT EXISTS idx_anomaly_origin_status ON anomalies(origin, status_id)",
+            // Novos índices para tabela de junção user_client
+            "CREATE INDEX IF NOT EXISTS idx_user_client_user_id ON user_client(user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_user_client_client_id ON user_client(client_id)",
+            "CREATE INDEX IF NOT EXISTS idx_user_client_composite ON user_client(user_id, client_id)",
+            // Índices para consultas de permissão
+            "CREATE INDEX IF NOT EXISTS idx_dam_perm_active_users ON dam_permissions(client_id, has_access) WHERE has_access = true",
+            "CREATE INDEX IF NOT EXISTS idx_dam_perm_user_active ON dam_permissions(user_id, has_access, client_id) WHERE has_access = true",
+            // Índices para consultas geográficas otimizadas
+            "CREATE INDEX IF NOT EXISTS idx_dam_geo_client_status ON dam(client_id, status_id, latitude, longitude)"
+        };
 
         int successCount = 0;
         for (String sql : indexCommands) {

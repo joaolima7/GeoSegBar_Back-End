@@ -8,6 +8,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -22,7 +23,11 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "anomaly_photos")
+@Table(name = "anomaly_photos", indexes = {
+    @Index(name = "idx_anomaly_photo_anomaly_id", columnList = "anomaly_id"),
+    @Index(name = "idx_anomaly_photo_dam_id", columnList = "dam_id"),
+    @Index(name = "idx_anomaly_photo_anomaly_dam", columnList = "anomaly_id, dam_id")
+})
 public class AnomalyPhotoEntity {
 
     @Id

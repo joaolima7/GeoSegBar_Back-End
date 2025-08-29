@@ -24,6 +24,7 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 @Table(name = "dam_permissions",
         uniqueConstraints = {
             @UniqueConstraint(columnNames = {"user_id", "dam_id", "client_id"})
@@ -34,10 +35,15 @@ import lombok.Setter;
             @Index(name = "idx_dam_perm_client_id", columnList = "client_id"),
             @Index(name = "idx_dam_perm_access", columnList = "has_access"),
             @Index(name = "idx_dam_perm_created_at", columnList = "created_at"),
-            @Index(name = "idx_dam_perm_created_by", columnList = "created_by")
+            @Index(name = "idx_dam_perm_created_by", columnList = "created_by"),
+            @Index(name = "idx_dam_perm_updated_by", columnList = "updated_by"),
+            @Index(name = "idx_dam_perm_user_access", columnList = "user_id, has_access"),
+            @Index(name = "idx_dam_perm_client_access", columnList = "client_id, has_access"),
+            @Index(name = "idx_dam_perm_dam_access", columnList = "dam_id, has_access"),
+            @Index(name = "idx_dam_perm_user_client", columnList = "user_id, client_id"),
+            @Index(name = "idx_dam_perm_user_dam", columnList = "user_id, dam_id")
         }
 )
-@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class DamPermissionEntity {
 
     @Id

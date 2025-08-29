@@ -37,7 +37,18 @@ import lombok.Setter;
     @Index(name = "idx_dam_coords", columnList = "latitude, longitude"),
     @Index(name = "idx_dam_city_state", columnList = "city, state"),
     @Index(name = "idx_dam_upstream_downstream", columnList = "upstream_id, downstream_id"),
-    @Index(name = "idx_dam_zip", columnList = "zip_code")
+    @Index(name = "idx_dam_zip", columnList = "zip_code"),
+    @Index(name = "idx_dam_latitude", columnList = "latitude"),
+    @Index(name = "idx_dam_longitude", columnList = "longitude"),
+    @Index(name = "idx_dam_city", columnList = "city"),
+    @Index(name = "idx_dam_state", columnList = "state"),
+    @Index(name = "idx_dam_upstream", columnList = "upstream_id"),
+    @Index(name = "idx_dam_downstream", columnList = "downstream_id"),
+    @Index(name = "idx_dam_client_status", columnList = "client_id, status_id"),
+    @Index(name = "idx_dam_client_name", columnList = "client_id, name"),
+    @Index(name = "idx_dam_status_city", columnList = "status_id, city"),
+    @Index(name = "idx_dam_client_coords", columnList = "client_id, latitude, longitude"),
+    @Index(name = "idx_dam_client_geo_status", columnList = "client_id, status_id, latitude, longitude")
 })
 @Getter
 @Setter

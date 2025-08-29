@@ -19,6 +19,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.NamedAttributeNode;
@@ -37,8 +38,28 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "anomalies")
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@Table(name = "anomalies", indexes = {
+    @Index(name = "idx_anomaly_dam_id", columnList = "dam_id"),
+    @Index(name = "idx_anomaly_user_id", columnList = "user_id"),
+    @Index(name = "idx_anomaly_status_id", columnList = "status_id"),
+    @Index(name = "idx_anomaly_danger_level_id", columnList = "danger_level_id"),
+    @Index(name = "idx_anomaly_created_at", columnList = "created_at"),
+    @Index(name = "idx_anomaly_created_desc", columnList = "created_at DESC"),
+    @Index(name = "idx_anomaly_coordinates", columnList = "latitude, longitude"),
+    @Index(name = "idx_anomaly_dam_coordinates", columnList = "dam_id, latitude, longitude"),
+    @Index(name = "idx_anomaly_dam_status", columnList = "dam_id, status_id"),
+    @Index(name = "idx_anomaly_dam_created", columnList = "dam_id, created_at DESC"),
+    @Index(name = "idx_anomaly_user_created", columnList = "user_id, created_at DESC"),
+    @Index(name = "idx_anomaly_status_created", columnList = "status_id, created_at DESC"),
+    @Index(name = "idx_anomaly_danger_created", columnList = "danger_level_id, created_at DESC"),
+    @Index(name = "idx_anomaly_origin", columnList = "origin"),
+    @Index(name = "idx_anomaly_questionnaire_id", columnList = "questionnaire_id"),
+    @Index(name = "idx_anomaly_question_id", columnList = "question_id"),
+    @Index(name = "idx_anomaly_origin_dam", columnList = "origin, dam_id"),
+    @Index(name = "idx_anomaly_dam_danger_status", columnList = "dam_id, danger_level_id, status_id"),
+    @Index(name = "idx_anomaly_complete_filter", columnList = "dam_id, status_id, danger_level_id, created_at DESC")
+})
 @NamedEntityGraphs({
     @NamedEntityGraph(
             name = "anomaly.complete",

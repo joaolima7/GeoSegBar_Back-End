@@ -37,10 +37,16 @@ import lombok.Setter;
     @Index(name = "idx_client_name", columnList = "name", unique = true),
     @Index(name = "idx_client_email", columnList = "email", unique = true),
     @Index(name = "idx_client_status", columnList = "status_id"),
+    @Index(name = "idx_client_phone", columnList = "phone"),
+    @Index(name = "idx_client_whatsapp", columnList = "whatsapp_phone"),
+    @Index(name = "idx_client_email_contact", columnList = "email_contact"),
     @Index(name = "idx_client_city", columnList = "city"),
     @Index(name = "idx_client_state", columnList = "state"),
     @Index(name = "idx_client_city_state", columnList = "city, state"),
-    @Index(name = "idx_client_phone", columnList = "phone")
+    @Index(name = "idx_client_zip_code", columnList = "zip_code"),
+    @Index(name = "idx_client_status_name", columnList = "status_id, name"),
+    @Index(name = "idx_client_status_city", columnList = "status_id, city"),
+    @Index(name = "idx_client_state_status", columnList = "state, status_id")
 })
 public class ClientEntity {
 

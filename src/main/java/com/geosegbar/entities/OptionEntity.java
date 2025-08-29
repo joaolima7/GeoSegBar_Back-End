@@ -12,6 +12,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
@@ -26,9 +27,13 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "options")
+@Table(name = "options", indexes = {
+    @Index(name = "idx_option_label", columnList = "label", unique = true),
+    @Index(name = "idx_option_value", columnList = "value"),
+    @Index(name = "idx_option_order", columnList = "order_index")
+})
 public class OptionEntity {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

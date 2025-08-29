@@ -35,7 +35,9 @@ import lombok.Setter;
     @Index(name = "idx_checklist_response_checklist_id", columnList = "checklist_id"),
     @Index(name = "idx_checklist_response_created_at", columnList = "created_at"),
     @Index(name = "idx_checklist_response_dam_created_desc", columnList = "dam_id, created_at"),
-    @Index(name = "idx_checklist_response_dam_checklist_created", columnList = "dam_id, checklist_id, created_at")
+    @Index(name = "idx_checklist_response_dam_checklist_created", columnList = "dam_id, checklist_id, created_at"),
+    @Index(name = "idx_checklist_response_dam_period", columnList = "dam_id, created_at"),
+    @Index(name = "idx_checklist_response_user_created", columnList = "user_id, created_at")
 })
 @Getter
 @Setter

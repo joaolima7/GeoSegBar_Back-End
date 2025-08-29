@@ -14,6 +14,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
@@ -29,7 +30,10 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "checklists")
+@Table(name = "checklists", indexes = {
+    @Index(name = "idx_checklist_name", columnList = "name"),
+    @Index(name = "idx_checklist_created_at", columnList = "created_at")
+})
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class ChecklistEntity {
 

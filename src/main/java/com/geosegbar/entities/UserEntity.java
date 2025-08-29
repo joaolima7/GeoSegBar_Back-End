@@ -17,6 +17,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
@@ -38,7 +39,19 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "users")
+@Table(name = "users", indexes = {
+    @Index(name = "idx_user_email", columnList = "email", unique = true),
+    @Index(name = "idx_user_phone", columnList = "phone"),
+    @Index(name = "idx_user_email_status", columnList = "email, status_id"),
+    @Index(name = "idx_user_role_status", columnList = "role_id, status_id"),
+    @Index(name = "idx_user_created_by", columnList = "created_by_id"),
+    @Index(name = "idx_user_status", columnList = "status_id"),
+    @Index(name = "idx_user_role", columnList = "role_id"),
+    @Index(name = "idx_user_sex", columnList = "sex_id"),
+    @Index(name = "idx_user_first_access", columnList = "is_first_access"),
+    @Index(name = "idx_user_token_expiry", columnList = "token_expiry_date"),
+    @Index(name = "idx_user_id_name", columnList = "id, name")
+})
 public class UserEntity {
 
     @Id

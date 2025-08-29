@@ -14,6 +14,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
@@ -29,8 +30,10 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "questions")
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@Table(name = "questions", indexes = {
+    @Index(name = "idx_question_type", columnList = "type")
+})
 public class QuestionEntity {
 
     @Id

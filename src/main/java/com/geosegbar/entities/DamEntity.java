@@ -33,7 +33,11 @@ import lombok.Setter;
 @Table(name = "dam", indexes = {
     @Index(name = "idx_dam_client_id", columnList = "client_id"),
     @Index(name = "idx_dam_status_id", columnList = "status_id"),
-    @Index(name = "idx_dam_name", columnList = "name")
+    @Index(name = "idx_dam_name", columnList = "name"),
+    @Index(name = "idx_dam_coords", columnList = "latitude, longitude"),
+    @Index(name = "idx_dam_city_state", columnList = "city, state"),
+    @Index(name = "idx_dam_upstream_downstream", columnList = "upstream_id, downstream_id"),
+    @Index(name = "idx_dam_zip", columnList = "zip_code")
 })
 @Getter
 @Setter

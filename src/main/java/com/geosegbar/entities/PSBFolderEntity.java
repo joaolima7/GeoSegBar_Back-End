@@ -16,6 +16,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
@@ -29,12 +30,18 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "psb_folders")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@Table(name = "psb_folders", indexes = {
+    @Index(name = "idx_psb_folder_dam_id", columnList = "dam_id"),
+    @Index(name = "idx_psb_folder_created_by", columnList = "created_by"),
+    @Index(name = "idx_psb_folder_dam_idx", columnList = "dam_id, folder_index"),
+    @Index(name = "idx_psb_folder_dam_name", columnList = "dam_id, name"),
+    @Index(name = "idx_psb_folder_updated_at", columnList = "updated_at")
+})
 public class PSBFolderEntity {
 
     @Id

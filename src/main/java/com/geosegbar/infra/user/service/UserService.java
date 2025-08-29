@@ -5,6 +5,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.hibernate.Hibernate;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -76,6 +79,9 @@ public class UserService {
     private final RoutineInspectionPermissionService routineInspectionPermissionService;
 
     @Transactional
+    @CacheEvict(value = {"userById", "allUsers", "usersByRoleAndClient", "usersByCreatedBy",
+        "userExistence"},
+            allEntries = true, cacheManager = "userCacheManager")
     public void deleteById(Long id) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -83,6 +89,7 @@ public class UserService {
                 throw new UnauthorizedException("Usuário não tem permissão para excluir usuários!");
             }
         }
+
         UserEntity user = userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado para exclusão!"));
 
@@ -99,18 +106,30 @@ public class UserService {
         userRepository.deleteById(id);
     }
 
+    @Transactional()
+    @Cacheable(value = "usersByCreatedBy", key = "#createdById", cacheManager = "userCacheManager")
     public List<UserEntity> findByCreatedBy(Long createdById) {
         userRepository.findById(createdById)
                 .orElseThrow(() -> new NotFoundException("Usuário criador não encontrado com ID: " + createdById));
 
-        return userRepository.findByCreatedById(createdById);
+        List<UserEntity> result = userRepository.findByCreatedByIdWithDetails(createdById);
+
+        return result;
     }
 
+    @Transactional()
+    @Cacheable(value = "usersByRoleAndClient", key = "#roleId + '_' + #clientId + '_' + #statusId",
+            cacheManager = "userCacheManager")
     public List<UserEntity> findByRoleAndClient(Long roleId, Long clientId, Long statusId) {
-        return userRepository.findByRoleAndClient(roleId, clientId, statusId);
+        List<UserEntity> result = userRepository.findByRoleAndClientWithDetails(roleId, clientId, statusId);
+
+        return result;
     }
 
     @Transactional
+    @CacheEvict(value = {"userById", "allUsers", "usersByRoleAndClient", "usersByCreatedBy",
+        "userExistence", "userByEmail"},
+            allEntries = true, cacheManager = "userCacheManager")
     public UserEntity save(UserCreateDTO userDTO) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -118,6 +137,7 @@ public class UserService {
                 throw new UnauthorizedException("Usuário não tem permissão para editar/criar usuários!");
             }
         }
+
         UserEntity userEntity = new UserEntity();
         userEntity.setName(userDTO.getName());
         userEntity.setEmail(userDTO.getEmail());
@@ -137,10 +157,11 @@ public class UserService {
             throw new DuplicateResourceException("Já existe um usuário com o email informado!");
         }
 
-        if (userRepository.existsByPhone(userEntity.getPhone())) {
+        if (userEntity.getPhone() != null && userRepository.existsByPhone(userEntity.getPhone())) {
             throw new DuplicateResourceException("Já existe um usuário com o telefone informado!");
         }
 
+        // Validações e configurações existentes...
         if (userEntity.getSex() == null || userEntity.getSex().getId() == null) {
             throw new InvalidInputException("Sexo é obrigatório!");
         }
@@ -195,6 +216,9 @@ public class UserService {
     }
 
     @Transactional
+    @CacheEvict(value = {"userById", "allUsers", "usersByRoleAndClient", "usersByCreatedBy",
+        "userExistence", "userByEmail"},
+            allEntries = true, cacheManager = "userCacheManager")
     public UserEntity update(Long id, UserUpdateDTO userDTO) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -205,8 +229,7 @@ public class UserService {
             }
         }
 
-        UserEntity existingUser = userRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização!"));
+        UserEntity existingUser = findEntityByIdWithAllDetails(id);
 
         if (userRepository.existsByEmailAndIdNot(userDTO.getEmail(), id)) {
             throw new DuplicateResourceException("Já existe um usuário com o email informado!");
@@ -218,6 +241,7 @@ public class UserService {
             }
         }
 
+        // Validações existentes...
         if (userDTO.getSex() == null || userDTO.getSex().getId() == null) {
             throw new InvalidInputException("Sexo é obrigatório!");
         }
@@ -261,61 +285,9 @@ public class UserService {
         return savedUser;
     }
 
-    private void handleRoleChange(UserEntity user, RoleEnum oldRole, RoleEnum newRole) {
-        if (oldRole == RoleEnum.ADMIN && newRole == RoleEnum.COLLABORATOR) {
-
-            if (!user.getClients().isEmpty()) {
-                createDefaultDamPermissions(user);
-            }
-
-            documentationPermissionService.createDefaultPermission(user);
-            attributionsPermissionService.createDefaultPermission(user);
-            instrumentationPermissionService.createDefaultPermission(user);
-            routineInspectionPermissionService.createDefaultPermission(user);
-        }
-
-        if (oldRole == RoleEnum.COLLABORATOR && newRole == RoleEnum.ADMIN) {
-
-            deleteAllDamPermissions(user);
-
-            documentationPermissionService.deleteByUserSafely(user.getId());
-            attributionsPermissionService.deleteByUserSafely(user.getId());
-            instrumentationPermissionService.deleteByUserSafely(user.getId());
-            routineInspectionPermissionService.deleteByUserSafely(user.getId());
-        }
-    }
-
-    private void createDefaultDamPermissions(UserEntity user) {
-
-        for (ClientEntity client : user.getClients()) {
-            List<DamEntity> dams = damRepository.findByClient(client);
-
-            for (DamEntity dam : dams) {
-                if (damPermissionRepository.existsByUserAndDamAndClient(user, dam, client)) {
-                    continue;
-                }
-
-                DamPermissionEntity permission = new DamPermissionEntity();
-                permission.setUser(user);
-                permission.setDam(dam);
-                permission.setClient(client);
-                permission.setHasAccess(false);
-                permission.setCreatedAt(LocalDateTime.now());
-
-                damPermissionRepository.save(permission);
-            }
-        }
-    }
-
-    private void deleteAllDamPermissions(UserEntity user) {
-        List<DamPermissionEntity> permissions = damPermissionRepository.findByUser(user);
-
-        if (!permissions.isEmpty()) {
-            damPermissionRepository.deleteAll(permissions);
-        }
-    }
-
     @Transactional
+    @CacheEvict(value = {"userById", "userByEmail"},
+            allEntries = true, cacheManager = "userCacheManager")
     public UserEntity updatePassword(Long id, UserPasswordUpdateDTO passwordDTO) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -325,8 +297,8 @@ public class UserService {
                 }
             }
         }
-        UserEntity existingUser = userRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização de senha!"));
+
+        UserEntity existingUser = findEntityByIdWithAllDetails(id);
 
         if (!passwordEncoder.matches(passwordDTO.getCurrentPassword(), existingUser.getPassword())) {
             throw new InvalidInputException("Senha atual incorreta!");
@@ -342,14 +314,17 @@ public class UserService {
             existingUser.setIsFirstAccess(false);
         }
 
-        return userRepository.save(existingUser);
+        UserEntity savedUser = userRepository.save(existingUser);
+
+        return savedUser;
     }
 
     @Transactional
+    @CacheEvict(value = {"userById", "allUsers", "usersByRoleAndClient"},
+            allEntries = true, cacheManager = "userCacheManager")
     public UserEntity updateUserClients(Long userId, UserClientAssociationDTO clientAssociationDTO) {
         AuthenticatedUserUtil.checkAdminPermission();
-        UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("Usuário não encontrado para atualização de clientes!"));
+        UserEntity user = findEntityByIdWithAllDetails(userId);
 
         Set<ClientEntity> oldClients = new HashSet<>(user.getClients());
 
@@ -364,7 +339,6 @@ public class UserService {
         user.setClients(newClients);
 
         if (user.getRole() != null && user.getRole().getName() == RoleEnum.COLLABORATOR) {
-
             Set<ClientEntity> addedClients = new HashSet<>(newClients);
             addedClients.removeAll(oldClients);
 
@@ -380,15 +354,67 @@ public class UserService {
             }
         }
 
-        return userRepository.save(user);
+        UserEntity savedUser = userRepository.save(user);
+
+        return savedUser;
     }
 
+    @Transactional()
+    @Cacheable(value = "userById", key = "#id", cacheManager = "userCacheManager")
     public UserEntity findById(Long id) {
-        UserEntity user = userRepository.findByIdWithClients(id)
-                .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+        UserEntity user = findEntityByIdWithAllDetails(id);
         return user;
     }
 
+    @Transactional()
+    @Cacheable(value = "userByEmail", key = "#email", cacheManager = "userCacheManager")
+    public UserEntity findByEmail(String email) {
+        UserEntity user = userRepository.findByEmailWithBasicDetails(email)
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado com email: " + email));
+
+        return user;
+    }
+
+    @Transactional()
+    @Cacheable(value = "allUsers", key = "'all'", cacheManager = "userCacheManager")
+    public List<UserEntity> findAll() {
+        List<UserEntity> users = userRepository.findAllWithBasicDetails();
+
+        // Força inicialização das coleções para evitar N+1 no cache
+        users.forEach(user -> {
+            if (!Hibernate.isInitialized(user.getClients())) {
+                user.getClients().size();
+            }
+        });
+        return users;
+    }
+
+    @Transactional()
+    @Cacheable(value = "userExistence", key = "'email_' + #email", cacheManager = "userCacheManager")
+    public boolean existsByEmail(String email) {
+        return userRepository.existsByEmail(email);
+    }
+
+    @Transactional()
+    @Cacheable(value = "userExistence", key = "'emailNot_' + #email + '_' + #id", cacheManager = "userCacheManager")
+    public boolean existsByEmailAndIdNot(String email, Long id) {
+        return userRepository.existsByEmailAndIdNot(email, id);
+    }
+
+    // Método interno para buscar usuário com todos os detalhes (sem cache)
+    private UserEntity findEntityByIdWithAllDetails(Long id) {
+        UserEntity user = userRepository.findByIdWithAllDetails(id)
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+
+        // Proteção contra N+1: garantir que todas as coleções estejam inicializadas
+        if (!Hibernate.isInitialized(user.getClients())) {
+            user.getClients().size();
+        }
+
+        return user;
+    }
+
+    // Métodos de login e autenticação (sem alterações)
     @Transactional
     public Object initiateLogin(LoginRequestDTO userDTO) {
         UserEntity user = userRepository.findByEmail(userDTO.email())
@@ -496,6 +522,8 @@ public class UserService {
     }
 
     @Transactional
+    @CacheEvict(value = {"userById", "userByEmail"},
+            allEntries = true, cacheManager = "userCacheManager")
     public void resetPassword(ResetPasswordRequestDTO requestDTO) {
         UserEntity user = userRepository.findByEmail(requestDTO.getEmail())
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com este email!"));
@@ -539,6 +567,61 @@ public class UserService {
         return true;
     }
 
+    // Métodos auxiliares privados mantidos sem alterações
+    private void handleRoleChange(UserEntity user, RoleEnum oldRole, RoleEnum newRole) {
+        if (oldRole == RoleEnum.ADMIN && newRole == RoleEnum.COLLABORATOR) {
+
+            if (!user.getClients().isEmpty()) {
+                createDefaultDamPermissions(user);
+            }
+
+            documentationPermissionService.createDefaultPermission(user);
+            attributionsPermissionService.createDefaultPermission(user);
+            instrumentationPermissionService.createDefaultPermission(user);
+            routineInspectionPermissionService.createDefaultPermission(user);
+        }
+
+        if (oldRole == RoleEnum.COLLABORATOR && newRole == RoleEnum.ADMIN) {
+
+            deleteAllDamPermissions(user);
+
+            documentationPermissionService.deleteByUserSafely(user.getId());
+            attributionsPermissionService.deleteByUserSafely(user.getId());
+            instrumentationPermissionService.deleteByUserSafely(user.getId());
+            routineInspectionPermissionService.deleteByUserSafely(user.getId());
+        }
+    }
+
+    private void createDefaultDamPermissions(UserEntity user) {
+
+        for (ClientEntity client : user.getClients()) {
+            List<DamEntity> dams = damRepository.findByClient(client);
+
+            for (DamEntity dam : dams) {
+                if (damPermissionRepository.existsByUserAndDamAndClient(user, dam, client)) {
+                    continue;
+                }
+
+                DamPermissionEntity permission = new DamPermissionEntity();
+                permission.setUser(user);
+                permission.setDam(dam);
+                permission.setClient(client);
+                permission.setHasAccess(false);
+                permission.setCreatedAt(LocalDateTime.now());
+
+                damPermissionRepository.save(permission);
+            }
+        }
+    }
+
+    private void deleteAllDamPermissions(UserEntity user) {
+        List<DamPermissionEntity> permissions = damPermissionRepository.findByUser(user);
+
+        if (!permissions.isEmpty()) {
+            damPermissionRepository.deleteAll(permissions);
+        }
+    }
+
     private void createDamPermissionsForSpecificClients(UserEntity user, Set<ClientEntity> clients) {
         for (ClientEntity client : clients) {
             List<DamEntity> dams = damRepository.findByClient(client);
@@ -567,22 +650,6 @@ public class UserService {
                 damPermissionRepository.deleteAll(permissions);
             }
         }
-    }
-
-    public List<UserEntity> findAll() {
-        List<UserEntity> users = userRepository.findAllByOrderByIdAsc();
-
-        users.forEach(user -> user.getClients().size());
-
-        return users;
-    }
-
-    public boolean existsByEmail(String email) {
-        return userRepository.existsByEmail(email);
-    }
-
-    public boolean existsByEmailAndIdNot(String email, Long id) {
-        return userRepository.existsByEmailAndIdNot(email, id);
     }
 
     @Transactional

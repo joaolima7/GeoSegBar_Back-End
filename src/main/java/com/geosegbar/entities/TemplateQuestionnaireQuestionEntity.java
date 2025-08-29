@@ -9,6 +9,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -23,8 +24,12 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "template_questionnaire_questions")
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@Table(name = "template_questionnaire_questions", indexes = {
+    @Index(name = "idx_tqq_template_id", columnList = "template_questionnaire_id"),
+    @Index(name = "idx_tqq_question_id", columnList = "question_id"),
+    @Index(name = "idx_tqq_order", columnList = "template_questionnaire_id, order_index")
+})
 public class TemplateQuestionnaireQuestionEntity {
 
     @Id

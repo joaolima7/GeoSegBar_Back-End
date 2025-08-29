@@ -7,6 +7,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToOne;
@@ -23,8 +24,15 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "regulatory_dam")
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@Table(name = "regulatory_dam", indexes = {
+    @Index(name = "idx_regulatory_dam_dam_id", columnList = "dam_id", unique = true),
+    @Index(name = "idx_regulatory_dam_security", columnList = "security_level_id"),
+    @Index(name = "idx_regulatory_dam_risk", columnList = "risk_category_id"),
+    @Index(name = "idx_regulatory_dam_damage", columnList = "potential_damage_id"),
+    @Index(name = "idx_regulatory_dam_classification", columnList = "classification_dam_id"),
+    @Index(name = "idx_regulatory_dam_frame_pnsb", columnList = "frame_pnsb")
+})
 public class RegulatoryDamEntity {
 
     @Id

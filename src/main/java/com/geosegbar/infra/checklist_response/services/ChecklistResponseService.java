@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -42,15 +44,18 @@ public class ChecklistResponseService {
     private final QuestionnaireResponseRepository questionnaireResponseRepository;
     private final DamService damService;
 
+    @Cacheable(value = "allChecklistResponses", key = "'all'", cacheManager = "checklistCacheManager")
     public List<ChecklistResponseEntity> findAll() {
         return checklistResponseRepository.findAll();
     }
 
+    @Cacheable(value = "checklistResponseById", key = "#id", cacheManager = "checklistCacheManager")
     public ChecklistResponseEntity findById(Long id) {
         return checklistResponseRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para id: " + id));
     }
 
+    @Cacheable(value = "checklistResponsesByDam", key = "#damId", cacheManager = "checklistCacheManager")
     public List<ChecklistResponseEntity> findByDamId(Long damId) {
         damService.findById(damId);
         List<ChecklistResponseEntity> responses = checklistResponseRepository.findByDamId(damId);
@@ -58,6 +63,10 @@ public class ChecklistResponseService {
     }
 
     @Transactional
+    @CacheEvict(value = {"allChecklistResponses", "checklistResponseById", "checklistResponsesByDam",
+        "checklistResponseDetail", "checklistResponsesByUser", "checklistResponsesByDate",
+        "damLastChecklist", "checklistsWithAnswersByDam", "checklistsWithAnswersByClient"},
+            allEntries = true, cacheManager = "checklistCacheManager")
     public ChecklistResponseEntity save(ChecklistResponseEntity checklistResponse) {
         Long damId = checklistResponse.getDam().getId();
         DamEntity dam = damService.findById(damId);
@@ -67,6 +76,10 @@ public class ChecklistResponseService {
     }
 
     @Transactional
+    @CacheEvict(value = {"allChecklistResponses", "checklistResponseById", "checklistResponsesByDam",
+        "checklistResponseDetail", "checklistResponsesByUser", "checklistResponsesByDate",
+        "damLastChecklist", "checklistsWithAnswersByDam", "checklistsWithAnswersByClient"},
+            allEntries = true, cacheManager = "checklistCacheManager")
     public ChecklistResponseEntity update(ChecklistResponseEntity checklistResponse) {
         checklistResponseRepository.findById(checklistResponse.getId())
                 .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para atualização!"));
@@ -79,14 +92,19 @@ public class ChecklistResponseService {
     }
 
     @Transactional
+    @CacheEvict(value = {"allChecklistResponses", "checklistResponseById", "checklistResponsesByDam",
+        "checklistResponseDetail", "checklistResponsesByUser", "checklistResponsesByDate",
+        "damLastChecklist", "checklistsWithAnswersByDam", "checklistsWithAnswersByClient"},
+            allEntries = true, cacheManager = "checklistCacheManager")
     public void deleteById(Long id) {
         checklistResponseRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para exclusão!"));
         checklistResponseRepository.deleteById(id);
     }
 
+    @Cacheable(value = "checklistResponsesByDam", key = "#damId", cacheManager = "checklistCacheManager")
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByDamId(Long damId) {
-        DamEntity dam = damService.findById(damId);
+        damService.findById(damId);
 
         List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByDamId(damId);
 
@@ -95,6 +113,8 @@ public class ChecklistResponseService {
                 .collect(Collectors.toList());
     }
 
+    @Cacheable(value = "checklistResponsesByClient", key = "#clientId + '_' + #pageable.pageNumber + '_' + #pageable.pageSize",
+            cacheManager = "checklistCacheManager")
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByClientIdPaged(
             Long clientId, Pageable pageable) {
 
@@ -116,6 +136,7 @@ public class ChecklistResponseService {
         );
     }
 
+    @Cacheable(value = "checklistResponseDetail", key = "#checklistResponseId", cacheManager = "checklistCacheManager")
     public ChecklistResponseDetailDTO findChecklistResponseById(Long checklistResponseId) {
         ChecklistResponseEntity checklistResponse = findById(checklistResponseId);
         return convertToDetailDto(checklistResponse);
@@ -198,6 +219,7 @@ public class ChecklistResponseService {
         return dto;
     }
 
+    @Cacheable(value = "checklistResponsesByUser", key = "#userId", cacheManager = "checklistCacheManager")
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByUserId(Long userId) {
         List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByUserId(userId);
 
@@ -206,6 +228,9 @@ public class ChecklistResponseService {
                 .collect(Collectors.toList());
     }
 
+    @Cacheable(value = "checklistResponsesByDate",
+            key = "#startDate.toString() + '_' + #endDate.toString()",
+            cacheManager = "checklistCacheManager")
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByDateRange(LocalDateTime startDate, LocalDateTime endDate) {
         List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByCreatedAtBetween(startDate, endDate);
 
@@ -214,6 +239,9 @@ public class ChecklistResponseService {
                 .collect(Collectors.toList());
     }
 
+    @Cacheable(value = "checklistResponsesByDamPaged",
+            key = "#damId + '_' + #pageable.pageNumber + '_' + #pageable.pageSize",
+            cacheManager = "checklistCacheManager")
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByDamIdPaged(Long damId, Pageable pageable) {
         damService.findById(damId);
 
@@ -235,6 +263,9 @@ public class ChecklistResponseService {
         );
     }
 
+    @Cacheable(value = "checklistResponsesByUserPaged",
+            key = "#userId + '_' + #pageable.pageNumber + '_' + #pageable.pageSize",
+            cacheManager = "checklistCacheManager")
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByUserIdPaged(Long userId, Pageable pageable) {
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByUserId(userId, pageable);
 
@@ -253,6 +284,9 @@ public class ChecklistResponseService {
         );
     }
 
+    @Cacheable(value = "checklistResponsesByDatePaged",
+            key = "#startDate.toString() + '_' + #endDate.toString() + '_' + #pageable.pageNumber + '_' + #pageable.pageSize",
+            cacheManager = "checklistCacheManager")
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByDateRangePaged(
             LocalDateTime startDate, LocalDateTime endDate, Pageable pageable) {
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByCreatedAtBetween(startDate, endDate, pageable);
@@ -272,6 +306,9 @@ public class ChecklistResponseService {
         );
     }
 
+    @Cacheable(value = "allChecklistResponsesPaged",
+            key = "#pageable.pageNumber + '_' + #pageable.pageSize",
+            cacheManager = "checklistCacheManager")
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findAllChecklistResponsesPaged(Pageable pageable) {
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findAll(pageable);
 
@@ -290,6 +327,7 @@ public class ChecklistResponseService {
         );
     }
 
+    @Cacheable(value = "damLastChecklist", key = "#clientId", cacheManager = "checklistCacheManager")
     public List<DamLastChecklistDTO> getLastChecklistDateByClient(Long clientId) {
         List<DamEntity> dams = damService.findDamsByClientId(clientId);
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");

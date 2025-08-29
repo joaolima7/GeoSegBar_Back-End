@@ -27,10 +27,11 @@ import lombok.Setter;
 @AllArgsConstructor
 @Table(name = "sex")
 public class SexEntity {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
+
     @NotBlank(message = "Nome do Sexo é obrigatório!")
     @Pattern(regexp = "^[A-Za-zÀ-ÿ\\s]+$", message = "O campo não pode conter números!")
     @Column(nullable = false, unique = true)

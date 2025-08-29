@@ -9,6 +9,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
@@ -22,7 +23,12 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "documentation_dam")
+@Table(name = "documentation_dam", indexes = {
+    @Index(name = "idx_doc_dam_dam_id", columnList = "dam_id", unique = true),
+    @Index(name = "idx_doc_dam_next_pae", columnList = "next_update_pae"),
+    @Index(name = "idx_doc_dam_next_psb", columnList = "next_update_psb"),
+    @Index(name = "idx_doc_dam_next_checklist", columnList = "next_achievement_checklist")
+})
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class DocumentationDamEntity {
 

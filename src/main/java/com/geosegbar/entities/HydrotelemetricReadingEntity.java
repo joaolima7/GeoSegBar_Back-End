@@ -9,6 +9,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -19,12 +20,16 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "hydrotelemetric_reading")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@Table(name = "hydrotelemetric_reading", indexes = {
+    @Index(name = "idx_hydrotelemetric_dam_id", columnList = "dam_id"),
+    @Index(name = "idx_hydrotelemetric_date", columnList = "date"),
+    @Index(name = "idx_hydrotelemetric_dam_date", columnList = "dam_id, date")
+})
 public class HydrotelemetricReadingEntity {
 
     @Id

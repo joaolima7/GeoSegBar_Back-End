@@ -11,6 +11,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
@@ -19,11 +20,14 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "risk_categories")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Table(name = "risk_categories", indexes = {
+    @Index(name = "idx_risk_category_name", columnList = "name", unique = true)
+})
 public class RiskCategoryEntity {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -31,7 +35,7 @@ public class RiskCategoryEntity {
     @NotBlank(message = "O nome da categoria de risco é obrigatório!")
     @Column(nullable = false, unique = true)
     private String name;
-    
+
     @JsonIgnore
     @OneToMany(mappedBy = "riskCategory", fetch = FetchType.LAZY)
     private Set<RegulatoryDamEntity> regulatoryDams = new HashSet<>();

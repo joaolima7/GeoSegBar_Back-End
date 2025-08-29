@@ -11,6 +11,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
@@ -19,11 +20,14 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "classification_dams")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Table(name = "classification_dams", indexes = {
+    @Index(name = "idx_classification_value", columnList = "classification", unique = true)
+})
 public class ClassificationDamEntity {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -31,7 +35,7 @@ public class ClassificationDamEntity {
     @NotBlank(message = "A classificação da barragem é obrigatória!")
     @Column(nullable = false, unique = true)
     private String classification;
-    
+
     @JsonIgnore
     @OneToMany(mappedBy = "classificationDam", fetch = FetchType.LAZY)
     private Set<RegulatoryDamEntity> regulatoryDams = new HashSet<>();

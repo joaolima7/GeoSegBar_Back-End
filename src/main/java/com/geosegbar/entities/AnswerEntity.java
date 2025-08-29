@@ -14,6 +14,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
@@ -31,10 +32,14 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "answers")
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@Table(name = "answers", indexes = {
+    @Index(name = "idx_answer_question", columnList = "question_id"),
+    @Index(name = "idx_answer_questionnaire", columnList = "questionnaire_response_id"),
+    @Index(name = "idx_answer_coords", columnList = "latitude, longitude")
+})
 public class AnswerEntity {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -61,12 +66,12 @@ public class AnswerEntity {
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "answer_options",
-        joinColumns = @JoinColumn(name = "answer_id"),
-        inverseJoinColumns = @JoinColumn(name = "option_id"))
+            joinColumns = @JoinColumn(name = "answer_id"),
+            inverseJoinColumns = @JoinColumn(name = "option_id"))
     private Set<OptionEntity> selectedOptions = new HashSet<>();
 
     @OneToMany(mappedBy = "answer", fetch = FetchType.LAZY,
-               cascade = CascadeType.ALL, orphanRemoval = true)
+            cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference(value = "answer-photos")
     private Set<AnswerPhotoEntity> photos = new HashSet<>();
 }

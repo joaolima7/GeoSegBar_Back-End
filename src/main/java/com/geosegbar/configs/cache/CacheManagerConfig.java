@@ -118,4 +118,192 @@ public class CacheManagerConfig {
 
         return cacheManager;
     }
+
+    @Bean("userCacheManager")
+    public CacheManager userCacheManager() {
+        SimpleCacheManager cacheManager = new SimpleCacheManager();
+        cacheManager.setCaches(Arrays.asList(
+                new CaffeineCache("userById",
+                        Caffeine.newBuilder()
+                                .maximumSize(500)
+                                .expireAfterWrite(Duration.ofMinutes(30))
+                                .expireAfterAccess(Duration.ofMinutes(15))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("userByEmail",
+                        Caffeine.newBuilder()
+                                .maximumSize(300)
+                                .expireAfterWrite(Duration.ofMinutes(20))
+                                .expireAfterAccess(Duration.ofMinutes(10))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("allUsers",
+                        Caffeine.newBuilder()
+                                .maximumSize(10)
+                                .expireAfterWrite(Duration.ofMinutes(10))
+                                .expireAfterAccess(Duration.ofMinutes(5))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("usersByRoleAndClient",
+                        Caffeine.newBuilder()
+                                .maximumSize(50)
+                                .expireAfterWrite(Duration.ofMinutes(15))
+                                .expireAfterAccess(Duration.ofMinutes(8))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("usersByCreatedBy",
+                        Caffeine.newBuilder()
+                                .maximumSize(100)
+                                .expireAfterWrite(Duration.ofMinutes(20))
+                                .expireAfterAccess(Duration.ofMinutes(10))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("userExistence",
+                        Caffeine.newBuilder()
+                                .maximumSize(200)
+                                .expireAfterWrite(Duration.ofMinutes(5))
+                                .expireAfterAccess(Duration.ofMinutes(2))
+                                .recordStats()
+                                .build())
+        ));
+
+        return cacheManager;
+    }
+
+    @Bean("checklistCacheManager")
+    public CacheManager checklistCacheManager() {
+        SimpleCacheManager cacheManager = new SimpleCacheManager();
+        cacheManager.setCaches(Arrays.asList(
+                // Caches existentes para ChecklistService
+                new CaffeineCache("checklistsByDam",
+                        Caffeine.newBuilder()
+                                .maximumSize(100)
+                                .expireAfterWrite(Duration.ofMinutes(15))
+                                .expireAfterAccess(Duration.ofMinutes(8))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("checklistsWithAnswersByDam",
+                        Caffeine.newBuilder()
+                                .maximumSize(50)
+                                .expireAfterWrite(Duration.ofMinutes(10))
+                                .expireAfterAccess(Duration.ofMinutes(5))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("checklistsWithAnswersByClient",
+                        Caffeine.newBuilder()
+                                .maximumSize(30)
+                                .expireAfterWrite(Duration.ofMinutes(12))
+                                .expireAfterAccess(Duration.ofMinutes(6))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("checklistById",
+                        Caffeine.newBuilder()
+                                .maximumSize(200)
+                                .expireAfterWrite(Duration.ofMinutes(20))
+                                .expireAfterAccess(Duration.ofMinutes(10))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("checklistForDam",
+                        Caffeine.newBuilder()
+                                .maximumSize(100)
+                                .expireAfterWrite(Duration.ofMinutes(15))
+                                .expireAfterAccess(Duration.ofMinutes(8))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("allChecklists",
+                        Caffeine.newBuilder()
+                                .maximumSize(5)
+                                .expireAfterWrite(Duration.ofMinutes(10))
+                                .expireAfterAccess(Duration.ofMinutes(5))
+                                .recordStats()
+                                .build()),
+                // Novos caches para ChecklistResponseService
+                new CaffeineCache("allChecklistResponses",
+                        Caffeine.newBuilder()
+                                .maximumSize(5)
+                                .expireAfterWrite(Duration.ofMinutes(10))
+                                .expireAfterAccess(Duration.ofMinutes(5))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("checklistResponseById",
+                        Caffeine.newBuilder()
+                                .maximumSize(200)
+                                .expireAfterWrite(Duration.ofMinutes(20))
+                                .expireAfterAccess(Duration.ofMinutes(10))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("checklistResponsesByDam",
+                        Caffeine.newBuilder()
+                                .maximumSize(100)
+                                .expireAfterWrite(Duration.ofMinutes(15))
+                                .expireAfterAccess(Duration.ofMinutes(8))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("checklistResponseDetail",
+                        Caffeine.newBuilder()
+                                .maximumSize(200)
+                                .expireAfterWrite(Duration.ofMinutes(20))
+                                .expireAfterAccess(Duration.ofMinutes(10))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("checklistResponsesByUser",
+                        Caffeine.newBuilder()
+                                .maximumSize(100)
+                                .expireAfterWrite(Duration.ofMinutes(15))
+                                .expireAfterAccess(Duration.ofMinutes(8))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("checklistResponsesByDate",
+                        Caffeine.newBuilder()
+                                .maximumSize(100)
+                                .expireAfterWrite(Duration.ofMinutes(15))
+                                .expireAfterAccess(Duration.ofMinutes(8))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("damLastChecklist",
+                        Caffeine.newBuilder()
+                                .maximumSize(100)
+                                .expireAfterWrite(Duration.ofMinutes(15))
+                                .expireAfterAccess(Duration.ofMinutes(8))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("checklistResponsesByDamPaged",
+                        Caffeine.newBuilder()
+                                .maximumSize(100)
+                                .expireAfterWrite(Duration.ofMinutes(10))
+                                .expireAfterAccess(Duration.ofMinutes(5))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("checklistResponsesByUserPaged",
+                        Caffeine.newBuilder()
+                                .maximumSize(100)
+                                .expireAfterWrite(Duration.ofMinutes(10))
+                                .expireAfterAccess(Duration.ofMinutes(5))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("checklistResponsesByDatePaged",
+                        Caffeine.newBuilder()
+                                .maximumSize(100)
+                                .expireAfterWrite(Duration.ofMinutes(10))
+                                .expireAfterAccess(Duration.ofMinutes(5))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("allChecklistResponsesPaged",
+                        Caffeine.newBuilder()
+                                .maximumSize(5)
+                                .expireAfterWrite(Duration.ofMinutes(10))
+                                .expireAfterAccess(Duration.ofMinutes(5))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("checklistResponsesByClient",
+                        Caffeine.newBuilder()
+                                .maximumSize(50)
+                                .expireAfterWrite(Duration.ofMinutes(12))
+                                .expireAfterAccess(Duration.ofMinutes(6))
+                                .recordStats()
+                                .build())
+        ));
+
+        return cacheManager;
+    }
 }

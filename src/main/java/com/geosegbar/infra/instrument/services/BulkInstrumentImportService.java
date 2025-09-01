@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.geosegbar.entities.DamEntity;
+import com.geosegbar.entities.InstrumentTypeEntity;
 import com.geosegbar.entities.MeasurementUnitEntity;
 import com.geosegbar.entities.SectionEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
@@ -33,6 +34,7 @@ import com.geosegbar.infra.instrument.dtos.ImportInstrumentsRequest;
 import com.geosegbar.infra.instrument.dtos.InputDTO;
 import com.geosegbar.infra.instrument.dtos.OutputDTO;
 import com.geosegbar.infra.instrument.dtos.StatisticalLimitDTO;
+import com.geosegbar.infra.instrument_type.persistence.jpa.InstrumentTypeRepository;
 import com.geosegbar.infra.measurement_unit.persistence.jpa.MeasurementUnitRepository;
 import com.geosegbar.infra.section.persistence.jpa.SectionRepository;
 
@@ -49,6 +51,7 @@ public class BulkInstrumentImportService {
     private final DamService damService;
     private final MeasurementUnitRepository muRepository;
     private final SectionRepository sectionRepository;
+    private final InstrumentTypeRepository instrumentTypeRepository;
 
     @Data
     public static class ImportResult {
@@ -64,6 +67,13 @@ public class BulkInstrumentImportService {
 
         Map<String, Long> unitMap = muRepository.findAll().stream()
                 .collect(Collectors.toMap(MeasurementUnitEntity::getAcronym, MeasurementUnitEntity::getId));
+
+        // Criar mapa de tipos de instrumentos pelo nome (em uppercase para comparação case-insensitive)
+        Map<String, InstrumentTypeEntity> instrumentTypesByName = instrumentTypeRepository.findAll().stream()
+                .collect(Collectors.toMap(
+                        type -> type.getName().toUpperCase(),
+                        type -> type
+                ));
 
         Map<String, SectionEntity> sectionsByName = sectionRepository
                 .findAllByDamId(meta.getDamId())
@@ -84,7 +94,7 @@ public class BulkInstrumentImportService {
             result.setTotal(instruments.size());
 
             for (InstrumentRow ir : instruments.values()) {
-
+                // Validar se a seção existe
                 Long sectionId = null;
                 if (ir.sectionName != null && !ir.sectionName.isBlank()) {
                     SectionEntity sec = sectionsByName.get(ir.sectionName);
@@ -97,7 +107,20 @@ public class BulkInstrumentImportService {
                     sectionId = sec.getId();
                 }
 
+                // Validar se o tipo de instrumento existe
+                String instrumentTypeName = ir.instrumentTypeName != null ? ir.instrumentTypeName.trim().toUpperCase() : null;
+                if (instrumentTypeName == null || instrumentTypeName.isBlank()) {
+                    throw new InvalidInputException("Tipo de instrumento é obrigatório para o instrumento: " + ir.id);
+                }
+
+                InstrumentTypeEntity instrumentType = instrumentTypesByName.get(instrumentTypeName);
+                if (instrumentType == null) {
+                    throw new InvalidInputException("Tipo de instrumento não encontrado: " + ir.instrumentTypeName);
+                }
+
                 CreateInstrumentRequest req = ir.toRequest(meta, sectionId);
+                req.setInstrumentTypeId(instrumentType.getId()); // Usar o ID do tipo encontrado
+
                 req.setInputs(inputs.getOrDefault(ir.id, Collections.emptyList()));
                 req.setConstants(constants.getOrDefault(ir.id, Collections.emptyList()));
 
@@ -163,7 +186,7 @@ public class BulkInstrumentImportService {
             ir.latitude = getDouble(r, idx, "Latitude");
             ir.longitude = getDouble(r, idx, "Longitude");
             ir.noLimit = getBoolean(r, idx, "Sem Limites");
-            ir.instrumentType = getString(r, idx, "Tipo de Instrumento");
+            ir.instrumentTypeName = getString(r, idx, "Tipo de Instrumento"); // Renomeado para evitar confusão
             ir.sectionName = getString(r, idx, "Seção");
             map.put(id, ir);
         }
@@ -335,7 +358,7 @@ public class BulkInstrumentImportService {
 
         String id;
         int row;
-        String name, location, instrumentType;
+        String name, location, instrumentTypeName;
         Double distanceOffset, latitude, longitude;
         Boolean noLimit;
         String sectionName;
@@ -350,7 +373,6 @@ public class BulkInstrumentImportService {
             r.setNoLimit(noLimit != null ? noLimit : meta.getNoLimit());
             r.setActiveForSection(meta.getActiveForSection());
             r.setDamId(meta.getDamId());
-            r.setInstrumentType(instrumentType);
             r.setSectionId(resolvedSectionId);
             return r;
         }

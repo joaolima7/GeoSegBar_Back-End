@@ -28,8 +28,6 @@ import lombok.Setter;
 @Table(name = "instrument", indexes = {
     @Index(name = "idx_instrument_dam_active", columnList = "dam_id, active"),
     @Index(name = "idx_instrument_section_active", columnList = "section_id, active"),
-    @Index(name = "idx_instrument_type_active", columnList = "instrument_type, active"),
-    @Index(name = "idx_instrument_dam_type", columnList = "dam_id, instrument_type"),
     @Index(name = "idx_instrument_name", columnList = "name"),
     @Index(name = "idx_instrument_active_section", columnList = "active, activeForSection")
 })
@@ -71,9 +69,9 @@ public class InstrumentEntity {
     @JsonIgnoreProperties({"instruments"})
     private DamEntity dam;
 
-    @NotBlank(message = "Tipo de Instrumento é obrigatório!")
-    @Column(name = "instrument_type", nullable = true)
-    private String instrumentType;
+    @ManyToOne
+    @JoinColumn(name = "instrument_type_id", nullable = false)
+    private InstrumentTypeEntity instrumentType;
 
     @NotNull(message = "Campo 'Ativo' do Instrumento é obrigatório!")
     @Column(nullable = false)

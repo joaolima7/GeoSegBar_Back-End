@@ -14,6 +14,7 @@ public class InstrumentLimitStatusDTO {
     private Long instrumentId;
     private String instrumentName;
     private String instrumentType;
+    private Long instrumentTypeId;
     private Long damId;
     private String damName;
     private Long clientId;

@@ -282,7 +282,7 @@ public class ReadingService {
         InstrumentLimitStatusDTO dto = new InstrumentLimitStatusDTO();
         dto.setInstrumentId(instrument.getId());
         dto.setInstrumentName(instrument.getName());
-        dto.setInstrumentType(instrument.getInstrumentType());
+        dto.setInstrumentType(instrument.getInstrumentType().getName());// Adicionado
         dto.setDamId(instrument.getDam().getId());
         dto.setDamName(instrument.getDam().getName());
         dto.setClientId(instrument.getDam().getClient().getId());

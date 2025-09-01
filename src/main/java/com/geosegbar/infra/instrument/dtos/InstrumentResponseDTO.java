@@ -21,6 +21,7 @@ public class InstrumentResponseDTO {
     private Boolean activeForSection;
     private Long damId;
     private String damName;
+    private Long instrumentTypeId;
     private String instrumentType;
     private Long sectionId;
     private String sectionName;

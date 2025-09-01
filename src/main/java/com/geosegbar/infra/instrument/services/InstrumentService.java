@@ -19,6 +19,7 @@ import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.DeterministicLimitEntity;
 import com.geosegbar.entities.InputEntity;
 import com.geosegbar.entities.InstrumentEntity;
+import com.geosegbar.entities.InstrumentTypeEntity;
 import com.geosegbar.entities.MeasurementUnitEntity;
 import com.geosegbar.entities.OutputEntity;
 import com.geosegbar.entities.SectionEntity;
@@ -39,6 +40,7 @@ import com.geosegbar.infra.instrument.dtos.OutputDTO;
 import com.geosegbar.infra.instrument.dtos.StatisticalLimitDTO;
 import com.geosegbar.infra.instrument.dtos.UpdateInstrumentRequest;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
+import com.geosegbar.infra.instrument_type.persistence.jpa.InstrumentTypeRepository;
 import com.geosegbar.infra.measurement_unit.persistence.jpa.MeasurementUnitRepository;
 import com.geosegbar.infra.output.persistence.jpa.OutputRepository;
 import com.geosegbar.infra.section.persistence.jpa.SectionRepository;
@@ -61,6 +63,7 @@ public class InstrumentService {
     private final InputRepository inputRepository;
     private final ConstantRepository constantRepository;
     private final OutputRepository outputRepository;
+    private final InstrumentTypeRepository instrumentTypeRepository;
 
     public List<InstrumentEntity> findAll() {
         return instrumentRepository.findAllByOrderByNameAsc();
@@ -104,6 +107,9 @@ public class InstrumentService {
         SectionEntity section = sectionRepository.findById(request.getSectionId())
                 .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + request.getSectionId()));
 
+        InstrumentTypeEntity instrumentType = instrumentTypeRepository.findById(request.getInstrumentTypeId())
+                .orElseThrow(() -> new NotFoundException("Tipo de instrumento não encontrado com ID: " + request.getInstrumentTypeId()));
+
         InstrumentEntity instrument = new InstrumentEntity();
         instrument.setName(request.getName().toUpperCase());
         instrument.setLocation(request.getLocation());
@@ -111,7 +117,7 @@ public class InstrumentService {
         instrument.setLatitude(request.getLatitude());
         instrument.setLongitude(request.getLongitude());
         instrument.setNoLimit(request.getNoLimit());
-        instrument.setInstrumentType(request.getInstrumentType());
+        instrument.setInstrumentType(instrumentType);
         instrument.setDam(dam);
         instrument.setSection(section);
         instrument.setActive(true);
@@ -461,13 +467,16 @@ public class InstrumentService {
         SectionEntity section = sectionRepository.findById(request.getSectionId())
                 .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + request.getSectionId()));
 
+        InstrumentTypeEntity instrumentType = instrumentTypeRepository.findById(request.getInstrumentTypeId())
+                .orElseThrow(() -> new NotFoundException("Tipo de instrumento não encontrado com ID: " + request.getInstrumentTypeId()));
+
         instrument.setName(request.getName().toUpperCase());
         instrument.setLocation(request.getLocation());
         instrument.setDistanceOffset(request.getDistanceOffset());
         instrument.setLatitude(request.getLatitude());
         instrument.setLongitude(request.getLongitude());
         instrument.setNoLimit(request.getNoLimit());
-        instrument.setInstrumentType(request.getInstrumentType());
+        instrument.setInstrumentType(instrumentType);
         instrument.setDam(dam);
         instrument.setSection(section);
         instrument.setActiveForSection(request.getActiveForSection());
@@ -501,8 +510,8 @@ public class InstrumentService {
         return instrumentRepository.save(instrument);
     }
 
-    public List<InstrumentEntity> findByFilters(Long damId, String instrumentType, Long sectionId, Boolean active, Long clientId) {
-        return instrumentRepository.findByFiltersOptimized(damId, instrumentType, sectionId, active, clientId);
+    public List<InstrumentEntity> findByFilters(Long damId, Long instrumentTypeId, Long sectionId, Boolean active, Long clientId) {
+        return instrumentRepository.findByFiltersOptimized(damId, instrumentTypeId, sectionId, active, clientId);
     }
 
     private void validateEquation(String equation, Set<String> inputAcronyms, Set<String> constantAcronyms) {
@@ -838,7 +847,8 @@ public class InstrumentService {
         dto.setNoLimit(instrument.getNoLimit());
         dto.setDamId(instrument.getDam().getId());
         dto.setDamName(instrument.getDam().getName());
-        dto.setInstrumentType(instrument.getInstrumentType());
+        dto.setInstrumentTypeId(instrument.getInstrumentType().getId());
+        dto.setInstrumentType(instrument.getInstrumentType().getName());
         dto.setSectionId(instrument.getSection().getId());
         dto.setSectionName(instrument.getSection().getName());
         dto.setActiveForSection(instrument.getActiveForSection());

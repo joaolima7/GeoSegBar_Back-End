@@ -56,12 +56,12 @@ public class InstrumentController {
     @GetMapping("/filter")
     public ResponseEntity<WebResponseEntity<List<InstrumentResponseDTO>>> filterInstruments(
             @RequestParam(required = false) Long damId,
-            @RequestParam(required = false) String instrumentType,
+            @RequestParam(required = false) Long instrumentTypeId,
             @RequestParam(required = false) Long sectionId,
             @RequestParam(required = false) Boolean active,
             @RequestParam(required = false) Long clientId) {
 
-        List<InstrumentEntity> instruments = instrumentService.findByFilters(damId, instrumentType, sectionId, active, clientId);
+        List<InstrumentEntity> instruments = instrumentService.findByFilters(damId, instrumentTypeId, sectionId, active, clientId);
         List<InstrumentResponseDTO> responseList = instrumentService.mapToResponseDTOList(instruments);
 
         return ResponseEntity.ok(WebResponseEntity.success(responseList, "Instrumentos obtidos com sucesso!"));

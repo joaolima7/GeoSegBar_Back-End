@@ -77,6 +77,8 @@ public class ChecklistResponseSubmissionService {
 
     @Transactional
     public ChecklistResponseEntity submitChecklistResponse(ChecklistResponseSubmissionDTO submissionDto) {
+        validateUserAccessToDam(submissionDto.getUserId(), submissionDto.getDamId());
+
         if (!AuthenticatedUserUtil.isAdmin()) {
             if (submissionDto.isMobile()) {
                 if (!AuthenticatedUserUtil.getCurrentUser().getRoutineInspectionPermission().getIsFillMobile()) {
@@ -114,6 +116,45 @@ public class ChecklistResponseSubmissionService {
         }
 
         return checklistResponse;
+    }
+
+    private void validateUserAccessToDam(Long userId, Long damId) {
+        UserEntity user = userRepository.findByIdWithClients(userId)
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+
+        DamEntity dam = damRepository.findById(damId)
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
+
+        // Verificar se o usuário é admin (tem acesso a tudo)
+        if (AuthenticatedUserUtil.isAdmin()) {
+            return;
+        }
+
+        // Verificar se o usuário pertence ao cliente da barragem
+        boolean userBelongsToClient = user.getClients().stream()
+                .anyMatch(client -> client.getId().equals(dam.getClient().getId()));
+
+        if (!userBelongsToClient) {
+            throw new UnauthorizedException(
+                    "Usuário não tem permissão para acessar esta barragem. "
+                    + "O usuário não pertence ao cliente proprietário da barragem."
+            );
+        }
+
+        // Verificar permissões específicas na tabela dam_permissions
+        boolean hasSpecificPermission = user.getDamPermissions().stream()
+                .anyMatch(permission
+                        -> permission.getDam().getId().equals(damId)
+                && permission.getHasAccess()
+                && permission.getClient().getId().equals(dam.getClient().getId())
+                );
+
+        if (!hasSpecificPermission) {
+            throw new UnauthorizedException(
+                    "Usuário não tem permissão específica para acessar esta barragem. "
+                    + "Verifique as permissões de acesso na administração do sistema."
+            );
+        }
     }
 
     private void validatePVAnswersHaveRequiredFields(ChecklistResponseSubmissionDTO submissionDto) {

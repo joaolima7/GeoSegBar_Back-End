@@ -36,7 +36,12 @@ import lombok.Setter;
     @Index(name = "idx_reading_instrument_output_active", columnList = "instrument_id, output_id, active"),
     @Index(name = "idx_reading_date_hour_status", columnList = "date DESC, hour DESC, limit_status"),
     @Index(name = "idx_reading_user_date", columnList = "user_id, date DESC"),
-    @Index(name = "idx_reading_active", columnList = "active")
+    @Index(name = "idx_reading_active", columnList = "active"),
+    @Index(name = "idx_reading_limit_status", columnList = "limit_status"),
+    @Index(name = "idx_reading_instrument_limit", columnList = "instrument_id, limit_status"),
+    @Index(name = "idx_reading_date_range", columnList = "date"),
+    @Index(name = "idx_reading_date_instrument_status", columnList = "date DESC, instrument_id, limit_status"),
+    @Index(name = "idx_reading_instrument_date", columnList = "instrument_id, date DESC")
 })
 @Getter
 @Setter

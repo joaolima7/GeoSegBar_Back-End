@@ -51,7 +51,14 @@ public class IndexInitializer {
             "CREATE INDEX IF NOT EXISTS idx_dam_perm_active_users ON dam_permissions(client_id, has_access) WHERE has_access = true",
             "CREATE INDEX IF NOT EXISTS idx_dam_perm_user_active ON dam_permissions(user_id, has_access, client_id) WHERE has_access = true",
             // Índices para consultas geográficas otimizadas
-            "CREATE INDEX IF NOT EXISTS idx_dam_geo_client_status ON dam(client_id, status_id, latitude, longitude)"
+            "CREATE INDEX IF NOT EXISTS idx_dam_geo_client_status ON dam(client_id, status_id, latitude, longitude)",
+            // Índices para instrumentos e leituras
+            "CREATE INDEX IF NOT EXISTS idx_instrument_dam_type_active ON instrument(dam_id, instrument_type_id, active)",
+            "CREATE INDEX IF NOT EXISTS idx_instrument_type_dam_coords ON instrument(instrument_type_id, dam_id, latitude, longitude)",
+            "CREATE INDEX IF NOT EXISTS idx_reading_recent_by_instrument ON reading(instrument_id, date DESC, hour DESC) WHERE active = true",
+            "CREATE INDEX IF NOT EXISTS idx_reading_alert_status ON reading(limit_status, instrument_id) WHERE limit_status != 'NORMAL'",
+            // Índices para limites e validações
+            "CREATE INDEX IF NOT EXISTS idx_instrument_geo_search ON instrument(latitude, longitude) WHERE latitude IS NOT NULL AND longitude IS NOT NULL"
         };
 
         int successCount = 0;

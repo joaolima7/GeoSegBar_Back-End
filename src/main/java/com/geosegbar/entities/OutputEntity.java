@@ -25,7 +25,8 @@ import lombok.Setter;
     @Index(name = "idx_output_instrument_active", columnList = "instrument_id, active"),
     @Index(name = "idx_output_acronym", columnList = "acronym"),
     @Index(name = "idx_output_instrument_acronym", columnList = "instrument_id, acronym"),
-    @Index(name = "idx_output_active", columnList = "active")
+    @Index(name = "idx_output_active", columnList = "active"),
+    @Index(name = "idx_output_measurement_unit", columnList = "measurement_unit_id, instrument_id")
 })
 @Getter
 @Setter

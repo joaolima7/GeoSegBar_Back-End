@@ -29,8 +29,12 @@ import lombok.Setter;
     @Index(name = "idx_instrument_dam_active", columnList = "dam_id, active"),
     @Index(name = "idx_instrument_section_active", columnList = "section_id, active"),
     @Index(name = "idx_instrument_name", columnList = "name"),
-    @Index(name = "idx_instrument_active_section", columnList = "active, activeForSection")
-})
+    @Index(name = "idx_instrument_active_section", columnList = "active, activeForSection"),
+    @Index(name = "idx_instrument_type_active", columnList = "instrument_type_id, active"),
+    @Index(name = "idx_instrument_dam_type", columnList = "dam_id, instrument_type_id"),
+    @Index(name = "idx_instrument_coordinates", columnList = "latitude, longitude"),
+    @Index(name = "idx_instrument_dam_coordinates", columnList = "dam_id, latitude, longitude"),
+    @Index(name = "idx_instrument_dam_section", columnList = "dam_id, section_id")})
 @Getter
 @Setter
 @NoArgsConstructor

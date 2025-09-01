@@ -10,6 +10,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
@@ -23,6 +24,9 @@ import lombok.Setter;
 @Table(name = "instrument_type",
         uniqueConstraints = {
             @UniqueConstraint(name = "uk_instrument_type_name", columnNames = "name")
+        },
+        indexes = {
+            @Index(name = "idx_instrument_type_name_search", columnList = "name")
         })
 @Getter
 @Setter

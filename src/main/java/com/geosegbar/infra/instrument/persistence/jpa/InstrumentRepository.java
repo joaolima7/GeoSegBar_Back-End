@@ -16,8 +16,10 @@ import com.geosegbar.entities.SectionEntity;
 @Repository
 public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Long> {
 
+    @EntityGraph(attributePaths = {"dam", "section", "instrumentType"})
     List<InstrumentEntity> findAllByOrderByNameAsc();
 
+    @EntityGraph(attributePaths = {"dam", "section", "instrumentType"})
     List<InstrumentEntity> findByDamId(Long damId);
 
     List<InstrumentEntity> findByDam(DamEntity dam);
@@ -87,4 +89,11 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
             @Param("sectionId") Long sectionId,
             @Param("active") Boolean active,
             @Param("clientId") Long clientId);
+
+    @Query("SELECT i FROM InstrumentEntity i "
+            + "LEFT JOIN FETCH i.instrumentType "
+            + "LEFT JOIN FETCH i.section "
+            + "WHERE i.id = :id")
+    Optional<InstrumentEntity> findByIdWithBasicRelations(@Param("id") Long id);
+
 }

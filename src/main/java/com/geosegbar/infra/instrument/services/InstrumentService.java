@@ -10,6 +10,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,29 +67,47 @@ public class InstrumentService {
     private final OutputRepository outputRepository;
     private final InstrumentTypeRepository instrumentTypeRepository;
 
+    @Cacheable(value = "allInstruments", cacheManager = "instrumentCacheManager")
     public List<InstrumentEntity> findAll() {
         return instrumentRepository.findAllByOrderByNameAsc();
     }
 
+    @Cacheable(value = "instrumentsByDam", key = "#damId", cacheManager = "instrumentCacheManager")
     public List<InstrumentEntity> findByDamId(Long damId) {
         return instrumentRepository.findByDamId(damId);
     }
 
+    @Cacheable(value = "instrumentById", key = "#id", cacheManager = "instrumentCacheManager")
     public InstrumentEntity findById(Long id) {
-        return instrumentRepository.findById(id)
+        return instrumentRepository.findByIdWithBasicRelations(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
     }
 
+    @Cacheable(value = "instrumentWithDetails", key = "#id", cacheManager = "instrumentCacheManager")
     public InstrumentEntity findWithAllDetails(Long id) {
         return instrumentRepository.findWithCompleteDetailsById(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
     }
 
+    @Cacheable(
+            value = "instrumentsByClient",
+            key = "#clientId + '_' + #active",
+            cacheManager = "instrumentCacheManager"
+    )
     public List<InstrumentEntity> findByClientId(Long clientId, Boolean active) {
         return instrumentRepository.findByClientIdOptimized(clientId, active);
     }
 
     @Transactional
+    @CacheEvict(
+            value = {
+                "instrumentById", "instrumentWithDetails", "instrumentsByClient",
+                "instrumentsByFilters", "instrumentsByDam", "allInstruments",
+                "instrumentResponseDTO"
+            },
+            allEntries = true,
+            cacheManager = "instrumentCacheManager"
+    )
     public InstrumentEntity createComplete(CreateInstrumentRequest request) {
         validateRequest(request);
 
@@ -347,6 +367,15 @@ public class InstrumentService {
     }
 
     @Transactional
+    @CacheEvict(
+            value = {
+                "instrumentById", "instrumentWithDetails", "instrumentsByClient",
+                "instrumentsByFilters", "instrumentsByDam", "allInstruments",
+                "instrumentResponseDTO"
+            },
+            allEntries = true,
+            cacheManager = "instrumentCacheManager"
+    )
     public InstrumentEntity update(Long id, UpdateInstrumentRequest request) {
         validateRequest(request);
 
@@ -484,6 +513,15 @@ public class InstrumentService {
     }
 
     @Transactional
+    @CacheEvict(
+            value = {
+                "instrumentById", "instrumentWithDetails", "instrumentsByClient",
+                "instrumentsByFilters", "instrumentsByDam", "allInstruments",
+                "instrumentResponseDTO"
+            },
+            allEntries = true,
+            cacheManager = "instrumentCacheManager"
+    )
     public void delete(Long id) {
         InstrumentEntity instrument = findById(id);
 
@@ -504,13 +542,28 @@ public class InstrumentService {
     }
 
     @Transactional
+    @CacheEvict(
+            value = {
+                "instrumentById", "instrumentWithDetails", "instrumentsByClient",
+                "instrumentsByFilters", "instrumentsByDam", "allInstruments",
+                "instrumentResponseDTO"
+            },
+            allEntries = true,
+            cacheManager = "instrumentCacheManager"
+    )
     public InstrumentEntity toggleActiveInstrument(Long id, Boolean active) {
         InstrumentEntity instrument = findById(id);
         instrument.setActive(active);
         return instrumentRepository.save(instrument);
     }
 
+    @Cacheable(
+            value = "instrumentsByFilters",
+            key = "#damId + '_' + #instrumentTypeId + '_' + #sectionId + '_' + #active + '_' + #clientId",
+            cacheManager = "instrumentCacheManager"
+    )
     public List<InstrumentEntity> findByFilters(Long damId, Long instrumentTypeId, Long sectionId, Boolean active, Long clientId) {
+        log.debug("Cache miss: findByFilters({}, {}, {}, {}, {})", damId, instrumentTypeId, sectionId, active, clientId);
         return instrumentRepository.findByFiltersOptimized(damId, instrumentTypeId, sectionId, active, clientId);
     }
 
@@ -829,12 +882,26 @@ public class InstrumentService {
     }
 
     @Transactional
+    @CacheEvict(
+            value = {
+                "instrumentById", "instrumentWithDetails", "instrumentsByClient",
+                "instrumentsByFilters", "instrumentsByDam", "allInstruments",
+                "instrumentResponseDTO"
+            },
+            allEntries = true,
+            cacheManager = "instrumentCacheManager"
+    )
     public InstrumentEntity toggleSectionVisibility(Long id, Boolean active) {
         InstrumentEntity instrument = findById(id);
         instrument.setActiveForSection(active);
         return instrumentRepository.save(instrument);
     }
 
+    @Cacheable(
+            value = "instrumentResponseDTO",
+            key = "#instrument.id",
+            cacheManager = "instrumentCacheManager"
+    )
     public InstrumentResponseDTO mapToResponseDTO(InstrumentEntity instrument) {
         InstrumentResponseDTO dto = new InstrumentResponseDTO();
         // Campos básicos
@@ -845,80 +912,100 @@ public class InstrumentService {
         dto.setLatitude(instrument.getLatitude());
         dto.setLongitude(instrument.getLongitude());
         dto.setNoLimit(instrument.getNoLimit());
-        dto.setDamId(instrument.getDam().getId());
-        dto.setDamName(instrument.getDam().getName());
-        dto.setInstrumentTypeId(instrument.getInstrumentType().getId());
-        dto.setInstrumentType(instrument.getInstrumentType().getName());
-        dto.setSectionId(instrument.getSection().getId());
-        dto.setSectionName(instrument.getSection().getName());
+
+        // Relações diretas
+        DamEntity dam = instrument.getDam();
+        dto.setDamId(dam.getId());
+        dto.setDamName(dam.getName());
+
+        InstrumentTypeEntity type = instrument.getInstrumentType();
+        dto.setInstrumentTypeId(type.getId());
+        dto.setInstrumentType(type.getName());
+
+        SectionEntity section = instrument.getSection();
+        dto.setSectionId(section.getId());
+        dto.setSectionName(section.getName());
+
         dto.setActiveForSection(instrument.getActiveForSection());
 
-        // Inputs
-        List<InputDTO> inputDTOs = new ArrayList<>();
+        // Inputs - usar inicialização eager para evitar N+1
+        List<InputDTO> inputDTOs = new ArrayList<>(instrument.getInputs().size());
         for (InputEntity input : instrument.getInputs()) {
             InputDTO inputDTO = new InputDTO();
-            inputDTO.setId(input.getId()); // Adicionado
+            inputDTO.setId(input.getId());
             inputDTO.setAcronym(input.getAcronym());
             inputDTO.setName(input.getName());
             inputDTO.setPrecision(input.getPrecision());
-            inputDTO.setMeasurementUnitId(input.getMeasurementUnit().getId());
-            inputDTO.setMeasurementUnitName(input.getMeasurementUnit().getName());
-            inputDTO.setMeasurementUnitAcronym(input.getMeasurementUnit().getAcronym());
+
+            MeasurementUnitEntity unit = input.getMeasurementUnit();
+            inputDTO.setMeasurementUnitId(unit.getId());
+            inputDTO.setMeasurementUnitName(unit.getName());
+            inputDTO.setMeasurementUnitAcronym(unit.getAcronym());
+
             inputDTOs.add(inputDTO);
         }
         dto.setInputs(inputDTOs);
 
         // Constants
-        List<ConstantDTO> constantDTOs = new ArrayList<>();
+        List<ConstantDTO> constantDTOs = new ArrayList<>(instrument.getConstants().size());
         for (ConstantEntity constant : instrument.getConstants()) {
             ConstantDTO constantDTO = new ConstantDTO();
-            constantDTO.setId(constant.getId()); // Adicionado
+            constantDTO.setId(constant.getId());
             constantDTO.setAcronym(constant.getAcronym());
             constantDTO.setName(constant.getName());
             constantDTO.setPrecision(constant.getPrecision());
             constantDTO.setValue(constant.getValue());
-            constantDTO.setMeasurementUnitId(constant.getMeasurementUnit().getId());
-            constantDTO.setMeasurementUnitName(constant.getMeasurementUnit().getName());
-            constantDTO.setMeasurementUnitAcronym(constant.getMeasurementUnit().getAcronym());
+
+            MeasurementUnitEntity unit = constant.getMeasurementUnit();
+            constantDTO.setMeasurementUnitId(unit.getId());
+            constantDTO.setMeasurementUnitName(unit.getName());
+            constantDTO.setMeasurementUnitAcronym(unit.getAcronym());
+
             constantDTOs.add(constantDTO);
         }
         dto.setConstants(constantDTOs);
 
-        // Outputs with their limits
-        List<OutputDTO> outputDTOs = new ArrayList<>();
-        for (OutputEntity output : instrument.getOutputs()) {
-            if (output.getActive()) {
-                OutputDTO outputDTO = new OutputDTO();
-                outputDTO.setId(output.getId()); // Adicionado
-                outputDTO.setAcronym(output.getAcronym());
-                outputDTO.setName(output.getName());
-                outputDTO.setEquation(output.getEquation());
-                outputDTO.setPrecision(output.getPrecision());
-                outputDTO.setMeasurementUnitId(output.getMeasurementUnit().getId());
-                outputDTO.setMeasurementUnitName(output.getMeasurementUnit().getName());
-                outputDTO.setMeasurementUnitAcronym(output.getMeasurementUnit().getAcronym());
+        // Outputs - filtrar ativos primeiro para melhorar performance
+        List<OutputEntity> activeOutputs = instrument.getOutputs().stream()
+                .filter(OutputEntity::getActive)
+                .collect(Collectors.toList());
 
-                // Add statistical limit
-                if (output.getStatisticalLimit() != null) {
-                    StatisticalLimitDTO limitDTO = new StatisticalLimitDTO();
-                    limitDTO.setId(output.getStatisticalLimit().getId()); // Adicionado
-                    limitDTO.setLowerValue(output.getStatisticalLimit().getLowerValue());
-                    limitDTO.setUpperValue(output.getStatisticalLimit().getUpperValue());
-                    outputDTO.setStatisticalLimit(limitDTO);
-                }
+        List<OutputDTO> outputDTOs = new ArrayList<>(activeOutputs.size());
+        for (OutputEntity output : activeOutputs) {
+            OutputDTO outputDTO = new OutputDTO();
+            outputDTO.setId(output.getId());
+            outputDTO.setAcronym(output.getAcronym());
+            outputDTO.setName(output.getName());
+            outputDTO.setEquation(output.getEquation());
+            outputDTO.setPrecision(output.getPrecision());
 
-                // Add deterministic limit
-                if (output.getDeterministicLimit() != null) {
-                    DeterministicLimitDTO limitDTO = new DeterministicLimitDTO();
-                    limitDTO.setId(output.getDeterministicLimit().getId()); // Adicionado
-                    limitDTO.setAttentionValue(output.getDeterministicLimit().getAttentionValue());
-                    limitDTO.setAlertValue(output.getDeterministicLimit().getAlertValue());
-                    limitDTO.setEmergencyValue(output.getDeterministicLimit().getEmergencyValue());
-                    outputDTO.setDeterministicLimit(limitDTO);
-                }
+            MeasurementUnitEntity unit = output.getMeasurementUnit();
+            outputDTO.setMeasurementUnitId(unit.getId());
+            outputDTO.setMeasurementUnitName(unit.getName());
+            outputDTO.setMeasurementUnitAcronym(unit.getAcronym());
 
-                outputDTOs.add(outputDTO);
+            // Limites estatísticos
+            StatisticalLimitEntity statLimit = output.getStatisticalLimit();
+            if (statLimit != null) {
+                StatisticalLimitDTO limitDTO = new StatisticalLimitDTO();
+                limitDTO.setId(statLimit.getId());
+                limitDTO.setLowerValue(statLimit.getLowerValue());
+                limitDTO.setUpperValue(statLimit.getUpperValue());
+                outputDTO.setStatisticalLimit(limitDTO);
             }
+
+            // Limites determinísticos
+            DeterministicLimitEntity detLimit = output.getDeterministicLimit();
+            if (detLimit != null) {
+                DeterministicLimitDTO limitDTO = new DeterministicLimitDTO();
+                limitDTO.setId(detLimit.getId());
+                limitDTO.setAttentionValue(detLimit.getAttentionValue());
+                limitDTO.setAlertValue(detLimit.getAlertValue());
+                limitDTO.setEmergencyValue(detLimit.getEmergencyValue());
+                outputDTO.setDeterministicLimit(limitDTO);
+            }
+
+            outputDTOs.add(outputDTO);
         }
         dto.setOutputs(outputDTOs);
 

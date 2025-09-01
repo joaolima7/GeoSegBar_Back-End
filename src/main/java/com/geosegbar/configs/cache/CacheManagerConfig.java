@@ -306,4 +306,61 @@ public class CacheManagerConfig {
 
         return cacheManager;
     }
+
+    @Bean("instrumentCacheManager")
+    public CacheManager instrumentCacheManager() {
+        SimpleCacheManager cacheManager = new SimpleCacheManager();
+        cacheManager.setCaches(Arrays.asList(
+                new CaffeineCache("instrumentById",
+                        Caffeine.newBuilder()
+                                .maximumSize(300)
+                                .expireAfterWrite(Duration.ofMinutes(15))
+                                .expireAfterAccess(Duration.ofMinutes(10))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("instrumentWithDetails",
+                        Caffeine.newBuilder()
+                                .maximumSize(100)
+                                .expireAfterWrite(Duration.ofMinutes(12))
+                                .expireAfterAccess(Duration.ofMinutes(8))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("instrumentsByClient",
+                        Caffeine.newBuilder()
+                                .maximumSize(50)
+                                .expireAfterWrite(Duration.ofMinutes(10))
+                                .expireAfterAccess(Duration.ofMinutes(5))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("instrumentsByFilters",
+                        Caffeine.newBuilder()
+                                .maximumSize(200)
+                                .expireAfterWrite(Duration.ofMinutes(10))
+                                .expireAfterAccess(Duration.ofMinutes(5))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("instrumentsByDam",
+                        Caffeine.newBuilder()
+                                .maximumSize(100)
+                                .expireAfterWrite(Duration.ofMinutes(15))
+                                .expireAfterAccess(Duration.ofMinutes(8))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("allInstruments",
+                        Caffeine.newBuilder()
+                                .maximumSize(5)
+                                .expireAfterWrite(Duration.ofMinutes(5))
+                                .expireAfterAccess(Duration.ofMinutes(3))
+                                .recordStats()
+                                .build()),
+                new CaffeineCache("instrumentResponseDTO",
+                        Caffeine.newBuilder()
+                                .maximumSize(500)
+                                .expireAfterWrite(Duration.ofMinutes(10))
+                                .expireAfterAccess(Duration.ofMinutes(5))
+                                .recordStats()
+                                .build())
+        ));
+        return cacheManager;
+    }
 }

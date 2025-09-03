@@ -269,7 +269,6 @@ public class InstrumentGraphCustomizationPropertiesService {
                 property.setLineType(item.getLineType());
                 property.setLabelEnable(item.getLabelEnable());
                 property.setIsPrimaryOrdinate(item.getIsPrimaryOrdinate());
-                property.setLimitValueType(item.getLimitValueType());
 
                 updatedProperties.add(mapToPropertyResponseDTO(property));
 

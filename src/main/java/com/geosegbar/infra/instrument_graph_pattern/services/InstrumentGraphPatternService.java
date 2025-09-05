@@ -269,6 +269,16 @@ public class InstrumentGraphPatternService {
             ));
         }
 
+        // Adicionar mapeamento para constante
+        if (property.getConstant() != null) {
+            dto.setConstant(new GraphPatternDetailResponseDTO.RelatedConstantDTO(
+                    property.getConstant().getId(),
+                    property.getConstant().getAcronym(),
+                    property.getConstant().getName(),
+                    property.getConstant().getValue()
+            ));
+        }
+
         if (property.getStatisticalLimit() != null) {
             var statLimit = property.getStatisticalLimit();
             GraphPatternDetailResponseDTO.RelatedOutputDTO outputDto = null;

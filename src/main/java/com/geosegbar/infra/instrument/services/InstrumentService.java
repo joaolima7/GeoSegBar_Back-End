@@ -124,8 +124,11 @@ public class InstrumentService {
         DamEntity dam = damRepository.findById(request.getDamId())
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + request.getDamId()));
 
-        SectionEntity section = sectionRepository.findById(request.getSectionId())
-                .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + request.getSectionId()));
+        SectionEntity section = null;
+        if (request.getSectionId() != null) {
+            section = sectionRepository.findById(request.getSectionId())
+                    .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + request.getSectionId()));
+        }
 
         InstrumentTypeEntity instrumentType = instrumentTypeRepository.findById(request.getInstrumentTypeId())
                 .orElseThrow(() -> new NotFoundException("Tipo de instrumento não encontrado com ID: " + request.getInstrumentTypeId()));
@@ -493,9 +496,11 @@ public class InstrumentService {
         DamEntity dam = damRepository.findById(request.getDamId())
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + request.getDamId()));
 
-        SectionEntity section = sectionRepository.findById(request.getSectionId())
-                .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + request.getSectionId()));
-
+        SectionEntity section = null;
+        if (request.getSectionId() != null) {
+            section = sectionRepository.findById(request.getSectionId())
+                    .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + request.getSectionId()));
+        }
         InstrumentTypeEntity instrumentType = instrumentTypeRepository.findById(request.getInstrumentTypeId())
                 .orElseThrow(() -> new NotFoundException("Tipo de instrumento não encontrado com ID: " + request.getInstrumentTypeId()));
 
@@ -923,8 +928,10 @@ public class InstrumentService {
         dto.setInstrumentType(type.getName());
 
         SectionEntity section = instrument.getSection();
-        dto.setSectionId(section.getId());
-        dto.setSectionName(section.getName());
+        if (section != null) {
+            dto.setSectionId(section.getId());
+            dto.setSectionName(section.getName());
+        }
 
         dto.setActiveForSection(instrument.getActiveForSection());
 

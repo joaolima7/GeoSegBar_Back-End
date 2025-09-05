@@ -38,7 +38,6 @@ public class UpdateInstrumentRequest {
     @NotNull(message = "ID do tipo de instrumento é obrigatório")
     private Long instrumentTypeId;
 
-    @NotNull(message = "ID da seção é obrigatório")
     private Long sectionId;
 
     @Valid

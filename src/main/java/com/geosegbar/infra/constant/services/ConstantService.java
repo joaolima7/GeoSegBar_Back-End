@@ -28,6 +28,10 @@ public class ConstantService {
                 .orElseThrow(() -> new NotFoundException("Constante não encontrada com ID: " + id));
     }
 
+    public List<Long> findConstantIdsByInstrumentDamId(Long damId) {
+        return constantRepository.findConstantIdsByInstrumentDamId(damId);
+    }
+
     @Transactional
     public void deleteById(Long id) {
         ConstantEntity constant = findById(id);

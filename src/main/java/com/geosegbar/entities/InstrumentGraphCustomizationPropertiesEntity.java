@@ -30,7 +30,8 @@ import lombok.Setter;
     @Index(name = "idx_graph_custom_props_stat_limit", columnList = "statistical_limit_id"),
     @Index(name = "idx_graph_custom_props_det_limit", columnList = "deterministic_limit_id"),
     @Index(name = "idx_graph_custom_props_name", columnList = "name"),
-    @Index(name = "idx_graph_custom_props_limit_value_type", columnList = "limit_value_type")
+    @Index(name = "idx_graph_custom_props_limit_value_type", columnList = "limit_value_type"),
+    @Index(name = "idx_graph_custom_props_constant", columnList = "constant_id")
 })
 @Getter
 @Setter
@@ -86,6 +87,11 @@ public class InstrumentGraphCustomizationPropertiesEntity {
     @JoinColumn(name = "output_id", nullable = true)
     @JsonIgnoreProperties({"instrument", "statisticalLimit", "deterministicLimit"})
     private OutputEntity output;
+
+    @ManyToOne
+    @JoinColumn(name = "constant_id", nullable = true)
+    @JsonIgnoreProperties({"instrument", "measurementUnit"})
+    private ConstantEntity constant;
 
     @ManyToOne
     @JoinColumn(name = "instrument_id", nullable = true)

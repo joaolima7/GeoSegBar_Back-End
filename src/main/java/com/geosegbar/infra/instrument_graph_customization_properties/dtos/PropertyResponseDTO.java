@@ -25,6 +25,7 @@ public class PropertyResponseDTO {
 
     private Long instrumentId;
     private Long outputId;
+    private Long constantId;
     private Long statisticalLimitId;
     private Long deterministicLimitId;
 }

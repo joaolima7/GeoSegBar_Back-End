@@ -78,6 +78,7 @@ public class GraphPatternDetailResponseDTO {
         private Double linimetricRulerValue;
         private RelatedInstrumentDTO instrument;
         private RelatedOutputDTO output;
+        private RelatedConstantDTO constant;
         private RelatedStatisticalLimitDTO statisticalLimit;
         private RelatedDeterministicLimitDTO deterministicLimit;
     }
@@ -123,5 +124,16 @@ public class GraphPatternDetailResponseDTO {
         private Double alertValue;
         private Double emergencyValue;
         private RelatedOutputDTO output;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class RelatedConstantDTO {
+
+        private Long id;
+        private String acronym;
+        private String name;
+        private Double value;
     }
 }

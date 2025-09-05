@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.geosegbar.common.enums.CustomizationTypeEnum;
 import com.geosegbar.common.enums.LimitValueTypeEnum;
 import com.geosegbar.common.enums.LineTypeEnum;
+import com.geosegbar.entities.ConstantEntity;
 import com.geosegbar.entities.DeterministicLimitEntity;
 import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.entities.InstrumentGraphCustomizationPropertiesEntity;
@@ -24,6 +25,7 @@ import com.geosegbar.entities.OutputEntity;
 import com.geosegbar.entities.StatisticalLimitEntity;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.constant.services.ConstantService;
 import com.geosegbar.infra.deterministic_limit.services.DeterministicLimitService;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.instrument.services.InstrumentService;
@@ -57,6 +59,7 @@ public class InstrumentGraphCustomizationPropertiesService {
     private final OutputRepository outputRepository;
     private final StatisticalLimitService statLimitService;
     private final DeterministicLimitService detLimitService;
+    private final ConstantService constantService;
 
     @Transactional
     @CacheEvict(value = {"graphProperties", "graphPatternById", "graphPatternsByInstrument", "graphPatternsByDam", "folderWithPatterns", "damFoldersWithPatterns"},
@@ -74,6 +77,7 @@ public class InstrumentGraphCustomizationPropertiesService {
                 req.getOutputIds(),
                 req.getStatisticalLimitValues().stream().map(StatisticalLimitValueReference::getLimitId).toList(),
                 req.getDeterministicLimitValues().stream().map(DeterministicLimitValueReference::getLimitId).toList(),
+                req.getConstantIds(), // Novo parâmetro
                 damId
         );
 
@@ -85,6 +89,10 @@ public class InstrumentGraphCustomizationPropertiesService {
         manageOutputProperties(pattern, existingProperties,
                 getExistingOutputIds(existingProperties),
                 new HashSet<>(req.getOutputIds()));
+
+        manageConstantProperties(pattern, existingProperties,
+                getExistingConstantIds(existingProperties),
+                new HashSet<>(req.getConstantIds()));
 
         manageStatisticalLimitValueProperties(pattern, existingProperties, req.getStatisticalLimitValues());
 
@@ -102,6 +110,7 @@ public class InstrumentGraphCustomizationPropertiesService {
             List<Long> outputIds,
             List<Long> statisticalLimitIds,
             List<Long> deterministicLimitIds,
+            List<Long> constantIds, // Novo parâmetro
             Long damId) {
 
         if (instrumentIds != null && !instrumentIds.isEmpty()) {
@@ -135,6 +144,24 @@ public class InstrumentGraphCustomizationPropertiesService {
 
             if (!invalidOutputIds.isEmpty()) {
                 throw new InvalidInputException("Os seguintes outputs não pertencem à mesma barragem do padrão: " + invalidOutputIds);
+            }
+        }
+
+        if (constantIds != null && !constantIds.isEmpty()) {
+            // Buscar apenas os IDs de constantes que pertencem a instrumentos da barragem correta
+            List<Long> validConstantIds = constantService.findConstantIdsByInstrumentDamId(damId)
+                    .stream()
+                    .filter(constantIds::contains)
+                    .toList();
+
+            // Identificar IDs inválidos
+            List<Long> invalidConstantIds = constantIds.stream()
+                    .filter(id -> !validConstantIds.contains(id))
+                    .toList();
+
+            if (!invalidConstantIds.isEmpty()) {
+                throw new InvalidInputException(
+                        "As seguintes constantes não pertencem à barragem selecionada: " + invalidConstantIds);
             }
         }
 
@@ -420,7 +447,7 @@ public class InstrumentGraphCustomizationPropertiesService {
             if (!exists) {
                 StatisticalLimitEntity statLimit = statLimitService.findById(ref.getLimitId());
                 createCustomizationProperty(pattern, CustomizationTypeEnum.STATISTICAL_LIMIT,
-                        null, statLimit, null, null, ref.getValueType());
+                        null, statLimit, null, null, null, ref.getValueType());
             }
         }
     }
@@ -486,7 +513,7 @@ public class InstrumentGraphCustomizationPropertiesService {
             if (!exists) {
                 DeterministicLimitEntity detLimit = detLimitService.findById(ref.getLimitId());
                 createCustomizationProperty(pattern, CustomizationTypeEnum.DETERMINISTIC_LIMIT,
-                        null, null, detLimit, null, ref.getValueType());
+                        null, null, detLimit, null, null, ref.getValueType());
             }
         }
     }
@@ -556,7 +583,37 @@ public class InstrumentGraphCustomizationPropertiesService {
         for (Long idToAdd : idsToAdd) {
             InstrumentEntity instrument = instrumentService.findById(idToAdd);
             createCustomizationProperty(pattern, CustomizationTypeEnum.INSTRUMENT,
-                    null, null, null, instrument, null);
+                    null, null, null, instrument, null, null);
+        }
+    }
+
+    private void manageConstantProperties(
+            InstrumentGraphPatternEntity pattern,
+            List<InstrumentGraphCustomizationPropertiesEntity> existingProperties,
+            Set<Long> currentIds, Set<Long> newIds) {
+
+        Set<Long> idsToRemove = new HashSet<>(currentIds);
+        idsToRemove.removeAll(newIds);
+
+        for (Long idToRemove : idsToRemove) {
+            existingProperties.stream()
+                    .filter(p -> p.getCustomizationType() == CustomizationTypeEnum.CONSTANT)
+                    .filter(p -> p.getConstant() != null && p.getConstant().getId().equals(idToRemove))
+                    .findFirst()
+                    .ifPresent(p -> propertiesRepository.delete(p));
+        }
+
+        Set<Long> idsToAdd = new HashSet<>(newIds);
+        idsToAdd.removeAll(currentIds);
+
+        for (Long idToAdd : idsToAdd) {
+            ConstantEntity constant = constantService.findById(idToAdd);
+            createCustomizationProperty(
+                    pattern,
+                    CustomizationTypeEnum.CONSTANT,
+                    null, null, null, null,
+                    constant,
+                    null);
         }
     }
 
@@ -581,7 +638,7 @@ public class InstrumentGraphCustomizationPropertiesService {
         for (Long idToAdd : idsToAdd) {
             OutputEntity output = outputService.findById(idToAdd);
             createCustomizationProperty(pattern, CustomizationTypeEnum.OUTPUT,
-                    output, null, null, null, null);
+                    output, null, null, null, null, null);
         }
     }
 
@@ -596,7 +653,7 @@ public class InstrumentGraphCustomizationPropertiesService {
                     .forEach(propertiesRepository::delete);
         } else if (!currentLinimetricRuler && newLinimetricRuler) {
             createCustomizationProperty(pattern, CustomizationTypeEnum.LINIMETRIC_RULER,
-                    null, null, null, null, null);
+                    null, null, null, null, null, null);
         }
     }
 
@@ -607,6 +664,7 @@ public class InstrumentGraphCustomizationPropertiesService {
             StatisticalLimitEntity statLimit,
             DeterministicLimitEntity detLimit,
             InstrumentEntity instrument,
+            ConstantEntity constant, // Novo parâmetro
             LimitValueTypeEnum limitValueType) {
 
         InstrumentGraphCustomizationPropertiesEntity property = new InstrumentGraphCustomizationPropertiesEntity();
@@ -673,7 +731,10 @@ public class InstrumentGraphCustomizationPropertiesService {
                 property.setDeterministicLimit(detLimit);
             case INSTRUMENT ->
                 property.setInstrument(instrument);
+            case CONSTANT ->
+                property.setConstant(constant);  // Novo caso
             case LINIMETRIC_RULER -> {
+                // Código existente
             }
         }
 
@@ -699,6 +760,9 @@ public class InstrumentGraphCustomizationPropertiesService {
         }
         if (property.getOutput() != null) {
             dto.setOutputId(property.getOutput().getId());
+        }
+        if (property.getConstant() != null) {
+            dto.setConstantId(property.getConstant().getId());
         }
         if (property.getStatisticalLimit() != null) {
             dto.setStatisticalLimitId(property.getStatisticalLimit().getId());
@@ -734,6 +798,15 @@ public class InstrumentGraphCustomizationPropertiesService {
                     property.getOutput().getId(),
                     property.getOutput().getAcronym(),
                     property.getOutput().getName()
+            ));
+        }
+
+        if (property.getConstant() != null) {
+            dto.setConstant(new GraphPropertiesResponseDTO.ConstantDetailDTO(
+                    property.getConstant().getId(),
+                    property.getConstant().getAcronym(),
+                    property.getConstant().getName(),
+                    property.getConstant().getValue()
             ));
         }
 
@@ -791,6 +864,14 @@ public class InstrumentGraphCustomizationPropertiesService {
                 .filter(p -> p.getCustomizationType() == CustomizationTypeEnum.OUTPUT)
                 .filter(p -> p.getOutput() != null)
                 .map(p -> p.getOutput().getId())
+                .collect(Collectors.toSet());
+    }
+
+    private Set<Long> getExistingConstantIds(List<InstrumentGraphCustomizationPropertiesEntity> properties) {
+        return properties.stream()
+                .filter(p -> p.getCustomizationType() == CustomizationTypeEnum.CONSTANT)
+                .filter(p -> p.getConstant() != null)
+                .map(p -> p.getConstant().getId())
                 .collect(Collectors.toSet());
     }
 

@@ -20,6 +20,9 @@ public class UpdateGraphPropertiesRequestDTO {
     @NotNull(message = "IDs de outputs são obrigatórios.")
     private List<Long> outputIds;
 
+    @NotNull(message = "IDs de constantes são obrigatórios.")
+    private List<Long> constantIds;
+
     @NotNull(message = "Valores de limites estatísticos são obrigatórios.")
     private List<StatisticalLimitValueReference> statisticalLimitValues;
 

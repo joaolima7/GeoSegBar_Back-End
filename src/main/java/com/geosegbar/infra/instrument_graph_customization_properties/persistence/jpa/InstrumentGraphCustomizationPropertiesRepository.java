@@ -29,6 +29,8 @@ public interface InstrumentGraphCustomizationPropertiesRepository extends JpaRep
             + "WHERE p.pattern.id = :patternId")
     List<InstrumentGraphCustomizationPropertiesEntity> findByPatternId(@Param("patternId") Long patternId);
 
+    List<InstrumentGraphCustomizationPropertiesEntity> findByConstantId(Long constantId);
+
     List<InstrumentGraphCustomizationPropertiesEntity> findByCustomizationType(CustomizationTypeEnum customizationType);
 
     List<InstrumentGraphCustomizationPropertiesEntity> findByPatternIdAndCustomizationType(

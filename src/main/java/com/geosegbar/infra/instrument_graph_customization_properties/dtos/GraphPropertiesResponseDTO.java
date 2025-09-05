@@ -34,6 +34,7 @@ public class GraphPropertiesResponseDTO {
 
         private InstrumentDetailDTO instrument;
         private OutputDetailDTO output;
+        private ConstantDetailDTO constant;
         private StatisticalLimitDetailDTO statisticalLimit;
         private DeterministicLimitDetailDTO deterministicLimit;
     }
@@ -79,5 +80,16 @@ public class GraphPropertiesResponseDTO {
         private Double alertValue;
         private Double emergencyValue;
         private OutputDetailDTO output;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ConstantDetailDTO {
+
+        private Long id;
+        private String acronym;
+        private String name;
+        private Double value;
     }
 }

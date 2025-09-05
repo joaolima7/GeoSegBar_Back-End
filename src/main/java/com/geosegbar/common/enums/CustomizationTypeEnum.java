@@ -5,5 +5,6 @@ public enum CustomizationTypeEnum {
     OUTPUT,
     STATISTICAL_LIMIT,
     DETERMINISTIC_LIMIT,
-    LINIMETRIC_RULER
+    LINIMETRIC_RULER,
+    CONSTANT
 }

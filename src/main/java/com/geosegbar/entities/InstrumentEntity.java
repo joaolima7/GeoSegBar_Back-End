@@ -85,7 +85,7 @@ public class InstrumentEntity {
     private Boolean activeForSection = true;
 
     @ManyToOne
-    @JoinColumn(name = "section_id", nullable = false)
+    @JoinColumn(name = "section_id", nullable = true)
     private SectionEntity section;
 
     @OneToMany(mappedBy = "instrument", cascade = CascadeType.ALL, fetch = FetchType.LAZY)

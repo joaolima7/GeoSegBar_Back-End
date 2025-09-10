@@ -1,7 +1,7 @@
 #!/bin/bash
 cd /home/wwgeomprod/backend.geometrisa-prod.com.br/target
 
-JAVA_OPTS="-XX:MetaspaceSize=256M -XX:MaxMetaspaceSize=512M -Xms384m -Xmx768m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+JAVA_OPTS="-XX:MetaspaceSize=512M -XX:MaxMetaspaceSize=768M -Xms384m -Xmx768m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
 
 nohup java $JAVA_OPTS -jar geosegbar-0.0.1-SNAPSHOT.jar --server.port=9090 > log.out 2>&1 &
 

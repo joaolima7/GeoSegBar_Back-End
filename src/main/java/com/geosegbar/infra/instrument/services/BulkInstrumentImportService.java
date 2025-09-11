@@ -65,10 +65,18 @@ public class BulkInstrumentImportService {
     public ImportResult importFromExcel(ImportInstrumentsRequest meta, MultipartFile file) {
         ImportResult result = new ImportResult();
 
+        if (file == null || file.isEmpty()) {
+            throw new InvalidInputException("Nenhum arquivo foi enviado. Por favor, selecione uma planilha Excel válida.");
+        }
+
+        String fileName = file.getOriginalFilename();
+        if (fileName == null || !(fileName.endsWith(".xlsx") || fileName.endsWith(".xls"))) {
+            throw new InvalidInputException("Formato de arquivo inválido. Por favor, envie um arquivo Excel (.xlsx ou .xls).");
+        }
+
         Map<String, Long> unitMap = muRepository.findAll().stream()
                 .collect(Collectors.toMap(MeasurementUnitEntity::getAcronym, MeasurementUnitEntity::getId));
 
-        // Criar mapa de tipos de instrumentos pelo nome (em uppercase para comparação case-insensitive)
         Map<String, InstrumentTypeEntity> instrumentTypesByName = instrumentTypeRepository.findAll().stream()
                 .collect(Collectors.toMap(
                         type -> type.getName().toUpperCase(),
@@ -85,16 +93,34 @@ public class BulkInstrumentImportService {
         try (InputStream is = file.getInputStream()) {
             Workbook wb = WorkbookFactory.create(is);
 
-            Map<String, InstrumentRow> instruments = parseInstrumentSheet(wb.getSheet("Instruments"));
-            Map<String, List<InputDTO>> inputs = parseComponent(wb.getSheet("Inputs"), unitMap, InputDTO.class);
-            Map<String, List<ConstantDTO>> constants = parseComponent(wb.getSheet("Constants"), unitMap, ConstantDTO.class);
-            Map<String, List<OutputDTO>> outputs = parseComponent(wb.getSheet("Outputs"), unitMap, OutputDTO.class);
-            Map<Key, LimitData> limits = parseLimits(wb.getSheet("Limits"));
+            Sheet instrumentsSheet = wb.getSheet("Instruments");
+            if (instrumentsSheet == null) {
+                throw new InvalidInputException("Formato de planilha inválido: Aba 'Instruments' não encontrada. Por favor, use o modelo de planilha correto.");
+            }
+
+            Sheet inputsSheet = wb.getSheet("Inputs");
+            Sheet constantsSheet = wb.getSheet("Constants");
+            Sheet outputsSheet = wb.getSheet("Outputs");
+            Sheet limitsSheet = wb.getSheet("Limits");
+
+            if (inputsSheet == null || constantsSheet == null || outputsSheet == null || limitsSheet == null) {
+                throw new InvalidInputException("Formato de planilha inválido: Uma ou mais abas necessárias não foram encontradas. A planilha deve conter as abas: 'Instruments', 'Inputs', 'Constants', 'Outputs' e 'Limits'.");
+            }
+
+            Map<String, InstrumentRow> instruments = parseInstrumentSheet(instrumentsSheet);
+            Map<String, List<InputDTO>> inputs = parseComponent(inputsSheet, unitMap, InputDTO.class);
+            Map<String, List<ConstantDTO>> constants = parseComponent(constantsSheet, unitMap, ConstantDTO.class);
+            Map<String, List<OutputDTO>> outputs = parseComponent(outputsSheet, unitMap, OutputDTO.class);
+            Map<Key, LimitData> limits = parseLimits(limitsSheet);
 
             result.setTotal(instruments.size());
 
+            if (instruments.isEmpty()) {
+                throw new InvalidInputException("A planilha não contém instrumentos para importar. Verifique se a aba 'Instruments' possui dados válidos.");
+            }
+
             for (InstrumentRow ir : instruments.values()) {
-                // Validar se a seção existe
+
                 Long sectionId = null;
                 if (ir.sectionName != null && !ir.sectionName.isBlank()) {
                     SectionEntity sec = sectionsByName.get(ir.sectionName);
@@ -107,7 +133,6 @@ public class BulkInstrumentImportService {
                     sectionId = sec.getId();
                 }
 
-                // Validar se o tipo de instrumento existe
                 String instrumentTypeName = ir.instrumentTypeName != null ? ir.instrumentTypeName.trim().toUpperCase() : null;
                 if (instrumentTypeName == null || instrumentTypeName.isBlank()) {
                     throw new InvalidInputException("Tipo de instrumento é obrigatório para o instrumento: " + ir.id);
@@ -119,7 +144,7 @@ public class BulkInstrumentImportService {
                 }
 
                 CreateInstrumentRequest req = ir.toRequest(meta, sectionId);
-                req.setInstrumentTypeId(instrumentType.getId()); // Usar o ID do tipo encontrado
+                req.setInstrumentTypeId(instrumentType.getId());
 
                 req.setInputs(inputs.getOrDefault(ir.id, Collections.emptyList()));
                 req.setConstants(constants.getOrDefault(ir.id, Collections.emptyList()));
@@ -155,8 +180,23 @@ public class BulkInstrumentImportService {
                 }
             }
 
+        } catch (InvalidInputException e) {
+
+            throw e;
         } catch (Exception e) {
-            throw new InvalidInputException("Erro ao processar Excel: " + e.getMessage());
+
+            String detailedMessage = e.getMessage();
+            String friendlyMessage = "Erro ao processar a planilha Excel. ";
+
+            if (detailedMessage != null && detailedMessage.contains("iterator()") && detailedMessage.contains("null")) {
+                friendlyMessage += "Uma ou mais abas necessárias não foram encontradas. Certifique-se de usar o modelo de planilha correto com as abas: 'Instruments', 'Inputs', 'Constants', 'Outputs' e 'Limits'.";
+            } else if (detailedMessage != null && detailedMessage.contains("Invalid header signature")) {
+                friendlyMessage += "O arquivo não é uma planilha Excel válida ou está corrompido.";
+            } else {
+                friendlyMessage += "Detalhes: " + detailedMessage;
+            }
+
+            throw new InvalidInputException(friendlyMessage);
         }
 
         return result;
@@ -165,9 +205,19 @@ public class BulkInstrumentImportService {
     private Map<String, InstrumentRow> parseInstrumentSheet(Sheet sheet) {
         Iterator<Row> it = sheet.iterator();
         if (!it.hasNext()) {
-            throw new InvalidInputException("Aba Instruments está vazia");
+            throw new InvalidInputException("A aba 'Instruments' está vazia. Por favor, adicione dados de instrumentos.");
         }
-        Map<String, Integer> idx = headerIndex(it.next());
+
+        Row headerRow = it.next();
+        Map<String, Integer> idx = headerIndex(headerRow);
+
+        List<String> requiredHeaders = List.of("ID", "Nome", "Tipo de Instrumento");
+        for (String header : requiredHeaders) {
+            if (!idx.containsKey(header)) {
+                throw new InvalidInputException("Cabeçalho obrigatório '" + header + "' não encontrado na aba 'Instruments'. Verifique se está usando o modelo de planilha correto.");
+            }
+        }
+
         Map<String, InstrumentRow> map = new LinkedHashMap<>();
         int rowNum = 1;
         while (it.hasNext()) {
@@ -186,8 +236,16 @@ public class BulkInstrumentImportService {
             ir.latitude = getDouble(r, idx, "Latitude");
             ir.longitude = getDouble(r, idx, "Longitude");
             ir.noLimit = getBoolean(r, idx, "Sem Limites");
-            ir.instrumentTypeName = getString(r, idx, "Tipo de Instrumento"); // Renomeado para evitar confusão
+            ir.instrumentTypeName = getString(r, idx, "Tipo de Instrumento");
             ir.sectionName = getString(r, idx, "Seção");
+
+            if (ir.name == null || ir.name.isBlank()) {
+                throw new InvalidInputException("Campo 'Nome' é obrigatório para o instrumento ID: " + id + " (linha " + rowNum + ")");
+            }
+            if (ir.instrumentTypeName == null || ir.instrumentTypeName.isBlank()) {
+                throw new InvalidInputException("Campo 'Tipo de Instrumento' é obrigatório para o instrumento ID: " + id + " (linha " + rowNum + ")");
+            }
+
             map.put(id, ir);
         }
         return map;

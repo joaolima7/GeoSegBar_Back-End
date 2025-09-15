@@ -32,14 +32,14 @@ public class DamController {
 
     @GetMapping
     public ResponseEntity<WebResponseEntity<List<DamEntity>>> getAllDams() {
-        List<DamEntity> dams = damService.findAll();
+        List<DamEntity> dams = damService.findAllWithSections();
         WebResponseEntity<List<DamEntity>> response = WebResponseEntity.success(dams, "Barragens obtidas com sucesso!");
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<WebResponseEntity<DamEntity>> getDamById(@PathVariable Long id) {
-        DamEntity dam = damService.findById(id);
+        DamEntity dam = damService.findByIdWithSections(id);
         WebResponseEntity<DamEntity> response = WebResponseEntity.success(dam, "Barragem obtida com sucesso!");
         return ResponseEntity.ok(response);
     }
@@ -49,7 +49,7 @@ public class DamController {
             @RequestParam(required = false) Long clientId,
             @RequestParam(required = false) Long statusId) {
 
-        List<DamEntity> dams = damService.findByClientAndStatus(clientId, statusId);
+        List<DamEntity> dams = damService.findByClientAndStatusWithSections(clientId, statusId);
         WebResponseEntity<List<DamEntity>> response = WebResponseEntity.success(
                 dams,
                 "Barragens filtradas obtidas com sucesso!"
@@ -59,7 +59,7 @@ public class DamController {
 
     @GetMapping("/client/{clientId}")
     public ResponseEntity<WebResponseEntity<List<DamEntity>>> getDamsByClientId(@PathVariable Long clientId) {
-        List<DamEntity> dams = damService.findDamsByClientId(clientId);
+        List<DamEntity> dams = damService.findDamsByClientIdWithSections(clientId);
         WebResponseEntity<List<DamEntity>> response = WebResponseEntity.success(dams, "Barragens do cliente obtidas com sucesso!");
         return ResponseEntity.ok(response);
     }

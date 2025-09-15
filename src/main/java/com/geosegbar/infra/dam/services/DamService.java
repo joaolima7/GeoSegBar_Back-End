@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
@@ -62,6 +63,30 @@ public class DamService {
     private final LevelRepository levelRepository;
     private final ReservoirRepository reservoirRepository;
     private final PSBFolderService psbFolderService;
+
+    public DamEntity findByIdWithSections(Long id) {
+        DamEntity dam = findById(id);
+        Hibernate.initialize(dam.getSections());
+        return dam;
+    }
+
+    public List<DamEntity> findAllWithSections() {
+        List<DamEntity> dams = findAll();
+        dams.forEach(dam -> Hibernate.initialize(dam.getSections()));
+        return dams;
+    }
+
+    public List<DamEntity> findDamsByClientIdWithSections(Long clientId) {
+        List<DamEntity> dams = findDamsByClientId(clientId);
+        dams.forEach(dam -> Hibernate.initialize(dam.getSections()));
+        return dams;
+    }
+
+    public List<DamEntity> findByClientAndStatusWithSections(Long clientId, Long statusId) {
+        List<DamEntity> dams = findByClientAndStatus(clientId, statusId);
+        dams.forEach(dam -> Hibernate.initialize(dam.getSections()));
+        return dams;
+    }
 
     @Transactional
     public DamEntity createCompleteWithRelationships(CreateDamCompleteRequest request) {

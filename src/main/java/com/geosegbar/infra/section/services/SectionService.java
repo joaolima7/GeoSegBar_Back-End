@@ -3,6 +3,7 @@ package com.geosegbar.infra.section.services;
 import java.util.List;
 import java.util.Optional;
 
+import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -36,7 +37,15 @@ public class SectionService {
                 throw new UnauthorizedException("Usuário não autorizado a visualizar seções!");
             }
         }
-        return sectionRepository.findAllByOrderByNameAsc();
+        List<SectionEntity> sections = sectionRepository.findAllByOrderByNameAsc();
+
+        sections.forEach(section -> {
+            if (section.getDam() != null) {
+                Hibernate.initialize(section.getDam());
+            }
+        });
+
+        return sections;
     }
 
     public SectionEntity findById(Long id) {
@@ -46,8 +55,14 @@ public class SectionService {
                 throw new UnauthorizedException("Usuário não autorizado a visualizar seções!");
             }
         }
-        return sectionRepository.findById(id)
+        SectionEntity section = sectionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + id));
+
+        if (section.getDam() != null) {
+            Hibernate.initialize(section.getDam());
+        }
+
+        return section;
     }
 
     public Optional<SectionEntity> findByName(String name) {

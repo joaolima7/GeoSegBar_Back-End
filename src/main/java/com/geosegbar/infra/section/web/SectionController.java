@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
@@ -45,52 +44,56 @@ public class SectionController {
         return ResponseEntity.ok(WebResponseEntity.success(section, "Seção obtida com sucesso!"));
     }
 
-    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<WebResponseEntity<SectionEntity>> createSectionJson(
-            @Valid @RequestBody CreateSectionDTO sectionDTO) {
-
-        SectionEntity section = new SectionEntity();
-        section.setName(sectionDTO.getName());
-        section.setFirstVertexLatitude(sectionDTO.getFirstVertexLatitude());
-        section.setSecondVertexLatitude(sectionDTO.getSecondVertexLatitude());
-        section.setFirstVertexLongitude(sectionDTO.getFirstVertexLongitude());
-        section.setSecondVertexLongitude(sectionDTO.getSecondVertexLongitude());
-        section.setDam(damService.findById(sectionDTO.getDamId()));
-
-        SectionEntity createdSection = sectionService.create(section);
-
-        return new ResponseEntity<>(
-                WebResponseEntity.success(createdSection, "Seção criada com sucesso!"),
-                HttpStatus.CREATED);
+    @GetMapping("/dam/{damId}")
+    public ResponseEntity<WebResponseEntity<List<SectionEntity>>> getSectionsByDamId(@PathVariable Long damId) {
+        List<SectionEntity> sections = sectionService.findAllByDamId(damId);
+        return ResponseEntity.ok(WebResponseEntity.success(sections, "Seções da barragem obtidas com sucesso!"));
     }
 
-    @PostMapping(path = "/with-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<WebResponseEntity<SectionEntity>> createSectionWithFile(
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<WebResponseEntity<SectionEntity>> createSection(
             @RequestPart("section") @Valid CreateSectionDTO sectionDTO,
-            @RequestPart("file") MultipartFile file) {
+            @RequestPart(value = "file", required = false) MultipartFile file) {
 
-        SectionEntity createdSection = sectionService.createWithFile(sectionDTO, file);
+        SectionEntity createdSection;
+        if (file != null && !file.isEmpty()) {
+            createdSection = sectionService.createWithFile(sectionDTO, file);
+        } else {
+            SectionEntity section = new SectionEntity();
+            section.setName(sectionDTO.getName());
+            section.setFirstVertexLatitude(sectionDTO.getFirstVertexLatitude());
+            section.setSecondVertexLatitude(sectionDTO.getSecondVertexLatitude());
+            section.setFirstVertexLongitude(sectionDTO.getFirstVertexLongitude());
+            section.setSecondVertexLongitude(sectionDTO.getSecondVertexLongitude());
+            section.setDam(damService.findById(sectionDTO.getDamId()));
+            createdSection = sectionService.create(section);
+        }
 
         return new ResponseEntity<>(
                 WebResponseEntity.success(createdSection, "Seção criada com sucesso!"),
                 HttpStatus.CREATED);
     }
 
-    @PutMapping(value = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<WebResponseEntity<SectionEntity>> updateSection(
-            @PathVariable Long id,
-            @Valid @RequestBody SectionEntity section) {
-        SectionEntity updatedSection = sectionService.update(id, section);
-        return ResponseEntity.ok(WebResponseEntity.success(updatedSection, "Seção atualizada com sucesso!"));
-    }
-
-    @PutMapping(value = "/{id}/with-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<WebResponseEntity<SectionEntity>> updateSectionWithFile(
             @PathVariable Long id,
             @RequestPart("section") @Valid CreateSectionDTO sectionDTO,
             @RequestPart(value = "file", required = false) MultipartFile file) {
 
-        SectionEntity updatedSection = sectionService.updateWithFile(id, sectionDTO, file);
+        SectionEntity updatedSection;
+        if (file != null && !file.isEmpty()) {
+            updatedSection = sectionService.updateWithFile(id, sectionDTO, file);
+        } else {
+            SectionEntity section = new SectionEntity();
+            section.setName(sectionDTO.getName());
+            section.setFirstVertexLatitude(sectionDTO.getFirstVertexLatitude());
+            section.setSecondVertexLatitude(sectionDTO.getSecondVertexLatitude());
+            section.setFirstVertexLongitude(sectionDTO.getFirstVertexLongitude());
+            section.setSecondVertexLongitude(sectionDTO.getSecondVertexLongitude());
+            section.setDam(damService.findById(sectionDTO.getDamId()));
+            updatedSection = sectionService.update(id, section);
+        }
+
         return ResponseEntity.ok(WebResponseEntity.success(updatedSection, "Seção atualizada com sucesso!"));
     }
 

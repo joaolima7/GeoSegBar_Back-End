@@ -11,6 +11,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.SectionEntity;
 import com.geosegbar.entities.UserEntity;
+import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
@@ -63,6 +64,25 @@ public class SectionService {
         }
 
         return section;
+    }
+
+    public List<SectionEntity> findAllByDamId(Long damId) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getViewSections()) {
+                throw new UnauthorizedException("Usuário não autorizado a visualizar seções!");
+            }
+        }
+
+        List<SectionEntity> sections = sectionRepository.findAllByDamId(damId);
+
+        sections.forEach(section -> {
+            if (section.getDam() != null) {
+                Hibernate.initialize(section.getDam());
+            }
+        });
+
+        return sections;
     }
 
     public Optional<SectionEntity> findByName(String name) {
@@ -219,11 +239,16 @@ public class SectionService {
         SectionEntity section = findById(id);
 
         if (!section.getInstruments().isEmpty()) {
-            throw new IllegalStateException("Não é possível excluir uma seção que possui instrumentos associados");
+            throw new BusinessRuleException("Não é possível excluir uma seção que possui instrumentos associados");
         }
 
         if (section.getFilePath() != null && !section.getFilePath().isEmpty()) {
             fileStorageService.deleteFile(section.getFilePath());
+        }
+
+        if (section.getDam() != null) {
+            section.getDam().getSections().remove(section);
+            section.setDam(null);
         }
 
         sectionRepository.delete(section);

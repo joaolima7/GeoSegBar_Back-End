@@ -126,7 +126,7 @@ public class BulkInstrumentImportService {
                     SectionEntity sec = sectionsByName.get(ir.sectionName);
                     if (sec == null) {
                         throw new InvalidInputException(
-                                String.format("Seção '%s' não encontrada para barragem %s",
+                                String.format("Seção '%s' não encontrada para barragem %s!",
                                         ir.sectionName, dam.getName())
                         );
                     }

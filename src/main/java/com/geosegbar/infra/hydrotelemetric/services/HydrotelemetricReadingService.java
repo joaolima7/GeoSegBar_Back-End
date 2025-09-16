@@ -10,8 +10,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import com.geosegbar.common.enums.ReadingTypeEnum;
+import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.HydrotelemetricReadingEntity;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.hydrotelemetric.persistence.jpa.HydrotelemetricReadingRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -23,13 +26,18 @@ import lombok.extern.slf4j.Slf4j;
 public class HydrotelemetricReadingService {
 
     private final HydrotelemetricReadingRepository hydrotelemetricReadingRepository;
+    private final DamRepository damRepository;
 
     public List<HydrotelemetricReadingEntity> getAllReadings() {
         return hydrotelemetricReadingRepository.findAll(Sort.by(Sort.Direction.DESC, "date"));
     }
 
-    public Optional<Double> getLatestUpstreamAverageByDamId(Long damId) {
+    public Optional<Double> getLatestUpstreamAverageIncludingNullByDamId(Long damId) {
         return hydrotelemetricReadingRepository.findLatestUpstreamAverageByDamId(damId);
+    }
+
+    public Optional<Double> getLatestUpstreamAverageByDamId(Long damId) {
+        return hydrotelemetricReadingRepository.findLatestNonNullUpstreamAverageByDamId(damId);
     }
 
     public Page<HydrotelemetricReadingEntity> getAllReadingsPaginated(int page, int size) {
@@ -102,5 +110,23 @@ public class HydrotelemetricReadingService {
         } else {
             return getAllReadings();
         }
+    }
+
+    public HydrotelemetricReadingEntity createManualReading(Long damId, LocalDate date, Double upstreamAverage, Double downstreamAverage) {
+        DamEntity dam = damRepository.findById(damId)
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + damId));
+
+        if (hydrotelemetricReadingRepository.existsByDamIdAndDate(damId, date)) {
+            throw new IllegalArgumentException("Já existe uma leitura para esta barragem nesta data.");
+        }
+
+        HydrotelemetricReadingEntity reading = new HydrotelemetricReadingEntity();
+        reading.setDam(dam);
+        reading.setDate(date);
+        reading.setUpstreamAverage(upstreamAverage);
+        reading.setDownstreamAverage(downstreamAverage);
+        reading.setReadingType(ReadingTypeEnum.MANUAL);
+
+        return hydrotelemetricReadingRepository.save(reading);
     }
 }

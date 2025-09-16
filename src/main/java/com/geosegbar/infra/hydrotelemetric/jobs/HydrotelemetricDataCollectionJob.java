@@ -7,6 +7,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.geosegbar.common.enums.ReadingTypeEnum;
 import com.geosegbar.common.response.AnaTelemetryResponse.TelemetryItem;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.HydrotelemetricReadingEntity;
@@ -27,7 +28,6 @@ public class HydrotelemetricDataCollectionJob {
     private final HydrotelemetricReadingRepository hydrotelemetricReadingRepository;
 
     @Scheduled(cron = "0 30 0 * * ?")
-    @Transactional
     public void collectHydrotelemetricData() {
         log.info("Iniciando coleta de dados hidrotelemétricos");
 
@@ -52,9 +52,11 @@ public class HydrotelemetricDataCollectionJob {
         }
     }
 
+    @Transactional(timeout = 60)
     private void collectDamData(DamEntity dam, String authToken, LocalDate date) {
-        if (dam.getUpstreamId() == null || dam.getDownstreamId() == null) {
-            log.warn("Barragem {} possui IDs de montante ou jusante nulos. Ignorando.", dam.getName());
+
+        if (dam.getUpstreamId() == null && dam.getDownstreamId() == null) {
+            log.warn("Barragem {} não possui IDs de montante nem jusante. Ignorando.", dam.getName());
             return;
         }
 
@@ -65,31 +67,38 @@ public class HydrotelemetricDataCollectionJob {
         }
 
         try {
-            String upstreamId = String.valueOf(dam.getUpstreamId());
-            List<TelemetryItem> upstreamData = anaApiService.getTelemetryData(upstreamId, authToken);
-            Double upstreamAverageMm = anaApiService.calculateAverageLevel(upstreamData, date);
+            Double upstreamAverageM = null;
+            Double downstreamAverageM = null;
 
-            Double upstreamAverageM = upstreamAverageMm != null ? upstreamAverageMm / 1000.0 : null;
-
-            String downstreamId = String.valueOf(dam.getDownstreamId());
-            List<TelemetryItem> downstreamData = anaApiService.getTelemetryData(downstreamId, authToken);
-            Double downstreamAverageMm = anaApiService.calculateAverageLevel(downstreamData, date);
-
-            Double downstreamAverageM = downstreamAverageMm != null ? downstreamAverageMm / 1000.0 : null;
-
-            if (upstreamAverageM != null && downstreamAverageM != null) {
-                HydrotelemetricReadingEntity reading = new HydrotelemetricReadingEntity();
-                reading.setDam(dam);
-                reading.setDate(date);
-                reading.setUpstreamAverage(upstreamAverageM);
-                reading.setDownstreamAverage(downstreamAverageM);
-
-                hydrotelemetricReadingRepository.save(reading);
-                log.info("Leitura hidrotelemétrica salva com sucesso para barragem: {}", dam.getName());
-            } else {
-                log.warn("Dados insuficientes para barragem: {}. Montante: {}, Jusante: {}",
-                        dam.getName(), upstreamAverageM, downstreamAverageM);
+            if (dam.getUpstreamId() != null) {
+                String upstreamId = String.valueOf(dam.getUpstreamId());
+                List<TelemetryItem> upstreamData = anaApiService.getTelemetryData(upstreamId, authToken);
+                Double upstreamAverageMm = anaApiService.calculateAverageLevel(upstreamData, date);
+                upstreamAverageM = upstreamAverageMm != null ? upstreamAverageMm / 1000.0 : null;
             }
+
+            if (dam.getDownstreamId() != null) {
+                String downstreamId = String.valueOf(dam.getDownstreamId());
+                List<TelemetryItem> downstreamData = anaApiService.getTelemetryData(downstreamId, authToken);
+                Double downstreamAverageMm = anaApiService.calculateAverageLevel(downstreamData, date);
+                downstreamAverageM = downstreamAverageMm != null ? downstreamAverageMm / 1000.0 : null;
+            }
+
+            HydrotelemetricReadingEntity reading = new HydrotelemetricReadingEntity();
+            reading.setDam(dam);
+            reading.setDate(date);
+            reading.setUpstreamAverage(upstreamAverageM);
+            reading.setDownstreamAverage(downstreamAverageM);
+            reading.setReadingType(ReadingTypeEnum.ANA);
+
+            hydrotelemetricReadingRepository.save(reading);
+
+            if (upstreamAverageM == null && downstreamAverageM == null) {
+                log.warn("Leitura hidrotelemétrica salva com valores nulos para barragem: {}", dam.getName());
+            } else {
+                log.info("Leitura hidrotelemétrica salva com sucesso para barragem: {}", dam.getName());
+            }
+
         } catch (Exception e) {
             log.error("Erro ao coletar dados para barragem {}: {}", dam.getName(), e.getMessage());
             throw e;

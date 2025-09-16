@@ -39,4 +39,10 @@ public interface HydrotelemetricReadingRepository extends JpaRepository<Hydrotel
             + "ORDER BY h.date DESC "
             + "LIMIT 1")
     Optional<Double> findLatestUpstreamAverageByDamId(@Param("damId") Long damId);
+
+    @Query("SELECT h.upstreamAverage FROM HydrotelemetricReadingEntity h "
+            + "WHERE h.dam.id = :damId AND h.upstreamAverage IS NOT NULL "
+            + "ORDER BY h.date DESC "
+            + "LIMIT 1")
+    Optional<Double> findLatestNonNullUpstreamAverageByDamId(@Param("damId") Long damId);
 }

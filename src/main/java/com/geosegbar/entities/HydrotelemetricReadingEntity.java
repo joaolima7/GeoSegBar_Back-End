@@ -3,9 +3,12 @@ package com.geosegbar.entities;
 import java.time.LocalDate;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.geosegbar.common.enums.ReadingTypeEnum;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -45,11 +48,14 @@ public class HydrotelemetricReadingEntity {
     @NotNull(message = "A data da leitura é obrigatória!")
     private LocalDate date;
 
-    @Column(name = "downstream_average", nullable = false)
-    @NotNull(message = "A média da jusante é obrigatória!")
+    @Column(name = "downstream_average")
     private Double downstreamAverage;
 
-    @Column(name = "upstream_average", nullable = false)
-    @NotNull(message = "A média da montante é obrigatória!")
+    @Column(name = "upstream_average")
     private Double upstreamAverage;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reading_type", nullable = false)
+    @NotNull(message = "O tipo de leitura é obrigatório!")
+    private ReadingTypeEnum readingType;
 }

@@ -47,26 +47,41 @@ public class AnaApiService {
 
     public String getAuthToken() {
         try {
-            AnaAuthResponse response = webClient.get()
-                    .uri(authUrl)
-                    .header("Identificador", apiIdentifier)
-                    .header("Senha", apiPassword)
-                    .accept(MediaType.APPLICATION_JSON)
-                    .retrieve()
-                    .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(), clientResponse -> {
-                        return clientResponse.bodyToMono(String.class)
-                                .flatMap(errorBody -> Mono.error(new ExternalApiException(
-                                "Erro ao obter token da API da ANA: " + errorBody)));
-                    })
-                    .bodyToMono(AnaAuthResponse.class)
-                    .block();
 
-            if (response == null || response.getItems() == null || response.getItems().getTokenautenticacao() == null) {
-                throw new ExternalApiException("Resposta da API da ANA inválida ou sem token");
+            for (int attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    AnaAuthResponse response = webClient.get()
+                            .uri(authUrl)
+                            .header("Identificador", apiIdentifier)
+                            .header("Senha", apiPassword)
+                            .accept(MediaType.APPLICATION_JSON)
+                            .retrieve()
+                            .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                                    clientResponse -> {
+                                        return clientResponse.bodyToMono(String.class)
+                                                .flatMap(errorBody -> Mono.error(new ExternalApiException(
+                                                "Erro ao obter token da API da ANA: " + errorBody)));
+                                    })
+                            .bodyToMono(AnaAuthResponse.class)
+                            .block();
+
+                    if (response == null || response.getItems() == null
+                            || response.getItems().getTokenautenticacao() == null) {
+                        throw new ExternalApiException("Resposta da API da ANA inválida ou sem token");
+                    }
+
+                    log.info("Token de autenticação obtido com sucesso");
+                    return response.getItems().getTokenautenticacao();
+                } catch (Exception e) {
+                    if (attempt == 3) {
+                        throw e;
+                    }
+                    log.warn("Tentativa {} falhou, tentando novamente em {} segundos",
+                            attempt, attempt * 2);
+                    Thread.sleep(attempt * 2000);
+                }
             }
-
-            log.info("Token de autenticação obtido com sucesso");
-            return response.getItems().getTokenautenticacao();
+            throw new ExternalApiException("Todas as tentativas de obter token falharam");
         } catch (Exception e) {
             log.error("Erro ao obter token de autenticação", e);
             throw new ExternalApiException("Falha ao obter token de autenticação: " + e.getMessage(), e);

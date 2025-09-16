@@ -29,6 +29,7 @@ public class InstrumentTabulatePatternMapper {
 
         if (Boolean.TRUE.equals(pattern.getIsLinimetricRulerEnable()) && pattern.getDam() != null) {
             Long damId = pattern.getDam().getId();
+            // Usando o método que retorna apenas valores não nulos
             Optional<Double> linimetricRulerValue = hydrotelemetricReadingService.getLatestUpstreamAverageByDamId(damId);
             dto.setLinimetricRulerValue(linimetricRulerValue.orElse(null));
         }

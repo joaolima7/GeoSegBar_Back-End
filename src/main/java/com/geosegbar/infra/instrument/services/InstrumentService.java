@@ -109,13 +109,22 @@ public class InstrumentService {
             cacheManager = "instrumentCacheManager"
     )
     public InstrumentEntity createComplete(CreateInstrumentRequest request) {
-        validateRequest(request);
-
-        validateUniqueAcronymsAcrossComponents(
-                request.getInputs(),
-                request.getConstants(),
-                request.getOutputs()
-        );
+        // Se for régua linimétrica, fazemos validações específicas
+        if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
+            // Se fornecido um código, verificar se já existe outra régua com o mesmo código
+            if (request.getLinimetricRulerCode() != null
+                    && instrumentRepository.findByLinimetricRulerCode(request.getLinimetricRulerCode()).isPresent()) {
+                throw new DuplicateResourceException("Já existe uma régua linimétrica com o código " + request.getLinimetricRulerCode());
+            }
+        } else {
+            // Para instrumentos normais, validamos as entradas
+            validateRequest(request);
+            validateUniqueAcronymsAcrossComponents(
+                    request.getInputs(),
+                    request.getConstants(),
+                    request.getOutputs()
+            );
+        }
 
         if (instrumentRepository.existsByNameAndDamId(request.getName(), request.getDamId())) {
             throw new DuplicateResourceException("Já existe um instrumento com o nome '" + request.getName() + "' na mesma barragem");
@@ -146,27 +155,42 @@ public class InstrumentService {
         instrument.setActive(true);
         instrument.setActiveForSection(request.getActiveForSection());
 
+        // Definindo os novos campos
+        instrument.setIsLinimetricRuler(request.getIsLinimetricRuler());
+        instrument.setLinimetricRulerCode(request.getLinimetricRulerCode());
+
         InstrumentEntity savedInstrument = instrumentRepository.save(instrument);
 
-        processInputs(savedInstrument, request.getInputs());
+        // Se for régua linimétrica, criamos components padrão
+        if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
+            createLinimetricRulerComponents(savedInstrument);
+        } else {
+            // Caso contrário, processamos os componentes normalmente
+            processInputs(savedInstrument, request.getInputs());
 
-        if (request.getConstants() != null && !request.getConstants().isEmpty()) {
-            processConstants(savedInstrument, request.getConstants());
+            if (request.getConstants() != null && !request.getConstants().isEmpty()) {
+                processConstants(savedInstrument, request.getConstants());
+            }
+
+            processOutputs(savedInstrument, request.getOutputs());
         }
-
-        processOutputs(savedInstrument, request.getOutputs());
 
         return instrumentRepository.findWithActiveOutputsById(savedInstrument.getId())
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após criação"));
     }
 
     private void validateRequest(CreateInstrumentRequest request) {
+        if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
+            return;
+        }
+
+        // Validações padrão
         if (request.getInputs() == null || request.getInputs().isEmpty()) {
-            throw new InvalidInputException("Pelo menos um input é obrigatório");
+            throw new InvalidInputException("Pelo menos um input é obrigatório para instrumentos normais");
         }
 
         if (request.getOutputs() == null || request.getOutputs().isEmpty()) {
-            throw new InvalidInputException("Pelo menos um output é obrigatório");
+            throw new InvalidInputException("Pelo menos um output é obrigatório para instrumentos normais");
         }
 
         // Validar que quando noLimit = false, todos os outputs têm o mesmo tipo de limite
@@ -195,12 +219,18 @@ public class InstrumentService {
     }
 
     private void validateRequest(UpdateInstrumentRequest request) {
+        // Se for régua linimétrica, não precisamos validar inputs/outputs
+        if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
+            return;
+        }
+
+        // Validações padrão
         if (request.getInputs() == null || request.getInputs().isEmpty()) {
-            throw new InvalidInputException("Pelo menos um input é obrigatório");
+            throw new InvalidInputException("Pelo menos um input é obrigatório para instrumentos normais");
         }
 
         if (request.getOutputs() == null || request.getOutputs().isEmpty()) {
-            throw new InvalidInputException("Pelo menos um output é obrigatório");
+            throw new InvalidInputException("Pelo menos um output é obrigatório para instrumentos normais");
         }
 
         // Validar que quando noLimit = false, todos os outputs têm o mesmo tipo de limite
@@ -380,13 +410,22 @@ public class InstrumentService {
             cacheManager = "instrumentCacheManager"
     )
     public InstrumentEntity update(Long id, UpdateInstrumentRequest request) {
-        validateRequest(request);
-
-        validateUniqueAcronymsAcrossComponents(
-                request.getInputs(),
-                request.getConstants(),
-                request.getOutputs()
-        );
+        // Se for régua linimétrica, fazemos validações específicas
+        if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
+            // Se fornecido um código, verificar se já existe outra régua com o mesmo código (diferente desta)
+            if (request.getLinimetricRulerCode() != null
+                    && instrumentRepository.existsByLinimetricRulerCodeAndIdNot(request.getLinimetricRulerCode(), id)) {
+                throw new DuplicateResourceException("Já existe uma régua linimétrica com o código " + request.getLinimetricRulerCode());
+            }
+        } else {
+            // Para instrumentos normais, validamos as entradas
+            validateRequest(request);
+            validateUniqueAcronymsAcrossComponents(
+                    request.getInputs(),
+                    request.getConstants(),
+                    request.getOutputs()
+            );
+        }
 
         if (instrumentRepository.existsByNameAndDamIdAndIdNot(request.getName(), request.getDamId(), id)) {
             throw new DuplicateResourceException("Já existe um instrumento com esse nome nesta barragem");
@@ -394,57 +433,97 @@ public class InstrumentService {
 
         InstrumentEntity oldInstrument = findById(id);
 
-        Map<String, InputEntity> existingInputsByAcronym = oldInstrument.getInputs().stream()
-                .collect(Collectors.toMap(
-                        InputEntity::getAcronym,
-                        input -> input,
-                        (existing, replacement) -> {
-                            log.warn("Encontrado input duplicado com acrônimo: {} (ids: {} e {})",
-                                    existing.getAcronym(), existing.getId(), replacement.getId());
-                            return existing;
-                        }
-                ));
+        // Verificar se está mudando de normal para régua linimétrica ou vice-versa
+        boolean changingToLinimetric = !oldInstrument.getIsLinimetricRuler() && Boolean.TRUE.equals(request.getIsLinimetricRuler());
+        boolean changingFromLinimetric = oldInstrument.getIsLinimetricRuler() && Boolean.FALSE.equals(request.getIsLinimetricRuler());
 
-        Map<String, ConstantEntity> existingConstantsByAcronym = oldInstrument.getConstants().stream()
-                .collect(Collectors.toMap(
-                        ConstantEntity::getAcronym,
-                        constant -> constant,
-                        (existing, replacement) -> {
-                            log.warn("Encontrada constante duplicada com acrônimo: {} (ids: {} e {})",
-                                    existing.getAcronym(), existing.getId(), replacement.getId());
-                            return existing;
-                        }
-                ));
+        // Se estiver mudando o tipo, precisamos limpar os componentes antigos
+        if (changingToLinimetric || changingFromLinimetric) {
+            // Remover todos os componentes existentes
+            inputRepository.deleteByInstrumentId(id);
+            constantRepository.deleteByInstrumentId(id);
+            outputRepository.deleteByInstrumentId(id);
 
-        Map<String, OutputEntity> existingOutputsByAcronym = oldInstrument.getOutputs().stream()
-                .filter(OutputEntity::getActive)
-                .collect(Collectors.toMap(
-                        OutputEntity::getAcronym,
-                        output -> output,
-                        (existing, replacement) -> {
-                            log.warn("Encontrado output duplicado com acrônimo: {} (ids: {} e {})",
-                                    existing.getAcronym(), existing.getId(), replacement.getId());
-                            return existing;
-                        }
-                ));
+            // Limpar as coleções em memória
+            oldInstrument.getInputs().clear();
+            oldInstrument.getConstants().clear();
+            oldInstrument.getOutputs().clear();
+        } else if (!Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
+            // Se continua sendo instrumento normal, mapeia os componentes existentes
+            Map<String, InputEntity> existingInputsByAcronym = oldInstrument.getInputs().stream()
+                    .collect(Collectors.toMap(
+                            InputEntity::getAcronym,
+                            input -> input,
+                            (existing, replacement) -> {
+                                log.warn("Encontrado input duplicado com acrônimo: {} (ids: {} e {})",
+                                        existing.getAcronym(), existing.getId(), replacement.getId());
+                                return existing;
+                            }
+                    ));
 
+            Map<String, ConstantEntity> existingConstantsByAcronym = oldInstrument.getConstants().stream()
+                    .collect(Collectors.toMap(
+                            ConstantEntity::getAcronym,
+                            constant -> constant,
+                            (existing, replacement) -> {
+                                log.warn("Encontrada constante duplicada com acrônimo: {} (ids: {} e {})",
+                                        existing.getAcronym(), existing.getId(), replacement.getId());
+                                return existing;
+                            }
+                    ));
+
+            Map<String, OutputEntity> existingOutputsByAcronym = oldInstrument.getOutputs().stream()
+                    .filter(OutputEntity::getActive)
+                    .collect(Collectors.toMap(
+                            OutputEntity::getAcronym,
+                            output -> output,
+                            (existing, replacement) -> {
+                                log.warn("Encontrado output duplicado com acrônimo: {} (ids: {} e {})",
+                                        existing.getAcronym(), existing.getId(), replacement.getId());
+                                return existing;
+                            }
+                    ));
+
+            // Atualizar os campos básicos
+            updateInstrumentBasicFields(oldInstrument, request);
+            InstrumentEntity savedInstrument = instrumentRepository.save(oldInstrument);
+
+            // Processar os componentes para atualização
+            processInputsForUpdate(savedInstrument, request.getInputs(), existingInputsByAcronym);
+            if (request.getConstants() != null && !request.getConstants().isEmpty()) {
+                processConstantsForUpdate(savedInstrument, request.getConstants(), existingConstantsByAcronym);
+            }
+            processOutputsForUpdate(savedInstrument, request.getOutputs(), existingOutputsByAcronym);
+
+            // Remover componentes não utilizados
+            deleteUnusedComponents(existingInputsByAcronym, existingConstantsByAcronym);
+
+            log.info("Instrumento normal atualizado com sucesso");
+
+            return instrumentRepository.findWithActiveOutputsById(id)
+                    .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após atualização"));
+        }
+
+        // Atualizar os campos básicos do instrumento
         updateInstrumentBasicFields(oldInstrument, request);
 
-        // Remover chamada ao método updateLimits que não existe mais
-        // updateLimits(oldInstrument, request);
+        // Agora atualizamos os campos específicos da régua linimétrica
+        oldInstrument.setIsLinimetricRuler(request.getIsLinimetricRuler());
+        oldInstrument.setLinimetricRulerCode(request.getLinimetricRulerCode());
+
         InstrumentEntity savedInstrument = instrumentRepository.save(oldInstrument);
 
-        savedInstrument.getInputs().clear();
-        savedInstrument.getConstants().clear();
-        savedInstrument.getOutputs().clear();
-
-        processInputsForUpdate(savedInstrument, request.getInputs(), existingInputsByAcronym);
-        if (request.getConstants() != null && !request.getConstants().isEmpty()) {
-            processConstantsForUpdate(savedInstrument, request.getConstants(), existingConstantsByAcronym);
+        // Se mudou para régua linimétrica, criamos os componentes padrão
+        if (changingToLinimetric) {
+            createLinimetricRulerComponents(savedInstrument);
+        } else if (changingFromLinimetric) {
+            // Se mudou de régua para normal, processamos os componentes fornecidos
+            processInputs(savedInstrument, request.getInputs());
+            if (request.getConstants() != null && !request.getConstants().isEmpty()) {
+                processConstants(savedInstrument, request.getConstants());
+            }
+            processOutputs(savedInstrument, request.getOutputs());
         }
-        processOutputsForUpdate(savedInstrument, request.getOutputs(), existingOutputsByAcronym);
-
-        deleteUnusedComponents(existingInputsByAcronym, existingConstantsByAcronym);
 
         log.info("Instrumento atualizado com sucesso");
 
@@ -492,6 +571,38 @@ public class InstrumentService {
         }
     }
 
+    private void createLinimetricRulerComponents(InstrumentEntity instrument) {
+        // Obter a unidade de medida com ID 1 (metros)
+        MeasurementUnitEntity measurementUnit = measurementUnitRepository.findById(1L)
+                .orElseThrow(() -> new NotFoundException("Unidade de medida 'metros' não encontrada com ID: 1"));
+
+        // Criar o input LEI
+        InputEntity input = new InputEntity();
+        input.setAcronym("LEI");
+        input.setName("Leitura");
+        input.setPrecision(6);
+        input.setMeasurementUnit(measurementUnit);
+        input.setInstrument(instrument);
+
+        inputRepository.save(input);
+        instrument.getInputs().add(input);
+
+        // Criar o output NVL
+        OutputEntity output = new OutputEntity();
+        output.setAcronym("NVL");
+        output.setName("Nivel");
+        output.setEquation("LEI * 1");
+        output.setPrecision(6);
+        output.setMeasurementUnit(measurementUnit);
+        output.setActive(true);
+        output.setInstrument(instrument);
+
+        outputRepository.save(output);
+        instrument.getOutputs().add(output);
+
+        log.info("Componentes da régua linimétrica criados com sucesso para o instrumento ID: {}", instrument.getId());
+    }
+
     private void updateInstrumentBasicFields(InstrumentEntity instrument, UpdateInstrumentRequest request) {
         DamEntity dam = damRepository.findById(request.getDamId())
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + request.getDamId()));
@@ -514,7 +625,8 @@ public class InstrumentService {
         instrument.setDam(dam);
         instrument.setSection(section);
         instrument.setActiveForSection(request.getActiveForSection());
-
+        instrument.setIsLinimetricRuler(request.getIsLinimetricRuler());
+        instrument.setLinimetricRulerCode(request.getLinimetricRulerCode());
     }
 
     @Transactional
@@ -909,7 +1021,6 @@ public class InstrumentService {
     )
     public InstrumentResponseDTO mapToResponseDTO(InstrumentEntity instrument) {
         InstrumentResponseDTO dto = new InstrumentResponseDTO();
-        // Campos básicos
         dto.setId(instrument.getId());
         dto.setName(instrument.getName());
         dto.setLocation(instrument.getLocation());
@@ -917,6 +1028,10 @@ public class InstrumentService {
         dto.setLatitude(instrument.getLatitude());
         dto.setLongitude(instrument.getLongitude());
         dto.setNoLimit(instrument.getNoLimit());
+
+        // Novos campos
+        dto.setIsLinimetricRuler(instrument.getIsLinimetricRuler());
+        dto.setLinimetricRulerCode(instrument.getLinimetricRulerCode());
 
         // Relações diretas
         DamEntity dam = instrument.getDam();

@@ -4,7 +4,6 @@ import java.util.List;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -33,6 +32,11 @@ public class CreateInstrumentRequest {
 
     private Boolean activeForSection = true;
 
+    @NotNull(message = "Campo 'É Régua Linimétrica' é obrigatório")
+    private Boolean isLinimetricRuler = false;
+
+    private Long linimetricRulerCode;
+
     @NotNull(message = "ID da barragem é obrigatório")
     private Long damId;
 
@@ -41,13 +45,11 @@ public class CreateInstrumentRequest {
 
     private Long sectionId;
 
-    @NotEmpty(message = "Pelo menos um input é obrigatório")
     @Valid
     private List<InputDTO> inputs;
 
     private List<ConstantDTO> constants;
 
-    @NotEmpty(message = "Pelo menos um output é obrigatório")
     @Valid
     private List<OutputDTO> outputs;
 }

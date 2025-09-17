@@ -32,6 +32,11 @@ public class UpdateInstrumentRequest {
 
     private Boolean activeForSection = true;
 
+    @NotNull(message = "Campo 'É Régua Linimétrica' é obrigatório")
+    private Boolean isLinimetricRuler = false;
+
+    private Long linimetricRulerCode;
+
     @NotNull(message = "ID da barragem é obrigatório")
     private Long damId;
 
@@ -41,12 +46,10 @@ public class UpdateInstrumentRequest {
     private Long sectionId;
 
     @Valid
-    @NotNull(message = "Lista de inputs é obrigatória")
     private List<InputDTO> inputs;
 
     private List<ConstantDTO> constants;
 
     @Valid
-    @NotNull(message = "Lista de outputs é obrigatória")
     private List<OutputDTO> outputs;
 }

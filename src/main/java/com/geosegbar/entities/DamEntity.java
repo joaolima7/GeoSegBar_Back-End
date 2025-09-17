@@ -74,14 +74,6 @@ public class DamEntity {
     @NotNull(message = "Longitude é obrigatório!")
     private Double longitude;
 
-    @Column(name = "upstream_id", nullable = false)
-    @NotNull(message = "ID da montante é obrigatório!")
-    private Long upstreamId;
-
-    @Column(name = "downstream_id", nullable = false)
-    @NotNull(message = "ID da jusante é obrigatório!")
-    private Long downstreamId;
-
     @NotBlank(message = "O nome da rua é obrigatório!")
     @Column(nullable = false)
     private String street;

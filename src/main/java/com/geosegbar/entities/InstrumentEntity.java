@@ -34,7 +34,8 @@ import lombok.Setter;
     @Index(name = "idx_instrument_dam_type", columnList = "dam_id, instrument_type_id"),
     @Index(name = "idx_instrument_coordinates", columnList = "latitude, longitude"),
     @Index(name = "idx_instrument_dam_coordinates", columnList = "dam_id, latitude, longitude"),
-    @Index(name = "idx_instrument_dam_section", columnList = "dam_id, section_id")})
+    @Index(name = "idx_instrument_dam_section", columnList = "dam_id, section_id"),
+    @Index(name = "idx_instrument_linimetric", columnList = "is_linimetric_ruler")})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -83,6 +84,12 @@ public class InstrumentEntity {
 
     @Column(nullable = false)
     private Boolean activeForSection = true;
+
+    @Column(name = "is_linimetric_ruler", nullable = false)
+    private Boolean isLinimetricRuler;
+
+    @Column(name = "linimetric_ruler_code", nullable = true)
+    private Long linimetricRulerCode;
 
     @ManyToOne
     @JoinColumn(name = "section_id", nullable = true)

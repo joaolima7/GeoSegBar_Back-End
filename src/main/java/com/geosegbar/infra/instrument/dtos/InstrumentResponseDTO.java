@@ -19,6 +19,8 @@ public class InstrumentResponseDTO {
     private Double longitude;
     private Boolean noLimit;
     private Boolean activeForSection;
+    private Boolean isLinimetricRuler;
+    private Long linimetricRulerCode;
     private Long damId;
     private String damName;
     private Long instrumentTypeId;

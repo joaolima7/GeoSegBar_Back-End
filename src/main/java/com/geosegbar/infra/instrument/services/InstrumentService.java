@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +42,7 @@ import com.geosegbar.infra.instrument.dtos.InstrumentResponseDTO;
 import com.geosegbar.infra.instrument.dtos.OutputDTO;
 import com.geosegbar.infra.instrument.dtos.StatisticalLimitDTO;
 import com.geosegbar.infra.instrument.dtos.UpdateInstrumentRequest;
+import com.geosegbar.infra.instrument.events.InstrumentCreatedEvent;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.instrument_type.persistence.jpa.InstrumentTypeRepository;
 import com.geosegbar.infra.measurement_unit.persistence.jpa.MeasurementUnitRepository;
@@ -66,6 +68,7 @@ public class InstrumentService {
     private final ConstantRepository constantRepository;
     private final OutputRepository outputRepository;
     private final InstrumentTypeRepository instrumentTypeRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Cacheable(value = "allInstruments", cacheManager = "instrumentCacheManager")
     public List<InstrumentEntity> findAll() {
@@ -155,7 +158,7 @@ public class InstrumentService {
         instrument.setActive(true);
         instrument.setActiveForSection(request.getActiveForSection());
 
-        // Definindo os novos campos
+        // Definindo os campos relacionados à régua linimétrica
         instrument.setIsLinimetricRuler(request.getIsLinimetricRuler());
         instrument.setLinimetricRulerCode(request.getLinimetricRulerCode());
 
@@ -175,8 +178,16 @@ public class InstrumentService {
             processOutputs(savedInstrument, request.getOutputs());
         }
 
-        return instrumentRepository.findWithActiveOutputsById(savedInstrument.getId())
+        savedInstrument = instrumentRepository.findWithActiveOutputsById(savedInstrument.getId())
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após criação"));
+
+        // Publicar evento em vez de chamar diretamente o serviço
+        if (Boolean.FALSE.equals(savedInstrument.getIsLinimetricRuler())) {
+            log.debug("Publicando evento de criação de instrumento para ID: {}", savedInstrument.getId());
+            eventPublisher.publishEvent(new InstrumentCreatedEvent(savedInstrument));
+        }
+
+        return savedInstrument;
     }
 
     private void validateRequest(CreateInstrumentRequest request) {
@@ -410,6 +421,13 @@ public class InstrumentService {
             cacheManager = "instrumentCacheManager"
     )
     public InstrumentEntity update(Long id, UpdateInstrumentRequest request) {
+        InstrumentEntity oldInstrument = findById(id);
+
+        // Verificar se está tentando mudar o tipo do instrumento (linimétrico/normal)
+        if (!oldInstrument.getIsLinimetricRuler().equals(request.getIsLinimetricRuler())) {
+            throw new InvalidInputException("Não é permitido alterar o tipo de instrumento. Uma vez criado como régua linimétrica ou instrumento normal, este atributo não pode ser modificado.");
+        }
+
         // Se for régua linimétrica, fazemos validações específicas
         if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
             // Se fornecido um código, verificar se já existe outra régua com o mesmo código (diferente desta)
@@ -431,24 +449,9 @@ public class InstrumentService {
             throw new DuplicateResourceException("Já existe um instrumento com esse nome nesta barragem");
         }
 
-        InstrumentEntity oldInstrument = findById(id);
-
-        // Verificar se está mudando de normal para régua linimétrica ou vice-versa
-        boolean changingToLinimetric = !oldInstrument.getIsLinimetricRuler() && Boolean.TRUE.equals(request.getIsLinimetricRuler());
-        boolean changingFromLinimetric = oldInstrument.getIsLinimetricRuler() && Boolean.FALSE.equals(request.getIsLinimetricRuler());
-
-        // Se estiver mudando o tipo, precisamos limpar os componentes antigos
-        if (changingToLinimetric || changingFromLinimetric) {
-            // Remover todos os componentes existentes
-            inputRepository.deleteByInstrumentId(id);
-            constantRepository.deleteByInstrumentId(id);
-            outputRepository.deleteByInstrumentId(id);
-
-            // Limpar as coleções em memória
-            oldInstrument.getInputs().clear();
-            oldInstrument.getConstants().clear();
-            oldInstrument.getOutputs().clear();
-        } else if (!Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
+        // Não precisamos mais verificar se está mudando de normal para régua linimétrica ou vice-versa
+        // pois não permitimos mais essa mudança
+        if (!Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
             // Se continua sendo instrumento normal, mapeia os componentes existentes
             Map<String, InputEntity> existingInputsByAcronym = oldInstrument.getInputs().stream()
                     .collect(Collectors.toMap(
@@ -502,33 +505,16 @@ public class InstrumentService {
 
             return instrumentRepository.findWithActiveOutputsById(id)
                     .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após atualização"));
+        } else {
+            // Atualizar os campos básicos do instrumento linimétrico
+            updateInstrumentBasicFields(oldInstrument, request);
+            instrumentRepository.save(oldInstrument);
+
+            log.info("Instrumento linimétrico atualizado com sucesso");
+
+            return instrumentRepository.findWithActiveOutputsById(id)
+                    .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após atualização"));
         }
-
-        // Atualizar os campos básicos do instrumento
-        updateInstrumentBasicFields(oldInstrument, request);
-
-        // Agora atualizamos os campos específicos da régua linimétrica
-        oldInstrument.setIsLinimetricRuler(request.getIsLinimetricRuler());
-        oldInstrument.setLinimetricRulerCode(request.getLinimetricRulerCode());
-
-        InstrumentEntity savedInstrument = instrumentRepository.save(oldInstrument);
-
-        // Se mudou para régua linimétrica, criamos os componentes padrão
-        if (changingToLinimetric) {
-            createLinimetricRulerComponents(savedInstrument);
-        } else if (changingFromLinimetric) {
-            // Se mudou de régua para normal, processamos os componentes fornecidos
-            processInputs(savedInstrument, request.getInputs());
-            if (request.getConstants() != null && !request.getConstants().isEmpty()) {
-                processConstants(savedInstrument, request.getConstants());
-            }
-            processOutputs(savedInstrument, request.getOutputs());
-        }
-
-        log.info("Instrumento atualizado com sucesso");
-
-        return instrumentRepository.findWithActiveOutputsById(id)
-                .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após atualização"));
     }
 
     private void validateUniqueAcronymsAcrossComponents(List<InputDTO> inputs, List<ConstantDTO> constants, List<OutputDTO> outputs) {
@@ -625,8 +611,13 @@ public class InstrumentService {
         instrument.setDam(dam);
         instrument.setSection(section);
         instrument.setActiveForSection(request.getActiveForSection());
-        instrument.setIsLinimetricRuler(request.getIsLinimetricRuler());
-        instrument.setLinimetricRulerCode(request.getLinimetricRulerCode());
+
+        // Apenas atualizar o código da régua linimétrica, mas nunca o status
+        if (Boolean.TRUE.equals(instrument.getIsLinimetricRuler())) {
+            instrument.setLinimetricRulerCode(request.getLinimetricRulerCode());
+        }
+
+        // Não atualizamos o campo isLinimetricRuler, pois ele é imutável após a criação
     }
 
     @Transactional

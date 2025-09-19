@@ -1,8 +1,11 @@
 package com.geosegbar.infra.reading.services;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +66,10 @@ public class ReadingService {
         return readings.stream()
                 .map(this::mapToResponseDTOOptimized)
                 .collect(Collectors.toList());
+    }
+
+    public boolean existsByInstrumentAndDate(Long instrumentId, LocalDate date) {
+        return readingRepository.existsByInstrumentIdAndDate(instrumentId, date);
     }
 
     public InstrumentLimitStatusDTO getInstrumentLimitStatus(Long instrumentId, int limit) {
@@ -401,14 +408,25 @@ public class ReadingService {
 
         validateInputValues(instrument, request.getInputValues());
 
+        // Formatar valores de entrada com a precisão correta de cada input
+        Map<String, Double> formattedInputValues = new HashMap<>();
+
+        for (InputEntity input : instrument.getInputs()) {
+            Double inputValue = request.getInputValues().get(input.getAcronym());
+            if (inputValue != null) {
+                Double formattedValue = formatToSpecificPrecision(inputValue, input.getPrecision());
+                formattedInputValues.put(input.getAcronym(), formattedValue);
+            }
+        }
+
         List<ReadingEntity> createdReadings = new ArrayList<>();
 
         Map<String, String> inputNames = instrument.getInputs().stream()
                 .collect(Collectors.toMap(InputEntity::getAcronym, InputEntity::getName));
 
         for (OutputEntity output : activeOutputs) {
-
-            Double calculatedValue = outputCalculationService.calculateOutput(output, request, request.getInputValues());
+            // Calcular com os valores formatados
+            Double calculatedValue = outputCalculationService.calculateOutput(output, request, formattedInputValues);
 
             ReadingEntity reading = new ReadingEntity();
             reading.setDate(request.getDate());
@@ -425,7 +443,7 @@ public class ReadingService {
 
             ReadingEntity savedReading = readingRepository.save(reading);
 
-            for (Map.Entry<String, Double> entry : request.getInputValues().entrySet()) {
+            for (Map.Entry<String, Double> entry : formattedInputValues.entrySet()) {
                 ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
                 inputValue.setReading(savedReading);
                 inputValue.setInputAcronym(entry.getKey());
@@ -747,5 +765,16 @@ public class ReadingService {
         dto.setInputValues(inputValueDTOs);
 
         return dto;
+    }
+
+    private Double formatToSpecificPrecision(Double value, Integer precision) {
+        if (value == null || precision == null) {
+            return value;
+        }
+
+        // Usando BigDecimal para evitar problemas de arredondamento
+        BigDecimal bd = BigDecimal.valueOf(value);
+        bd = bd.setScale(precision, RoundingMode.HALF_UP);
+        return bd.doubleValue();
     }
 }

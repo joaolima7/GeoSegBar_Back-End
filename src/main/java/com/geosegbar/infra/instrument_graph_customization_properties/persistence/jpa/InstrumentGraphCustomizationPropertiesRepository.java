@@ -46,10 +46,6 @@ public interface InstrumentGraphCustomizationPropertiesRepository extends JpaRep
 
     List<InstrumentGraphCustomizationPropertiesEntity> findByInstrumentId(Long instrumentId);
 
-    @Query("SELECT p FROM InstrumentGraphCustomizationPropertiesEntity p "
-            + "WHERE p.customizationType = 'LINIMETRIC_RULER' AND p.pattern.id = :patternId")
-    Optional<InstrumentGraphCustomizationPropertiesEntity> findLinimetricRulerByPatternId(@Param("patternId") Long patternId);
-
     List<InstrumentGraphCustomizationPropertiesEntity> findByLabelEnableTrue();
 
     List<InstrumentGraphCustomizationPropertiesEntity> findByIsPrimaryOrdinateTrue();

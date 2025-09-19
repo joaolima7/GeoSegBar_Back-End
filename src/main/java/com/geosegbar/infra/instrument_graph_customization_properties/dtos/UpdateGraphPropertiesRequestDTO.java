@@ -29,9 +29,6 @@ public class UpdateGraphPropertiesRequestDTO {
     @NotNull(message = "Valores de limites determinísticos são obrigatórios.")
     private List<DeterministicLimitValueReference> deterministicLimitValues;
 
-    @NotNull(message = "Campo 'linimetricRulerEnable' é obrigatório")
-    private Boolean linimetricRulerEnable;
-
     @Data
     @NoArgsConstructor
     @AllArgsConstructor

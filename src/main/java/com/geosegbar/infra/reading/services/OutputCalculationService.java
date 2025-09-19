@@ -1,5 +1,7 @@
 package com.geosegbar.infra.reading.services;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -17,7 +19,6 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class OutputCalculationService {
 
-// Atualize o método calculateOutput
     public Double calculateOutput(OutputEntity output, ReadingRequestDTO reading, Map<String, Double> inputValues) {
         InstrumentEntity instrument = output.getInstrument();
 
@@ -29,7 +30,11 @@ public class OutputCalculationService {
             variables.put(constant.getAcronym(), constant.getValue());
         }
 
-        return ExpressionEvaluator.evaluate(output.getEquation(), variables);
+        // Realizar o cálculo usando o ExpressionEvaluator
+        Double result = ExpressionEvaluator.evaluate(output.getEquation(), variables);
+
+        // Aplicar a precisão definida no output
+        return formatToSpecificPrecision(result, output.getPrecision());
     }
 
 // Método calculateAllOutputs também precisa ser atualizado para receber Map<String, Double> diretamente
@@ -43,5 +48,15 @@ public class OutputCalculationService {
         }
 
         return results;
+    }
+
+    private Double formatToSpecificPrecision(Double value, Integer precision) {
+        if (value == null || precision == null) {
+            return value;
+        }
+
+        BigDecimal bd = BigDecimal.valueOf(value);
+        bd = bd.setScale(precision, RoundingMode.HALF_UP);
+        return bd.doubleValue();
     }
 }

@@ -58,10 +58,6 @@ public class InstrumentTabulatePatternEntity {
     @JsonIgnoreProperties({"patterns"})
     private InstrumentTabulatePatternFolder folder;
 
-    @NotNull(message = "Campo 'Régua Linimétrica habilitada' é obrigatório!")
-    @Column(name = "is_linimetric_ruler_enable", nullable = false)
-    private Boolean isLinimetricRulerEnable = false;
-
     @OneToMany(mappedBy = "pattern", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     @JsonIgnoreProperties({"pattern"})
     private Set<InstrumentTabulateAssociationEntity> associations = new HashSet<>();

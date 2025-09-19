@@ -24,9 +24,6 @@ public class CreateTabulatePatternRequestDTO {
 
     private Long folderId;
 
-    @NotNull(message = "Campo 'Régua Linimétrica habilitada' é obrigatório!")
-    private Boolean isLinimetricRulerEnable = false;
-
     @NotEmpty(message = "Pelo menos uma associação de instrumento é obrigatória!")
     @Size(min = 1, message = "Pelo menos uma associação de instrumento é obrigatória!")
     @Valid

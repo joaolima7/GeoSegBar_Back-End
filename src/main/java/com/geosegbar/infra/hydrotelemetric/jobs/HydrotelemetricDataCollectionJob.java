@@ -1,19 +1,21 @@
 package com.geosegbar.infra.hydrotelemetric.jobs;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.geosegbar.common.enums.ReadingTypeEnum;
 import com.geosegbar.common.response.AnaTelemetryResponse.TelemetryItem;
-import com.geosegbar.entities.DamEntity;
-import com.geosegbar.entities.HydrotelemetricReadingEntity;
-import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
-import com.geosegbar.infra.hydrotelemetric.persistence.jpa.HydrotelemetricReadingRepository;
+import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.infra.hydrotelemetric.services.AnaApiService;
+import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
+import com.geosegbar.infra.reading.dtos.ReadingRequestDTO;
+import com.geosegbar.infra.reading.services.ReadingService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,8 +26,8 @@ import lombok.extern.slf4j.Slf4j;
 public class HydrotelemetricDataCollectionJob {
 
     private final AnaApiService anaApiService;
-    private final DamRepository damRepository;
-    private final HydrotelemetricReadingRepository hydrotelemetricReadingRepository;
+    private final InstrumentRepository instrumentRepository;
+    private final ReadingService readingService;
 
     @Scheduled(cron = "0 30 0 * * ?")
     public void collectHydrotelemetricData() {
@@ -34,15 +36,17 @@ public class HydrotelemetricDataCollectionJob {
         try {
             String authToken = anaApiService.getAuthToken();
 
-            List<DamEntity> dams = damRepository.findAll();
+            List<InstrumentEntity> linimetricInstruments = instrumentRepository.findByIsLinimetricRulerTrue();
+            log.info("Encontrados {} instrumentos do tipo régua linimétrica", linimetricInstruments.size());
 
             LocalDate today = LocalDate.now();
 
-            for (DamEntity dam : dams) {
+            for (InstrumentEntity instrument : linimetricInstruments) {
                 try {
-                    collectDamData(dam, authToken, today);
+                    collectInstrumentData(instrument, authToken, today);
                 } catch (Exception e) {
-                    log.error("Erro ao coletar dados para a barragem {}: {}", dam.getName(), e.getMessage(), e);
+                    log.error("Erro ao coletar dados para o instrumento {}: {}",
+                            instrument.getName(), e.getMessage(), e);
                 }
             }
 
@@ -53,54 +57,71 @@ public class HydrotelemetricDataCollectionJob {
     }
 
     @Transactional(timeout = 60)
-    private void collectDamData(DamEntity dam, String authToken, LocalDate date) {
+    private void collectInstrumentData(InstrumentEntity instrument, String authToken, LocalDate date) {
+        Long linimetricCode = instrument.getLinimetricRulerCode();
 
-        if (dam.getUpstreamId() == null && dam.getDownstreamId() == null) {
-            log.warn("Barragem {} não possui IDs de montante nem jusante. Ignorando.", dam.getName());
+        // Verificar se o instrumento tem código de régua linimétrica
+        if (linimetricCode == null) {
+            log.warn("Instrumento {} não possui código de régua linimétrica. Ignorando.",
+                    instrument.getName());
             return;
         }
 
-        boolean readingExists = hydrotelemetricReadingRepository.existsByDamIdAndDate(dam.getId(), date);
+        // Verificar se já existe leitura para este instrumento nesta data
+        boolean readingExists = readingService.existsByInstrumentAndDate(instrument.getId(), date);
         if (readingExists) {
-            log.info("Já existe leitura para a barragem {} na data {}. Ignorando.", dam.getName(), date);
+            log.info("Já existe leitura para o instrumento {} na data {}. Ignorando.",
+                    instrument.getName(), date);
             return;
         }
 
         try {
-            Double upstreamAverageM = null;
-            Double downstreamAverageM = null;
+            String stationCode = String.valueOf(linimetricCode);
+            List<TelemetryItem> telemetryData = anaApiService.getTelemetryData(stationCode, authToken);
 
-            if (dam.getUpstreamId() != null) {
-                String upstreamId = String.valueOf(dam.getUpstreamId());
-                List<TelemetryItem> upstreamData = anaApiService.getTelemetryData(upstreamId, authToken);
-                Double upstreamAverageMm = anaApiService.calculateAverageLevel(upstreamData, date);
-                upstreamAverageM = upstreamAverageMm != null ? upstreamAverageMm / 1000.0 : null;
+            Double averageMm = anaApiService.calculateAverageLevel(telemetryData, date);
+            Double averageM = averageMm != null ? averageMm / 1000.0 : null;
+
+            // Só prosseguir se tivermos um valor válido para registrar
+            if (averageM == null) {
+                log.warn("Valor nulo obtido para instrumento: {}. Nenhuma leitura será registrada.",
+                        instrument.getName());
+                return;
             }
 
-            if (dam.getDownstreamId() != null) {
-                String downstreamId = String.valueOf(dam.getDownstreamId());
-                List<TelemetryItem> downstreamData = anaApiService.getTelemetryData(downstreamId, authToken);
-                Double downstreamAverageMm = anaApiService.calculateAverageLevel(downstreamData, date);
-                downstreamAverageM = downstreamAverageMm != null ? downstreamAverageMm / 1000.0 : null;
+            // Obter o input principal do instrumento linimétrico (deve ser o input "LEI")
+            String inputAcronym = "LEI";
+
+            // Verificar se o instrumento possui este input
+            boolean hasRequiredInput = instrument.getInputs().stream()
+                    .anyMatch(input -> input.getAcronym().equals(inputAcronym));
+
+            if (!hasRequiredInput) {
+                log.error("Instrumento {} não possui o input necessário '{}'. Ignorando.",
+                        instrument.getName(), inputAcronym);
+                return;
             }
 
-            HydrotelemetricReadingEntity reading = new HydrotelemetricReadingEntity();
-            reading.setDam(dam);
-            reading.setDate(date);
-            reading.setUpstreamAverage(upstreamAverageM);
-            reading.setDownstreamAverage(downstreamAverageM);
-            reading.setReadingType(ReadingTypeEnum.ANA);
+            // Criar o objeto de requisição de leitura
+            ReadingRequestDTO readingRequest = new ReadingRequestDTO();
+            readingRequest.setDate(date);
+            readingRequest.setHour(LocalTime.of(0, 30));  // Meia-noite como padrão
 
-            hydrotelemetricReadingRepository.save(reading);
+            Map<String, Double> inputValues = new HashMap<>();
+            inputValues.put(inputAcronym, averageM);
+            readingRequest.setInputValues(inputValues);
 
-            if (upstreamAverageM == null && downstreamAverageM == null) {
-                log.warn("Leitura hidrotelemétrica salva com valores nulos para barragem: {}", dam.getName());
-            } else {
-                log.info("Leitura hidrotelemétrica salva com sucesso para barragem: {}", dam.getName());
-            }
+            readingRequest.setComment("Leitura automática da API ANA");
+
+            // Registrar a leitura usando o ReadingService existente
+            readingService.create(instrument.getId(), readingRequest);
+
+            log.info("Leitura linimétrica registrada com sucesso para instrumento: {} - Valor: {}m",
+                    instrument.getName(), averageM);
 
         } catch (Exception e) {
-            log.error("Erro ao coletar dados para barragem {}: {}", dam.getName(), e.getMessage());
+            log.error("Erro ao coletar dados para instrumento {}: {}",
+                    instrument.getName(), e.getMessage());
             throw e;
         }
     }

@@ -78,7 +78,6 @@ public class AnaApiService {
                     }
                     log.warn("Tentativa {} falhou, tentando novamente em {} segundos",
                             attempt, attempt * 2);
-                    Thread.sleep(attempt * 2000);
                 }
             }
             throw new ExternalApiException("Todas as tentativas de obter token falharam");

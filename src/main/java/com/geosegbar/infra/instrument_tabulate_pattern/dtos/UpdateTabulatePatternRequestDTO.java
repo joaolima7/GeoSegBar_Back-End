@@ -21,9 +21,6 @@ public class UpdateTabulatePatternRequestDTO {
 
     private Long folderId; // Pode ser null para remover da pasta
 
-    @NotNull(message = "Campo 'Régua Linimétrica habilitada' é obrigatório!")
-    private Boolean isLinimetricRulerEnable = false;
-
     @NotEmpty(message = "Pelo menos uma associação de instrumento é obrigatória!")
     @Size(min = 1, message = "Pelo menos uma associação de instrumento é obrigatória!")
     @Valid

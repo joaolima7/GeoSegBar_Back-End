@@ -74,7 +74,6 @@ public class InstrumentTabulatePatternService {
         pattern.setName(request.getName());
         pattern.setDam(dam);
         pattern.setFolder(folder);
-        pattern.setIsLinimetricRulerEnable(request.getIsLinimetricRulerEnable());
 
         pattern = patternRepository.save(pattern);
 
@@ -137,7 +136,6 @@ public class InstrumentTabulatePatternService {
 
         pattern.setName(request.getName());
         pattern.setFolder(folder);
-        pattern.setIsLinimetricRulerEnable(request.getIsLinimetricRulerEnable());
 
         Set<InstrumentTabulateAssociationEntity> currentAssociations = pattern.getAssociations();
         Set<InstrumentTabulateAssociationEntity> newAssociations = new HashSet<>();

@@ -77,11 +77,11 @@ public class InstrumentGraphCustomizationPropertiesService {
                 req.getOutputIds(),
                 req.getStatisticalLimitValues().stream().map(StatisticalLimitValueReference::getLimitId).toList(),
                 req.getDeterministicLimitValues().stream().map(DeterministicLimitValueReference::getLimitId).toList(),
-                req.getConstantIds(), // Novo parâmetro
+                req.getConstantIds(),
                 damId
         );
 
-        // Continuar com o código original
+        // Remover propriedades existentes de instrumentos não mais presentes
         manageInstrumentProperties(pattern, existingProperties,
                 getExistingInstrumentIds(existingProperties),
                 new HashSet<>(req.getInstrumentIds()));
@@ -97,10 +97,6 @@ public class InstrumentGraphCustomizationPropertiesService {
         manageStatisticalLimitValueProperties(pattern, existingProperties, req.getStatisticalLimitValues());
 
         manageDeterministicLimitValueProperties(pattern, existingProperties, req.getDeterministicLimitValues());
-
-        manageLinimetricRulerProperty(pattern, existingProperties,
-                hasLinimetricRuler(existingProperties),
-                req.getLinimetricRulerEnable());
 
         log.info("Propriedades atualizadas para pattern: {}", patternId);
     }
@@ -642,21 +638,6 @@ public class InstrumentGraphCustomizationPropertiesService {
         }
     }
 
-    private void manageLinimetricRulerProperty(
-            InstrumentGraphPatternEntity pattern,
-            List<InstrumentGraphCustomizationPropertiesEntity> existingProperties,
-            boolean currentLinimetricRuler, boolean newLinimetricRuler) {
-
-        if (currentLinimetricRuler && !newLinimetricRuler) {
-            existingProperties.stream()
-                    .filter(p -> p.getCustomizationType() == CustomizationTypeEnum.LINIMETRIC_RULER)
-                    .forEach(propertiesRepository::delete);
-        } else if (!currentLinimetricRuler && newLinimetricRuler) {
-            createCustomizationProperty(pattern, CustomizationTypeEnum.LINIMETRIC_RULER,
-                    null, null, null, null, null, null);
-        }
-    }
-
     private void createCustomizationProperty(
             InstrumentGraphPatternEntity pattern,
             CustomizationTypeEnum type,
@@ -720,7 +701,7 @@ public class InstrumentGraphCustomizationPropertiesService {
         }
 
         property.setLabelEnable(true);
-        property.setIsPrimaryOrdinate(type != CustomizationTypeEnum.LINIMETRIC_RULER);
+        property.setIsPrimaryOrdinate(true);
 
         switch (type) {
             case OUTPUT ->
@@ -734,7 +715,10 @@ public class InstrumentGraphCustomizationPropertiesService {
             case CONSTANT ->
                 property.setConstant(constant);  // Novo caso
             case LINIMETRIC_RULER -> {
-                // Código existente
+                if (instrument == null || !Boolean.TRUE.equals(instrument.getIsLinimetricRuler())) {
+                    throw new InvalidInputException("O instrumento selecionado não é uma régua linimétrica");
+                }
+                property.setInstrument(instrument);
             }
         }
 
@@ -873,10 +857,5 @@ public class InstrumentGraphCustomizationPropertiesService {
                 .filter(p -> p.getConstant() != null)
                 .map(p -> p.getConstant().getId())
                 .collect(Collectors.toSet());
-    }
-
-    private boolean hasLinimetricRuler(List<InstrumentGraphCustomizationPropertiesEntity> properties) {
-        return properties.stream()
-                .anyMatch(p -> p.getCustomizationType() == CustomizationTypeEnum.LINIMETRIC_RULER);
     }
 }

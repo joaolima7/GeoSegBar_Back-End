@@ -111,8 +111,6 @@ public class DamService {
         dam.setName(request.getName());
         dam.setLatitude(request.getLatitude());
         dam.setLongitude(request.getLongitude());
-        dam.setUpstreamId(request.getUpstreamId());
-        dam.setDownstreamId(request.getDownstreamId());
         dam.setStreet(request.getStreet());
         dam.setNeighborhood(request.getNeighborhood());
         dam.setNumberAddress(request.getNumberAddress());
@@ -319,8 +317,6 @@ public class DamService {
         existingDam.setName(request.getName());
         existingDam.setLatitude(request.getLatitude());
         existingDam.setLongitude(request.getLongitude());
-        existingDam.setUpstreamId(request.getUpstreamId());
-        existingDam.setDownstreamId(request.getDownstreamId());
         existingDam.setStreet(request.getStreet());
         existingDam.setNeighborhood(request.getNeighborhood());
         existingDam.setNumberAddress(request.getNumberAddress());

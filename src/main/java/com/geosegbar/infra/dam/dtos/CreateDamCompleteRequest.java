@@ -31,12 +31,6 @@ public class CreateDamCompleteRequest {
     @NotNull(message = "Longitude é obrigatório!")
     private Double longitude;
 
-    @NotNull(message = "ID da montante é obrigatório!")
-    private Long upstreamId;
-
-    @NotNull(message = "ID da jusante é obrigatório!")
-    private Long downstreamId;
-
     @NotBlank(message = "O nome da rua é obrigatório!")
     private String street;
 

@@ -18,6 +18,8 @@ import com.geosegbar.entities.ReadingEntity;
 @Repository
 public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
 
+    boolean existsByInstrumentIdAndDate(Long instrumentId, LocalDate date);
+
     List<ReadingEntity> findByInstrumentId(Long instrumentId);
 
     Page<ReadingEntity> findByInstrumentId(Long instrumentId, Pageable pageable);

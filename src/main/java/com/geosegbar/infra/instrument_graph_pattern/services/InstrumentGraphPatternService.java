@@ -1,7 +1,6 @@
 package com.geosegbar.infra.instrument_graph_pattern.services;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.hibernate.Hibernate;
@@ -10,7 +9,6 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.geosegbar.common.enums.CustomizationTypeEnum;
 import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.entities.InstrumentGraphAxesEntity;
 import com.geosegbar.entities.InstrumentGraphCustomizationPropertiesEntity;
@@ -19,7 +17,7 @@ import com.geosegbar.entities.InstrumentGraphPatternFolder;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.dam.services.DamService;
-import com.geosegbar.infra.hydrotelemetric.services.HydrotelemetricReadingService;
+import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.instrument.services.InstrumentService;
 import com.geosegbar.infra.instrument_graph_axes.persistence.jpa.InstrumentGraphAxesRepository;
 import com.geosegbar.infra.instrument_graph_pattern.dtos.CreateGraphPatternRequest;
@@ -36,10 +34,9 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class InstrumentGraphPatternService {
 
-    private final InstrumentService instrumentService;
+    private final InstrumentRepository instrumentRepository;
     private final InstrumentGraphPatternRepository patternRepository;
     private final InstrumentGraphAxesRepository axesRepository;
-    private final HydrotelemetricReadingService hydrotelemetricReadingService;
     private final InstrumentGraphPatternFolderRepository folderRepository;
     private final DamService damService;
 
@@ -118,8 +115,8 @@ public class InstrumentGraphPatternService {
                     "Já existe um Padrão de Gráfico com o nome '" + request.getName() + "' para este instrumento!");
         }
 
-        InstrumentEntity instrument = instrumentService.findById(request.getInstrumentId());
-
+        InstrumentEntity instrument = instrumentRepository.findById(request.getInstrumentId())
+                .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + request.getInstrumentId()));
         InstrumentGraphPatternFolder folder = null;
         if (request.getFolderId() != null) {
             folder = folderRepository.findById(request.getFolderId())
@@ -240,18 +237,6 @@ public class InstrumentGraphPatternService {
         dto.setLabelEnable(property.getLabelEnable());
         dto.setIsPrimaryOrdinate(property.getIsPrimaryOrdinate());
         dto.setLimitValueType(property.getLimitValueType());
-
-        if (property.getCustomizationType() == CustomizationTypeEnum.LINIMETRIC_RULER) {
-            if (instrument != null && instrument.getDam() != null) {
-                Long damId = instrument.getDam().getId();
-                Optional<Double> linimetricRulerValue = hydrotelemetricReadingService
-                        .getLatestUpstreamAverageByDamId(damId);
-
-                dto.setLinimetricRulerValue(linimetricRulerValue.orElse(null));
-            } else {
-                dto.setLinimetricRulerValue(null);
-            }
-        }
 
         if (property.getInstrument() != null) {
             dto.setInstrument(new GraphPatternDetailResponseDTO.RelatedInstrumentDTO(

@@ -29,7 +29,7 @@ public class HydrotelemetricDataCollectionJob {
     private final InstrumentRepository instrumentRepository;
     private final ReadingService readingService;
 
-    @Scheduled(cron = "0 17 12 * * ?")
+    @Scheduled(cron = "0 30 0 * * ?")
     public void collectHydrotelemetricData() {
         log.info("Iniciando coleta de dados hidrotelemétricos");
 

@@ -3,6 +3,7 @@ package com.geosegbar.infra.user.service;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import org.hibernate.Hibernate;
@@ -22,6 +23,7 @@ import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.DamPermissionEntity;
 import com.geosegbar.entities.RoleEntity;
+import com.geosegbar.entities.SexEntity;
 import com.geosegbar.entities.StatusEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.entities.VerificationCodeEntity;
@@ -55,11 +57,14 @@ import com.geosegbar.infra.verification_code.dto.ResetPasswordRequestDTO;
 import com.geosegbar.infra.verification_code.dto.VerifyCodeRequestDTO;
 import com.geosegbar.infra.verification_code.persistence.jpa.VerificationCodeRepository;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserService {
 
     private final UserRepository userRepository;
@@ -78,6 +83,62 @@ public class UserService {
     private final InstrumentationPermissionService instrumentationPermissionService;
     private final RoutineInspectionPermissionService routineInspectionPermissionService;
 
+    @PostConstruct
+    public void initializeSystemUser() {
+        String systemUserEmail = "noreply@geometrisa-prod.com.br";
+        String systemUserName = "SISTEMA";
+
+        try {
+            // Verificar se já existe um usuário com este email
+            Optional<UserEntity> existingUser = userRepository.findByEmail(systemUserEmail);
+
+            if (existingUser.isPresent()) {
+                log.info("Usuário do sistema já existe com ID: {}", existingUser.get().getId());
+                return;
+            }
+
+            // Verificar se já existe um usuário com o nome SISTEMA
+            boolean systemNameExists = userRepository.existsByName(systemUserName);
+
+            if (systemNameExists) {
+                log.warn("Já existe um usuário com o nome SISTEMA. Não será criado o usuário do sistema.");
+                return;
+            }
+
+            // Criar o usuário do sistema
+            UserEntity systemUser = new UserEntity();
+            systemUser.setName(systemUserName);
+            systemUser.setEmail(systemUserEmail);
+
+            // Gerar uma senha forte aleatória, já que este usuário não fará login normal
+            String randomPassword = GenerateRandomPassword.execute();
+            systemUser.setPassword(passwordEncoder.encode(randomPassword));
+
+            // Obter o status ACTIVE
+            StatusEntity activeStatus = statusRepository.findByStatus(StatusEnum.ACTIVE)
+                    .orElseThrow(() -> new NotFoundException("Status ACTIVE não encontrado no sistema!"));
+            systemUser.setStatus(activeStatus);
+
+            // Obter a role ADMIN (para não ter problemas de permissão)
+            RoleEntity adminRole = roleRepository.findByName(RoleEnum.ADMIN)
+                    .orElseThrow(() -> new NotFoundException("Role ADMIN não encontrada no sistema!"));
+            systemUser.setRole(adminRole);
+
+            // Definir sexo (obrigatório)
+            SexEntity maleOrFirstSex = sexRepository.findAll().stream()
+                    .findFirst()
+                    .orElseThrow(() -> new NotFoundException("Nenhum sexo encontrado no sistema!"));
+            systemUser.setSex(maleOrFirstSex);
+
+            // Salvar o usuário
+            UserEntity savedUser = userRepository.save(systemUser);
+            log.info("Usuário do sistema criado com ID: {}", savedUser.getId());
+
+        } catch (Exception e) {
+            log.error("Erro ao criar usuário do sistema: {}", e.getMessage(), e);
+        }
+    }
+
     @Transactional
     @CacheEvict(value = {"userById", "allUsers", "usersByRoleAndClient", "usersByCreatedBy",
         "userExistence"},
@@ -92,6 +153,10 @@ public class UserService {
 
         UserEntity user = userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado para exclusão!"));
+
+        if (isSystemUser(user)) {
+            throw new InvalidInputException("O usuário do sistema não pode ser excluído.");
+        }
 
         documentationPermissionService.deleteByUserSafely(user.getId());
         attributionsPermissionService.deleteByUserSafely(user.getId());
@@ -230,6 +295,10 @@ public class UserService {
         }
 
         UserEntity existingUser = findEntityByIdWithAllDetails(id);
+
+        if (isSystemUser(existingUser)) {
+            throw new InvalidInputException("O usuário SISTEMA não pode ser modificado.");
+        }
 
         if (userRepository.existsByEmailAndIdNot(userDTO.getEmail(), id)) {
             throw new DuplicateResourceException("Já existe um usuário com o email informado!");
@@ -715,5 +784,42 @@ public class UserService {
         if (!targetUser.getClients().isEmpty()) {
             createDefaultDamPermissions(targetUser);
         }
+    }
+
+    public boolean isSystemUser(UserEntity user) {
+        return user != null
+                && "SISTEMA".equals(user.getName())
+                && "noreply@geometrisa-prod.com.br".equals(user.getEmail());
+    }
+
+    /**
+     * Verifica se o ID pertence ao usuário do sistema.
+     */
+    public boolean isSystemUser(Long userId) {
+        try {
+            UserEntity user = findById(userId);
+            return isSystemUser(user);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Retorna o ID do usuário do sistema.
+     */
+    public Long getSystemUserId() {
+        String systemUserEmail = "noreply@geometrisa-prod.com.br";
+        UserEntity systemUser = userRepository.findByEmail(systemUserEmail)
+                .orElseThrow(() -> new NotFoundException("Usuário do sistema não encontrado!"));
+        return systemUser.getId();
+    }
+
+    /**
+     * Retorna o usuário do sistema.
+     */
+    public UserEntity getSystemUser() {
+        String systemUserEmail = "noreply@geometrisa-prod.com.br";
+        return userRepository.findByEmail(systemUserEmail)
+                .orElseThrow(() -> new NotFoundException("Usuário do sistema não encontrado!"));
     }
 }

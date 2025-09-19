@@ -105,6 +105,8 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
 
     List<UserEntity> findByCreatedById(Long createdById);
 
+    boolean existsByName(String name);
+
     boolean existsByEmail(String email);
 
     boolean existsByPhone(String phone);

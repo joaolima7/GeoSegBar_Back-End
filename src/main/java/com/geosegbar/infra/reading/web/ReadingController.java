@@ -196,7 +196,7 @@ public class ReadingController {
     public ResponseEntity<WebResponseEntity<List<ReadingResponseDTO>>> createReading(
             @PathVariable Long instrumentId,
             @Valid @RequestBody ReadingRequestDTO request) {
-        List<ReadingResponseDTO> created = readingService.create(instrumentId, request);
+        List<ReadingResponseDTO> created = readingService.create(instrumentId, request, false);
         return new ResponseEntity<>(WebResponseEntity.success(created, "Leituras registradas com sucesso!"), HttpStatus.CREATED);
     }
 

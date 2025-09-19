@@ -175,7 +175,7 @@ public class BulkReadingImportService {
                     }
 
                     ReadingRequestDTO req = new ReadingRequestDTO(date, hour, inputValues, null);
-                    readingService.create(instrumentId, req);
+                    readingService.create(instrumentId, req, false);
                     result.setSuccessCount(result.getSuccessCount() + 1);
 
                 } catch (Exception ex) {

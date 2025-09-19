@@ -111,10 +111,10 @@ public class HydrotelemetricDataCollectionJob {
             inputValues.put(inputAcronym, averageM);
             readingRequest.setInputValues(inputValues);
 
-            readingRequest.setComment("Leitura automática da API ANA");
+            readingRequest.setComment("Leitura automática pela ANA.");
 
             // Registrar a leitura usando o ReadingService existente
-            readingService.create(instrument.getId(), readingRequest);
+            readingService.create(instrument.getId(), readingRequest, true);
 
             log.info("Leitura linimétrica registrada com sucesso para instrumento: {} - Valor: {}m",
                     instrument.getName(), averageM);

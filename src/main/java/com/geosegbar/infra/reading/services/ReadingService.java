@@ -386,12 +386,21 @@ public class ReadingService {
     }
 
     @Transactional
-    public List<ReadingResponseDTO> create(Long instrumentId, ReadingRequestDTO request) {
-        UserEntity currentUser = AuthenticatedUserUtil.getCurrentUser();
+    public List<ReadingResponseDTO> create(Long instrumentId, ReadingRequestDTO request, boolean skipPermissionCheck) {
+        UserEntity currentUser;
 
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            if (!currentUser.getInstrumentationPermission().getEditRead()) {
-                throw new UnauthorizedException("Usuário não autorizado a criar leituras!");
+        if (skipPermissionCheck) {
+            String systemUserEmail = "noreply@geometrisa-prod.com.br";
+            currentUser = userRepository.findByEmail(systemUserEmail)
+                    .orElseThrow(() -> new NotFoundException("Usuário do sistema não encontrado!"));
+
+        } else {
+            currentUser = AuthenticatedUserUtil.getCurrentUser();
+
+            if (!AuthenticatedUserUtil.isAdmin()) {
+                if (!currentUser.getInstrumentationPermission().getEditRead()) {
+                    throw new UnauthorizedException("Usuário não autorizado a criar leituras!");
+                }
             }
         }
 

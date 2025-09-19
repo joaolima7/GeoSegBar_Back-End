@@ -112,8 +112,11 @@ public class InstrumentService {
             cacheManager = "instrumentCacheManager"
     )
     public InstrumentEntity createComplete(CreateInstrumentRequest request) {
-        // Se for régua linimétrica, fazemos validações específicas
+        // Se for régua linimétrica, fazemos validações específicas e garantimos noLimit = true
         if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
+            // Forçar noLimit = true para réguas linimétricas
+            request.setNoLimit(true);
+
             // Se fornecido um código, verificar se já existe outra régua com o mesmo código
             if (request.getLinimetricRulerCode() != null
                     && instrumentRepository.findByLinimetricRulerCode(request.getLinimetricRulerCode()).isPresent()) {
@@ -183,7 +186,6 @@ public class InstrumentService {
 
         // Publicar evento em vez de chamar diretamente o serviço
         if (Boolean.FALSE.equals(savedInstrument.getIsLinimetricRuler())) {
-            log.debug("Publicando evento de criação de instrumento para ID: {}", savedInstrument.getId());
             eventPublisher.publishEvent(new InstrumentCreatedEvent(savedInstrument));
         }
 
@@ -428,8 +430,11 @@ public class InstrumentService {
             throw new InvalidInputException("Não é permitido alterar o tipo de instrumento. Uma vez criado como régua linimétrica ou instrumento normal, este atributo não pode ser modificado.");
         }
 
-        // Se for régua linimétrica, fazemos validações específicas
+        // Se for régua linimétrica, fazemos validações específicas e garantimos noLimit = true
         if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
+            // Forçar noLimit = true para réguas linimétricas
+            request.setNoLimit(true);
+
             // Se fornecido um código, verificar se já existe outra régua com o mesmo código (diferente desta)
             if (request.getLinimetricRulerCode() != null
                     && instrumentRepository.existsByLinimetricRulerCodeAndIdNot(request.getLinimetricRulerCode(), id)) {

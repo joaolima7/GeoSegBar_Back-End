@@ -239,6 +239,21 @@ public class BulkInstrumentImportService {
             ir.instrumentTypeName = getString(r, idx, "Tipo de Instrumento");
             ir.sectionName = getString(r, idx, "Seção");
 
+            ir.isLinimetricRuler = getBoolean(r, idx, "Régua Linimétrica");
+
+            Long code = getLong(r, idx, "Código ANA");
+            if (code == null) {
+                String codeStr = getString(r, idx, "Código ANA");
+                if (codeStr != null && !codeStr.isBlank()) {
+                    try {
+                        code = Long.parseLong(codeStr.trim());
+                    } catch (NumberFormatException e) {
+
+                    }
+                }
+            }
+            ir.linimetricRulerCode = code;
+
             if (ir.name == null || ir.name.isBlank()) {
                 throw new InvalidInputException("Campo 'Nome' é obrigatório para o instrumento ID: " + id + " (linha " + rowNum + ")");
             }
@@ -383,6 +398,11 @@ public class BulkInstrumentImportService {
                 ? c.getNumericCellValue() : null;
     }
 
+    private Long getLong(Row r, Map<String, Integer> ix, String col) {
+        Double d = getDouble(r, ix, col);
+        return d == null ? null : d.longValue();
+    }
+
     private Integer getInt(Row r, Map<String, Integer> ix, String col) {
         Double d = getDouble(r, ix, col);
         return d == null ? null : d.intValue();
@@ -421,6 +441,9 @@ public class BulkInstrumentImportService {
         Boolean noLimit;
         String sectionName;
 
+        Boolean isLinimetricRuler;
+        Long linimetricRulerCode;
+
         CreateInstrumentRequest toRequest(ImportInstrumentsRequest meta, Long resolvedSectionId) {
             CreateInstrumentRequest r = new CreateInstrumentRequest();
             r.setName(name);
@@ -432,6 +455,14 @@ public class BulkInstrumentImportService {
             r.setActiveForSection(meta.getActiveForSection());
             r.setDamId(meta.getDamId());
             r.setSectionId(resolvedSectionId);
+
+            r.setIsLinimetricRuler(isLinimetricRuler);
+            r.setLinimetricRulerCode(linimetricRulerCode);
+
+            if (Boolean.TRUE.equals(r.getIsLinimetricRuler())) {
+                r.setNoLimit(true);
+            }
+
             return r;
         }
     }

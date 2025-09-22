@@ -18,6 +18,7 @@ public class InstrumentResponseDTO {
     private Double latitude;
     private Double longitude;
     private Boolean noLimit;
+    private Boolean active;
     private Boolean activeForSection;
     private Boolean isLinimetricRuler;
     private Long linimetricRulerCode;

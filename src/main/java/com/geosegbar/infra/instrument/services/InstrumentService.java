@@ -1024,8 +1024,7 @@ public class InstrumentService {
         dto.setLatitude(instrument.getLatitude());
         dto.setLongitude(instrument.getLongitude());
         dto.setNoLimit(instrument.getNoLimit());
-
-        // Novos campos
+        dto.setActive(instrument.getActive());
         dto.setIsLinimetricRuler(instrument.getIsLinimetricRuler());
         dto.setLinimetricRulerCode(instrument.getLinimetricRulerCode());
 

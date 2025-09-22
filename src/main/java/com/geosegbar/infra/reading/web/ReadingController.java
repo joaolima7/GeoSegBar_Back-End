@@ -23,6 +23,7 @@ import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.infra.reading.dtos.BulkToggleActiveRequestDTO;
 import com.geosegbar.infra.reading.dtos.BulkToggleActiveResponseDTO;
 import com.geosegbar.infra.reading.dtos.InstrumentLimitStatusDTO;
+import com.geosegbar.infra.reading.dtos.InstrumentReadingsDTO.MultiInstrumentReadingsResponseDTO;
 import com.geosegbar.infra.reading.dtos.PagedReadingResponseDTO;
 import com.geosegbar.infra.reading.dtos.ReadingRequestDTO;
 import com.geosegbar.infra.reading.dtos.ReadingResponseDTO;
@@ -129,6 +130,54 @@ public class ReadingController {
                 = readingService.findGroupedReadingsFlatByMultipleInstruments(instrumentIds, pageable);
 
         return ResponseEntity.ok(WebResponseEntity.success(result, "Leituras agrupadas obtidas com sucesso!"));
+    }
+
+    @GetMapping("/latest")
+    public ResponseEntity<WebResponseEntity<MultiInstrumentReadingsResponseDTO>> getLatestReadingsForMultipleInstruments(
+            @RequestParam(required = false) List<Long> instrumentIds,
+            @RequestParam(required = false) List<Long> outputIds,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(defaultValue = "10") int pageSize) {
+
+        if ((instrumentIds == null || instrumentIds.isEmpty())
+                && (outputIds == null || outputIds.isEmpty())) {
+            return ResponseEntity.badRequest().body(
+                    WebResponseEntity.error("Pelo menos um instrumentId ou outputId deve ser fornecido")
+            );
+        }
+
+        if (pageSize > 100) {
+            pageSize = 100;
+        }
+
+        MultiInstrumentReadingsResponseDTO result = readingService.findLatestReadingsForMultipleInstruments(
+                instrumentIds,
+                outputIds,
+                startDate,
+                endDate,
+                pageSize
+        );
+
+        String message;
+        if (startDate != null || endDate != null) {
+            String dateRange = "";
+            if (startDate != null && endDate != null) {
+                dateRange = String.format(" no período de %s a %s", startDate, endDate);
+            } else if (startDate != null) {
+                dateRange = String.format(" a partir de %s", startDate);
+            } else {
+                dateRange = String.format(" até %s", endDate);
+            }
+
+            message = String.format("Últimas %d leituras obtidas para %d instrumentos%s",
+                    pageSize, result.getInstrumentsReadings().size(), dateRange);
+        } else {
+            message = String.format("Últimas %d leituras obtidas para %d instrumentos",
+                    pageSize, result.getInstrumentsReadings().size());
+        }
+
+        return ResponseEntity.ok(WebResponseEntity.success(result, message));
     }
 
     @PutMapping("/{id}")

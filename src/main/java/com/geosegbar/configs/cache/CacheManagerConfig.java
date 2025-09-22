@@ -320,4 +320,84 @@ public class CacheManagerConfig {
         ));
         return cacheManager;
     }
+
+    @Bean("readingCacheManager")
+    public CacheManager readingCacheManager() {
+        SimpleCacheManager cacheManager = new SimpleCacheManager();
+        cacheManager.setCaches(Arrays.asList(
+                new CaffeineCache("readingById",
+                        Caffeine.newBuilder()
+                                .maximumSize(1000)
+                                .expireAfterWrite(Duration.ofMinutes(15))
+                                .expireAfterAccess(Duration.ofMinutes(8))
+                                .build()),
+                new CaffeineCache("readingsByInstrument",
+                        Caffeine.newBuilder()
+                                .maximumSize(300)
+                                .expireAfterWrite(Duration.ofMinutes(10))
+                                .expireAfterAccess(Duration.ofMinutes(5))
+                                .build()),
+                new CaffeineCache("readingsByOutput",
+                        Caffeine.newBuilder()
+                                .maximumSize(300)
+                                .expireAfterWrite(Duration.ofMinutes(10))
+                                .expireAfterAccess(Duration.ofMinutes(5))
+                                .build()),
+                new CaffeineCache("readingsByFilters",
+                        Caffeine.newBuilder()
+                                .maximumSize(500)
+                                .expireAfterWrite(Duration.ofMinutes(5))
+                                .expireAfterAccess(Duration.ofMinutes(3))
+                                .build()),
+                new CaffeineCache("instrumentLimitStatus",
+                        Caffeine.newBuilder()
+                                .maximumSize(200)
+                                .expireAfterWrite(Duration.ofMinutes(5))
+                                .expireAfterAccess(Duration.ofMinutes(2))
+                                .build()),
+                new CaffeineCache("clientInstrumentLimitStatuses",
+                        Caffeine.newBuilder()
+                                .maximumSize(100)
+                                .expireAfterWrite(Duration.ofMinutes(5))
+                                .expireAfterAccess(Duration.ofMinutes(2))
+                                .build()),
+                new CaffeineCache("readingResponseDTO",
+                        Caffeine.newBuilder()
+                                .maximumSize(2000)
+                                .expireAfterWrite(Duration.ofMinutes(15))
+                                .expireAfterAccess(Duration.ofMinutes(8))
+                                .build()),
+                new CaffeineCache("latestReadings",
+                        Caffeine.newBuilder()
+                                .maximumSize(500)
+                                .expireAfterWrite(Duration.ofMinutes(5))
+                                .expireAfterAccess(Duration.ofMinutes(2))
+                                .build()),
+                new CaffeineCache("readingExists",
+                        Caffeine.newBuilder()
+                                .maximumSize(1000)
+                                .expireAfterWrite(Duration.ofMinutes(10))
+                                .expireAfterAccess(Duration.ofMinutes(5))
+                                .build()),
+                new CaffeineCache("groupedReadings",
+                        Caffeine.newBuilder()
+                                .maximumSize(300)
+                                .expireAfterWrite(Duration.ofMinutes(10))
+                                .expireAfterAccess(Duration.ofMinutes(5))
+                                .build()),
+                new CaffeineCache("readingInputValues",
+                        Caffeine.newBuilder()
+                                .maximumSize(1000)
+                                .expireAfterWrite(Duration.ofMinutes(15))
+                                .expireAfterAccess(Duration.ofMinutes(8))
+                                .build()),
+                new CaffeineCache("multiInstrumentReadings",
+                        Caffeine.newBuilder()
+                                .maximumSize(300)
+                                .expireAfterWrite(Duration.ofMinutes(5))
+                                .expireAfterAccess(Duration.ofMinutes(2))
+                                .build())
+        ));
+        return cacheManager;
+    }
 }

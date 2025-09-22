@@ -3,6 +3,7 @@ package com.geosegbar.infra.reading.persistence.jpa;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -149,4 +150,52 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             @Param("instrumentIds") List<Long> instrumentIds,
             @Param("date") LocalDate date,
             @Param("hour") LocalTime hour);
+
+    @EntityGraph(attributePaths = {"user", "instrument", "output", "inputValues"})
+    @Query("SELECT r FROM ReadingEntity r WHERE r.instrument.id = :instrumentId "
+            + "AND r.active = true ORDER BY r.date DESC, r.hour DESC")
+    List<ReadingEntity> findLatestReadingsByInstrumentId(
+            @Param("instrumentId") Long instrumentId,
+            Pageable pageable);
+
+    @Query("SELECT DISTINCT o.instrument.id FROM OutputEntity o WHERE o.id IN :outputIds")
+    Set<Long> findInstrumentIdsByOutputIds(@Param("outputIds") List<Long> outputIds);
+
+    @Query(value = "SELECT r.id FROM reading r WHERE r.instrument_id = :instrumentId "
+            + "AND r.active = true ORDER BY r.date DESC, r.hour DESC LIMIT :limit",
+            nativeQuery = true)
+    List<Long> findLatestReadingIdsByInstrumentId(
+            @Param("instrumentId") Long instrumentId,
+            @Param("limit") int limit);
+
+    @Query(value = "SELECT r.id FROM reading r WHERE r.instrument_id = :instrumentId "
+            + "AND r.date >= :startDate "
+            + "AND r.active = true ORDER BY r.date DESC, r.hour DESC LIMIT :limit",
+            nativeQuery = true)
+    List<Long> findLatestReadingIdsByInstrumentIdAndStartDate(
+            @Param("instrumentId") Long instrumentId,
+            @Param("startDate") LocalDate startDate,
+            @Param("limit") int limit);
+
+    @Query(value = "SELECT r.id FROM reading r WHERE r.instrument_id = :instrumentId "
+            + "AND r.date <= :endDate "
+            + "AND r.active = true ORDER BY r.date DESC, r.hour DESC LIMIT :limit",
+            nativeQuery = true)
+    List<Long> findLatestReadingIdsByInstrumentIdAndEndDate(
+            @Param("instrumentId") Long instrumentId,
+            @Param("endDate") LocalDate endDate,
+            @Param("limit") int limit);
+
+    @Query(value = "SELECT r.id FROM reading r WHERE r.instrument_id = :instrumentId "
+            + "AND r.date >= :startDate AND r.date <= :endDate "
+            + "AND r.active = true ORDER BY r.date DESC, r.hour DESC LIMIT :limit",
+            nativeQuery = true)
+    List<Long> findLatestReadingIdsByInstrumentIdAndDateRange(
+            @Param("instrumentId") Long instrumentId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("limit") int limit);
+
+    @EntityGraph(attributePaths = {"user", "instrument", "output", "inputValues"})
+    List<ReadingEntity> findByIdIn(List<Long> ids);
 }

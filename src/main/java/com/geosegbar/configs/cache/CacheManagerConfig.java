@@ -396,6 +396,12 @@ public class CacheManagerConfig {
                                 .maximumSize(300)
                                 .expireAfterWrite(Duration.ofMinutes(5))
                                 .expireAfterAccess(Duration.ofMinutes(2))
+                                .build()),
+                new CaffeineCache("clientInstrumentLatestGroupedReadings",
+                        Caffeine.newBuilder()
+                                .maximumSize(200)
+                                .expireAfterWrite(Duration.ofMinutes(10))
+                                .expireAfterAccess(Duration.ofMinutes(5))
                                 .build())
         ));
         return cacheManager;

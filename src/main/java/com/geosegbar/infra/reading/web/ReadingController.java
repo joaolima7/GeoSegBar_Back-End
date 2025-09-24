@@ -22,6 +22,7 @@ import com.geosegbar.common.enums.LimitStatusEnum;
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.infra.reading.dtos.BulkToggleActiveRequestDTO;
 import com.geosegbar.infra.reading.dtos.BulkToggleActiveResponseDTO;
+import com.geosegbar.infra.reading.dtos.InstrumentGroupedReadingsDTO;
 import com.geosegbar.infra.reading.dtos.InstrumentLimitStatusDTO;
 import com.geosegbar.infra.reading.dtos.InstrumentReadingsDTO.MultiInstrumentReadingsResponseDTO;
 import com.geosegbar.infra.reading.dtos.PagedReadingResponseDTO;
@@ -130,6 +131,25 @@ public class ReadingController {
                 = readingService.findGroupedReadingsFlatByMultipleInstruments(instrumentIds, pageable);
 
         return ResponseEntity.ok(WebResponseEntity.success(result, "Leituras agrupadas obtidas com sucesso!"));
+    }
+
+    @GetMapping("/client/{clientId}/latest-grouped")
+    public ResponseEntity<WebResponseEntity<List<InstrumentGroupedReadingsDTO>>> getLatestGroupedReadingsByClientId(
+            @PathVariable Long clientId,
+            @RequestParam(defaultValue = "3") int limit) {
+
+        if (limit <= 0 || limit > 10) {
+            return ResponseEntity.badRequest().body(
+                    WebResponseEntity.error("O número de leituras por instrumento deve estar entre 1 e 10")
+            );
+        }
+
+        List<InstrumentGroupedReadingsDTO> result = readingService.findLatestGroupedReadingsByClientId(clientId, limit);
+
+        return ResponseEntity.ok(WebResponseEntity.success(
+                result,
+                String.format("Últimas %d leituras agrupadas obtidas com sucesso para os instrumentos do cliente", limit)
+        ));
     }
 
     @GetMapping("/latest")

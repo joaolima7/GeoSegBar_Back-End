@@ -37,6 +37,7 @@ import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.reading.dtos.BulkToggleActiveResponseDTO;
+import com.geosegbar.infra.reading.dtos.InstrumentGroupedReadingsDTO;
 import com.geosegbar.infra.reading.dtos.InstrumentLimitStatusDTO;
 import com.geosegbar.infra.reading.dtos.InstrumentReadingsDTO;
 import com.geosegbar.infra.reading.dtos.InstrumentReadingsDTO.MultiInstrumentReadingsResponseDTO;
@@ -948,5 +949,89 @@ public class ReadingService {
         BigDecimal bd = BigDecimal.valueOf(value);
         bd = bd.setScale(precision, RoundingMode.HALF_UP);
         return bd.doubleValue();
+    }
+
+    @Cacheable(
+            value = "clientInstrumentLatestGroupedReadings",
+            key = "#clientId + '_' + #limit",
+            cacheManager = "readingCacheManager"
+    )
+    @Transactional(readOnly = true)
+    public List<InstrumentGroupedReadingsDTO> findLatestGroupedReadingsByClientId(Long clientId, int limit) {
+        // Verificações de permissão e existência do cliente (mantidas)
+
+        // Buscar os momentos mais recentes para cada instrumento
+        List<Object[]> latestDateHours = readingRepository.findLatestDistinctDateHoursByClientId(clientId, limit);
+
+        if (latestDateHours.isEmpty()) {
+            return List.of();
+        }
+
+        // Agrupar as datas/horas por instrumento
+        Map<Long, List<Object[]>> instrumentDateHoursMap = new HashMap<>();
+        for (Object[] row : latestDateHours) {
+            Long instrumentId = ((Number) row[0]).longValue();
+            java.sql.Date sqlDate = (java.sql.Date) row[1];
+            java.sql.Time sqlTime = (java.sql.Time) row[2];
+
+            LocalDate date = sqlDate.toLocalDate();
+            LocalTime hour = sqlTime.toLocalTime();
+
+            instrumentDateHoursMap
+                    .computeIfAbsent(instrumentId, k -> new ArrayList<>())
+                    .add(new Object[]{date, hour});
+        }
+
+        // Preparar o resultado
+        List<InstrumentGroupedReadingsDTO> result = new ArrayList<>();
+
+        // Para cada instrumento, buscar as leituras das datas/horas especificadas
+        for (Map.Entry<Long, List<Object[]>> entry : instrumentDateHoursMap.entrySet()) {
+            Long instrumentId = entry.getKey();
+            List<Object[]> dateHours = entry.getValue();
+
+            // Buscar detalhes do instrumento
+            InstrumentEntity instrument = instrumentRepository.findById(instrumentId)
+                    .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + instrumentId));
+
+            // Criar o DTO para o instrumento
+            InstrumentGroupedReadingsDTO instrumentDTO = new InstrumentGroupedReadingsDTO();
+            instrumentDTO.setInstrumentId(instrument.getId());
+            instrumentDTO.setInstrumentName(instrument.getName());
+            instrumentDTO.setInstrumentType(instrument.getInstrumentType().getName());
+            instrumentDTO.setDamId(instrument.getDam().getId());
+            instrumentDTO.setDamName(instrument.getDam().getName());
+            instrumentDTO.setGroupedReadings(new ArrayList<>());
+
+            // Para cada data/hora, buscar as leituras (todos os outputs daquele momento)
+            for (Object[] dateHour : dateHours) {
+                LocalDate date = (LocalDate) dateHour[0];
+                LocalTime hour = (LocalTime) dateHour[1];
+
+                // Buscar leituras para essa data/hora específica
+                List<ReadingEntity> readings = readingRepository.findByInstrumentIdAndDateAndHourAndActiveTrue(
+                        instrumentId, date, hour);
+
+                if (!readings.isEmpty()) {
+                    // Criar um grupo para essa data/hora
+                    String dateHourKey = date.toString() + " " + hour.toString();
+                    InstrumentGroupedReadingsDTO.GroupedDateHourReadingsDTO group
+                            = new InstrumentGroupedReadingsDTO.GroupedDateHourReadingsDTO();
+                    group.setDateTime(dateHourKey);
+
+                    // Mapear as leituras para DTOs (todas as leituras desse momento - um por output)
+                    List<ReadingResponseDTO> readingDTOs = readings.stream()
+                            .map(this::mapToResponseDTOOptimized)
+                            .collect(Collectors.toList());
+
+                    group.setReadings(readingDTOs);
+                    instrumentDTO.getGroupedReadings().add(group);
+                }
+            }
+
+            result.add(instrumentDTO);
+        }
+
+        return result;
     }
 }

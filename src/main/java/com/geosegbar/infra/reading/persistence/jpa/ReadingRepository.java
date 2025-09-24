@@ -198,4 +198,27 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
 
     @EntityGraph(attributePaths = {"user", "instrument", "output", "inputValues"})
     List<ReadingEntity> findByIdIn(List<Long> ids);
+
+    @Query(value = """
+    WITH instrument_ids AS (
+        SELECT DISTINCT i.id 
+        FROM instrument i
+        JOIN dam d ON i.dam_id = d.id
+        WHERE d.client_id = :clientId
+        AND i.active = true
+    ),
+    distinct_date_hours AS (
+        SELECT r.instrument_id, r.date, r.hour,
+               ROW_NUMBER() OVER (PARTITION BY r.instrument_id ORDER BY r.date DESC, r.hour DESC) as row_num
+        FROM reading r
+        JOIN instrument_ids ii ON r.instrument_id = ii.id
+        WHERE r.active = true
+        GROUP BY r.instrument_id, r.date, r.hour
+    )
+    SELECT instrument_id, date, hour
+    FROM distinct_date_hours
+    WHERE row_num <= :limit
+    ORDER BY instrument_id, row_num
+    """, nativeQuery = true)
+    List<Object[]> findLatestDistinctDateHoursByClientId(@Param("clientId") Long clientId, @Param("limit") int limit);
 }

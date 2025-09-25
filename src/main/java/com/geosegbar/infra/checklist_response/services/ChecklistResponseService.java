@@ -16,12 +16,14 @@ import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.AnswerEntity;
 import com.geosegbar.entities.ChecklistResponseEntity;
+import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.QuestionEntity;
 import com.geosegbar.entities.QuestionnaireResponseEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseDetailDTO;
+import com.geosegbar.infra.checklist_response.dtos.ClientDetailedChecklistResponsesDTO;
 import com.geosegbar.infra.checklist_response.dtos.DamInfoDTO;
 import com.geosegbar.infra.checklist_response.dtos.DamLastChecklistDTO;
 import com.geosegbar.infra.checklist_response.dtos.OptionInfoDTO;
@@ -30,6 +32,7 @@ import com.geosegbar.infra.checklist_response.dtos.PhotoInfoDTO;
 import com.geosegbar.infra.checklist_response.dtos.QuestionWithAnswerDTO;
 import com.geosegbar.infra.checklist_response.dtos.TemplateWithAnswersDTO;
 import com.geosegbar.infra.checklist_response.persistence.jpa.ChecklistResponseRepository;
+import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.services.DamService;
 import com.geosegbar.infra.questionnaire_response.persistence.jpa.QuestionnaireResponseRepository;
 
@@ -43,6 +46,7 @@ public class ChecklistResponseService {
     private final ChecklistResponseRepository checklistResponseRepository;
     private final QuestionnaireResponseRepository questionnaireResponseRepository;
     private final DamService damService;
+    private final ClientRepository clientRepository;
 
     @Cacheable(value = "allChecklistResponses", key = "'all'", cacheManager = "checklistCacheManager")
     public List<ChecklistResponseEntity> findAll() {
@@ -347,5 +351,62 @@ public class ChecklistResponseService {
             }
         }
         return result;
+    }
+
+    @Cacheable(
+            value = "clientLatestDetailedChecklistResponses",
+            key = "#clientId + '_' + #limit",
+            cacheManager = "checklistCacheManager"
+    )
+    public ClientDetailedChecklistResponsesDTO findLatestDetailedChecklistResponsesByClientId(Long clientId, int limit) {
+        // Verificar se o cliente existe
+        ClientEntity client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + clientId));
+
+        // Obter os IDs das respostas mais recentes de checklist
+        List<Long> responseIds = checklistResponseRepository.findLatestChecklistResponseIdsByClientIdAndLimit(clientId, limit);
+
+        if (responseIds.isEmpty()) {
+            return new ClientDetailedChecklistResponsesDTO(clientId, client.getName(), List.of());
+        }
+
+        // Buscar as respostas detalhadas - aqui está a principal mudança
+        List<ChecklistResponseEntity> responses = new ArrayList<>();
+        for (Long id : responseIds) {
+            // Usando o método findByIdWithFullDetails para garantir que todos os relacionamentos sejam carregados
+            ChecklistResponseEntity response = checklistResponseRepository.findByIdWithFullDetails(id)
+                    .orElse(null);
+            if (response != null) {
+                responses.add(response);
+            }
+        }
+
+        // Agrupar por checklist
+        Map<Long, ClientDetailedChecklistResponsesDTO.ChecklistWithDetailedResponsesDTO> checklistMap = new HashMap<>();
+
+        for (ChecklistResponseEntity response : responses) {
+            Long checklistId = response.getChecklistId();
+
+            ClientDetailedChecklistResponsesDTO.ChecklistWithDetailedResponsesDTO checklistDto
+                    = checklistMap.computeIfAbsent(
+                            checklistId,
+                            id -> new ClientDetailedChecklistResponsesDTO.ChecklistWithDetailedResponsesDTO(
+                                    checklistId,
+                                    response.getChecklistName(),
+                                    new ArrayList<>()
+                            )
+                    );
+
+            // Converter para DTO detalhado usando o método existente
+            ChecklistResponseDetailDTO detailedDto = convertToDetailDto(response);
+            checklistDto.getLatestResponses().add(detailedDto);
+        }
+
+        // Criar o resultado final
+        return new ClientDetailedChecklistResponsesDTO(
+                clientId,
+                client.getName(),
+                new ArrayList<>(checklistMap.values())
+        );
     }
 }

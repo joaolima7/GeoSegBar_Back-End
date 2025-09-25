@@ -91,4 +91,32 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
     @EntityGraph(attributePaths = {"user", "dam"})
     Optional<ChecklistResponseEntity> findLatestByClientIdAndDamId(
             @Param("clientId") Long clientId, @Param("damId") Long damId);
+
+    @Query(value = """
+    WITH client_dams AS (
+        SELECT d.id AS dam_id
+        FROM dam d
+        WHERE d.client_id = :clientId
+    ),
+    unique_checklists AS (
+        SELECT DISTINCT cr.checklist_id, cr.checklist_name
+        FROM checklist_responses cr
+        JOIN client_dams cd ON cr.dam_id = cd.dam_id
+    ),
+    latest_responses AS (
+        SELECT cr.id, cr.checklist_id, cr.checklist_name,
+               ROW_NUMBER() OVER (PARTITION BY cr.checklist_id ORDER BY cr.created_at DESC) as row_num
+        FROM checklist_responses cr
+        JOIN client_dams cd ON cr.dam_id = cd.dam_id
+    )
+    SELECT id FROM latest_responses
+    WHERE row_num <= :limit
+    ORDER BY checklist_id, row_num
+    """, nativeQuery = true)
+    List<Long> findLatestChecklistResponseIdsByClientIdAndLimit(
+            @Param("clientId") Long clientId,
+            @Param("limit") int limit);
+
+    @EntityGraph(attributePaths = {"user", "dam"})
+    List<ChecklistResponseEntity> findByIdIn(Collection<Long> ids);
 }

@@ -265,6 +265,12 @@ public class CacheManagerConfig {
                                 .maximumSize(50)
                                 .expireAfterWrite(Duration.ofMinutes(12))
                                 .expireAfterAccess(Duration.ofMinutes(6))
+                                .build()),
+                new CaffeineCache("clientLatestDetailedChecklistResponses",
+                        Caffeine.newBuilder()
+                                .maximumSize(100)
+                                .expireAfterWrite(Duration.ofMinutes(15))
+                                .expireAfterAccess(Duration.ofMinutes(10))
                                 .build())
         ));
 

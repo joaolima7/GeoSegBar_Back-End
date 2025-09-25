@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.ChecklistResponseEntity;
 import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseDetailDTO;
+import com.geosegbar.infra.checklist_response.dtos.ClientDetailedChecklistResponsesDTO;
 import com.geosegbar.infra.checklist_response.dtos.DamLastChecklistDTO;
 import com.geosegbar.infra.checklist_response.dtos.PagedChecklistResponseDTO;
 import com.geosegbar.infra.checklist_response.services.ChecklistResponseService;
@@ -247,5 +248,24 @@ public class ChecklistResponseController {
         );
 
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/client/{clientId}/latest-detailed-responses")
+    public ResponseEntity<WebResponseEntity<ClientDetailedChecklistResponsesDTO>> getLatestDetailedChecklistResponsesByClientId(
+            @PathVariable Long clientId,
+            @RequestParam(defaultValue = "3") int limit) {
+
+        if (limit <= 0 || limit > 10) {
+            return ResponseEntity.badRequest().body(
+                    WebResponseEntity.error("O número de respostas por checklist deve estar entre 1 e 10")
+            );
+        }
+
+        ClientDetailedChecklistResponsesDTO result = checklistResponseService.findLatestDetailedChecklistResponsesByClientId(clientId, limit);
+
+        return ResponseEntity.ok(WebResponseEntity.success(
+                result,
+                String.format("Últimas %d respostas detalhadas obtidas com sucesso para os checklists do cliente", limit)
+        ));
     }
 }

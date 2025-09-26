@@ -869,6 +869,7 @@ public class ReadingService {
         dto.setOutputName(reading.getOutput().getName());
         dto.setOutputAcronym(reading.getOutput().getAcronym());
         dto.setComment(reading.getComment());
+        dto.setActive(reading.getActive());
 
         if (reading.getUser() != null) {
             dto.setCreatedBy(new ReadingResponseDTO.UserInfoDTO(
@@ -885,18 +886,33 @@ public class ReadingService {
 
     @Cacheable(
             value = "groupedReadings",
-            key = "#instrumentId + '_' + #pageable.pageNumber + '_' + #pageable.pageSize",
+            key = "#instrumentId + '_' + #active + '_' + #pageable.pageNumber + '_' + #pageable.pageSize",
             cacheManager = "readingCacheManager"
     )
-    public PagedReadingResponseDTO<ReadingResponseDTO> findGroupedReadingsFlatByInstrument(Long instrumentId, Pageable pageable) {
-        Page<Object[]> dateHourPage = readingRepository.findDistinctDateHourByInstrumentId(instrumentId, pageable);
+    public PagedReadingResponseDTO<ReadingResponseDTO> findGroupedReadingsFlatByInstrument(
+            Long instrumentId, Boolean active, Pageable pageable) {
+
+        // Verificar permissões
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getViewRead()) {
+                throw new UnauthorizedException("Usuário não tem permissão para visualizar leituras");
+            }
+        }
+
+        Page<Object[]> dateHourPage = readingRepository.findDistinctDateHourByInstrumentIdAndActive(instrumentId, active, pageable);
 
         List<ReadingResponseDTO> allReadings = new ArrayList<>();
         for (Object[] dh : dateHourPage.getContent()) {
             LocalDate date = (LocalDate) dh[0];
             LocalTime hour = (LocalTime) dh[1];
-            List<ReadingEntity> readings = readingRepository.findByInstrumentIdAndDateAndHourAndActiveTrue(instrumentId, date, hour);
-            List<ReadingResponseDTO> dtos = readings.stream().map(this::mapToResponseDTO).collect(Collectors.toList());
+            List<ReadingEntity> readings = readingRepository.findByInstrumentIdAndDateAndHourAndActive(
+                    instrumentId, date, hour, active);
+
+            List<ReadingResponseDTO> dtos = readings.stream()
+                    .map(this::mapToResponseDTOOptimized)
+                    .collect(Collectors.toList());
+
             allReadings.addAll(dtos);
         }
 
@@ -924,6 +940,7 @@ public class ReadingService {
         dto.setOutputName(reading.getOutput().getName());
         dto.setOutputAcronym(reading.getOutput().getAcronym());
         dto.setComment(reading.getComment());
+        dto.setActive(reading.getActive());
 
         if (reading.getUser() != null) {
             dto.setCreatedBy(new ReadingResponseDTO.UserInfoDTO(

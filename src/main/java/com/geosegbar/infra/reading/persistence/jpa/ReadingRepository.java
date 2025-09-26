@@ -51,8 +51,23 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
 
     List<ReadingEntity> findByInstrumentIdAndLimitStatusOrderByDateDescHourDesc(Long instrumentId, LimitStatusEnum limitStatus);
 
-    @Query("SELECT r.date, r.hour FROM ReadingEntity r WHERE r.instrument.id = :instrumentId AND r.active = true GROUP BY r.date, r.hour ORDER BY r.date DESC, r.hour DESC")
-    Page<Object[]> findDistinctDateHourByInstrumentId(@Param("instrumentId") Long instrumentId, Pageable pageable);
+    @Query("SELECT r.date, r.hour FROM ReadingEntity r WHERE r.instrument.id = :instrumentId "
+            + "AND (:active IS NULL OR r.active = :active) "
+            + "GROUP BY r.date, r.hour ORDER BY r.date DESC, r.hour DESC")
+    Page<Object[]> findDistinctDateHourByInstrumentIdAndActive(
+            @Param("instrumentId") Long instrumentId,
+            @Param("active") Boolean active,
+            Pageable pageable);
+
+    @EntityGraph(attributePaths = {"user", "instrument", "output", "inputValues"})
+    @Query("SELECT r FROM ReadingEntity r WHERE r.instrument.id = :instrumentId "
+            + "AND r.date = :date AND r.hour = :hour "
+            + "AND (:active IS NULL OR r.active = :active)")
+    List<ReadingEntity> findByInstrumentIdAndDateAndHourAndActive(
+            @Param("instrumentId") Long instrumentId,
+            @Param("date") LocalDate date,
+            @Param("hour") LocalTime hour,
+            @Param("active") Boolean active);
 
     List<ReadingEntity> findByInstrumentIdAndDateAndHourAndActiveTrue(Long instrumentId, LocalDate date, LocalTime hour);
 

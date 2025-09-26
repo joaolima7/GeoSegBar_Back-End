@@ -29,6 +29,7 @@ public class ReadingResponseDTO {
     private List<ReadingInputValueDTO> inputValues;
     private UserInfoDTO createdBy;
     private String comment;
+    private Boolean active;
 
     @Data
     @NoArgsConstructor

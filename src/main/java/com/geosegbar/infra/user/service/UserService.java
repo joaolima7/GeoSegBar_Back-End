@@ -1,11 +1,11 @@
 package com.geosegbar.infra.user.service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import org.hibernate.Hibernate;
 import org.springframework.cache.annotation.CacheEvict;
@@ -46,7 +46,6 @@ import com.geosegbar.infra.permissions.routine_inspection_permission.services.Ro
 import com.geosegbar.infra.roles.persistence.RoleRepository;
 import com.geosegbar.infra.sex.persistence.jpa.SexRepository;
 import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
-import com.geosegbar.infra.user.dto.ClientSummaryDTO;
 import com.geosegbar.infra.user.dto.LoginRequestDTO;
 import com.geosegbar.infra.user.dto.LoginResponseDTO;
 import com.geosegbar.infra.user.dto.UserClientAssociationDTO;
@@ -490,12 +489,8 @@ public class UserService {
                 && LocalDateTime.now().isBefore(user.getTokenExpiryDate())
                 && tokenService.isTokenValid(user.getLastToken())) {
 
-            List<ClientSummaryDTO> clientDTOs = user.getClients().stream()
-                    .map(client -> new ClientSummaryDTO(
-                    client.getId(),
-                    client.getName(),
-                    client.getLogoPath()))
-                    .collect(Collectors.toList());
+            // Usar a lista de clientes diretamente, sem converter para DTO
+            List<ClientEntity> clients = new ArrayList<>(user.getClients());
 
             return new LoginResponseDTO(
                     user.getId(),
@@ -506,7 +501,7 @@ public class UserService {
                     user.getRole().getName(),
                     user.getIsFirstAccess(),
                     user.getLastToken(),
-                    clientDTOs
+                    clients
             );
         }
 
@@ -549,12 +544,7 @@ public class UserService {
 
         userRepository.save(user);
 
-        List<ClientSummaryDTO> clientDTOs = user.getClients().stream()
-                .map(client -> new ClientSummaryDTO(
-                client.getId(),
-                client.getName(),
-                client.getLogoPath()))
-                .collect(Collectors.toList());
+        List<ClientEntity> clients = new ArrayList<>(user.getClients());
 
         return new LoginResponseDTO(
                 user.getId(),
@@ -565,7 +555,7 @@ public class UserService {
                 user.getRole().getName(),
                 user.getIsFirstAccess(),
                 token,
-                clientDTOs
+                clients
         );
     }
 

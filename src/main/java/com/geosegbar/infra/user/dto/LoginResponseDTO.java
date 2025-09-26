@@ -3,6 +3,7 @@ package com.geosegbar.infra.user.dto;
 import java.util.List;
 
 import com.geosegbar.common.enums.RoleEnum;
+import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.SexEntity;
 
 public record LoginResponseDTO(
@@ -14,7 +15,7 @@ public record LoginResponseDTO(
         RoleEnum role,
         Boolean isFirstAccess,
         String token,
-        List<ClientSummaryDTO> clients
+        List<ClientEntity> clients
         ) {
 
 }

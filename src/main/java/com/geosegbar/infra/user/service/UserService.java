@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.hibernate.Hibernate;
 import org.springframework.cache.annotation.CacheEvict;
@@ -45,6 +46,7 @@ import com.geosegbar.infra.permissions.routine_inspection_permission.services.Ro
 import com.geosegbar.infra.roles.persistence.RoleRepository;
 import com.geosegbar.infra.sex.persistence.jpa.SexRepository;
 import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
+import com.geosegbar.infra.user.dto.ClientSummaryDTO;
 import com.geosegbar.infra.user.dto.LoginRequestDTO;
 import com.geosegbar.infra.user.dto.LoginResponseDTO;
 import com.geosegbar.infra.user.dto.UserClientAssociationDTO;
@@ -89,7 +91,7 @@ public class UserService {
         String systemUserName = "SISTEMA";
 
         try {
-            // Verificar se já existe um usuário com este email
+
             Optional<UserEntity> existingUser = userRepository.findByEmail(systemUserEmail);
 
             if (existingUser.isPresent()) {
@@ -97,7 +99,6 @@ public class UserService {
                 return;
             }
 
-            // Verificar se já existe um usuário com o nome SISTEMA
             boolean systemNameExists = userRepository.existsByName(systemUserName);
 
             if (systemNameExists) {
@@ -105,32 +106,26 @@ public class UserService {
                 return;
             }
 
-            // Criar o usuário do sistema
             UserEntity systemUser = new UserEntity();
             systemUser.setName(systemUserName);
             systemUser.setEmail(systemUserEmail);
 
-            // Gerar uma senha forte aleatória, já que este usuário não fará login normal
             String randomPassword = GenerateRandomPassword.execute();
             systemUser.setPassword(passwordEncoder.encode(randomPassword));
 
-            // Obter o status ACTIVE
             StatusEntity activeStatus = statusRepository.findByStatus(StatusEnum.ACTIVE)
                     .orElseThrow(() -> new NotFoundException("Status ACTIVE não encontrado no sistema!"));
             systemUser.setStatus(activeStatus);
 
-            // Obter a role ADMIN (para não ter problemas de permissão)
             RoleEntity adminRole = roleRepository.findByName(RoleEnum.ADMIN)
                     .orElseThrow(() -> new NotFoundException("Role ADMIN não encontrada no sistema!"));
             systemUser.setRole(adminRole);
 
-            // Definir sexo (obrigatório)
             SexEntity maleOrFirstSex = sexRepository.findAll().stream()
                     .findFirst()
                     .orElseThrow(() -> new NotFoundException("Nenhum sexo encontrado no sistema!"));
             systemUser.setSex(maleOrFirstSex);
 
-            // Salvar o usuário
             UserEntity savedUser = userRepository.save(systemUser);
             log.info("Usuário do sistema criado com ID: {}", savedUser.getId());
 
@@ -226,7 +221,6 @@ public class UserService {
             throw new DuplicateResourceException("Já existe um usuário com o telefone informado!");
         }
 
-        // Validações e configurações existentes...
         if (userEntity.getSex() == null || userEntity.getSex().getId() == null) {
             throw new InvalidInputException("Sexo é obrigatório!");
         }
@@ -310,7 +304,6 @@ public class UserService {
             }
         }
 
-        // Validações existentes...
         if (userDTO.getSex() == null || userDTO.getSex().getId() == null) {
             throw new InvalidInputException("Sexo é obrigatório!");
         }
@@ -449,7 +442,6 @@ public class UserService {
     public List<UserEntity> findAll() {
         List<UserEntity> users = userRepository.findAllWithBasicDetails();
 
-        // Força inicialização das coleções para evitar N+1 no cache
         users.forEach(user -> {
             if (!Hibernate.isInitialized(user.getClients())) {
                 user.getClients().size();
@@ -470,12 +462,10 @@ public class UserService {
         return userRepository.existsByEmailAndIdNot(email, id);
     }
 
-    // Método interno para buscar usuário com todos os detalhes (sem cache)
     private UserEntity findEntityByIdWithAllDetails(Long id) {
         UserEntity user = userRepository.findByIdWithAllDetails(id)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
 
-        // Proteção contra N+1: garantir que todas as coleções estejam inicializadas
         if (!Hibernate.isInitialized(user.getClients())) {
             user.getClients().size();
         }
@@ -483,10 +473,9 @@ public class UserService {
         return user;
     }
 
-    // Métodos de login e autenticação (sem alterações)
     @Transactional
     public Object initiateLogin(LoginRequestDTO userDTO) {
-        UserEntity user = userRepository.findByEmail(userDTO.email())
+        UserEntity user = userRepository.findByEmailWithClientsAndDetails(userDTO.email())
                 .orElseThrow(() -> new NotFoundException("Credenciais incorretas!"));
 
         if (user.getStatus().getStatus() == StatusEnum.DISABLED) {
@@ -501,6 +490,13 @@ public class UserService {
                 && LocalDateTime.now().isBefore(user.getTokenExpiryDate())
                 && tokenService.isTokenValid(user.getLastToken())) {
 
+            List<ClientSummaryDTO> clientDTOs = user.getClients().stream()
+                    .map(client -> new ClientSummaryDTO(
+                    client.getId(),
+                    client.getName(),
+                    client.getLogoPath()))
+                    .collect(Collectors.toList());
+
             return new LoginResponseDTO(
                     user.getId(),
                     user.getName(),
@@ -509,7 +505,8 @@ public class UserService {
                     user.getSex(),
                     user.getRole().getName(),
                     user.getIsFirstAccess(),
-                    user.getLastToken()
+                    user.getLastToken(),
+                    clientDTOs
             );
         }
 
@@ -530,7 +527,7 @@ public class UserService {
 
     @Transactional
     public LoginResponseDTO verifyCodeAndLogin(VerifyCodeRequestDTO verifyRequest) {
-        UserEntity user = userRepository.findByEmail(verifyRequest.getEmail())
+        UserEntity user = userRepository.findByEmailWithClientsAndDetails(verifyRequest.getEmail())
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
 
         VerificationCodeEntity codeEntity = verificationCodeRepository
@@ -552,6 +549,13 @@ public class UserService {
 
         userRepository.save(user);
 
+        List<ClientSummaryDTO> clientDTOs = user.getClients().stream()
+                .map(client -> new ClientSummaryDTO(
+                client.getId(),
+                client.getName(),
+                client.getLogoPath()))
+                .collect(Collectors.toList());
+
         return new LoginResponseDTO(
                 user.getId(),
                 user.getName(),
@@ -560,7 +564,8 @@ public class UserService {
                 user.getSex(),
                 user.getRole().getName(),
                 user.getIsFirstAccess(),
-                token
+                token,
+                clientDTOs
         );
     }
 
@@ -636,7 +641,6 @@ public class UserService {
         return true;
     }
 
-    // Métodos auxiliares privados mantidos sem alterações
     private void handleRoleChange(UserEntity user, RoleEnum oldRole, RoleEnum newRole) {
         if (oldRole == RoleEnum.ADMIN && newRole == RoleEnum.COLLABORATOR) {
 

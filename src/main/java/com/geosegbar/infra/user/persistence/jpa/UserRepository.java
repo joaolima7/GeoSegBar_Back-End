@@ -88,7 +88,6 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
             + "ORDER BY u.id ASC")
     List<UserEntity> findByCreatedByIdWithDetails(@Param("createdById") Long createdById);
 
-    // Métodos existentes mantidos para compatibilidade
     List<UserEntity> findAllByOrderByIdAsc();
 
     Optional<UserEntity> findByEmail(String email);
@@ -104,6 +103,15 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
             @Param("statusId") Long statusId);
 
     List<UserEntity> findByCreatedById(Long createdById);
+
+    @QueryHints(
+            @QueryHint(name = "org.hibernate.cacheable", value = "true"))
+    @Query("SELECT u FROM UserEntity u "
+            + "LEFT JOIN FETCH u.clients c "
+            + "LEFT JOIN FETCH u.sex "
+            + "LEFT JOIN FETCH u.role "
+            + "WHERE u.email = :email")
+    Optional<UserEntity> findByEmailWithClientsAndDetails(@Param("email") String email);
 
     boolean existsByName(String name);
 

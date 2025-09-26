@@ -68,10 +68,8 @@ public class InstrumentGraphCustomizationPropertiesService {
         InstrumentGraphPatternEntity pattern = patternService.findById(patternId);
         List<InstrumentGraphCustomizationPropertiesEntity> existingProperties = propertiesRepository.findByPatternId(patternId);
 
-        // Obter a barragem associada ao padrão para validação
         Long damId = pattern.getInstrument().getDam().getId();
 
-        // Verificar se todos os elementos pertencem à mesma barragem
         validateAllElementsBelongToDam(
                 req.getInstrumentIds(),
                 req.getOutputIds(),
@@ -81,7 +79,6 @@ public class InstrumentGraphCustomizationPropertiesService {
                 damId
         );
 
-        // Remover propriedades existentes de instrumentos não mais presentes
         manageInstrumentProperties(pattern, existingProperties,
                 getExistingInstrumentIds(existingProperties),
                 new HashSet<>(req.getInstrumentIds()));
@@ -106,17 +103,16 @@ public class InstrumentGraphCustomizationPropertiesService {
             List<Long> outputIds,
             List<Long> statisticalLimitIds,
             List<Long> deterministicLimitIds,
-            List<Long> constantIds, // Novo parâmetro
+            List<Long> constantIds,
             Long damId) {
 
         if (instrumentIds != null && !instrumentIds.isEmpty()) {
-            // Buscar apenas os IDs de instrumentos que pertencem à barragem correta
+
             List<Long> validInstrumentIds = instrumentRepository.findInstrumentIdsByDamId(damId)
                     .stream()
                     .filter(instrumentIds::contains)
                     .toList();
 
-            // Identificar IDs inválidos (que estão em instrumentIds mas não em validInstrumentIds)
             List<Long> invalidInstrumentIds = instrumentIds.stream()
                     .filter(id -> !validInstrumentIds.contains(id))
                     .toList();
@@ -127,13 +123,12 @@ public class InstrumentGraphCustomizationPropertiesService {
         }
 
         if (outputIds != null && !outputIds.isEmpty()) {
-            // Buscar apenas os IDs de outputs que pertencem a instrumentos da barragem correta
+
             List<Long> validOutputIds = outputRepository.findOutputIdsByInstrumentDamId(damId)
                     .stream()
                     .filter(outputIds::contains)
                     .toList();
 
-            // Identificar IDs inválidos
             List<Long> invalidOutputIds = outputIds.stream()
                     .filter(id -> !validOutputIds.contains(id))
                     .toList();
@@ -144,13 +139,12 @@ public class InstrumentGraphCustomizationPropertiesService {
         }
 
         if (constantIds != null && !constantIds.isEmpty()) {
-            // Buscar apenas os IDs de constantes que pertencem a instrumentos da barragem correta
+
             List<Long> validConstantIds = constantService.findConstantIdsByInstrumentDamId(damId)
                     .stream()
                     .filter(constantIds::contains)
                     .toList();
 
-            // Identificar IDs inválidos
             List<Long> invalidConstantIds = constantIds.stream()
                     .filter(id -> !validConstantIds.contains(id))
                     .toList();
@@ -162,13 +156,12 @@ public class InstrumentGraphCustomizationPropertiesService {
         }
 
         if (statisticalLimitIds != null && !statisticalLimitIds.isEmpty()) {
-            // Buscar apenas os IDs de limites estatísticos associados a outputs de instrumentos da barragem correta
+
             List<Long> validLimitIds = statLimitService.findStatisticalLimitIdsByOutputInstrumentDamId(damId)
                     .stream()
                     .filter(statisticalLimitIds::contains)
                     .toList();
 
-            // Identificar IDs inválidos
             List<Long> invalidLimitIds = statisticalLimitIds.stream()
                     .filter(id -> !validLimitIds.contains(id))
                     .toList();
@@ -179,13 +172,12 @@ public class InstrumentGraphCustomizationPropertiesService {
         }
 
         if (deterministicLimitIds != null && !deterministicLimitIds.isEmpty()) {
-            // Buscar apenas os IDs de limites determinísticos associados a outputs de instrumentos da barragem correta
+
             List<Long> validLimitIds = detLimitService.findDeterministicLimitIdsByOutputInstrumentDamId(damId)
                     .stream()
                     .filter(deterministicLimitIds::contains)
                     .toList();
 
-            // Identificar IDs inválidos
             List<Long> invalidLimitIds = deterministicLimitIds.stream()
                     .filter(id -> !validLimitIds.contains(id))
                     .toList();
@@ -203,7 +195,6 @@ public class InstrumentGraphCustomizationPropertiesService {
         InstrumentGraphCustomizationPropertiesEntity property = propertiesRepository.findById(propertyId)
                 .orElseThrow(() -> new NotFoundException("Propriedade não encontrada com ID: " + propertyId));
 
-        // Sempre atualizar os outros campos
         property.setName(req.getName());
         property.setFillColor(req.getFillColor());
         property.setLineType(req.getLineType());
@@ -240,7 +231,6 @@ public class InstrumentGraphCustomizationPropertiesService {
         List<PropertyResponseDTO> updatedProperties = new ArrayList<>();
         List<UpdatePropertiesBatchResponseDTO.PropertyUpdateError> errors = new ArrayList<>();
 
-        // Manter um registro dos tipos de valores que estão sendo atualizados para validar duplicidades
         Map<Long, Set<LimitValueTypeEnum>> statisticalLimitValueTypes = new HashMap<>();
         Map<Long, Set<LimitValueTypeEnum>> deterministicLimitValueTypes = new HashMap<>();
 
@@ -252,7 +242,6 @@ public class InstrumentGraphCustomizationPropertiesService {
                     throw new NotFoundException("Propriedade não encontrada ou não pertence ao padrão: " + item.getId());
                 }
 
-                // Verificar se há outra propriedade com o mesmo tipo de valor no mesmo lote
                 if (item.getLimitValueType() != null && !item.getLimitValueType().equals(property.getLimitValueType())) {
                     if (property.getStatisticalLimit() != null) {
                         Long limitId = property.getStatisticalLimit().getId();
@@ -260,12 +249,10 @@ public class InstrumentGraphCustomizationPropertiesService {
                             statisticalLimitValueTypes.put(limitId, new HashSet<>());
                         }
 
-                        // Verificar duplicidade no lote atual
                         if (statisticalLimitValueTypes.get(limitId).contains(item.getLimitValueType())) {
                             throw new InvalidInputException("Tipo de valor duplicado para limite estatístico: " + limitId);
                         }
 
-                        // Verificar duplicidade no banco (exceto a própria propriedade)
                         validateUniqueValueType(patternId, limitId, null, item.getLimitValueType(), property.getId());
 
                         statisticalLimitValueTypes.get(limitId).add(item.getLimitValueType());
@@ -275,12 +262,10 @@ public class InstrumentGraphCustomizationPropertiesService {
                             deterministicLimitValueTypes.put(limitId, new HashSet<>());
                         }
 
-                        // Verificar duplicidade no lote atual
                         if (deterministicLimitValueTypes.get(limitId).contains(item.getLimitValueType())) {
                             throw new InvalidInputException("Tipo de valor duplicado para limite determinístico: " + limitId);
                         }
 
-                        // Verificar duplicidade no banco (exceto a própria propriedade)
                         validateUniqueValueType(patternId, null, limitId, item.getLimitValueType(), property.getId());
 
                         deterministicLimitValueTypes.get(limitId).add(item.getLimitValueType());
@@ -349,7 +334,6 @@ public class InstrumentGraphCustomizationPropertiesService {
         return new GraphPropertiesResponseDTO(patternId, propertyDetails);
     }
 
-    // Validação para garantir que não exista outra propriedade com o mesmo tipo de valor para o mesmo limite
     private void validateUniqueValueType(
             Long patternId,
             Long statisticalLimitId,
@@ -388,11 +372,9 @@ public class InstrumentGraphCustomizationPropertiesService {
             List<InstrumentGraphCustomizationPropertiesEntity> existingProperties,
             List<UpdateGraphPropertiesRequestDTO.StatisticalLimitValueReference> references) {
 
-        // Mapear propriedades existentes por limite e tipo de valor
         Map<Long, Map<LimitValueTypeEnum, InstrumentGraphCustomizationPropertiesEntity>> existingLimitProps
                 = mapExistingStatisticalLimitProperties(existingProperties);
 
-        // Mapear referências de entrada por limite e tipo de valor
         Map<Long, Set<LimitValueTypeEnum>> requestedValues = new HashMap<>();
         for (UpdateGraphPropertiesRequestDTO.StatisticalLimitValueReference ref : references) {
             if (!requestedValues.containsKey(ref.getLimitId())) {
@@ -405,18 +387,15 @@ public class InstrumentGraphCustomizationPropertiesService {
 
             requestedValues.get(ref.getLimitId()).add(ref.getValueType());
 
-            // Validar tipo de valor apropriado para limite estatístico
             if (ref.getValueType() != LimitValueTypeEnum.STATISTICAL_LOWER
                     && ref.getValueType() != LimitValueTypeEnum.STATISTICAL_UPPER) {
                 throw new InvalidInputException("Tipo de valor inválido para limite estatístico: " + ref.getValueType());
             }
         }
 
-        // Remover propriedades que não estão mais na solicitação
         for (Long limitId : existingLimitProps.keySet()) {
             Map<LimitValueTypeEnum, InstrumentGraphCustomizationPropertiesEntity> valueProps = existingLimitProps.get(limitId);
 
-            // Se o limite não foi solicitado, remover todas as propriedades
             if (!requestedValues.containsKey(limitId)) {
                 for (InstrumentGraphCustomizationPropertiesEntity prop : valueProps.values()) {
                     propertiesRepository.delete(prop);
@@ -424,7 +403,6 @@ public class InstrumentGraphCustomizationPropertiesService {
                 continue;
             }
 
-            // Para limites solicitados, remover valores não solicitados
             Set<LimitValueTypeEnum> requestedTypesForLimit = requestedValues.get(limitId);
             for (LimitValueTypeEnum valueType : valueProps.keySet()) {
                 if (!requestedTypesForLimit.contains(valueType)) {
@@ -433,13 +411,11 @@ public class InstrumentGraphCustomizationPropertiesService {
             }
         }
 
-        // Adicionar novas propriedades
         for (UpdateGraphPropertiesRequestDTO.StatisticalLimitValueReference ref : references) {
-            // Verificar se a propriedade já existe
+
             boolean exists = existingLimitProps.containsKey(ref.getLimitId())
                     && existingLimitProps.get(ref.getLimitId()).containsKey(ref.getValueType());
 
-            // Se não existe, criar nova propriedade
             if (!exists) {
                 StatisticalLimitEntity statLimit = statLimitService.findById(ref.getLimitId());
                 createCustomizationProperty(pattern, CustomizationTypeEnum.STATISTICAL_LIMIT,
@@ -453,11 +429,9 @@ public class InstrumentGraphCustomizationPropertiesService {
             List<InstrumentGraphCustomizationPropertiesEntity> existingProperties,
             List<UpdateGraphPropertiesRequestDTO.DeterministicLimitValueReference> references) {
 
-        // Mapear propriedades existentes por limite e tipo de valor
         Map<Long, Map<LimitValueTypeEnum, InstrumentGraphCustomizationPropertiesEntity>> existingLimitProps
                 = mapExistingDeterministicLimitProperties(existingProperties);
 
-        // Mapear referências de entrada por limite e tipo de valor
         Map<Long, Set<LimitValueTypeEnum>> requestedValues = new HashMap<>();
         for (UpdateGraphPropertiesRequestDTO.DeterministicLimitValueReference ref : references) {
             if (!requestedValues.containsKey(ref.getLimitId())) {
@@ -470,7 +444,6 @@ public class InstrumentGraphCustomizationPropertiesService {
 
             requestedValues.get(ref.getLimitId()).add(ref.getValueType());
 
-            // Validar tipo de valor apropriado para limite determinístico
             if (ref.getValueType() != LimitValueTypeEnum.DETERMINISTIC_ATTENTION
                     && ref.getValueType() != LimitValueTypeEnum.DETERMINISTIC_ALERT
                     && ref.getValueType() != LimitValueTypeEnum.DETERMINISTIC_EMERGENCY) {
@@ -478,11 +451,9 @@ public class InstrumentGraphCustomizationPropertiesService {
             }
         }
 
-        // Remover propriedades que não estão mais na solicitação
         for (Long limitId : existingLimitProps.keySet()) {
             Map<LimitValueTypeEnum, InstrumentGraphCustomizationPropertiesEntity> valueProps = existingLimitProps.get(limitId);
 
-            // Se o limite não foi solicitado, remover todas as propriedades
             if (!requestedValues.containsKey(limitId)) {
                 for (InstrumentGraphCustomizationPropertiesEntity prop : valueProps.values()) {
                     propertiesRepository.delete(prop);
@@ -490,7 +461,6 @@ public class InstrumentGraphCustomizationPropertiesService {
                 continue;
             }
 
-            // Para limites solicitados, remover valores não solicitados
             Set<LimitValueTypeEnum> requestedTypesForLimit = requestedValues.get(limitId);
             for (LimitValueTypeEnum valueType : valueProps.keySet()) {
                 if (!requestedTypesForLimit.contains(valueType)) {
@@ -499,13 +469,11 @@ public class InstrumentGraphCustomizationPropertiesService {
             }
         }
 
-        // Adicionar novas propriedades
         for (UpdateGraphPropertiesRequestDTO.DeterministicLimitValueReference ref : references) {
-            // Verificar se a propriedade já existe
+
             boolean exists = existingLimitProps.containsKey(ref.getLimitId())
                     && existingLimitProps.get(ref.getLimitId()).containsKey(ref.getValueType());
 
-            // Se não existe, criar nova propriedade
             if (!exists) {
                 DeterministicLimitEntity detLimit = detLimitService.findById(ref.getLimitId());
                 createCustomizationProperty(pattern, CustomizationTypeEnum.DETERMINISTIC_LIMIT,
@@ -578,7 +546,12 @@ public class InstrumentGraphCustomizationPropertiesService {
 
         for (Long idToAdd : idsToAdd) {
             InstrumentEntity instrument = instrumentService.findById(idToAdd);
-            createCustomizationProperty(pattern, CustomizationTypeEnum.INSTRUMENT,
+
+            CustomizationTypeEnum customizationType = Boolean.TRUE.equals(instrument.getIsLinimetricRuler())
+                    ? CustomizationTypeEnum.LINIMETRIC_RULER
+                    : CustomizationTypeEnum.INSTRUMENT;
+
+            createCustomizationProperty(pattern, customizationType,
                     null, null, null, instrument, null, null);
         }
     }
@@ -645,7 +618,7 @@ public class InstrumentGraphCustomizationPropertiesService {
             StatisticalLimitEntity statLimit,
             DeterministicLimitEntity detLimit,
             InstrumentEntity instrument,
-            ConstantEntity constant, // Novo parâmetro
+            ConstantEntity constant,
             LimitValueTypeEnum limitValueType) {
 
         InstrumentGraphCustomizationPropertiesEntity property = new InstrumentGraphCustomizationPropertiesEntity();
@@ -654,15 +627,14 @@ public class InstrumentGraphCustomizationPropertiesService {
         property.setCustomizationType(type);
         property.setLimitValueType(limitValueType);
 
-        // Definir cores padrão baseadas no tipo de customização e no tipo de valor do limite
         if (type == CustomizationTypeEnum.STATISTICAL_LIMIT && limitValueType != null) {
             switch (limitValueType) {
                 case STATISTICAL_LOWER -> {
-                    property.setFillColor("#00AA00"); // Verde para limite inferior
+                    property.setFillColor("#00AA00");
                     property.setLineType(LineTypeEnum.DASHED);
                 }
                 case STATISTICAL_UPPER -> {
-                    property.setFillColor("#AA0000"); // Vermelho escuro para limite superior
+                    property.setFillColor("#AA0000");
                     property.setLineType(LineTypeEnum.DASHED);
                 }
                 default -> {
@@ -673,15 +645,15 @@ public class InstrumentGraphCustomizationPropertiesService {
         } else if (type == CustomizationTypeEnum.DETERMINISTIC_LIMIT && limitValueType != null) {
             switch (limitValueType) {
                 case DETERMINISTIC_ATTENTION -> {
-                    property.setFillColor("#FFFF00"); // Amarelo para atenção
+                    property.setFillColor("#FFFF00");
                     property.setLineType(LineTypeEnum.DASHED);
                 }
                 case DETERMINISTIC_ALERT -> {
-                    property.setFillColor("#FFA500"); // Laranja para alerta
+                    property.setFillColor("#FFA500");
                     property.setLineType(LineTypeEnum.DASHED);
                 }
                 case DETERMINISTIC_EMERGENCY -> {
-                    property.setFillColor("#FF0000"); // Vermelho para emergência
+                    property.setFillColor("#FF0000");
                     property.setLineType(LineTypeEnum.DASHED);
                 }
                 default -> {
@@ -690,10 +662,16 @@ public class InstrumentGraphCustomizationPropertiesService {
                 }
             }
         } else if (type == CustomizationTypeEnum.OUTPUT) {
-            property.setFillColor("#FF0000"); // Vermelho para output
+            property.setFillColor("#FF0000");
             property.setLineType(LineTypeEnum.SOLID);
         } else if (type == CustomizationTypeEnum.INSTRUMENT) {
-            property.setFillColor("#0000FF"); // Azul para instrumento
+            property.setFillColor("#0000FF");
+            property.setLineType(LineTypeEnum.SOLID);
+        } else if (type == CustomizationTypeEnum.LINIMETRIC_RULER) {
+            property.setFillColor("#00FFFF");
+            property.setLineType(LineTypeEnum.SOLID);
+        } else if (type == CustomizationTypeEnum.CONSTANT) {
+            property.setFillColor("#800080");
             property.setLineType(LineTypeEnum.SOLID);
         } else {
             property.setFillColor("#000000");
@@ -710,16 +688,16 @@ public class InstrumentGraphCustomizationPropertiesService {
                 property.setStatisticalLimit(statLimit);
             case DETERMINISTIC_LIMIT ->
                 property.setDeterministicLimit(detLimit);
-            case INSTRUMENT ->
-                property.setInstrument(instrument);
-            case CONSTANT ->
-                property.setConstant(constant);  // Novo caso
-            case LINIMETRIC_RULER -> {
-                if (instrument == null || !Boolean.TRUE.equals(instrument.getIsLinimetricRuler())) {
+            case INSTRUMENT, LINIMETRIC_RULER -> {
+
+                if (type == CustomizationTypeEnum.LINIMETRIC_RULER
+                        && (instrument == null || !Boolean.TRUE.equals(instrument.getIsLinimetricRuler()))) {
                     throw new InvalidInputException("O instrumento selecionado não é uma régua linimétrica");
                 }
                 property.setInstrument(instrument);
             }
+            case CONSTANT ->
+                property.setConstant(constant);
         }
 
         propertiesRepository.save(property);
@@ -834,10 +812,10 @@ public class InstrumentGraphCustomizationPropertiesService {
         return dto;
     }
 
-    // Métodos auxiliares
     private Set<Long> getExistingInstrumentIds(List<InstrumentGraphCustomizationPropertiesEntity> properties) {
         return properties.stream()
-                .filter(p -> p.getCustomizationType() == CustomizationTypeEnum.INSTRUMENT)
+                .filter(p -> p.getCustomizationType() == CustomizationTypeEnum.INSTRUMENT
+                || p.getCustomizationType() == CustomizationTypeEnum.LINIMETRIC_RULER)
                 .filter(p -> p.getInstrument() != null)
                 .map(p -> p.getInstrument().getId())
                 .collect(Collectors.toSet());

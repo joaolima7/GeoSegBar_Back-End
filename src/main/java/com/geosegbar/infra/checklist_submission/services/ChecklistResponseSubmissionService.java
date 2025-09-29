@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.common.enums.AnomalyOriginEnum;
@@ -76,6 +77,17 @@ public class ChecklistResponseSubmissionService {
     private final AnomalyPhotoRepository anomalyPhotoRepository;
 
     @Transactional
+    @CacheEvict(
+            value = {
+                "allChecklistResponses", "checklistResponseById", "checklistResponsesByDam",
+                "checklistResponseDetail", "checklistResponsesByUser", "checklistResponsesByDate",
+                "damLastChecklist", "checklistsWithAnswersByDam", "checklistsWithAnswersByClient",
+                "checklistResponsesByDamPaged", "checklistResponsesByUserPaged", "checklistResponsesByDatePaged",
+                "allChecklistResponsesPaged", "checklistResponsesByClient", "clientLatestDetailedChecklistResponses"
+            },
+            allEntries = true,
+            cacheManager = "checklistCacheManager"
+    )
     public ChecklistResponseEntity submitChecklistResponse(ChecklistResponseSubmissionDTO submissionDto) {
         validateUserAccessToDam(submissionDto.getUserId(), submissionDto.getDamId());
 

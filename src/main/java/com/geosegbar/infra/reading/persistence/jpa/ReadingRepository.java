@@ -21,6 +21,9 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
 
     boolean existsByInstrumentIdAndDate(Long instrumentId, LocalDate date);
 
+    boolean existsByInstrumentIdAndDateAndHourAndActive(
+            Long instrumentId, LocalDate date, LocalTime hour, Boolean active);
+
     List<ReadingEntity> findByInstrumentId(Long instrumentId);
 
     Page<ReadingEntity> findByInstrumentId(Long instrumentId, Pageable pageable);
@@ -34,6 +37,32 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
     Page<ReadingEntity> findByInstrumentIdAndDateBetween(Long instrumentId, LocalDate startDate, LocalDate endDate, Pageable pageable);
 
     List<ReadingEntity> findByInstrumentIdAndLimitStatus(Long instrumentId, LimitStatusEnum limitStatus);
+
+    @EntityGraph(attributePaths = {"user", "instrument", "output", "inputValues"})
+    @Query("SELECT r FROM ReadingEntity r WHERE r.instrument.id = :instrumentId "
+            + "AND r.date = :date AND r.hour = :hour AND r.active = true")
+    List<ReadingEntity> findByInstrumentIdAndDateAndHourActiveTrue(
+            @Param("instrumentId") Long instrumentId,
+            @Param("date") LocalDate date,
+            @Param("hour") LocalTime hour);
+
+    @EntityGraph(attributePaths = {"user", "instrument", "output", "inputValues"})
+    @Query("SELECT r FROM ReadingEntity r WHERE r.instrument.id = :instrumentId "
+            + "AND r.date = :date AND r.hour = :hour AND r.active = true "
+            + "AND (r.date != :excludeDate OR r.hour != :excludeHour)")
+    List<ReadingEntity> findByInstrumentIdAndDateAndHourExcludingSpecific(
+            @Param("instrumentId") Long instrumentId,
+            @Param("date") LocalDate date,
+            @Param("hour") LocalTime hour,
+            @Param("excludeDate") LocalDate excludeDate,
+            @Param("excludeHour") LocalTime excludeHour);
+
+    @Query("SELECT r FROM ReadingEntity r WHERE r.instrument.id = :instrumentId "
+            + "AND r.date = :date AND r.hour = :hour AND r.active = true")
+    List<ReadingEntity> findAllReadingsInGroup(
+            @Param("instrumentId") Long instrumentId,
+            @Param("date") LocalDate date,
+            @Param("hour") LocalTime hour);
 
     @Query("SELECT r FROM ReadingEntity r WHERE r.instrument.id = :instrumentId AND r.active = true ORDER BY r.date DESC, r.hour DESC")
     List<ReadingEntity> findByInstrumentIdOrderByDateDescHourDesc(@Param("instrumentId") Long instrumentId);

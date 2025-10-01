@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -420,6 +421,16 @@ public class ReadingService {
     public List<ReadingResponseDTO> create(Long instrumentId, ReadingRequestDTO request, boolean skipPermissionCheck) {
         UserEntity currentUser;
 
+        LocalTime truncatedHour = request.getHour().withNano(0); // Trunca para segundos, ignorando nanossegundos
+
+        if (readingRepository.existsByInstrumentIdAndDateAndHourAndActive(instrumentId, request.getDate(), truncatedHour, true)) {
+            throw new InvalidInputException("Já existe leitura registrada para este instrumento na mesma data e hora ("
+                    + request.getDate() + " " + truncatedHour + ")");
+        }
+
+        // Ajustar a hora na requisição para garantir consistência
+        request.setHour(truncatedHour);
+
         if (skipPermissionCheck) {
             String systemUserEmail = "noreply@geometrisa-prod.com.br";
             currentUser = userRepository.findByEmail(systemUserEmail)
@@ -641,14 +652,51 @@ public class ReadingService {
             throw new InvalidInputException("Não é possível editar uma leitura inativa");
         }
 
+        // Armazenar valores originais para usar nas atualizações em grupo
+        LocalDate originalDate = reading.getDate();
+        LocalTime originalHour = reading.getHour();
         UserEntity originalUser = reading.getUser();
+        Long instrumentId = reading.getInstrument().getId();
 
+        // Se está atualizando data ou hora, verificar possível conflito
+        LocalDate newDate = request.getDate() != null ? request.getDate() : originalDate;
+        LocalTime newHour = request.getHour() != null ? request.getHour() : originalHour;
+
+        // Truncar a hora para ignorar nanossegundos
+        if (newHour != null) {
+            newHour = newHour.withNano(0);
+        }
+
+        // Verificar se alguma data/hora está sendo alterada
+        boolean isDateTimeChanged = (request.getDate() != null && !Objects.equals(newDate, originalDate))
+                || (request.getHour() != null && !Objects.equals(newHour, originalHour));
+
+        // Se estiver alterando data/hora, verificar se já existe outro grupo com a mesma data/hora
+        if (isDateTimeChanged) {
+            List<ReadingEntity> existingReadings;
+
+            // Usar o método apropriado dependendo se temos valores originais ou não
+            if (originalDate == null || originalHour == null) {
+                existingReadings = readingRepository.findByInstrumentIdAndDateAndHourActiveTrue(
+                        instrumentId, newDate, newHour);
+            } else {
+                existingReadings = readingRepository.findByInstrumentIdAndDateAndHourExcludingSpecific(
+                        instrumentId, newDate, newHour, originalDate, originalHour);
+            }
+
+            if (!existingReadings.isEmpty()) {
+                throw new InvalidInputException("Já existe leitura registrada para este instrumento na mesma data e hora ("
+                        + newDate + " " + newHour + ")");
+            }
+        }
+
+        // Atualizar esta reading
         if (request.getDate() != null) {
-            reading.setDate(request.getDate());
+            reading.setDate(newDate);
         }
 
         if (request.getHour() != null) {
-            reading.setHour(request.getHour());
+            reading.setHour(newHour);
         }
 
         UserEntity newUser = null;
@@ -660,6 +708,12 @@ public class ReadingService {
 
         ReadingEntity savedReading = readingRepository.save(reading);
 
+        // Se alterou data/hora, atualizar todas as readings do mesmo grupo original
+        if (isDateTimeChanged) {
+            updateRelatedReadingsDateTime(instrumentId, originalDate, originalHour, newDate, newHour);
+        }
+
+        // Se alterou usuário, atualizar usuário das readings relacionadas
         if (newUser != null && !newUser.equals(originalUser)) {
             updateRelatedReadingsUser(savedReading, newUser);
         }
@@ -1050,5 +1104,17 @@ public class ReadingService {
         }
 
         return result;
+    }
+
+    private void updateRelatedReadingsDateTime(Long instrumentId, LocalDate oldDate, LocalTime oldHour,
+            LocalDate newDate, LocalTime newHour) {
+        List<ReadingEntity> relatedReadings = readingRepository.findAllReadingsInGroup(
+                instrumentId, oldDate, oldHour);
+
+        for (ReadingEntity reading : relatedReadings) {
+            reading.setDate(newDate);
+            reading.setHour(newHour);
+            readingRepository.save(reading);
+        }
     }
 }

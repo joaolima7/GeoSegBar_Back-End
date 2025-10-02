@@ -3,6 +3,7 @@ package com.geosegbar.infra.reading.services;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -24,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.common.enums.LimitStatusEnum;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
+import com.geosegbar.common.utils.DateFormatter;
 import com.geosegbar.entities.DeterministicLimitEntity;
 import com.geosegbar.entities.InputEntity;
 import com.geosegbar.entities.InstrumentEntity;
@@ -423,6 +425,15 @@ public class ReadingService {
 
         LocalTime truncatedHour = request.getHour().withNano(0); // Trunca para segundos, ignorando nanossegundos
 
+        LocalDateTime readingDateTime = LocalDateTime.of(request.getDate(), truncatedHour);
+        LocalDateTime now = LocalDateTime.now();
+
+        if (readingDateTime.isAfter(now)) {
+            throw new InvalidInputException("Não é possível criar leituras com data e hora futura. "
+                    + "Data/hora informada: " + DateFormatter.formatDateTime(readingDateTime)
+                    + ", Data/hora atual: " + DateFormatter.formatDateTime(now));
+        }
+
         if (readingRepository.existsByInstrumentIdAndDateAndHourAndActive(instrumentId, request.getDate(), truncatedHour, true)) {
             throw new InvalidInputException("Já existe leitura registrada para este instrumento na mesma data e hora ("
                     + request.getDate() + " " + truncatedHour + ")");
@@ -652,11 +663,24 @@ public class ReadingService {
             throw new InvalidInputException("Não é possível editar uma leitura inativa");
         }
 
+        InstrumentEntity instrument = reading.getInstrument();
+
+        // Verificar se há tentativa de atualizar valores de input
+        boolean isUpdatingInputValues = request.getInputValues() != null && !request.getInputValues().isEmpty();
+
+        // Verificar se as variáveis do instrumento foram alteradas desde a leitura
+        if (isUpdatingInputValues) {
+            LocalDateTime readingDateTime = LocalDateTime.of(reading.getDate(), reading.getHour());
+            if (instrument.getLastUpdateVariablesDate().isAfter(readingDateTime)) {
+                throw new InvalidInputException("Não é possível editar os valores desta leitura pois as variáveis do instrumento foram alteradas após o registro.");
+            }
+        }
+
         // Armazenar valores originais para usar nas atualizações em grupo
         LocalDate originalDate = reading.getDate();
         LocalTime originalHour = reading.getHour();
         UserEntity originalUser = reading.getUser();
-        Long instrumentId = reading.getInstrument().getId();
+        Long instrumentId = instrument.getId();
 
         // Se está atualizando data ou hora, verificar possível conflito
         LocalDate newDate = request.getDate() != null ? request.getDate() : originalDate;
@@ -673,6 +697,14 @@ public class ReadingService {
 
         // Se estiver alterando data/hora, verificar se já existe outro grupo com a mesma data/hora
         if (isDateTimeChanged) {
+            LocalDateTime newDateTime = LocalDateTime.of(newDate, newHour);
+            LocalDateTime now = LocalDateTime.now();
+
+            if (newDateTime.isAfter(now)) {
+                throw new InvalidInputException("Não é possível atualizar leituras para data e hora futura. "
+                        + "Data/hora informada: " + DateFormatter.formatDateTime(newDateTime) + ", Data/hora atual: " + DateFormatter.formatDateTime(now));
+            }
+
             List<ReadingEntity> existingReadings;
 
             // Usar o método apropriado dependendo se temos valores originais ou não
@@ -690,7 +722,7 @@ public class ReadingService {
             }
         }
 
-        // Atualizar esta reading
+        // Atualizar esta reading - campos básicos
         if (request.getDate() != null) {
             reading.setDate(newDate);
         }
@@ -706,35 +738,187 @@ public class ReadingService {
             reading.setUser(newUser);
         }
 
-        ReadingEntity savedReading = readingRepository.save(reading);
+        // Se não estiver atualizando input values, simplesmente salvar e retornar
+        if (!isUpdatingInputValues) {
+            ReadingEntity savedReading = readingRepository.save(reading);
 
-        // Se alterou data/hora, atualizar todas as readings do mesmo grupo original
+            // Se alterou data/hor2a, atualizar todas as readings do mesmo grupo original
+            if (isDateTimeChanged) {
+                updateRelatedReadingsDateTime(instrumentId, originalDate, originalHour, newDate, newHour);
+            }
+
+            // Se alterou usuário, atualizar usuário das readings relacionadas
+            if (newUser != null && !newUser.equals(originalUser)) {
+                updateRelatedReadingsUser(reading, newUser);
+            }
+
+            return mapToResponseDTO(savedReading);
+        }
+
+        // PROCESSAMENTO DOS INPUTS
+        // Obter todas as leituras do mesmo grupo
+        List<ReadingEntity> groupReadings = readingRepository.findAllReadingsInGroup(
+                instrumentId, reading.getDate(), reading.getHour());
+
+        // Validar que os inputs fornecidos são válidos para o instrumento
+        Map<String, InputEntity> instrumentInputs = instrument.getInputs().stream()
+                .collect(Collectors.toMap(InputEntity::getAcronym, input -> input));
+
+        for (String inputAcronym : request.getInputValues().keySet()) {
+            if (!instrumentInputs.containsKey(inputAcronym)) {
+                throw new InvalidInputException("Input com acrônimo '" + inputAcronym
+                        + "' não encontrado no instrumento");
+            }
+        }
+
+        // Atualizar todas as leituras do grupo e seus inputs relacionados
+        for (ReadingEntity groupReading : groupReadings) {
+            OutputEntity output = groupReading.getOutput();
+
+            // Criar mapa para o cálculo com todos os valores atuais de input
+            Map<String, Double> calculationInputs = new HashMap<>();
+            Map<String, ReadingInputValueEntity> inputValuesByAcronym = new HashMap<>();
+
+            // Carregar os valores de input existentes
+            for (ReadingInputValueEntity inputValue : groupReading.getInputValues()) {
+                calculationInputs.put(inputValue.getInputAcronym(), inputValue.getValue());
+                inputValuesByAcronym.put(inputValue.getInputAcronym(), inputValue);
+            }
+
+            // Atualizar os valores fornecidos na request
+            boolean inputsChanged = false;
+            for (Map.Entry<String, Double> entry : request.getInputValues().entrySet()) {
+                String acronym = entry.getKey();
+                Double newValue = entry.getValue();
+
+                // Atualizar no mapa de cálculo
+                Double oldValue = calculationInputs.put(acronym, newValue);
+                if (!Objects.equals(oldValue, newValue)) {
+                    inputsChanged = true;
+
+                    // Atualizar o valor de entrada diretamente no banco
+                    ReadingInputValueEntity inputValue = inputValuesByAcronym.get(acronym);
+                    if (inputValue != null) {
+                        inputValue.setValue(newValue);
+                        readingInputValueRepository.save(inputValue);
+                    }
+                }
+            }
+
+            // Recalcular o valor do output somente se houve mudança nos inputs
+            if (inputsChanged) {
+                Double newCalculatedValue = outputCalculationService.calculateOutput(
+                        output, null, calculationInputs);
+
+                // Atualizar valor calculado
+                groupReading.setCalculatedValue(newCalculatedValue);
+
+                // Recalcular status do limite
+                LimitStatusEnum newLimitStatus = determineLimitStatus(instrument, newCalculatedValue, output);
+                groupReading.setLimitStatus(newLimitStatus);
+
+                // Salvar a leitura com valores recalculados
+                readingRepository.save(groupReading);
+            }
+        }
+
+        // Se estiver atualizando input values
+        if (isUpdatingInputValues) {
+            updateInputValues(instrumentId, originalDate, originalHour, request.getInputValues());
+        }
+
+        // Atualizar data e hora usando o método auxiliar, se necessário
         if (isDateTimeChanged) {
             updateRelatedReadingsDateTime(instrumentId, originalDate, originalHour, newDate, newHour);
         }
 
-        // Se alterou usuário, atualizar usuário das readings relacionadas
-        if (newUser != null && !newUser.equals(originalUser)) {
-            updateRelatedReadingsUser(savedReading, newUser);
+        // Atualizar usuário usando o método auxiliar, se necessário
+        if (newUser != null) {
+            updateRelatedReadingsUser(reading, newUser);
         }
 
-        return mapToResponseDTO(savedReading);
+        // Recarregar a reading principal atualizada
+        ReadingEntity updatedReading = readingRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Leitura não encontrada após atualização"));
+
+        return mapToResponseDTO(updatedReading);
+    }
+
+    private void updateInputValues(Long instrumentId, LocalDate date, LocalTime hour, Map<String, Double> newInputValues) {
+        // Obter todas as leituras do grupo
+        List<ReadingEntity> groupReadings = readingRepository.findAllReadingsInGroup(instrumentId, date, hour);
+
+        InstrumentEntity instrument = instrumentRepository.findById(instrumentId)
+                .orElseThrow(() -> new NotFoundException("Instrumento não encontrado"));
+
+        // Validar inputs
+        Map<String, InputEntity> instrumentInputs = instrument.getInputs().stream()
+                .collect(Collectors.toMap(InputEntity::getAcronym, input -> input));
+
+        for (String inputAcronym : newInputValues.keySet()) {
+            if (!instrumentInputs.containsKey(inputAcronym)) {
+                throw new InvalidInputException("Input com acrônimo '" + inputAcronym
+                        + "' não encontrado no instrumento");
+            }
+        }
+
+        // Processar cada reading
+        for (ReadingEntity groupReading : groupReadings) {
+            OutputEntity output = groupReading.getOutput();
+
+            // Mapear inputs atuais
+            Map<String, Double> calculationInputs = new HashMap<>();
+            Map<String, ReadingInputValueEntity> inputValuesByAcronym = new HashMap<>();
+
+            for (ReadingInputValueEntity inputValue : groupReading.getInputValues()) {
+                calculationInputs.put(inputValue.getInputAcronym(), inputValue.getValue());
+                inputValuesByAcronym.put(inputValue.getInputAcronym(), inputValue);
+            }
+
+            // Atualizar valores
+            boolean inputsChanged = false;
+            for (Map.Entry<String, Double> entry : newInputValues.entrySet()) {
+                String acronym = entry.getKey();
+                Double newValue = entry.getValue();
+
+                // Sempre considerar como alterado para garantir o recálculo
+                inputsChanged = true;
+
+                calculationInputs.put(acronym, newValue);
+
+                // Atualizar o valor no banco
+                ReadingInputValueEntity inputValue = inputValuesByAcronym.get(acronym);
+                if (inputValue != null) {
+                    inputValue.setValue(newValue);
+                    readingInputValueRepository.save(inputValue);
+                }
+            }
+
+            // Recalcular se necessário
+            if (inputsChanged) {
+                Double newCalculatedValue = outputCalculationService.calculateOutput(
+                        output, null, calculationInputs);
+
+                groupReading.setCalculatedValue(newCalculatedValue);
+
+                LimitStatusEnum newLimitStatus = determineLimitStatus(instrument, newCalculatedValue, output);
+                groupReading.setLimitStatus(newLimitStatus);
+
+                readingRepository.save(groupReading);
+            }
+        }
     }
 
     private void updateRelatedReadingsUser(ReadingEntity baseReading, UserEntity newUser) {
-
-        List<ReadingEntity> relatedReadings = readingRepository.findByInstrumentAndDateAndHourAndUser(
+        List<ReadingEntity> relatedReadings = readingRepository.findAllReadingsInGroup(
                 baseReading.getInstrument().getId(),
                 baseReading.getDate(),
-                baseReading.getHour(),
-                baseReading.getUser().getId()
+                baseReading.getHour()
         );
 
         for (ReadingEntity relatedReading : relatedReadings) {
-            if (!relatedReading.getId().equals(baseReading.getId())) {
-                relatedReading.setUser(newUser);
-                readingRepository.save(relatedReading);
-            }
+            relatedReading.setUser(newUser);
+            readingRepository.save(relatedReading);
         }
     }
 

@@ -1,5 +1,6 @@
 package com.geosegbar.infra.instrument.services;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -151,6 +152,7 @@ public class InstrumentService {
         InstrumentEntity instrument = new InstrumentEntity();
         instrument.setName(request.getName().toUpperCase());
         instrument.setLocation(request.getLocation());
+        instrument.setLastUpdateVariablesDate(LocalDateTime.now());
         instrument.setDistanceOffset(request.getDistanceOffset());
         instrument.setLatitude(request.getLatitude());
         instrument.setLongitude(request.getLongitude());
@@ -457,6 +459,27 @@ public class InstrumentService {
         // Não precisamos mais verificar se está mudando de normal para régua linimétrica ou vice-versa
         // pois não permitimos mais essa mudança
         if (!Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
+
+            Set<String> newInputAcronyms = request.getInputs().stream()
+                    .map(InputDTO::getAcronym)
+                    .collect(Collectors.toSet());
+
+            Set<String> newConstantAcronyms = request.getConstants() != null
+                    ? request.getConstants().stream()
+                            .map(ConstantDTO::getAcronym)
+                            .collect(Collectors.toSet())
+                    : new HashSet<>();
+
+            // Validar todas as equações dos outputs com os NOVOS acrônimos
+            for (OutputDTO outputDTO : request.getOutputs()) {
+                try {
+                    validateEquation(outputDTO.getEquation(), newInputAcronyms, newConstantAcronyms);
+                } catch (InvalidInputException e) {
+                    throw new InvalidInputException("Erro na equação do output '" + outputDTO.getName()
+                            + "': " + e.getMessage());
+                }
+            }
+
             // Se continua sendo instrumento normal, mapeia os componentes existentes
             Map<String, InputEntity> existingInputsByAcronym = oldInstrument.getInputs().stream()
                     .collect(Collectors.toMap(
@@ -494,18 +517,18 @@ public class InstrumentService {
 
             // Atualizar os campos básicos
             updateInstrumentBasicFields(oldInstrument, request);
-            InstrumentEntity savedInstrument = instrumentRepository.save(oldInstrument);
 
             // Processar os componentes para atualização
-            processInputsForUpdate(savedInstrument, request.getInputs(), existingInputsByAcronym);
+            processInputsForUpdate(oldInstrument, request.getInputs(), existingInputsByAcronym);
             if (request.getConstants() != null && !request.getConstants().isEmpty()) {
-                processConstantsForUpdate(savedInstrument, request.getConstants(), existingConstantsByAcronym);
+                processConstantsForUpdate(oldInstrument, request.getConstants(), existingConstantsByAcronym);
             }
-            processOutputsForUpdate(savedInstrument, request.getOutputs(), existingOutputsByAcronym);
+            processOutputsForUpdate(oldInstrument, request.getOutputs(), existingOutputsByAcronym);
 
             // Remover componentes não utilizados
             deleteUnusedComponents(existingInputsByAcronym, existingConstantsByAcronym);
 
+            instrumentRepository.save(oldInstrument);
             log.info("Instrumento normal atualizado com sucesso");
 
             return instrumentRepository.findWithActiveOutputsById(id)
@@ -696,7 +719,8 @@ public class InstrumentService {
 
         for (String variable : variablesInEquation) {
             if (!inputAcronyms.contains(variable) && !constantAcronyms.contains(variable)) {
-                throw new InvalidInputException("Variável '" + variable + "' na equação não existe como input ou constante");
+                throw new InvalidInputException("Variável '" + variable + "' na equação não existe como input ou constante. "
+                        + "Verifique se você não alterou o acrônimo de um input ou constante utilizado nesta equação.");
             }
         }
 
@@ -723,6 +747,7 @@ public class InstrumentService {
 
         int updatedCount = 0;
         int createdCount = 0;
+        boolean significantChange = false;
 
         for (InputDTO inputDTO : inputDTOs) {
             if (!acronyms.add(inputDTO.getAcronym())) {
@@ -739,6 +764,10 @@ public class InstrumentService {
             InputEntity input = existingInputsByAcronym.get(inputDTO.getAcronym());
 
             if (input != null) {
+                String originalName = input.getName();
+                Integer originalPrecision = input.getPrecision();
+                Long originalUnitId = input.getMeasurementUnit().getId();
+
                 input.setName(inputDTO.getName());
                 input.setPrecision(inputDTO.getPrecision());
                 input.setMeasurementUnit(measurementUnit);
@@ -747,6 +776,16 @@ public class InstrumentService {
 
                 existingInputsByAcronym.remove(inputDTO.getAcronym());
                 updatedCount++;
+
+                boolean nameChanged = !originalName.equals(inputDTO.getName());
+                boolean precisionChanged = !originalPrecision.equals(inputDTO.getPrecision());
+                boolean unitChanged = !originalUnitId.equals(inputDTO.getMeasurementUnitId());
+
+                if (nameChanged || precisionChanged || unitChanged) {
+                    significantChange = true;
+                    log.info("Mudança significativa detectada no input '{}': nome={}, precisão={}, unidade={}",
+                            input.getAcronym(), nameChanged, precisionChanged, unitChanged);
+                }
             } else {
                 input = new InputEntity();
                 input.setAcronym(inputDTO.getAcronym().toUpperCase());
@@ -757,7 +796,19 @@ public class InstrumentService {
                 inputRepository.save(input);
                 instrument.getInputs().add(input);
                 createdCount++;
+
+                significantChange = true;
             }
+        }
+
+        if (!existingInputsByAcronym.isEmpty()) {
+            significantChange = true;
+        }
+
+        if (significantChange) {
+            instrument.setLastUpdateVariablesDate(LocalDateTime.now());
+            log.info("Atualizada data de modificação de variáveis do instrumento ID: {} devido a mudanças nos inputs",
+                    instrument.getId());
         }
 
         log.info("Inputs processados: {} atualizados, {} criados", updatedCount, createdCount);
@@ -770,6 +821,7 @@ public class InstrumentService {
 
         int updatedCount = 0;
         int createdCount = 0;
+        boolean significantChange = false;
 
         for (ConstantDTO constantDTO : constantDTOs) {
             if (!acronyms.add(constantDTO.getAcronym())) {
@@ -786,6 +838,11 @@ public class InstrumentService {
             ConstantEntity constant = existingConstantsByAcronym.get(constantDTO.getAcronym());
 
             if (constant != null) {
+                String originalName = constant.getName();
+                Integer originalPrecision = constant.getPrecision();
+                Double originalValue = constant.getValue();
+                Long originalUnitId = constant.getMeasurementUnit().getId();
+
                 constant.setName(constantDTO.getName());
                 constant.setPrecision(constantDTO.getPrecision());
                 constant.setValue(constantDTO.getValue());
@@ -795,6 +852,17 @@ public class InstrumentService {
 
                 existingConstantsByAcronym.remove(constantDTO.getAcronym());
                 updatedCount++;
+
+                boolean nameChanged = !originalName.equals(constantDTO.getName());
+                boolean precisionChanged = !originalPrecision.equals(constantDTO.getPrecision());
+                boolean valueChanged = !originalValue.equals(constantDTO.getValue());
+                boolean unitChanged = !originalUnitId.equals(constantDTO.getMeasurementUnitId());
+
+                if (nameChanged || precisionChanged || valueChanged || unitChanged) {
+                    significantChange = true;
+                    log.info("Mudança significativa detectada na constant '{}': nome={}, precisão={}, valor={}, unidade={}",
+                            constant.getAcronym(), nameChanged, precisionChanged, valueChanged, unitChanged);
+                }
             } else {
                 constant = new ConstantEntity();
                 constant.setAcronym(constantDTO.getAcronym().toUpperCase());
@@ -806,7 +874,17 @@ public class InstrumentService {
                 constantRepository.save(constant);
                 instrument.getConstants().add(constant);
                 createdCount++;
+
+                significantChange = true;
             }
+        }
+
+        if (!existingConstantsByAcronym.isEmpty()) {
+            significantChange = true;
+        }
+
+        if (significantChange) {
+            instrument.setLastUpdateVariablesDate(LocalDateTime.now());
         }
 
         log.info("Constants processadas: {} atualizadas, {} criadas", updatedCount, createdCount);
@@ -827,6 +905,7 @@ public class InstrumentService {
 
         int updatedCount = 0;
         int createdCount = 0;
+        boolean significantChange = false;
 
         // Validar que todos os outputs usam o mesmo tipo de limite
         if (!instrument.getNoLimit() && outputDTOs.size() > 1) {
@@ -865,6 +944,8 @@ public class InstrumentService {
             OutputEntity output = existingOutputsByAcronym.get(outputDTO.getAcronym());
 
             if (output == null) {
+                significantChange = true;
+
                 // Criar novo output
                 output = new OutputEntity();
                 output.setAcronym(outputDTO.getAcronym().toUpperCase());
@@ -902,6 +983,15 @@ public class InstrumentService {
                 instrument.getOutputs().add(savedOutput);
                 createdCount++;
             } else {
+                boolean nameChanged = !output.getName().equals(outputDTO.getName());
+                boolean equationChanged = !output.getEquation().equals(outputDTO.getEquation());
+                boolean precisionChanged = !output.getPrecision().equals(outputDTO.getPrecision());
+                boolean unitChanged = !output.getMeasurementUnit().getId().equals(outputDTO.getMeasurementUnitId());
+
+                if (nameChanged || equationChanged || precisionChanged || unitChanged) {
+                    significantChange = true;
+                }
+
                 // Atualizar output existente
                 output.setName(outputDTO.getName());
                 output.setEquation(outputDTO.getEquation());
@@ -968,6 +1058,28 @@ public class InstrumentService {
                 outputRepository.save(output);
                 existingOutputsByAcronym.remove(output.getAcronym());
                 updatedCount++;
+
+                if (output.getStatisticalLimit() != null && outputDTO.getStatisticalLimit() != null) {
+                    StatisticalLimitEntity limit = output.getStatisticalLimit();
+                    boolean lowerChanged = !limit.getLowerValue().equals(outputDTO.getStatisticalLimit().getLowerValue());
+                    boolean upperChanged = !limit.getUpperValue().equals(outputDTO.getStatisticalLimit().getUpperValue());
+
+                    if (lowerChanged || upperChanged) {
+                        significantChange = true;
+                    }
+                }
+
+                // Limites determinísticos
+                if (output.getDeterministicLimit() != null && outputDTO.getDeterministicLimit() != null) {
+                    DeterministicLimitEntity limit = output.getDeterministicLimit();
+                    boolean attentionChanged = !limit.getAttentionValue().equals(outputDTO.getDeterministicLimit().getAttentionValue());
+                    boolean alertChanged = !limit.getAlertValue().equals(outputDTO.getDeterministicLimit().getAlertValue());
+                    boolean emergencyChanged = !limit.getEmergencyValue().equals(outputDTO.getDeterministicLimit().getEmergencyValue());
+
+                    if (attentionChanged || alertChanged || emergencyChanged) {
+                        significantChange = true;
+                    }
+                }
             }
         }
 
@@ -977,21 +1089,44 @@ public class InstrumentService {
             outputRepository.save(unusedOutput);
         }
 
+        if (!existingOutputsByAcronym.isEmpty()) {
+            significantChange = true;
+        }
+
+        // Atualizar lastUpdateVariablesDate se houver mudança significativa
+        if (significantChange) {
+            instrument.setLastUpdateVariablesDate(LocalDateTime.now());
+            log.info("Atualizada data de modificação de variáveis do instrumento ID: {} devido a mudanças nos outputs",
+                    instrument.getId());
+        }
+
         log.info("Outputs processados: {} atualizados, {} criados, {} desativados",
                 updatedCount, createdCount, existingOutputsByAcronym.size());
     }
 
     private void deleteUnusedComponents(Map<String, InputEntity> unusedInputs, Map<String, ConstantEntity> unusedConstants) {
         for (InputEntity input : unusedInputs.values()) {
+            // Desassociar do instrumento e unidade de medida
+            InstrumentEntity instrument = input.getInstrument();
+            instrument.getInputs().remove(input);
+            input.setInstrument(null);
+            input.setMeasurementUnit(null);
+
+            // Agora exclui com segurança
             inputRepository.delete(input);
         }
 
+        // Desassociar e excluir constants
         for (ConstantEntity constant : unusedConstants.values()) {
+            // Desassociar do instrumento e unidade de medida
+            InstrumentEntity instrument = constant.getInstrument();
+            instrument.getConstants().remove(constant);
+            constant.setInstrument(null);
+            constant.setMeasurementUnit(null);
+
+            // Agora exclui com segurança
             constantRepository.delete(constant);
         }
-
-        log.info("Componentes não utilizados excluídos: {} inputs, {} constants",
-                unusedInputs.size(), unusedConstants.size());
     }
 
     @Transactional
@@ -1027,6 +1162,7 @@ public class InstrumentService {
         dto.setActive(instrument.getActive());
         dto.setIsLinimetricRuler(instrument.getIsLinimetricRuler());
         dto.setLinimetricRulerCode(instrument.getLinimetricRulerCode());
+        dto.setLastUpdateVariablesDate(instrument.getLastUpdateVariablesDate());
 
         // Relações diretas
         DamEntity dam = instrument.getDam();

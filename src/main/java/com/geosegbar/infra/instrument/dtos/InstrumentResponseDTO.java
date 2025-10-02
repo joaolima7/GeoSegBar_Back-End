@@ -1,5 +1,6 @@
 package com.geosegbar.infra.instrument.dtos;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import lombok.AllArgsConstructor;
@@ -28,6 +29,7 @@ public class InstrumentResponseDTO {
     private String instrumentType;
     private Long sectionId;
     private String sectionName;
+    private LocalDateTime lastUpdateVariablesDate;
     private StatisticalLimitDTO statisticalLimit;
     private DeterministicLimitDTO deterministicLimit;
     private List<InputDTO> inputs;

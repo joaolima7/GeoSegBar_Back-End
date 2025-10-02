@@ -1,5 +1,6 @@
 package com.geosegbar.entities;
 
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -84,6 +85,9 @@ public class InstrumentEntity {
 
     @Column(nullable = false)
     private Boolean activeForSection = true;
+
+    @Column(nullable = false)
+    private LocalDateTime lastUpdateVariablesDate;
 
     @Column(name = "is_linimetric_ruler", nullable = false)
     private Boolean isLinimetricRuler;

@@ -17,4 +17,5 @@ public class UpdateReadingRequestDTO {
     private LocalTime hour;
     private Long userId;
     private Map<String, Double> inputValues;
+    private String comment;
 }

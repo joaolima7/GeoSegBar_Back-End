@@ -477,7 +477,7 @@ public Object initiateLogin(LoginRequestDTO userDTO) {
             .orElseThrow(() -> new NotFoundException("Credenciais incorretas!"));
 
     if (user.getStatus().getStatus() == StatusEnum.DISABLED) {
-        throw new UnauthorizedException("Usuário desativado!");
+        throw new UnauthorizedException("Usuário não tem acesso ao sistema!");
     }
 
     if (!passwordEncoder.matches(userDTO.password(), user.getPassword())) {
@@ -488,7 +488,7 @@ public Object initiateLogin(LoginRequestDTO userDTO) {
             && LocalDateTime.now().isBefore(user.getTokenExpiryDate())
             && tokenService.isTokenValid(user.getLastToken())) {
 
-        // Usar a lista de clientes diretamente, sem converter para DTO
+        
         List<ClientEntity> clients = new ArrayList<>(user.getClients());
 
         return new LoginResponseDTO(
@@ -504,11 +504,11 @@ public Object initiateLogin(LoginRequestDTO userDTO) {
         );
     }
     
-    // Verificação especial para usuário do sistema - bypass da 2FA
+    
     if (isSystemUser(user)) {
         String token = tokenService.generateToken(user);
         
-        // Atualiza o token do usuário no banco
+        
         user.setLastToken(token);
         user.setTokenExpiryDate(LocalDateTime.now().plusHours(12));
         userRepository.save(user);

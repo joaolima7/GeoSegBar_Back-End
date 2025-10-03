@@ -423,9 +423,9 @@ public class ReadingService {
     public List<ReadingResponseDTO> create(Long instrumentId, ReadingRequestDTO request, boolean skipPermissionCheck) {
         UserEntity currentUser;
 
-        LocalTime truncatedHour = request.getHour().withNano(0); // Trunca para segundos, ignorando nanossegundos
+        LocalTime truncatedHour = request.getHour().withNano(0); 
 
-        // Validar data/hora futura
+        
         LocalDateTime readingDateTime = LocalDateTime.of(request.getDate(), truncatedHour);
         LocalDateTime now = LocalDateTime.now();
 
@@ -435,16 +435,16 @@ public class ReadingService {
                     + ", Data/hora atual: " + DateFormatter.formatDateTime(now));
         }
 
-        // Verificar se já existe leitura para essa data/hora
+        
         if (readingRepository.existsByInstrumentIdAndDateAndHourAndActive(instrumentId, request.getDate(), truncatedHour, true)) {
             throw new InvalidInputException("Já existe leitura registrada para este instrumento na mesma data e hora ("
                     + request.getDate() + " " + truncatedHour + ")");
         }
 
-        // Ajustar a hora na requisição para garantir consistência
+        
         request.setHour(truncatedHour);
 
-        // Obter usuário
+        
         if (skipPermissionCheck) {
             String systemUserEmail = "noreply@geometrisa-prod.com.br";
             currentUser = userRepository.findByEmail(systemUserEmail)
@@ -459,11 +459,11 @@ public class ReadingService {
             }
         }
 
-        // Obter instrumento
+        
         InstrumentEntity instrument = instrumentRepository.findWithActiveOutputsById(instrumentId)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + instrumentId));
 
-        // Obter outputs ativos
+        
         List<OutputEntity> activeOutputs = instrument.getOutputs().stream()
                 .filter(OutputEntity::getActive)
                 .collect(Collectors.toList());
@@ -472,10 +472,10 @@ public class ReadingService {
             throw new NotFoundException("O instrumento não possui outputs ativos para calcular leituras");
         }
 
-        // Validar valores de input
+        
         validateInputValues(instrument, request.getInputValues());
 
-        // Formatar valores com precisão correta
+        
         Map<String, Double> formattedInputValues = new HashMap<>();
         for (InputEntity input : instrument.getInputs()) {
             Double inputValue = request.getInputValues().get(input.getAcronym());
@@ -485,12 +485,12 @@ public class ReadingService {
             }
         }
 
-        // Criar os ReadingInputValueEntity que serão compartilhados
+        
         Set<ReadingInputValueEntity> sharedInputValues = new HashSet<>();
         Map<String, String> inputNames = instrument.getInputs().stream()
                 .collect(Collectors.toMap(InputEntity::getAcronym, InputEntity::getName));
 
-        // Criar os valores de input (uma vez só)
+        
         for (Map.Entry<String, Double> entry : formattedInputValues.entrySet()) {
             ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
             inputValue.setInputAcronym(entry.getKey());
@@ -501,14 +501,14 @@ public class ReadingService {
             sharedInputValues.add(savedInputValue);
         }
 
-        // Criar as readings para cada output
+        
         List<ReadingEntity> createdReadings = new ArrayList<>();
 
         for (OutputEntity output : activeOutputs) {
-            // Calcular o valor para este output
+            
             Double calculatedValue = outputCalculationService.calculateOutput(output, request, formattedInputValues);
 
-            // Criar a reading
+            
             ReadingEntity reading = new ReadingEntity();
             reading.setDate(request.getDate());
             reading.setHour(request.getHour());
@@ -519,14 +519,14 @@ public class ReadingService {
             reading.setActive(true);
             reading.setComment(request.getComment());
 
-            // Determinar o status do limite
+            
             LimitStatusEnum limitStatus = determineLimitStatus(instrument, calculatedValue, output);
             reading.setLimitStatus(limitStatus);
 
-            // Associar os mesmos valores de input a esta reading
+            
             reading.setInputValues(sharedInputValues);
 
-            // Salvar a reading
+            
             ReadingEntity savedReading = readingRepository.save(reading);
             createdReadings.add(savedReading);
         }
@@ -678,10 +678,10 @@ public ReadingResponseDTO updateReading(Long id, UpdateReadingRequestDTO request
 
     InstrumentEntity instrument = reading.getInstrument();
 
-    // Verificar se há tentativa de atualizar valores de input
+    
     boolean isUpdatingInputValues = request.getInputValues() != null && !request.getInputValues().isEmpty();
 
-    // Verificar se as variáveis do instrumento foram alteradas desde a leitura
+    
     if (isUpdatingInputValues) {
         LocalDateTime readingDateTime = LocalDateTime.of(reading.getDate(), reading.getHour());
         if (instrument.getLastUpdateVariablesDate() != null
@@ -690,27 +690,27 @@ public ReadingResponseDTO updateReading(Long id, UpdateReadingRequestDTO request
         }
     }
 
-    // Armazenar valores originais para usar nas atualizações em grupo
+    
     LocalDate originalDate = reading.getDate();
     LocalTime originalHour = reading.getHour();
     Long instrumentId = instrument.getId();
 
-    // Se está atualizando data ou hora, verificar possível conflito
+    
     LocalDate newDate = request.getDate() != null ? request.getDate() : originalDate;
     LocalTime newHour = request.getHour() != null ? request.getHour() : originalHour;
 
-    // Truncar a hora para ignorar nanossegundos
+    
     if (newHour != null) {
         newHour = newHour.withNano(0);
     }
 
-    // Verificar se alguma data/hora está sendo alterada
+    
     boolean isDateTimeChanged = (request.getDate() != null && !Objects.equals(newDate, originalDate))
             || (request.getHour() != null && !Objects.equals(newHour, originalHour));
 
-    // Se estiver alterando data/hora, verificar se já existe outro grupo com a mesma data/hora
+    
     if (isDateTimeChanged) {
-        // Validar que a nova data/hora não é futura
+        
         LocalDateTime newDateTime = LocalDateTime.of(newDate, newHour);
         LocalDateTime now = LocalDateTime.now();
 
@@ -736,23 +736,26 @@ public ReadingResponseDTO updateReading(Long id, UpdateReadingRequestDTO request
         }
     }
 
-    // Preparar o novo usuário se fornecido
+    
     UserEntity newUser = null;
     if (request.getUserId() != null) {
         newUser = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + request.getUserId()));
     }
 
-    // IMPORTANTE: Primeiro atualizar os valores de input (se necessário)
-    // para garantir que todas as readings (inclusive a principal) sejam recalculadas
+    
+    
     if (isUpdatingInputValues) {
         updateInputValues(instrumentId, originalDate, originalHour, request.getInputValues());
     }
 
-    // Depois atualizar data/hora e usuário em todas as readings do grupo
+    
     List<ReadingEntity> groupReadings = readingRepository.findAllReadingsInGroup(
             instrumentId, originalDate, originalHour);
             
+    
+    boolean isUpdatingComment = request.getComment() != null; 
+    
     for (ReadingEntity groupReading : groupReadings) {
         boolean changed = false;
         
@@ -767,13 +770,18 @@ public ReadingResponseDTO updateReading(Long id, UpdateReadingRequestDTO request
             changed = true;
         }
         
+        if (isUpdatingComment) {
+            groupReading.setComment(request.getComment());
+            changed = true;
+        }
+        
         if (changed) {
             readingRepository.save(groupReading);
-            log.info("Atualizada reading {} com data/hora/usuário", groupReading.getId());
+            log.info("Atualizada reading {} com data/hora/usuário/comentário", groupReading.getId());
         }
     }
     
-    // IMPORTANTE: Recarregar a reading principal para garantir que temos os dados mais atualizados
+    
     ReadingEntity updatedReading = readingRepository.findById(id)
             .orElseThrow(() -> new NotFoundException("Leitura não encontrada após atualização"));
             
@@ -781,7 +789,7 @@ public ReadingResponseDTO updateReading(Long id, UpdateReadingRequestDTO request
 }
 
 private void updateInputValues(Long instrumentId, LocalDate date, LocalTime hour, Map<String, Double> newInputValues) {
-    // Obter todas as leituras do grupo
+    
     List<ReadingEntity> groupReadings = readingRepository.findAllReadingsInGroup(instrumentId, date, hour);
     
     if (groupReadings.isEmpty()) {
@@ -794,7 +802,7 @@ private void updateInputValues(Long instrumentId, LocalDate date, LocalTime hour
     InstrumentEntity instrument = instrumentRepository.findById(instrumentId)
             .orElseThrow(() -> new NotFoundException("Instrumento não encontrado"));
     
-    // Validar inputs
+    
     Map<String, InputEntity> instrumentInputs = instrument.getInputs().stream()
             .collect(Collectors.toMap(InputEntity::getAcronym, input -> input));
     
@@ -805,24 +813,24 @@ private void updateInputValues(Long instrumentId, LocalDate date, LocalTime hour
         }
     }
     
-    // Primeiro: atualizar todos os valores de input do grupo
-    // Como os valores são compartilhados (many-to-many), precisamos atualizar apenas uma vez cada valor
+    
+    
     Set<ReadingInputValueEntity> uniqueInputValues = new HashSet<>();
     for (ReadingEntity reading : groupReadings) {
         uniqueInputValues.addAll(reading.getInputValues());
     }
     
-    // Mapear por acrônimo para facilitar atualização
+    
     Map<String, ReadingInputValueEntity> inputValuesByAcronym = uniqueInputValues.stream()
             .collect(Collectors.toMap(ReadingInputValueEntity::getInputAcronym, value -> value));
     
-    // Mapa para calcular novos valores
+    
     Map<String, Double> calculationInputs = new HashMap<>();
     for (ReadingInputValueEntity value : uniqueInputValues) {
         calculationInputs.put(value.getInputAcronym(), value.getValue());
     }
     
-    // Atualizar valores
+    
     boolean inputsChanged = false;
     for (Map.Entry<String, Double> entry : newInputValues.entrySet()) {
         String acronym = entry.getKey();
@@ -842,11 +850,11 @@ private void updateInputValues(Long instrumentId, LocalDate date, LocalTime hour
         }
     }
     
-    // Se pelo menos um valor foi alterado, recalcular TODAS as readings do grupo
+    
     if (inputsChanged) {
         log.info("Recalculando valores para todas as {} readings do grupo", groupReadings.size());
         
-        // Recalcular cada reading do grupo com os novos valores
+        
         for (ReadingEntity reading : groupReadings) {
             OutputEntity output = reading.getOutput();
             
@@ -935,59 +943,6 @@ private void updateInputValues(Long instrumentId, LocalDate date, LocalTime hour
             value = {
                 "readingById", "readingResponseDTO", "readingsByInstrument", "readingsByOutput",
                 "readingsByFilters", "instrumentLimitStatus", "clientInstrumentLimitStatuses",
-                "latestReadings", "groupedReadings", "multiInstrumentReadings"
-            },
-            allEntries = true,
-            cacheManager = "readingCacheManager"
-    )
-    public void deactivate(Long id) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getEditRead()) {
-                throw new UnauthorizedException("Usuário não autorizado a desativar leituras!");
-            }
-        }
-        ReadingEntity reading = readingRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
-
-        reading.setActive(false);
-        readingRepository.save(reading);
-    }
-
-    @Transactional
-    @CacheEvict(
-            value = {
-                "readingById", "readingResponseDTO"
-            },
-            key = "#id",
-            cacheManager = "readingCacheManager"
-    )
-    public ReadingResponseDTO updateComment(Long id, String comment) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getEditRead()) {
-                throw new UnauthorizedException("Usuário não autorizado a editar leituras!");
-            }
-        }
-
-        ReadingEntity reading = readingRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
-
-        if (!reading.getActive()) {
-            throw new InvalidInputException("Não é possível editar comentário de uma leitura inativa");
-        }
-
-        reading.setComment(comment);
-        ReadingEntity savedReading = readingRepository.save(reading);
-
-        return mapToResponseDTO(savedReading);
-    }
-
-    @Transactional
-    @CacheEvict(
-            value = {
-                "readingById", "readingResponseDTO", "readingsByInstrument", "readingsByOutput",
-                "readingsByFilters", "instrumentLimitStatus", "clientInstrumentLimitStatuses",
                 "latestReadings", "readingExists", "groupedReadings", "multiInstrumentReadings"
             },
             allEntries = true,
@@ -1004,24 +959,24 @@ private void updateInputValues(Long instrumentId, LocalDate date, LocalTime hour
         ReadingEntity reading = readingRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
 
-        // Remover associações com valores de input
+        
         Set<ReadingInputValueEntity> inputValues = new HashSet<>(reading.getInputValues());
         reading.getInputValues().clear();
         readingRepository.save(reading);
 
-        // Verificar quais valores de input não são mais usados por nenhuma outra leitura
+        
         for (ReadingInputValueEntity inputValue : inputValues) {
             inputValue.getReadings().remove(reading);
 
             if (inputValue.getReadings().isEmpty()) {
-                // Se não é mais usado por nenhuma leitura, podemos excluí-lo
+                
                 readingInputValueRepository.delete(inputValue);
             } else {
                 readingInputValueRepository.save(inputValue);
             }
         }
 
-        // Agora podemos excluir a leitura com segurança
+        
         readingRepository.delete(reading);
         log.info("Leitura excluída: ID {}", id);
     }
@@ -1097,7 +1052,7 @@ private void updateInputValues(Long instrumentId, LocalDate date, LocalTime hour
     public PagedReadingResponseDTO<ReadingResponseDTO> findGroupedReadingsFlatByInstrument(
             Long instrumentId, Boolean active, Pageable pageable) {
 
-        // Verificar permissões
+        
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getInstrumentationPermission().getViewRead()) {
@@ -1180,16 +1135,16 @@ private void updateInputValues(Long instrumentId, LocalDate date, LocalTime hour
     )
     @Transactional(readOnly = true)
     public List<InstrumentGroupedReadingsDTO> findLatestGroupedReadingsByClientId(Long clientId, int limit) {
-        // Verificações de permissão e existência do cliente (mantidas)
+        
 
-        // Buscar os momentos mais recentes para cada instrumento
+        
         List<Object[]> latestDateHours = readingRepository.findLatestDistinctDateHoursByClientId(clientId, limit);
 
         if (latestDateHours.isEmpty()) {
             return List.of();
         }
 
-        // Agrupar as datas/horas por instrumento
+        
         Map<Long, List<Object[]>> instrumentDateHoursMap = new HashMap<>();
         for (Object[] row : latestDateHours) {
             Long instrumentId = ((Number) row[0]).longValue();
@@ -1204,19 +1159,19 @@ private void updateInputValues(Long instrumentId, LocalDate date, LocalTime hour
                     .add(new Object[]{date, hour});
         }
 
-        // Preparar o resultado
+        
         List<InstrumentGroupedReadingsDTO> result = new ArrayList<>();
 
-        // Para cada instrumento, buscar as leituras das datas/horas especificadas
+        
         for (Map.Entry<Long, List<Object[]>> entry : instrumentDateHoursMap.entrySet()) {
             Long instrumentId = entry.getKey();
             List<Object[]> dateHours = entry.getValue();
 
-            // Buscar detalhes do instrumento
+            
             InstrumentEntity instrument = instrumentRepository.findById(instrumentId)
                     .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + instrumentId));
 
-            // Criar o DTO para o instrumento
+            
             InstrumentGroupedReadingsDTO instrumentDTO = new InstrumentGroupedReadingsDTO();
             instrumentDTO.setInstrumentId(instrument.getId());
             instrumentDTO.setInstrumentName(instrument.getName());
@@ -1225,23 +1180,23 @@ private void updateInputValues(Long instrumentId, LocalDate date, LocalTime hour
             instrumentDTO.setDamName(instrument.getDam().getName());
             instrumentDTO.setGroupedReadings(new ArrayList<>());
 
-            // Para cada data/hora, buscar as leituras (todos os outputs daquele momento)
+            
             for (Object[] dateHour : dateHours) {
                 LocalDate date = (LocalDate) dateHour[0];
                 LocalTime hour = (LocalTime) dateHour[1];
 
-                // Buscar leituras para essa data/hora específica
+                
                 List<ReadingEntity> readings = readingRepository.findByInstrumentIdAndDateAndHourAndActiveTrue(
                         instrumentId, date, hour);
 
                 if (!readings.isEmpty()) {
-                    // Criar um grupo para essa data/hora
+                    
                     String dateHourKey = date.toString() + " " + hour.toString();
                     InstrumentGroupedReadingsDTO.GroupedDateHourReadingsDTO group
                             = new InstrumentGroupedReadingsDTO.GroupedDateHourReadingsDTO();
                     group.setDateTime(dateHourKey);
 
-                    // Mapear as leituras para DTOs (todas as leituras desse momento - um por output)
+                    
                     List<ReadingResponseDTO> readingDTOs = readings.stream()
                             .map(this::mapToResponseDTOOptimized)
                             .collect(Collectors.toList());

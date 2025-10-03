@@ -28,7 +28,6 @@ import com.geosegbar.infra.reading.dtos.InstrumentReadingsDTO.MultiInstrumentRea
 import com.geosegbar.infra.reading.dtos.PagedReadingResponseDTO;
 import com.geosegbar.infra.reading.dtos.ReadingRequestDTO;
 import com.geosegbar.infra.reading.dtos.ReadingResponseDTO;
-import com.geosegbar.infra.reading.dtos.UpdateCommentRequestDTO;
 import com.geosegbar.infra.reading.dtos.UpdateReadingRequestDTO;
 import com.geosegbar.infra.reading.services.ReadingService;
 
@@ -209,13 +208,42 @@ public class ReadingController {
 
         ReadingResponseDTO updated = readingService.updateReading(id, request);
 
-        return ResponseEntity.ok(WebResponseEntity.success(updated, "Leitura atualizada com sucesso!"));
-    }
+        
+        StringBuilder message = new StringBuilder("Leitura atualizada com sucesso");
+        
+        boolean hasChanges = false;
+        if (request.getDate() != null || request.getHour() != null) {
+            message.append(" (data/hora alterada)");
+            hasChanges = true;
+        }
+        
+        if (request.getUserId() != null) {
+            if (hasChanges) {
+                message.append(" e");
+            }
+            message.append(" (usuário alterado)");
+            hasChanges = true;
+        }
+        
+        if (request.getInputValues() != null && !request.getInputValues().isEmpty()) {
+            if (hasChanges) {
+                message.append(" e");
+            }
+            message.append(" (valores de input e cálculos atualizados)");
+            hasChanges = true;
+        }
+        
+        if (request.getComment() != null) {
+            if (hasChanges) {
+                message.append(" e");
+            }
+            String commentAction = request.getComment().trim().isEmpty() ? "removido" : "atualizado";
+            message.append(" (comentário ").append(commentAction).append(")");
+        }
+        
+        message.append("!");
 
-    @PatchMapping("/{id}/deactivate")
-    public ResponseEntity<WebResponseEntity<Void>> deactivateReading(@PathVariable Long id) {
-        readingService.deactivate(id);
-        return ResponseEntity.ok(WebResponseEntity.success(null, "Leitura desativada com sucesso!"));
+        return ResponseEntity.ok(WebResponseEntity.success(updated, message.toString()));
     }
 
     @PatchMapping("/bulk-toggle-active")
@@ -247,20 +275,6 @@ public class ReadingController {
         }
 
         return ResponseEntity.ok(WebResponseEntity.success(result, message));
-    }
-
-    @PatchMapping("/{id}/comment")
-    public ResponseEntity<WebResponseEntity<ReadingResponseDTO>> updateComment(
-            @PathVariable Long id,
-            @Valid @RequestBody UpdateCommentRequestDTO request) {
-
-        ReadingResponseDTO updated = readingService.updateComment(id, request.getComment());
-
-        String message = request.getComment() != null
-                ? "Comentário atualizado com sucesso!"
-                : "Comentário removido com sucesso!";
-
-        return ResponseEntity.ok(WebResponseEntity.success(updated, message));
     }
 
     @PostMapping("/instrument/{instrumentId}")

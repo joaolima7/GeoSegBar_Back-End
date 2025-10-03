@@ -133,8 +133,8 @@ public class InstrumentService {
             );
         }
 
-        if (instrumentRepository.existsByNameAndDamIdAndActive(request.getName().toUpperCase(), request.getDamId(), true)) {
-            throw new DuplicateResourceException("Já existe um instrumento ativo com o nome '" + request.getName() + "' na mesma barragem");
+        if (instrumentRepository.existsByNameAndDamId(request.getName(), request.getDamId())) {
+            throw new DuplicateResourceException("Já existe um instrumento com o nome '" + request.getName() + "' na mesma barragem");
         }
 
         DamEntity dam = damRepository.findById(request.getDamId())
@@ -452,8 +452,8 @@ public class InstrumentService {
             );
         }
 
-        if (instrumentRepository.existsByNameAndDamIdAndIdNotAndActive(request.getName().toUpperCase(), request.getDamId(), id, true)) {
-            throw new DuplicateResourceException("Já existe um instrumento ativo com esse nome nesta barragem");
+        if (instrumentRepository.existsByNameAndDamIdAndIdNot(request.getName(), request.getDamId(), id)) {
+            throw new DuplicateResourceException("Já existe um instrumento com esse nome nesta barragem");
         }
 
         // Não precisamos mais verificar se está mudando de normal para régua linimétrica ou vice-versa

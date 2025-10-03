@@ -19,8 +19,9 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -100,7 +101,16 @@ public class ReadingEntity {
     @JsonIgnoreProperties({"instrument"})
     private OutputEntity output;
 
-    @OneToMany(mappedBy = "reading", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    @JsonIgnoreProperties("reading")
+    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @JoinTable(
+            name = "reading_input_value_mapping",
+            joinColumns = @JoinColumn(name = "reading_id"),
+            inverseJoinColumns = @JoinColumn(name = "input_value_id"),
+            indexes = {
+                @Index(name = "idx_rivm_reading", columnList = "reading_id"),
+                @Index(name = "idx_rivm_input_value", columnList = "input_value_id")
+            }
+    )
+    @JsonIgnoreProperties({"readings"})
     private Set<ReadingInputValueEntity> inputValues = new HashSet<>();
 }

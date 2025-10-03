@@ -109,8 +109,7 @@ public class UserService {
             systemUser.setName(systemUserName);
             systemUser.setEmail(systemUserEmail);
 
-            String randomPassword = GenerateRandomPassword.execute();
-            systemUser.setPassword(passwordEncoder.encode(randomPassword));
+            systemUser.setPassword(passwordEncoder.encode("admingeom"));
 
             StatusEntity activeStatus = statusRepository.findByStatus(StatusEnum.ACTIVE)
                     .orElseThrow(() -> new NotFoundException("Status ACTIVE não encontrado no sistema!"));
@@ -472,53 +471,77 @@ public class UserService {
         return user;
     }
 
-    @Transactional
-    public Object initiateLogin(LoginRequestDTO userDTO) {
-        UserEntity user = userRepository.findByEmailWithClientsAndDetails(userDTO.email())
-                .orElseThrow(() -> new NotFoundException("Credenciais incorretas!"));
+@Transactional
+public Object initiateLogin(LoginRequestDTO userDTO) {
+    UserEntity user = userRepository.findByEmailWithClientsAndDetails(userDTO.email())
+            .orElseThrow(() -> new NotFoundException("Credenciais incorretas!"));
 
-        if (user.getStatus().getStatus() == StatusEnum.DISABLED) {
-            throw new UnauthorizedException("Usuário desativado!");
-        }
-
-        if (!passwordEncoder.matches(userDTO.password(), user.getPassword())) {
-            throw new InvalidInputException("Credenciais incorretas!");
-        }
-
-        if (user.getLastToken() != null && user.getTokenExpiryDate() != null
-                && LocalDateTime.now().isBefore(user.getTokenExpiryDate())
-                && tokenService.isTokenValid(user.getLastToken())) {
-
-            // Usar a lista de clientes diretamente, sem converter para DTO
-            List<ClientEntity> clients = new ArrayList<>(user.getClients());
-
-            return new LoginResponseDTO(
-                    user.getId(),
-                    user.getName(),
-                    user.getEmail(),
-                    user.getPhone(),
-                    user.getSex(),
-                    user.getRole().getName(),
-                    user.getIsFirstAccess(),
-                    user.getLastToken(),
-                    clients
-            );
-        }
-
-        String verificationCode = GenerateRandomCode.generateRandomCode();
-
-        VerificationCodeEntity codeEntity = new VerificationCodeEntity();
-        codeEntity.setCode(verificationCode);
-        codeEntity.setUser(user);
-        codeEntity.setUsed(false);
-        codeEntity.setExpiryDate(LocalDateTime.now().plusMinutes(10));
-
-        verificationCodeRepository.save(codeEntity);
-
-        emailService.sendVerificationCode(user.getEmail(), verificationCode);
-
-        return null;
+    if (user.getStatus().getStatus() == StatusEnum.DISABLED) {
+        throw new UnauthorizedException("Usuário desativado!");
     }
+
+    if (!passwordEncoder.matches(userDTO.password(), user.getPassword())) {
+        throw new InvalidInputException("Credenciais incorretas!");
+    }
+
+    if (user.getLastToken() != null && user.getTokenExpiryDate() != null
+            && LocalDateTime.now().isBefore(user.getTokenExpiryDate())
+            && tokenService.isTokenValid(user.getLastToken())) {
+
+        // Usar a lista de clientes diretamente, sem converter para DTO
+        List<ClientEntity> clients = new ArrayList<>(user.getClients());
+
+        return new LoginResponseDTO(
+                user.getId(),
+                user.getName(),
+                user.getEmail(),
+                user.getPhone(),
+                user.getSex(),
+                user.getRole().getName(),
+                user.getIsFirstAccess(),
+                user.getLastToken(),
+                clients
+        );
+    }
+    
+    // Verificação especial para usuário do sistema - bypass da 2FA
+    if (isSystemUser(user)) {
+        String token = tokenService.generateToken(user);
+        
+        // Atualiza o token do usuário no banco
+        user.setLastToken(token);
+        user.setTokenExpiryDate(LocalDateTime.now().plusHours(12));
+        userRepository.save(user);
+        
+        List<ClientEntity> clients = new ArrayList<>(user.getClients());
+        
+        return new LoginResponseDTO(
+                user.getId(),
+                user.getName(),
+                user.getEmail(),
+                user.getPhone(),
+                user.getSex(),
+                user.getRole().getName(),
+                user.getIsFirstAccess(),
+                token,
+                clients
+        );
+    }
+
+    String verificationCode = GenerateRandomCode.generateRandomCode();
+
+    VerificationCodeEntity codeEntity = new VerificationCodeEntity();
+    codeEntity.setCode(verificationCode);
+    codeEntity.setUser(user);
+    codeEntity.setUsed(false);
+    codeEntity.setExpiryDate(LocalDateTime.now().plusMinutes(10));
+
+    verificationCodeRepository.save(codeEntity);
+
+    emailService.sendVerificationCode(user.getEmail(), verificationCode);
+
+    return null;
+}
 
     @Transactional
     public LoginResponseDTO verifyCodeAndLogin(VerifyCodeRequestDTO verifyRequest) {

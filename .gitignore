@@ -39,3 +39,7 @@ build/
 *.jpg *.jpeg *.png *.gif *.bmp *.tiff *.ico
 /uploads/ !uploads/.gitkeep
 
+
+/storage-dev/
+/logs/
+

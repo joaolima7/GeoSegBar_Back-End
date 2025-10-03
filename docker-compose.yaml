@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  geosegbar-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: geosegbar-api
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - JAVA_OPTS=-Xms512m -Xmx1024m -XX:+UseG1GC
+    volumes:
+      - ./storage-dev:/home/wwgeomprod/public_html/storage/app/public
+      - ./logs:/app/logs
+    networks:
+      - geosegbar-network
+
+networks:
+  geosegbar-network:
+    driver: bridge

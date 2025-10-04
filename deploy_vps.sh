@@ -1,4 +1,5 @@
 #!/bin/bash
+# filepath: /Users/joaoremonato/Projects/SpringBoot/GeoSegBar_Back-End/deploy_vps.sh
 
 set -e
 
@@ -37,7 +38,7 @@ if ! docker ps -q -f name=postgres-prod | grep -q .; then
       postgres:16-alpine
       
     echo "⏳ Aguardando banco de dados inicializar..."
-    sleep 10
+    sleep 15
     
     # Verificar se precisamos migrar dados do banco antigo
     if [ "$1" == "--migrate" ]; then
@@ -46,7 +47,7 @@ if ! docker ps -q -f name=postgres-prod | grep -q .; then
         # Instalar cliente PostgreSQL se necessário
         if ! command -v pg_dump &> /dev/null; then
             echo "⚙️ Instalando cliente PostgreSQL..."
-            apt-get update && apt-get install -y postgresql-client
+            sudo apt-get update && sudo apt-get install -y postgresql-client
         fi
         
         # Exportar dados do banco antigo
@@ -66,10 +67,10 @@ else
     echo "✅ Banco de dados já está rodando"
 fi
 
-# Fazer backup do container da API atual
-echo "📦 Fazendo backup do container atual da API..."
-docker stop geosegbar-api-prod || true
-docker rename geosegbar-api-prod geosegbar-api-backup-$(date +%Y%m%d-%H%M%S) || true
+# Parar e remover container atual da API (se existir)
+echo "🛑 Parando container atual da API..."
+docker stop geosegbar-api-prod 2>/dev/null || echo "   Container não estava rodando"
+docker rm geosegbar-api-prod 2>/dev/null || echo "   Container não existia"
 
 # Fazer pull das mudanças
 echo "📥 Atualizando código..."
@@ -97,26 +98,27 @@ echo "⏳ Aguardando aplicação inicializar..."
 sleep 30
 
 # Verificar se a aplicação está rodando
+echo "🔍 Verificando status da aplicação..."
 if curl -f http://localhost:9090/actuator/health > /dev/null 2>&1; then
     echo "✅ Deploy em PRODUÇÃO realizado com sucesso!"
+    echo "🌐 API disponível em: http://localhost:9090"
     
-    # Remover container de backup após sucesso
-    docker rm geosegbar-api-backup-* 2>/dev/null || true
+    # Mostrar status dos containers
+    echo "📊 Status dos containers:"
+    docker ps --filter "name=geosegbar" --filter "name=postgres-prod"
     
     # Limpar imagens não utilizadas
-    docker image prune -f
-else
-    echo "❌ Falha no deploy! Restaurando backup..."
-    docker stop geosegbar-api-prod || true
-    docker rm geosegbar-api-prod || true
+    docker image prune -f > /dev/null 2>&1 || true
     
-    # Restaurar backup se existir
-    BACKUP_CONTAINER=$(docker ps -a --filter "name=geosegbar-api-backup-" --format "{{.Names}}" | head -1)
-    if [ ! -z "$BACKUP_CONTAINER" ]; then
-        docker rename $BACKUP_CONTAINER geosegbar-api-prod
-        docker start geosegbar-api-prod
-        echo "🔄 Backup restaurado"
-    fi
+else
+    echo "❌ Falha no deploy! Verificando logs..."
+    echo "📋 Últimas linhas do log da API:"
+    docker logs --tail 20 geosegbar-api-prod
+    echo ""
+    echo "🔍 Status do container:"
+    docker ps -a --filter "name=geosegbar-api-prod"
+    echo ""
+    echo "💡 Para verificar logs completos: docker logs geosegbar-api-prod"
     exit 1
 fi
 

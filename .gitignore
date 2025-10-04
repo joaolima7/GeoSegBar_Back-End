@@ -42,4 +42,7 @@ build/
 
 /storage-dev/
 /logs/
+logs/
+log.out
+keystore.p12
 

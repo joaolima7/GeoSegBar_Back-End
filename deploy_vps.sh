@@ -15,7 +15,15 @@ fi
 docker network create geosegbar-network 2>/dev/null || true
 
 # Verificar se o banco de dados existe e está rodando
-if ! docker ps -q -f name=postgres-prod | grep -q .; then
+if docker ps -q -f name=postgres-prod | grep -q .; then
+    echo "✅ Banco de dados já está rodando"
+elif docker ps -a -q -f name=postgres-prod | grep -q .; then
+    echo "🔄 Container do banco existe mas está parado. Reiniciando..."
+    docker start postgres-prod
+    echo "⏳ Aguardando banco de dados inicializar..."
+    sleep 10
+    echo "✅ Banco de dados reiniciado"
+else
     echo "🛢️ Container do banco de dados não encontrado. Criando..."
     
     # Verificar se existe um volume para o banco de dados
@@ -39,32 +47,6 @@ if ! docker ps -q -f name=postgres-prod | grep -q .; then
       
     echo "⏳ Aguardando banco de dados inicializar..."
     sleep 15
-    
-    # Verificar se precisamos migrar dados do banco antigo
-    if [ "$1" == "--migrate" ]; then
-        echo "🔄 Migrando dados do banco antigo..."
-        
-        # Instalar cliente PostgreSQL se necessário
-        if ! command -v pg_dump &> /dev/null; then
-            echo "⚙️ Instalando cliente PostgreSQL..."
-            sudo apt-get update && sudo apt-get install -y postgresql-client
-        fi
-        
-        # Exportar dados do banco antigo
-        echo "📤 Exportando dados do banco antigo..."
-        PGPASSWORD=Geometr!s@ pg_dump -h 162.240.165.193 -U postgres -d wwgeom_dev_test > /tmp/db_export.sql
-        
-        # Importar para o novo banco
-        echo "📥 Importando dados para o novo banco..."
-        cat /tmp/db_export.sql | docker exec -i postgres-prod psql -U postgres -d geosegbar_prod
-        
-        # Limpar arquivo temporário
-        rm /tmp/db_export.sql
-        
-        echo "✅ Migração de dados concluída!"
-    fi
-else
-    echo "✅ Banco de dados já está rodando"
 fi
 
 # Parar e remover container atual da API (se existir)

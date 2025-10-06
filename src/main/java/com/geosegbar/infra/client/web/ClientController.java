@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.ClientEntity;
-import com.geosegbar.infra.client.dtos.LogoUpdateDTO;
+import com.geosegbar.infra.client.dtos.ClientDTO;
 import com.geosegbar.infra.client.service.ClientService;
 
 import jakarta.validation.Valid;
@@ -55,35 +55,17 @@ public class ClientController {
     }
 
     @PostMapping
-    public ResponseEntity<WebResponseEntity<ClientEntity>> createClient(@Valid @RequestBody ClientEntity client) {
-        ClientEntity createdClient = clientService.save(client);
+    public ResponseEntity<WebResponseEntity<ClientEntity>> createClient(@Valid @RequestBody ClientDTO clientDTO) {
+        ClientEntity createdClient = clientService.save(clientDTO);
         WebResponseEntity<ClientEntity> response = WebResponseEntity.success(createdClient, "Cliente criado com sucesso!");
         return ResponseEntity.ok(response);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<WebResponseEntity<ClientEntity>> updateClient(@PathVariable Long id, @Valid @RequestBody ClientEntity client) {
-        client.setId(id);
-        ClientEntity updatedClient = clientService.update(client);
+    public ResponseEntity<WebResponseEntity<ClientEntity>> updateClient(@PathVariable Long id, @Valid @RequestBody ClientDTO clientDTO) {
+        clientDTO.setId(id);
+        ClientEntity updatedClient = clientService.update(clientDTO);
         WebResponseEntity<ClientEntity> response = WebResponseEntity.success(updatedClient, "Cliente atualizado com sucesso!");
-        return ResponseEntity.ok(response);
-    }
-
-    @PutMapping("/{id}/logo")
-    public ResponseEntity<WebResponseEntity<ClientEntity>> updateLogo(
-            @PathVariable Long id,
-            @RequestBody LogoUpdateDTO logoUpdateDTO) {
-        ClientEntity updatedClient = clientService.updateLogo(id, logoUpdateDTO);
-        WebResponseEntity<ClientEntity> response = WebResponseEntity.success(
-                updatedClient, "Logo do cliente atualizado com sucesso!");
-        return ResponseEntity.ok(response);
-    }
-
-    @DeleteMapping("/{id}/logo")
-    public ResponseEntity<WebResponseEntity<ClientEntity>> removeLogo(@PathVariable Long id) {
-        ClientEntity updatedClient = clientService.updateLogo(id, null);
-        WebResponseEntity<ClientEntity> response = WebResponseEntity.success(
-                updatedClient, "Logo do cliente removido com sucesso!");
         return ResponseEntity.ok(response);
     }
 

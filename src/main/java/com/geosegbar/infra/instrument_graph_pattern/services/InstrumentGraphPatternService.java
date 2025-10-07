@@ -18,7 +18,6 @@ import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.dam.services.DamService;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
-import com.geosegbar.infra.instrument.services.InstrumentService;
 import com.geosegbar.infra.instrument_graph_axes.persistence.jpa.InstrumentGraphAxesRepository;
 import com.geosegbar.infra.instrument_graph_pattern.dtos.CreateGraphPatternRequest;
 import com.geosegbar.infra.instrument_graph_pattern.dtos.GraphPatternDetailResponseDTO;
@@ -165,7 +164,7 @@ public class InstrumentGraphPatternService {
     }
 
     public GraphPatternDetailResponseDTO mapToDetailResponseDTO(InstrumentGraphPatternEntity pattern) {
-        // Criar uma variável final para usar nas lambdas
+
         final InstrumentGraphPatternEntity finalPattern;
 
         if (!Hibernate.isInitialized(pattern.getProperties())) {
@@ -254,7 +253,6 @@ public class InstrumentGraphPatternService {
             ));
         }
 
-        // Adicionar mapeamento para constante
         if (property.getConstant() != null) {
             dto.setConstant(new GraphPatternDetailResponseDTO.RelatedConstantDTO(
                     property.getConstant().getId(),

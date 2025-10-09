@@ -2,6 +2,7 @@ package com.geosegbar.infra.user.persistence.jpa;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -15,6 +16,16 @@ import jakarta.persistence.QueryHint;
 
 @Repository
 public interface UserRepository extends JpaRepository<UserEntity, Long> {
+
+    @Query("SELECT DISTINCT u FROM UserEntity u "
+            + "LEFT JOIN FETCH u.clients c "
+            + "WHERE u.id IN :ids")
+    List<UserEntity> findByIdInWithClients(@Param("ids") Set<Long> ids);
+
+    @Query("SELECT u FROM UserEntity u "
+            + "JOIN u.clients c "
+            + "WHERE c.id = :clientId")
+    List<UserEntity> findByClientId(@Param("clientId") Long clientId);
 
     @QueryHints(
             @QueryHint(name = "org.hibernate.cacheable", value = "true"))

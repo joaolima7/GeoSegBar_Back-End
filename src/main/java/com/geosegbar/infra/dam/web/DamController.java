@@ -71,13 +71,6 @@ public class DamController {
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
-    @PostMapping
-    public ResponseEntity<WebResponseEntity<DamEntity>> createDam(@Valid @RequestBody DamEntity dam) {
-        DamEntity createdDam = damService.save(dam);
-        WebResponseEntity<DamEntity> response = WebResponseEntity.success(createdDam, "Barragem criada com sucesso!");
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
-    }
-
     @PutMapping("/{id}")
     public ResponseEntity<WebResponseEntity<DamEntity>> updateDam(
             @PathVariable Long id,

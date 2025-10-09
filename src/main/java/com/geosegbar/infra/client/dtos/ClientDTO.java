@@ -1,5 +1,7 @@
 package com.geosegbar.infra.client.dtos;
 
+import java.util.Set;
+
 import com.geosegbar.entities.StatusEntity;
 
 import jakarta.validation.constraints.Email;
@@ -67,4 +69,6 @@ public class ClientDTO {
     private String logoBase64;
 
     private StatusEntity status;
+
+    private Set<Long> userIds;
 }

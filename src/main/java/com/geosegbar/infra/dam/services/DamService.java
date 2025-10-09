@@ -275,22 +275,6 @@ public class DamService {
     }
 
     @Transactional
-    public DamEntity save(DamEntity damEntity) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getAttributionsPermission().getEditDam()) {
-                throw new UnauthorizedException("Usuário não tem permissão para criar barragens!");
-            }
-        }
-        if (damRepository.existsByNameAndClientId(damEntity.getName(), damEntity.getClient().getId())) {
-            throw new DuplicateResourceException("Já existe uma barragem com este nome para este cliente!");
-        }
-
-        DamEntity savedDam = damRepository.save(damEntity);
-        return findById(savedDam.getId());
-    }
-
-    @Transactional
     public DamEntity updateBasicInfo(Long damId, UpdateDamRequest request) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();

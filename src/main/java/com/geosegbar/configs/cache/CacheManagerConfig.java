@@ -107,51 +107,6 @@ public class CacheManagerConfig {
         return cacheManager;
     }
 
-    @Bean("userCacheManager")
-    public CacheManager userCacheManager() {
-        SimpleCacheManager cacheManager = new SimpleCacheManager();
-        cacheManager.setCaches(Arrays.asList(
-                new CaffeineCache("userById",
-                        Caffeine.newBuilder()
-                                .maximumSize(500)
-                                .expireAfterWrite(Duration.ofMinutes(30))
-                                .expireAfterAccess(Duration.ofMinutes(15))
-                                .build()),
-                new CaffeineCache("userByEmail",
-                        Caffeine.newBuilder()
-                                .maximumSize(300)
-                                .expireAfterWrite(Duration.ofMinutes(20))
-                                .expireAfterAccess(Duration.ofMinutes(10))
-                                .build()),
-                new CaffeineCache("allUsers",
-                        Caffeine.newBuilder()
-                                .maximumSize(10)
-                                .expireAfterWrite(Duration.ofMinutes(10))
-                                .expireAfterAccess(Duration.ofMinutes(5))
-                                .build()),
-                new CaffeineCache("usersByRoleAndClient",
-                        Caffeine.newBuilder()
-                                .maximumSize(50)
-                                .expireAfterWrite(Duration.ofMinutes(15))
-                                .expireAfterAccess(Duration.ofMinutes(8))
-                                .build()),
-                new CaffeineCache("usersByCreatedBy",
-                        Caffeine.newBuilder()
-                                .maximumSize(100)
-                                .expireAfterWrite(Duration.ofMinutes(20))
-                                .expireAfterAccess(Duration.ofMinutes(10))
-                                .build()),
-                new CaffeineCache("userExistence",
-                        Caffeine.newBuilder()
-                                .maximumSize(200)
-                                .expireAfterWrite(Duration.ofMinutes(5))
-                                .expireAfterAccess(Duration.ofMinutes(2))
-                                .build())
-        ));
-
-        return cacheManager;
-    }
-
     @Bean("checklistCacheManager")
     public CacheManager checklistCacheManager() {
         SimpleCacheManager cacheManager = new SimpleCacheManager();

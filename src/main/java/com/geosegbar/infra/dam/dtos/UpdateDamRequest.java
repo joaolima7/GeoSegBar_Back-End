@@ -26,12 +26,10 @@ public class UpdateDamRequest {
     @NotBlank(message = "O nome da rua é obrigatório!")
     private String street;
 
-    @NotBlank(message = "O nome do bairro é obrigatório!")
     @Size(max = 100, message = "O nome do bairro deve ter no máximo 100 caracteres!")
     private String neighborhood;
 
-    @Pattern(regexp = "^[0-9]+$", message = "O número do endereço deve conter apenas números!")
-    @Size(max = 10, message = "O número do endereço deve ter no máximo 10 caracteres!")
+    @Size(max = 20, message = "O número do endereço deve ter no máximo 20 caracteres!")
     private String numberAddress;
 
     @NotBlank(message = "O nome da cidade é obrigatório!")

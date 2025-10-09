@@ -1,11 +1,15 @@
 package com.geosegbar.infra.client.service;
 
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.ClientEntity;
+import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.FileStorageException;
 import com.geosegbar.exceptions.NotFoundException;
@@ -13,6 +17,7 @@ import com.geosegbar.infra.client.dtos.ClientDTO;
 import com.geosegbar.infra.client.dtos.LogoUpdateDTO;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.file_storage.FileStorageService;
+import com.geosegbar.infra.user.persistence.jpa.UserRepository;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +28,7 @@ public class ClientService {
 
     private final ClientRepository clientRepository;
     private final FileStorageService fileStorageService;
+    private final UserRepository userRepository;
 
     @Transactional
     public void deleteById(Long id) {
@@ -48,9 +54,18 @@ public class ClientService {
 
         ClientEntity clientEntity = convertDTOToEntity(clientDTO);
 
+        // Processar logo
         processLogoUpdate(clientEntity, clientDTO.getLogoBase64(), null);
 
-        return clientRepository.save(clientEntity);
+        // Salvar cliente primeiro para obter o ID
+        ClientEntity savedClient = clientRepository.save(clientEntity);
+
+        // Associar usuários ao cliente
+        if (clientDTO.getUserIds() != null && !clientDTO.getUserIds().isEmpty()) {
+            associateUsersToClient(savedClient, clientDTO.getUserIds());
+        }
+
+        return savedClient;
     }
 
     @Transactional
@@ -68,9 +83,108 @@ public class ClientService {
 
         ClientEntity clientEntity = convertDTOToEntity(clientDTO);
 
+        // Processar logo
         processLogoUpdate(clientEntity, clientDTO.getLogoBase64(), existingClient);
 
-        return clientRepository.save(clientEntity);
+        // Salvar cliente atualizado
+        ClientEntity savedClient = clientRepository.save(clientEntity);
+
+        // Processar associação de usuários
+        processUserAssociations(savedClient, clientDTO.getUserIds());
+
+        return savedClient;
+    }
+
+    private void associateUsersToClient(ClientEntity client, Set<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return;
+        }
+
+        // Buscar usuários por IDs (batch query)
+        List<UserEntity> users = userRepository.findByIdInWithClients(userIds);
+
+        if (users.size() != userIds.size()) {
+            Set<Long> foundIds = users.stream()
+                    .map(UserEntity::getId)
+                    .collect(Collectors.toSet());
+            Set<Long> missingIds = new HashSet<>(userIds);
+            missingIds.removeAll(foundIds);
+            throw new NotFoundException("Usuários não encontrados com IDs: " + missingIds);
+        }
+
+        // Para cada usuário, remover este cliente se já existir e adicionar novamente
+        for (UserEntity user : users) {
+            // Remover o cliente atual de outros clientes do usuário se necessário
+            user.getClients().clear();
+            user.getClients().add(client);
+        }
+
+        // Salvar todos de uma vez (batch update)
+        userRepository.saveAll(users);
+    }
+
+    private void processUserAssociations(ClientEntity client, Set<Long> userIds) {
+        // Se userIds é null, não modificar associações
+        if (userIds == null) {
+            return;
+        }
+
+        // Buscar usuários atualmente associados a este cliente
+        List<UserEntity> currentUsers = userRepository.findByClientId(client.getId());
+
+        // Se userIds está vazio, remover todas as associações
+        if (userIds.isEmpty()) {
+            for (UserEntity user : currentUsers) {
+                user.getClients().remove(client);
+            }
+            userRepository.saveAll(currentUsers);
+            return;
+        }
+
+        // Obter IDs dos usuários atualmente associados
+        Set<Long> currentUserIds = currentUsers.stream()
+                .map(UserEntity::getId)
+                .collect(Collectors.toSet());
+
+        // Identificar usuários a serem adicionados e removidos
+        Set<Long> usersToAdd = new HashSet<>(userIds);
+        usersToAdd.removeAll(currentUserIds);
+
+        Set<Long> usersToRemove = new HashSet<>(currentUserIds);
+        usersToRemove.removeAll(userIds);
+
+        // Remover usuários
+        if (!usersToRemove.isEmpty()) {
+            List<UserEntity> usersToRemoveList = currentUsers.stream()
+                    .filter(u -> usersToRemove.contains(u.getId()))
+                    .collect(Collectors.toList());
+
+            for (UserEntity user : usersToRemoveList) {
+                user.getClients().remove(client);
+            }
+            userRepository.saveAll(usersToRemoveList);
+        }
+
+        // Adicionar novos usuários
+        if (!usersToAdd.isEmpty()) {
+            List<UserEntity> usersToAddList = userRepository.findByIdInWithClients(usersToAdd);
+
+            if (usersToAddList.size() != usersToAdd.size()) {
+                Set<Long> foundIds = usersToAddList.stream()
+                        .map(UserEntity::getId)
+                        .collect(Collectors.toSet());
+                Set<Long> missingIds = new HashSet<>(usersToAdd);
+                missingIds.removeAll(foundIds);
+                throw new NotFoundException("Usuários não encontrados com IDs: " + missingIds);
+            }
+
+            for (UserEntity user : usersToAddList) {
+                // Limpar clientes anteriores e adicionar apenas este
+                user.getClients().clear();
+                user.getClients().add(client);
+            }
+            userRepository.saveAll(usersToAddList);
+        }
     }
 
     @Transactional

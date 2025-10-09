@@ -8,8 +8,6 @@ import java.util.Optional;
 import java.util.Set;
 
 import org.hibernate.Hibernate;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -133,9 +131,6 @@ public class UserService {
     }
 
     @Transactional
-    @CacheEvict(value = {"userById", "allUsers", "usersByRoleAndClient", "usersByCreatedBy",
-        "userExistence"},
-            allEntries = true, cacheManager = "userCacheManager")
     public void deleteById(Long id) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -165,7 +160,6 @@ public class UserService {
     }
 
     @Transactional()
-    @Cacheable(value = "usersByCreatedBy", key = "#createdById", cacheManager = "userCacheManager")
     public List<UserEntity> findByCreatedBy(Long createdById) {
         userRepository.findById(createdById)
                 .orElseThrow(() -> new NotFoundException("Usuário criador não encontrado com ID: " + createdById));
@@ -176,8 +170,7 @@ public class UserService {
     }
 
     @Transactional()
-    @Cacheable(value = "usersByRoleAndClient", key = "#roleId + '_' + #clientId + '_' + #statusId",
-            cacheManager = "userCacheManager")
+
     public List<UserEntity> findByRoleAndClient(Long roleId, Long clientId, Long statusId) {
         List<UserEntity> result = userRepository.findByRoleAndClientWithDetails(roleId, clientId, statusId);
 
@@ -185,9 +178,6 @@ public class UserService {
     }
 
     @Transactional
-    @CacheEvict(value = {"userById", "allUsers", "usersByRoleAndClient", "usersByCreatedBy",
-        "userExistence", "userByEmail"},
-            allEntries = true, cacheManager = "userCacheManager")
     public UserEntity save(UserCreateDTO userDTO) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -273,9 +263,6 @@ public class UserService {
     }
 
     @Transactional
-    @CacheEvict(value = {"userById", "allUsers", "usersByRoleAndClient", "usersByCreatedBy",
-        "userExistence", "userByEmail"},
-            allEntries = true, cacheManager = "userCacheManager")
     public UserEntity update(Long id, UserUpdateDTO userDTO) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -346,8 +333,6 @@ public class UserService {
     }
 
     @Transactional
-    @CacheEvict(value = {"userById", "userByEmail"},
-            allEntries = true, cacheManager = "userCacheManager")
     public UserEntity updatePassword(Long id, UserPasswordUpdateDTO passwordDTO) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -380,8 +365,6 @@ public class UserService {
     }
 
     @Transactional
-    @CacheEvict(value = {"userById", "allUsers", "usersByRoleAndClient"},
-            allEntries = true, cacheManager = "userCacheManager")
     public UserEntity updateUserClients(Long userId, UserClientAssociationDTO clientAssociationDTO) {
         AuthenticatedUserUtil.checkAdminPermission();
         UserEntity user = findEntityByIdWithAllDetails(userId);
@@ -420,14 +403,12 @@ public class UserService {
     }
 
     @Transactional()
-    @Cacheable(value = "userById", key = "#id", cacheManager = "userCacheManager")
     public UserEntity findById(Long id) {
         UserEntity user = findEntityByIdWithAllDetails(id);
         return user;
     }
 
     @Transactional()
-    @Cacheable(value = "userByEmail", key = "#email", cacheManager = "userCacheManager")
     public UserEntity findByEmail(String email) {
         UserEntity user = userRepository.findByEmailWithBasicDetails(email)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com email: " + email));
@@ -436,7 +417,6 @@ public class UserService {
     }
 
     @Transactional()
-    @Cacheable(value = "allUsers", key = "'all'", cacheManager = "userCacheManager")
     public List<UserEntity> findAll() {
         List<UserEntity> users = userRepository.findAllWithBasicDetails();
 
@@ -449,13 +429,11 @@ public class UserService {
     }
 
     @Transactional()
-    @Cacheable(value = "userExistence", key = "'email_' + #email", cacheManager = "userCacheManager")
     public boolean existsByEmail(String email) {
         return userRepository.existsByEmail(email);
     }
 
     @Transactional()
-    @Cacheable(value = "userExistence", key = "'emailNot_' + #email + '_' + #id", cacheManager = "userCacheManager")
     public boolean existsByEmailAndIdNot(String email, Long id) {
         return userRepository.existsByEmailAndIdNot(email, id);
     }
@@ -471,77 +449,74 @@ public class UserService {
         return user;
     }
 
-@Transactional
-public Object initiateLogin(LoginRequestDTO userDTO) {
-    UserEntity user = userRepository.findByEmailWithClientsAndDetails(userDTO.email())
-            .orElseThrow(() -> new NotFoundException("Credenciais incorretas!"));
+    @Transactional
+    public Object initiateLogin(LoginRequestDTO userDTO) {
+        UserEntity user = userRepository.findByEmailWithClientsAndDetails(userDTO.email())
+                .orElseThrow(() -> new NotFoundException("Credenciais incorretas!"));
 
-    if (user.getStatus().getStatus() == StatusEnum.DISABLED) {
-        throw new UnauthorizedException("Usuário não tem acesso ao sistema!");
+        if (user.getStatus().getStatus() == StatusEnum.DISABLED) {
+            throw new UnauthorizedException("Usuário não tem acesso ao sistema!");
+        }
+
+        if (!passwordEncoder.matches(userDTO.password(), user.getPassword())) {
+            throw new InvalidInputException("Credenciais incorretas!");
+        }
+
+        if (user.getLastToken() != null && user.getTokenExpiryDate() != null
+                && LocalDateTime.now().isBefore(user.getTokenExpiryDate())
+                && tokenService.isTokenValid(user.getLastToken())) {
+
+            List<ClientEntity> clients = new ArrayList<>(user.getClients());
+
+            return new LoginResponseDTO(
+                    user.getId(),
+                    user.getName(),
+                    user.getEmail(),
+                    user.getPhone(),
+                    user.getSex(),
+                    user.getRole().getName(),
+                    user.getIsFirstAccess(),
+                    user.getLastToken(),
+                    clients
+            );
+        }
+
+        if (isSystemUser(user)) {
+            String token = tokenService.generateToken(user);
+
+            user.setLastToken(token);
+            user.setTokenExpiryDate(LocalDateTime.now().plusHours(12));
+            userRepository.save(user);
+
+            List<ClientEntity> clients = new ArrayList<>(user.getClients());
+
+            return new LoginResponseDTO(
+                    user.getId(),
+                    user.getName(),
+                    user.getEmail(),
+                    user.getPhone(),
+                    user.getSex(),
+                    user.getRole().getName(),
+                    user.getIsFirstAccess(),
+                    token,
+                    clients
+            );
+        }
+
+        String verificationCode = GenerateRandomCode.generateRandomCode();
+
+        VerificationCodeEntity codeEntity = new VerificationCodeEntity();
+        codeEntity.setCode(verificationCode);
+        codeEntity.setUser(user);
+        codeEntity.setUsed(false);
+        codeEntity.setExpiryDate(LocalDateTime.now().plusMinutes(10));
+
+        verificationCodeRepository.save(codeEntity);
+
+        emailService.sendVerificationCode(user.getEmail(), verificationCode);
+
+        return null;
     }
-
-    if (!passwordEncoder.matches(userDTO.password(), user.getPassword())) {
-        throw new InvalidInputException("Credenciais incorretas!");
-    }
-
-    if (user.getLastToken() != null && user.getTokenExpiryDate() != null
-            && LocalDateTime.now().isBefore(user.getTokenExpiryDate())
-            && tokenService.isTokenValid(user.getLastToken())) {
-
-        
-        List<ClientEntity> clients = new ArrayList<>(user.getClients());
-
-        return new LoginResponseDTO(
-                user.getId(),
-                user.getName(),
-                user.getEmail(),
-                user.getPhone(),
-                user.getSex(),
-                user.getRole().getName(),
-                user.getIsFirstAccess(),
-                user.getLastToken(),
-                clients
-        );
-    }
-    
-    
-    if (isSystemUser(user)) {
-        String token = tokenService.generateToken(user);
-        
-        
-        user.setLastToken(token);
-        user.setTokenExpiryDate(LocalDateTime.now().plusHours(12));
-        userRepository.save(user);
-        
-        List<ClientEntity> clients = new ArrayList<>(user.getClients());
-        
-        return new LoginResponseDTO(
-                user.getId(),
-                user.getName(),
-                user.getEmail(),
-                user.getPhone(),
-                user.getSex(),
-                user.getRole().getName(),
-                user.getIsFirstAccess(),
-                token,
-                clients
-        );
-    }
-
-    String verificationCode = GenerateRandomCode.generateRandomCode();
-
-    VerificationCodeEntity codeEntity = new VerificationCodeEntity();
-    codeEntity.setCode(verificationCode);
-    codeEntity.setUser(user);
-    codeEntity.setUsed(false);
-    codeEntity.setExpiryDate(LocalDateTime.now().plusMinutes(10));
-
-    verificationCodeRepository.save(codeEntity);
-
-    emailService.sendVerificationCode(user.getEmail(), verificationCode);
-
-    return null;
-}
 
     @Transactional
     public LoginResponseDTO verifyCodeAndLogin(VerifyCodeRequestDTO verifyRequest) {
@@ -609,8 +584,6 @@ public Object initiateLogin(LoginRequestDTO userDTO) {
     }
 
     @Transactional
-    @CacheEvict(value = {"userById", "userByEmail"},
-            allEntries = true, cacheManager = "userCacheManager")
     public void resetPassword(ResetPasswordRequestDTO requestDTO) {
         UserEntity user = userRepository.findByEmail(requestDTO.getEmail())
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com este email!"));

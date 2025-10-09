@@ -25,6 +25,15 @@ RUN apk update && apk upgrade && \
     apk add --no-cache bash curl wget && \
     rm -rf /var/cache/apk/*
 
+# Definir timezone padrão da imagem
+ENV TZ=America/Sao_Paulo
+
+# instalar tzdata para configurar /etc/localtime
+RUN apk update && apk upgrade && \
+    apk add --no-cache bash curl wget tzdata && \
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
+    rm -rf /var/cache/apk/*
+
 # Criar usuário não-root para segurança
 RUN addgroup -g 1001 -S springboot && \
     adduser -u 1001 -S springboot -G springboot

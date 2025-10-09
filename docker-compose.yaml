@@ -7,6 +7,7 @@ services:
       POSTGRES_DB: geosegbar_dev
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: Geometr!s@
+      TZ: "America/Sao_Paulo"
     ports:
       - "5432:5432"
     volumes:
@@ -32,6 +33,7 @@ services:
       - "9090:9090"
     environment:
       - SPRING_PROFILES_ACTIVE=dev
+      - TZ=America/Sao_Paulo
       - JAVA_OPTS=-Xms512m -Xmx1024m -XX:+UseG1GC
     volumes:
       - ./storage-dev:/home/wwgeomprod/public_html/storage/app/public

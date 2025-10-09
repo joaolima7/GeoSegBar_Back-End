@@ -416,7 +416,8 @@ public class ReadingService {
     @CacheEvict(
             value = {
                 "readingsByInstrument", "instrumentLimitStatus", "clientInstrumentLimitStatuses",
-                "latestReadings", "readingExists", "multiInstrumentReadings", "groupedReadings"
+                "latestReadings", "readingExists", "multiInstrumentReadings", "groupedReadings",
+                "clientInstrumentLatestGroupedReadings" // ← ADICIONAR ESTA LINHA
             },
             allEntries = true,
             cacheManager = "readingCacheManager"
@@ -646,7 +647,8 @@ public class ReadingService {
             value = {
                 "readingById", "readingResponseDTO", "readingsByInstrument", "readingsByOutput",
                 "readingsByFilters", "instrumentLimitStatus", "clientInstrumentLimitStatuses",
-                "latestReadings", "groupedReadings", "multiInstrumentReadings"
+                "latestReadings", "groupedReadings", "multiInstrumentReadings",
+                "clientInstrumentLatestGroupedReadings"
             },
             allEntries = true,
             cacheManager = "readingCacheManager"
@@ -862,7 +864,8 @@ public class ReadingService {
             value = {
                 "readingById", "readingResponseDTO", "readingsByInstrument", "readingsByOutput",
                 "readingsByFilters", "instrumentLimitStatus", "clientInstrumentLimitStatuses",
-                "latestReadings", "groupedReadings", "multiInstrumentReadings"
+                "latestReadings", "groupedReadings", "multiInstrumentReadings",
+                "clientInstrumentLatestGroupedReadings"
             },
             allEntries = true,
             cacheManager = "readingCacheManager"
@@ -915,7 +918,8 @@ public class ReadingService {
             value = {
                 "readingById", "readingResponseDTO", "readingsByInstrument", "readingsByOutput",
                 "readingsByFilters", "instrumentLimitStatus", "clientInstrumentLimitStatuses",
-                "latestReadings", "readingExists", "groupedReadings", "multiInstrumentReadings"
+                "latestReadings", "readingExists", "groupedReadings", "multiInstrumentReadings",
+                "clientInstrumentLatestGroupedReadings"
             },
             allEntries = true,
             cacheManager = "readingCacheManager"

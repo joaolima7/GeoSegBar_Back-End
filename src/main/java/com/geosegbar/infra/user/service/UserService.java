@@ -170,9 +170,31 @@ public class UserService {
     }
 
     @Transactional()
+    public List<UserEntity> findByFilters(Long roleId, Long clientId, Long statusId, Boolean isAdminManagement) {
+        List<UserEntity> result = new ArrayList<>();
 
-    public List<UserEntity> findByRoleAndClient(Long roleId, Long clientId, Long statusId) {
-        List<UserEntity> result = userRepository.findByRoleAndClientWithDetails(roleId, clientId, statusId);
+        // Validação: se isAdminManagement é false, clientId é obrigatório
+        if (isAdminManagement != null && !isAdminManagement && clientId == null) {
+            if (result.add(AuthenticatedUserUtil.getCurrentUser())) {
+                return result;
+            }
+        }
+
+        // Fluxo 1: Gestão administrativa (todos os usuários do sistema, exceto SISTEMA)
+        if (isAdminManagement != null && isAdminManagement) {
+            result = userRepository.findAllForAdminManagement(statusId);
+        } // Fluxo 2: Colaboradores de um cliente específico (excluindo SISTEMA)
+        else if (isAdminManagement != null && !isAdminManagement && clientId != null) {
+            result = userRepository.findCollaboratorsByClient(clientId, statusId);
+        } // Fluxo 3: Filtro padrão com exclusão do usuário SISTEMA
+        else {
+            result = userRepository.findByRoleAndClientWithDetails(roleId, clientId, statusId);
+
+            // Filtrar usuário SISTEMA do resultado
+            result = result.stream()
+                    .filter(user -> !isSystemUser(user))
+                    .collect(java.util.stream.Collectors.toList());
+        }
 
         return result;
     }
@@ -264,19 +286,27 @@ public class UserService {
 
     @Transactional
     public UserEntity update(Long id, UserUpdateDTO userDTO) {
+        UserEntity existingUser = findEntityByIdWithAllDetails(id);
+
+        if (isSystemUser(existingUser)) {
+            throw new InvalidInputException("O usuário SISTEMA não pode ser modificado.");
+        }
+
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+
+            if (userLogged.getRole() != null
+                    && userLogged.getRole().getName() == RoleEnum.COLLABORATOR
+                    && existingUser.getRole() != null
+                    && existingUser.getRole().getName() == RoleEnum.ADMIN) {
+                throw new UnauthorizedException("Colaborador não pode editar usuário administrador.");
+            }
+
             if (userLogged.getId() != id.longValue()) {
                 if (!userLogged.getAttributionsPermission().getEditUser()) {
                     throw new UnauthorizedException("Usuário não tem permissão para editar usuários que não sejam ele mesmo!");
                 }
             }
-        }
-
-        UserEntity existingUser = findEntityByIdWithAllDetails(id);
-
-        if (isSystemUser(existingUser)) {
-            throw new InvalidInputException("O usuário SISTEMA não pode ser modificado.");
         }
 
         if (userRepository.existsByEmailAndIdNot(userDTO.getEmail(), id)) {

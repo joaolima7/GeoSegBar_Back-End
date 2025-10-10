@@ -62,12 +62,13 @@ public class UserController {
     }
 
     @GetMapping("/filter")
-    public ResponseEntity<WebResponseEntity<List<UserEntity>>> getUsersByRoleAndClient(
+    public ResponseEntity<WebResponseEntity<List<UserEntity>>> getUsersByFilters(
             @RequestParam(required = false) Long roleId,
             @RequestParam(required = false) Long clientId,
-            @RequestParam(required = false) Long statusId) {
+            @RequestParam(required = false) Long statusId,
+            @RequestParam(required = false) Boolean isAdminManagement) {
 
-        List<UserEntity> users = userService.findByRoleAndClient(roleId, clientId, statusId);
+        List<UserEntity> users = userService.findByFilters(roleId, clientId, statusId, isAdminManagement);
         WebResponseEntity<List<UserEntity>> response = WebResponseEntity.success(
                 users,
                 "Usuários filtrados obtidos com sucesso!"

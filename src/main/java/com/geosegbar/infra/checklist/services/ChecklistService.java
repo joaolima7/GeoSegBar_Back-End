@@ -7,6 +7,8 @@ import java.util.stream.Collectors;
 
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.AnswerEntity;
@@ -39,9 +41,8 @@ public class ChecklistService {
     private final DamService damService;
     private final AnswerRepository answerRepository;
 
-    @Cacheable(value = "allChecklists", key = "'all'", cacheManager = "checklistCacheManager")
-    public List<ChecklistEntity> findAll() {
-        return checklistRepository.findAll();
+    public Page<ChecklistEntity> findAllPaged(Pageable pageable) {
+        return checklistRepository.findAllWithDams(pageable);
     }
 
     @Cacheable(value = "checklistById", key = "#id", cacheManager = "checklistCacheManager")

@@ -2,6 +2,10 @@ package com.geosegbar.infra.checklist.web;
 
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -11,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
@@ -30,9 +35,18 @@ public class ChecklistController {
     private final ChecklistService checklistService;
 
     @GetMapping
-    public ResponseEntity<WebResponseEntity<List<ChecklistEntity>>> getAllChecklists() {
-        List<ChecklistEntity> checklists = checklistService.findAll();
-        WebResponseEntity<List<ChecklistEntity>> response = WebResponseEntity.success(checklists, "Checklists obtidas com sucesso!");
+    public ResponseEntity<WebResponseEntity<Page<ChecklistEntity>>> getAllChecklists(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "id") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir) {
+
+        Sort.Direction direction = "desc".equalsIgnoreCase(sortDir) ? Sort.Direction.DESC : Sort.Direction.ASC;
+        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
+        Page<ChecklistEntity> pageResult = checklistService.findAllPaged(pageable);
+
+        WebResponseEntity<Page<ChecklistEntity>> response
+                = WebResponseEntity.success(pageResult, "Checklists paginadas obtidas com sucesso!");
         return ResponseEntity.ok(response);
     }
 

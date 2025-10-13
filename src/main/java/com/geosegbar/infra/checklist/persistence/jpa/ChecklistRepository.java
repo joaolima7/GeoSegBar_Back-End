@@ -3,6 +3,8 @@ package com.geosegbar.infra.checklist.persistence.jpa;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -42,4 +44,8 @@ public interface ChecklistRepository extends JpaRepository<ChecklistEntity, Long
     boolean existsByNameAndDams_Id(String name, Long damId);
 
     boolean existsByNameAndDams_IdAndIdNot(String name, Long damId, Long id);
+
+    @EntityGraph(attributePaths = {"dams"})
+    @Query("SELECT c FROM ChecklistEntity c")
+    Page<ChecklistEntity> findAllWithDams(Pageable pageable);
 }

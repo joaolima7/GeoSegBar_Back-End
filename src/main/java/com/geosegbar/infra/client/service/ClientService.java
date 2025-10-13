@@ -17,7 +17,9 @@ import com.geosegbar.infra.client.dtos.ClientDTO;
 import com.geosegbar.infra.client.dtos.LogoUpdateDTO;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.file_storage.FileStorageService;
+import com.geosegbar.infra.user.dto.UserClientAssociationDTO;
 import com.geosegbar.infra.user.persistence.jpa.UserRepository;
+import com.geosegbar.infra.user.service.UserService;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +31,7 @@ public class ClientService {
     private final ClientRepository clientRepository;
     private final FileStorageService fileStorageService;
     private final UserRepository userRepository;
+    private final UserService userService;
 
     @Transactional
     public void deleteById(Long id) {
@@ -100,7 +103,7 @@ public class ClientService {
             return;
         }
 
-        // Buscar usuários por IDs (batch query)
+        // Buscar usuários por IDs
         List<UserEntity> users = userRepository.findByIdInWithClients(userIds);
 
         if (users.size() != userIds.size()) {
@@ -112,15 +115,17 @@ public class ClientService {
             throw new NotFoundException("Usuários não encontrados com IDs: " + missingIds);
         }
 
-        // Para cada usuário, remover este cliente se já existir e adicionar novamente
+        // Para cada usuário, atualizar seus clientes usando o UserService
         for (UserEntity user : users) {
-            // Remover o cliente atual de outros clientes do usuário se necessário
-            user.getClients().clear();
-            user.getClients().add(client);
-        }
+            // Criar DTO com o cliente atual
+            UserClientAssociationDTO associationDTO = new UserClientAssociationDTO();
+            Set<Long> clientIdsForUser = new HashSet<>();
+            clientIdsForUser.add(client.getId());
+            associationDTO.setClientIds(clientIdsForUser);
 
-        // Salvar todos de uma vez (batch update)
-        userRepository.saveAll(users);
+            // Usar o método do UserService que já gerencia DamPermissions
+            userService.updateUserClients(user.getId(), associationDTO);
+        }
     }
 
     private void processUserAssociations(ClientEntity client, Set<Long> userIds) {
@@ -135,9 +140,11 @@ public class ClientService {
         // Se userIds está vazio, remover todas as associações
         if (userIds.isEmpty()) {
             for (UserEntity user : currentUsers) {
-                user.getClients().remove(client);
+                // Remover o cliente do usuário usando o UserService
+                UserClientAssociationDTO associationDTO = new UserClientAssociationDTO();
+                associationDTO.setClientIds(new HashSet<>());
+                userService.updateUserClients(user.getId(), associationDTO);
             }
-            userRepository.saveAll(currentUsers);
             return;
         }
 
@@ -160,9 +167,11 @@ public class ClientService {
                     .collect(Collectors.toList());
 
             for (UserEntity user : usersToRemoveList) {
-                user.getClients().remove(client);
+                // Remover o cliente usando o UserService
+                UserClientAssociationDTO associationDTO = new UserClientAssociationDTO();
+                associationDTO.setClientIds(new HashSet<>());
+                userService.updateUserClients(user.getId(), associationDTO);
             }
-            userRepository.saveAll(usersToRemoveList);
         }
 
         // Adicionar novos usuários
@@ -179,11 +188,13 @@ public class ClientService {
             }
 
             for (UserEntity user : usersToAddList) {
-                // Limpar clientes anteriores e adicionar apenas este
-                user.getClients().clear();
-                user.getClients().add(client);
+                // Associar o cliente usando o UserService
+                UserClientAssociationDTO associationDTO = new UserClientAssociationDTO();
+                Set<Long> clientIdsForUser = new HashSet<>();
+                clientIdsForUser.add(client.getId());
+                associationDTO.setClientIds(clientIdsForUser);
+                userService.updateUserClients(user.getId(), associationDTO);
             }
-            userRepository.saveAll(usersToAddList);
         }
     }
 

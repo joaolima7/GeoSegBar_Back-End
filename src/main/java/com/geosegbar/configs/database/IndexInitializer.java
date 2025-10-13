@@ -61,7 +61,10 @@ public class IndexInitializer {
             "CREATE INDEX IF NOT EXISTS idx_reading_trend_analysis ON reading(instrument_id, output_id, date, calculated_value) WHERE active = true",
             "CREATE INDEX IF NOT EXISTS idx_output_active_with_readings ON output(id, active) WHERE active = true",
             "CREATE INDEX IF NOT EXISTS idx_instrument_with_recent_readings ON instrument(id, dam_id, active) WHERE active = true",
-            "CREATE INDEX IF NOT EXISTS idx_reading_timeseries ON reading(instrument_id, output_id, date, hour, calculated_value) WHERE active = true"
+            "CREATE INDEX IF NOT EXISTS idx_reading_timeseries ON reading(instrument_id, output_id, date, hour, calculated_value) WHERE active = true",
+            "CREATE INDEX idx_reading_input_value_mapping_both ON reading_input_value_mapping(reading_id, input_value_id)",
+            "CREATE INDEX idx_reading_instrument_active_output ON reading(instrument_id, active, output_id)",
+            "CREATE INDEX idx_reading_date_hour_instrument_active ON reading(date DESC, hour DESC, instrument_id, active)"
         };
 
         int successCount = 0;

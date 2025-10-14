@@ -2,6 +2,7 @@ package com.geosegbar.configs.cache;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.List;
 
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
@@ -17,53 +18,27 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 @EnableCaching
 public class CacheManagerConfig {
 
+    private CaffeineCache buildCache(String name, Duration ttlWrite, Duration ttlAccess, long maxSize) {
+        return new CaffeineCache(name,
+                Caffeine.newBuilder()
+                        .maximumSize(maxSize)
+                        .expireAfterWrite(ttlWrite)
+                        .expireAfterAccess(ttlAccess)
+                        .build());
+    }
+
     @Bean("instrumentGraphCacheManager")
     @Primary
     public CacheManager instrumentGraphCacheManager() {
         SimpleCacheManager cacheManager = new SimpleCacheManager();
         cacheManager.setCaches(Arrays.asList(
-                new CaffeineCache("graphPatternsByDam",
-                        Caffeine.newBuilder()
-                                .maximumSize(50)
-                                .expireAfterWrite(Duration.ofMinutes(20))
-                                .expireAfterAccess(Duration.ofMinutes(10))
-                                .build()),
-                new CaffeineCache("graphPatternById",
-                        Caffeine.newBuilder()
-                                .maximumSize(300)
-                                .expireAfterWrite(Duration.ofMinutes(15))
-                                .expireAfterAccess(Duration.ofMinutes(8))
-                                .build()),
-                new CaffeineCache("graphPatternsByInstrument",
-                        Caffeine.newBuilder()
-                                .maximumSize(100)
-                                .expireAfterWrite(Duration.ofMinutes(15))
-                                .expireAfterAccess(Duration.ofMinutes(8))
-                                .build()),
-                new CaffeineCache("folderWithPatterns",
-                        Caffeine.newBuilder()
-                                .maximumSize(80)
-                                .expireAfterWrite(Duration.ofMinutes(18))
-                                .expireAfterAccess(Duration.ofMinutes(10))
-                                .build()),
-                new CaffeineCache("damFoldersWithPatterns",
-                        Caffeine.newBuilder()
-                                .maximumSize(25)
-                                .expireAfterWrite(Duration.ofMinutes(25))
-                                .expireAfterAccess(Duration.ofMinutes(12))
-                                .build()),
-                new CaffeineCache("graphProperties",
-                        Caffeine.newBuilder()
-                                .maximumSize(400)
-                                .expireAfterWrite(Duration.ofMinutes(12))
-                                .expireAfterAccess(Duration.ofMinutes(6))
-                                .build()),
-                new CaffeineCache("graphAxes",
-                        Caffeine.newBuilder()
-                                .maximumSize(200)
-                                .expireAfterWrite(Duration.ofMinutes(20))
-                                .expireAfterAccess(Duration.ofMinutes(10))
-                                .build())
+                buildCache("graphPatternsByDam", Duration.ofMinutes(20), Duration.ofMinutes(10), 50),
+                buildCache("graphPatternById", Duration.ofMinutes(15), Duration.ofMinutes(8), 300),
+                buildCache("graphPatternsByInstrument", Duration.ofMinutes(15), Duration.ofMinutes(8), 100),
+                buildCache("folderWithPatterns", Duration.ofMinutes(18), Duration.ofMinutes(10), 80),
+                buildCache("damFoldersWithPatterns", Duration.ofMinutes(25), Duration.ofMinutes(12), 25),
+                buildCache("graphProperties", Duration.ofMinutes(12), Duration.ofMinutes(6), 400),
+                buildCache("graphAxes", Duration.ofMinutes(20), Duration.ofMinutes(10), 200)
         ));
         return cacheManager;
     }
@@ -72,36 +47,11 @@ public class CacheManagerConfig {
     public CacheManager instrumentTabulateCacheManager() {
         SimpleCacheManager cacheManager = new SimpleCacheManager();
         cacheManager.setCaches(Arrays.asList(
-                new CaffeineCache("tabulatePatterns",
-                        Caffeine.newBuilder()
-                                .maximumSize(300)
-                                .expireAfterWrite(Duration.ofMinutes(15))
-                                .expireAfterAccess(Duration.ofMinutes(8))
-                                .build()),
-                new CaffeineCache("tabulatePatternsByDam",
-                        Caffeine.newBuilder()
-                                .maximumSize(50)
-                                .expireAfterWrite(Duration.ofMinutes(20))
-                                .expireAfterAccess(Duration.ofMinutes(10))
-                                .build()),
-                new CaffeineCache("tabulatePatternsByFolder",
-                        Caffeine.newBuilder()
-                                .maximumSize(80)
-                                .expireAfterWrite(Duration.ofMinutes(15))
-                                .expireAfterAccess(Duration.ofMinutes(8))
-                                .build()),
-                new CaffeineCache("tabulateFolderWithPatterns",
-                        Caffeine.newBuilder()
-                                .maximumSize(80)
-                                .expireAfterWrite(Duration.ofMinutes(18))
-                                .expireAfterAccess(Duration.ofMinutes(10))
-                                .build()),
-                new CaffeineCache("damTabulateFoldersWithPatterns",
-                        Caffeine.newBuilder()
-                                .maximumSize(25)
-                                .expireAfterWrite(Duration.ofMinutes(25))
-                                .expireAfterAccess(Duration.ofMinutes(12))
-                                .build())
+                buildCache("tabulatePatterns", Duration.ofMinutes(15), Duration.ofMinutes(8), 300),
+                buildCache("tabulatePatternsByDam", Duration.ofMinutes(20), Duration.ofMinutes(10), 50),
+                buildCache("tabulatePatternsByFolder", Duration.ofMinutes(15), Duration.ofMinutes(8), 80),
+                buildCache("tabulateFolderWithPatterns", Duration.ofMinutes(18), Duration.ofMinutes(10), 80),
+                buildCache("damTabulateFoldersWithPatterns", Duration.ofMinutes(25), Duration.ofMinutes(12), 25)
         ));
 
         return cacheManager;
@@ -111,122 +61,25 @@ public class CacheManagerConfig {
     public CacheManager checklistCacheManager() {
         SimpleCacheManager cacheManager = new SimpleCacheManager();
         cacheManager.setCaches(Arrays.asList(
-                // Caches existentes para ChecklistService
-                new CaffeineCache("checklistsByDam",
-                        Caffeine.newBuilder()
-                                .maximumSize(100)
-                                .expireAfterWrite(Duration.ofMinutes(15))
-                                .expireAfterAccess(Duration.ofMinutes(8))
-                                .build()),
-                new CaffeineCache("checklistsWithAnswersByDam",
-                        Caffeine.newBuilder()
-                                .maximumSize(50)
-                                .expireAfterWrite(Duration.ofMinutes(10))
-                                .expireAfterAccess(Duration.ofMinutes(5))
-                                .build()),
-                new CaffeineCache("checklistsWithAnswersByClient",
-                        Caffeine.newBuilder()
-                                .maximumSize(30)
-                                .expireAfterWrite(Duration.ofMinutes(12))
-                                .expireAfterAccess(Duration.ofMinutes(6))
-                                .build()),
-                new CaffeineCache("checklistById",
-                        Caffeine.newBuilder()
-                                .maximumSize(200)
-                                .expireAfterWrite(Duration.ofMinutes(20))
-                                .expireAfterAccess(Duration.ofMinutes(10))
-                                .build()),
-                new CaffeineCache("checklistForDam",
-                        Caffeine.newBuilder()
-                                .maximumSize(100)
-                                .expireAfterWrite(Duration.ofMinutes(15))
-                                .expireAfterAccess(Duration.ofMinutes(8))
-                                .build()),
-                new CaffeineCache("allChecklists",
-                        Caffeine.newBuilder()
-                                .maximumSize(5)
-                                .expireAfterWrite(Duration.ofMinutes(10))
-                                .expireAfterAccess(Duration.ofMinutes(5))
-                                .build()),
-                // Novos caches para ChecklistResponseService
-                new CaffeineCache("allChecklistResponses",
-                        Caffeine.newBuilder()
-                                .maximumSize(5)
-                                .expireAfterWrite(Duration.ofMinutes(10))
-                                .expireAfterAccess(Duration.ofMinutes(5))
-                                .build()),
-                new CaffeineCache("checklistResponseById",
-                        Caffeine.newBuilder()
-                                .maximumSize(200)
-                                .expireAfterWrite(Duration.ofMinutes(20))
-                                .expireAfterAccess(Duration.ofMinutes(10))
-                                .build()),
-                new CaffeineCache("checklistResponsesByDam",
-                        Caffeine.newBuilder()
-                                .maximumSize(100)
-                                .expireAfterWrite(Duration.ofMinutes(15))
-                                .expireAfterAccess(Duration.ofMinutes(8))
-                                .build()),
-                new CaffeineCache("checklistResponseDetail",
-                        Caffeine.newBuilder()
-                                .maximumSize(200)
-                                .expireAfterWrite(Duration.ofMinutes(20))
-                                .expireAfterAccess(Duration.ofMinutes(10))
-                                .build()),
-                new CaffeineCache("checklistResponsesByUser",
-                        Caffeine.newBuilder()
-                                .maximumSize(100)
-                                .expireAfterWrite(Duration.ofMinutes(15))
-                                .expireAfterAccess(Duration.ofMinutes(8))
-                                .build()),
-                new CaffeineCache("checklistResponsesByDate",
-                        Caffeine.newBuilder()
-                                .maximumSize(100)
-                                .expireAfterWrite(Duration.ofMinutes(15))
-                                .expireAfterAccess(Duration.ofMinutes(8))
-                                .build()),
-                new CaffeineCache("damLastChecklist",
-                        Caffeine.newBuilder()
-                                .maximumSize(100)
-                                .expireAfterWrite(Duration.ofMinutes(15))
-                                .expireAfterAccess(Duration.ofMinutes(8))
-                                .build()),
-                new CaffeineCache("checklistResponsesByDamPaged",
-                        Caffeine.newBuilder()
-                                .maximumSize(100)
-                                .expireAfterWrite(Duration.ofMinutes(10))
-                                .expireAfterAccess(Duration.ofMinutes(5))
-                                .build()),
-                new CaffeineCache("checklistResponsesByUserPaged",
-                        Caffeine.newBuilder()
-                                .maximumSize(100)
-                                .expireAfterWrite(Duration.ofMinutes(10))
-                                .expireAfterAccess(Duration.ofMinutes(5))
-                                .build()),
-                new CaffeineCache("checklistResponsesByDatePaged",
-                        Caffeine.newBuilder()
-                                .maximumSize(100)
-                                .expireAfterWrite(Duration.ofMinutes(10))
-                                .expireAfterAccess(Duration.ofMinutes(5))
-                                .build()),
-                new CaffeineCache("allChecklistResponsesPaged",
-                        Caffeine.newBuilder()
-                                .maximumSize(5)
-                                .expireAfterWrite(Duration.ofMinutes(10))
-                                .expireAfterAccess(Duration.ofMinutes(5))
-                                .build()),
-                new CaffeineCache("checklistResponsesByClient",
-                        Caffeine.newBuilder()
-                                .maximumSize(50)
-                                .expireAfterWrite(Duration.ofMinutes(12))
-                                .expireAfterAccess(Duration.ofMinutes(6))
-                                .build()),
-                new CaffeineCache("clientLatestDetailedChecklistResponses",
-                        Caffeine.newBuilder()
-                                .maximumSize(100)
-                                .expireAfterWrite(Duration.ofMinutes(15))
-                                .expireAfterAccess(Duration.ofMinutes(10))
-                                .build())
+                buildCache("checklistsByDam", Duration.ofMinutes(15), Duration.ofMinutes(8), 100),
+                buildCache("checklistsWithAnswersByDam", Duration.ofMinutes(10), Duration.ofMinutes(5), 50),
+                buildCache("checklistsWithAnswersByClient", Duration.ofMinutes(12), Duration.ofMinutes(6), 30),
+                buildCache("checklistById", Duration.ofMinutes(20), Duration.ofMinutes(10), 200),
+                buildCache("checklistForDam", Duration.ofMinutes(15), Duration.ofMinutes(8), 100),
+                buildCache("allChecklists", Duration.ofMinutes(10), Duration.ofMinutes(5), 5),
+                buildCache("allChecklistResponses", Duration.ofMinutes(10), Duration.ofMinutes(5), 5),
+                buildCache("checklistResponseById", Duration.ofMinutes(20), Duration.ofMinutes(10), 200),
+                buildCache("checklistResponsesByDam", Duration.ofMinutes(15), Duration.ofMinutes(8), 100),
+                buildCache("checklistResponseDetail", Duration.ofMinutes(20), Duration.ofMinutes(10), 200),
+                buildCache("checklistResponsesByUser", Duration.ofMinutes(15), Duration.ofMinutes(8), 100),
+                buildCache("checklistResponsesByDate", Duration.ofMinutes(15), Duration.ofMinutes(8), 100),
+                buildCache("damLastChecklist", Duration.ofMinutes(15), Duration.ofMinutes(8), 100),
+                buildCache("checklistResponsesByDamPaged", Duration.ofMinutes(10), Duration.ofMinutes(5), 100),
+                buildCache("checklistResponsesByUserPaged", Duration.ofMinutes(10), Duration.ofMinutes(5), 100),
+                buildCache("checklistResponsesByDatePaged", Duration.ofMinutes(10), Duration.ofMinutes(5), 100),
+                buildCache("allChecklistResponsesPaged", Duration.ofMinutes(10), Duration.ofMinutes(5), 5),
+                buildCache("checklistResponsesByClient", Duration.ofMinutes(12), Duration.ofMinutes(6), 50),
+                buildCache("clientLatestDetailedChecklistResponses", Duration.ofMinutes(15), Duration.ofMinutes(10), 100)
         ));
 
         return cacheManager;
@@ -236,135 +89,38 @@ public class CacheManagerConfig {
     public CacheManager instrumentCacheManager() {
         SimpleCacheManager cacheManager = new SimpleCacheManager();
         cacheManager.setCaches(Arrays.asList(
-                new CaffeineCache("instrumentById",
-                        Caffeine.newBuilder()
-                                .maximumSize(300)
-                                .expireAfterWrite(Duration.ofMinutes(15))
-                                .expireAfterAccess(Duration.ofMinutes(10))
-                                .build()),
-                new CaffeineCache("instrumentWithDetails",
-                        Caffeine.newBuilder()
-                                .maximumSize(100)
-                                .expireAfterWrite(Duration.ofMinutes(12))
-                                .expireAfterAccess(Duration.ofMinutes(8))
-                                .build()),
-                new CaffeineCache("instrumentsByClient",
-                        Caffeine.newBuilder()
-                                .maximumSize(50)
-                                .expireAfterWrite(Duration.ofMinutes(10))
-                                .expireAfterAccess(Duration.ofMinutes(5))
-                                .build()),
-                new CaffeineCache("instrumentsByFilters",
-                        Caffeine.newBuilder()
-                                .maximumSize(200)
-                                .expireAfterWrite(Duration.ofMinutes(10))
-                                .expireAfterAccess(Duration.ofMinutes(5))
-                                .build()),
-                new CaffeineCache("instrumentsByDam",
-                        Caffeine.newBuilder()
-                                .maximumSize(100)
-                                .expireAfterWrite(Duration.ofMinutes(15))
-                                .expireAfterAccess(Duration.ofMinutes(8))
-                                .build()),
-                new CaffeineCache("allInstruments",
-                        Caffeine.newBuilder()
-                                .maximumSize(5)
-                                .expireAfterWrite(Duration.ofMinutes(5))
-                                .expireAfterAccess(Duration.ofMinutes(3))
-                                .build()),
-                new CaffeineCache("instrumentResponseDTO",
-                        Caffeine.newBuilder()
-                                .maximumSize(500)
-                                .expireAfterWrite(Duration.ofMinutes(10))
-                                .expireAfterAccess(Duration.ofMinutes(5))
-                                .build())
+                buildCache("instrumentById", Duration.ofMinutes(15), Duration.ofMinutes(10), 300),
+                buildCache("instrumentWithDetails", Duration.ofMinutes(12), Duration.ofMinutes(8), 100),
+                buildCache("instrumentsByClient", Duration.ofMinutes(10), Duration.ofMinutes(5), 50),
+                buildCache("instrumentsByFilters", Duration.ofMinutes(10), Duration.ofMinutes(5), 200),
+                buildCache("instrumentsByDam", Duration.ofMinutes(15), Duration.ofMinutes(8), 100),
+                buildCache("allInstruments", Duration.ofMinutes(5), Duration.ofMinutes(3), 5),
+                buildCache("instrumentResponseDTO", Duration.ofMinutes(10), Duration.ofMinutes(5), 500)
         ));
         return cacheManager;
     }
 
-    @Bean("readingCacheManager")
+    @Bean(name = "readingCacheManager")
     public CacheManager readingCacheManager() {
         SimpleCacheManager cacheManager = new SimpleCacheManager();
-        cacheManager.setCaches(Arrays.asList(
-                new CaffeineCache("readingById",
-                        Caffeine.newBuilder()
-                                .maximumSize(1000)
-                                .expireAfterWrite(Duration.ofMinutes(15))
-                                .expireAfterAccess(Duration.ofMinutes(8))
-                                .build()),
-                new CaffeineCache("readingsByInstrument",
-                        Caffeine.newBuilder()
-                                .maximumSize(300)
-                                .expireAfterWrite(Duration.ofMinutes(10))
-                                .expireAfterAccess(Duration.ofMinutes(5))
-                                .build()),
-                new CaffeineCache("readingsByOutput",
-                        Caffeine.newBuilder()
-                                .maximumSize(300)
-                                .expireAfterWrite(Duration.ofMinutes(10))
-                                .expireAfterAccess(Duration.ofMinutes(5))
-                                .build()),
-                new CaffeineCache("readingsByFilters",
-                        Caffeine.newBuilder()
-                                .maximumSize(500)
-                                .expireAfterWrite(Duration.ofMinutes(5))
-                                .expireAfterAccess(Duration.ofMinutes(3))
-                                .build()),
-                new CaffeineCache("instrumentLimitStatus",
-                        Caffeine.newBuilder()
-                                .maximumSize(200)
-                                .expireAfterWrite(Duration.ofMinutes(5))
-                                .expireAfterAccess(Duration.ofMinutes(2))
-                                .build()),
-                new CaffeineCache("clientInstrumentLimitStatuses",
-                        Caffeine.newBuilder()
-                                .maximumSize(100)
-                                .expireAfterWrite(Duration.ofMinutes(5))
-                                .expireAfterAccess(Duration.ofMinutes(2))
-                                .build()),
-                new CaffeineCache("readingResponseDTO",
-                        Caffeine.newBuilder()
-                                .maximumSize(2000)
-                                .expireAfterWrite(Duration.ofMinutes(15))
-                                .expireAfterAccess(Duration.ofMinutes(8))
-                                .build()),
-                new CaffeineCache("latestReadings",
-                        Caffeine.newBuilder()
-                                .maximumSize(500)
-                                .expireAfterWrite(Duration.ofMinutes(5))
-                                .expireAfterAccess(Duration.ofMinutes(2))
-                                .build()),
-                new CaffeineCache("readingExists",
-                        Caffeine.newBuilder()
-                                .maximumSize(1000)
-                                .expireAfterWrite(Duration.ofMinutes(10))
-                                .expireAfterAccess(Duration.ofMinutes(5))
-                                .build()),
-                new CaffeineCache("groupedReadings",
-                        Caffeine.newBuilder()
-                                .maximumSize(300)
-                                .expireAfterWrite(Duration.ofMinutes(10))
-                                .expireAfterAccess(Duration.ofMinutes(5))
-                                .build()),
-                new CaffeineCache("readingInputValues",
-                        Caffeine.newBuilder()
-                                .maximumSize(1000)
-                                .expireAfterWrite(Duration.ofMinutes(15))
-                                .expireAfterAccess(Duration.ofMinutes(8))
-                                .build()),
-                new CaffeineCache("multiInstrumentReadings",
-                        Caffeine.newBuilder()
-                                .maximumSize(300)
-                                .expireAfterWrite(Duration.ofMinutes(5))
-                                .expireAfterAccess(Duration.ofMinutes(2))
-                                .build()),
-                new CaffeineCache("clientInstrumentLatestGroupedReadings",
-                        Caffeine.newBuilder()
-                                .maximumSize(200)
-                                .expireAfterWrite(Duration.ofMinutes(10))
-                                .expireAfterAccess(Duration.ofMinutes(5))
-                                .build())
-        ));
+
+        List<CaffeineCache> caches = Arrays.asList(
+                buildCache("readingsByInstrument", Duration.ofMinutes(30), Duration.ofMinutes(30), 1000),
+                buildCache("instrumentLimitStatus", Duration.ofMinutes(15), Duration.ofMinutes(15), 500),
+                buildCache("clientInstrumentLatestGroupedReadings", Duration.ofHours(1), Duration.ofHours(1), 100),
+                buildCache("groupedReadings", Duration.ofMinutes(30), Duration.ofMinutes(30), 200),
+                buildCache("readingsByFiltersOptimized", Duration.ofMinutes(10), Duration.ofMinutes(10), 500),
+                buildCache("multiInstrumentReadings", Duration.ofMinutes(15), Duration.ofMinutes(15), 200),
+                buildCache("clientInstrumentLimitStatuses", Duration.ofMinutes(20), Duration.ofMinutes(20), 100),
+                buildCache("readingById", Duration.ofMinutes(60), Duration.ofMinutes(60), 5000),
+                buildCache("readingResponseDTO", Duration.ofMinutes(30), Duration.ofMinutes(30), 3000),
+                buildCache("readingExists", Duration.ofMinutes(20), Duration.ofMinutes(20), 1000),
+                buildCache("latestReadings", Duration.ofMinutes(10), Duration.ofMinutes(10), 500),
+                buildCache("readingsByOutput", Duration.ofMinutes(20), Duration.ofMinutes(20), 300),
+                buildCache("readingsByFilters", Duration.ofMinutes(5), Duration.ofMinutes(5), 300)
+        );
+
+        cacheManager.setCaches(caches);
         return cacheManager;
     }
 }

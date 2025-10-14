@@ -64,7 +64,51 @@ public class IndexInitializer {
             "CREATE INDEX IF NOT EXISTS idx_reading_timeseries ON reading(instrument_id, output_id, date, hour, calculated_value) WHERE active = true",
             "CREATE INDEX idx_reading_input_value_mapping_both ON reading_input_value_mapping(reading_id, input_value_id)",
             "CREATE INDEX idx_reading_instrument_active_output ON reading(instrument_id, active, output_id)",
-            "CREATE INDEX idx_reading_date_hour_instrument_active ON reading(date DESC, hour DESC, instrument_id, active)"
+            "CREATE INDEX idx_reading_date_hour_instrument_active ON reading(date DESC, hour DESC, instrument_id, active)",
+            //Novos
+            // Índice composto para lookup principal de readings
+            "CREATE INDEX IF NOT EXISTS idx_reading_composite_main "
+            + "ON reading(instrument_id, active, date DESC, hour DESC) "
+            + "INCLUDE (calculated_value, limit_status, output_id)",
+            // Índice para aggregação por cliente (query mais pesada)
+            "CREATE INDEX IF NOT EXISTS idx_reading_client_aggregation "
+            + "ON reading(instrument_id, date DESC, hour DESC) "
+            + "WHERE active = true",
+            // Índice covering para reading_input_value_mapping
+            "CREATE INDEX IF NOT EXISTS idx_rivm_mapping_covering "
+            + "ON reading_input_value_mapping(reading_id, input_value_id)",
+            // Índice para multi-filtros
+            "CREATE INDEX IF NOT EXISTS idx_reading_multifilter "
+            + "ON reading(instrument_id, output_id, active, limit_status, date DESC) "
+            + "INCLUDE (hour, calculated_value)",
+            // Índice para busca de date/hour distintos
+            "CREATE INDEX IF NOT EXISTS idx_reading_distinct_date_hour "
+            + "ON reading(instrument_id, date DESC, hour DESC, active) "
+            + "WHERE active = true",
+            // Índice para instrument com dam (join comum)
+            "CREATE INDEX IF NOT EXISTS idx_instrument_dam_active "
+            + "ON instrument(dam_id, active, id) "
+            + "WHERE active = true",
+            // Índice para contagens rápidas
+            "CREATE INDEX IF NOT EXISTS idx_reading_count_fast "
+            + "ON reading(instrument_id, active) "
+            + "WHERE active = true",
+            // Índice para busca por output
+            "CREATE INDEX IF NOT EXISTS idx_reading_output_lookup "
+            + "ON reading(output_id, active, date DESC, hour DESC) "
+            + "WHERE active = true",
+            // Índice para busca de IDs de instrumentos por cliente
+            "CREATE INDEX IF NOT EXISTS idx_dam_client_instruments "
+            + "ON dam(client_id, id) "
+            + "INCLUDE (name)",
+            // Índice partial para readings com alertas
+            "CREATE INDEX IF NOT EXISTS idx_reading_alerts_only "
+            + "ON reading(instrument_id, limit_status, date DESC, hour DESC) "
+            + "WHERE limit_status IN ('ATENCAO', 'ALERTA', 'EMERGENCIA', 'INFERIOR', 'SUPERIOR')",
+            // Índice para batch queries
+            "CREATE INDEX IF NOT EXISTS idx_reading_batch_lookup "
+            + "ON reading(instrument_id, date, hour, active) "
+            + "INCLUDE (id, calculated_value, limit_status, output_id)"
         };
 
         int successCount = 0;
@@ -79,5 +123,17 @@ public class IndexInitializer {
 
         log.info("Criação de índices concluída. {}/{} índices criados com sucesso.",
                 successCount, indexCommands.length);
+
+        // Executar ANALYZE para atualizar estatísticas
+        try {
+            log.info("Executando ANALYZE nas tabelas principais...");
+            jdbcTemplate.execute("ANALYZE reading");
+            jdbcTemplate.execute("ANALYZE reading_input_value_mapping");
+            jdbcTemplate.execute("ANALYZE instrument");
+            jdbcTemplate.execute("ANALYZE dam");
+            log.info("ANALYZE concluído com sucesso.");
+        } catch (Exception e) {
+            log.warn("Erro ao executar ANALYZE: {}", e.getMessage());
+        }
     }
 }

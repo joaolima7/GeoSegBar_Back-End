@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.ChecklistEntity;
+import com.geosegbar.infra.checklist.dtos.ChecklistCompleteDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersAndDamDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersDTO;
 import com.geosegbar.infra.checklist.services.ChecklistService;
@@ -51,9 +52,12 @@ public class ChecklistController {
     }
 
     @GetMapping("/dam/{damId}")
-    public ResponseEntity<WebResponseEntity<List<ChecklistEntity>>> getChecklistsByDam(@PathVariable Long damId) {
-        List<ChecklistEntity> checklists = checklistService.findByDamId(damId);
-        WebResponseEntity<List<ChecklistEntity>> response = WebResponseEntity.success(checklists, "Checklists para a Barragem obtidas com sucesso!");
+    public ResponseEntity<WebResponseEntity<List<ChecklistCompleteDTO>>> getChecklistsByDam(@PathVariable Long damId) {
+        List<ChecklistCompleteDTO> checklists = checklistService.findByDamIdDTO(damId);
+        WebResponseEntity<List<ChecklistCompleteDTO>> response = WebResponseEntity.success(
+                checklists,
+                "Checklists para a Barragem obtidas com sucesso!"
+        );
         return ResponseEntity.ok(response);
     }
 
@@ -79,11 +83,11 @@ public class ChecklistController {
     }
 
     @GetMapping("/dam/{damId}/checklist/{checklistId}")
-    public ResponseEntity<WebResponseEntity<ChecklistEntity>> getChecklistForDam(
+    public ResponseEntity<WebResponseEntity<ChecklistCompleteDTO>> getChecklistForDam(
             @PathVariable Long damId,
             @PathVariable Long checklistId) {
-        ChecklistEntity checklist = checklistService.findChecklistForDam(damId, checklistId);
-        WebResponseEntity<ChecklistEntity> response = WebResponseEntity.success(
+        ChecklistCompleteDTO checklist = checklistService.findChecklistForDamDTO(damId, checklistId);
+        WebResponseEntity<ChecklistCompleteDTO> response = WebResponseEntity.success(
                 checklist,
                 "Checklist encontrado para a barragem especificada!"
         );

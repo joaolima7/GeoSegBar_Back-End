@@ -20,6 +20,23 @@ services:
     networks:
       - geosegbar-network
 
+  redis-dev:
+    image: redis:7-alpine
+    container_name: geosegbar-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-dev-data:/data
+    command: redis-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy volatile-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - geosegbar-network
+
   geosegbar-api:
     build:
       context: .
@@ -28,6 +45,8 @@ services:
     restart: unless-stopped
     depends_on:
       postgres-dev:
+        condition: service_healthy
+      redis-dev:
         condition: service_healthy
     ports:
       - "9090:9090"
@@ -47,4 +66,6 @@ networks:
 
 volumes:
   postgres-dev-data:
+    driver: local
+  redis-dev-data:
     driver: local

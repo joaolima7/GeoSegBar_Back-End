@@ -14,6 +14,36 @@ fi
 # Criar rede se não existir
 docker network create geosegbar-network 2>/dev/null || true
 
+# Verificar se o Redis existe e está rodando
+if docker ps -q -f name=redis-prod | grep -q .; then
+    echo "✅ Redis já está rodando"
+elif docker ps -a -q -f name=redis-prod | grep -q .; then
+    echo "🔄 Container do Redis existe mas está parado. Reiniciando..."
+    docker start redis-prod
+    echo "✅ Redis reiniciado"
+else
+    echo "🔄 Container do Redis não encontrado. Criando..."
+    
+    # Verificar se existe um volume para o Redis
+    if ! docker volume ls -q -f name=redis-prod-data | grep -q .; then
+        echo "📦 Criando volume para Redis..."
+        docker volume create redis-prod-data
+    fi
+    
+    # Iniciar container do Redis
+    echo "🚀 Iniciando Redis..."
+    docker run -d \
+      --name redis-prod \
+      --restart unless-stopped \
+      --network geosegbar-network \
+      -p 6379:6379 \
+      -v redis-prod-data:/data \
+      redis:7-alpine redis-server --save 60 1 --loglevel warning --maxmemory 512mb --maxmemory-policy volatile-lru
+      
+    echo "⏳ Aguardando Redis inicializar..."
+    sleep 5
+fi
+
 # Verificar se o banco de dados existe e está rodando
 if docker ps -q -f name=postgres-prod | grep -q .; then
     echo "✅ Banco de dados já está rodando"
@@ -87,7 +117,7 @@ if curl -f http://localhost:9090/actuator/health > /dev/null 2>&1; then
     
     # Mostrar status dos containers
     echo "📊 Status dos containers:"
-    docker ps --filter "name=geosegbar" --filter "name=postgres-prod"
+    docker ps --filter "name=geosegbar" --filter "name=postgres-prod" --filter "name=redis-prod"
     
     # Limpar imagens não utilizadas
     docker image prune -f > /dev/null 2>&1 || true

@@ -72,25 +72,31 @@ public class InstrumentService {
     private final ApplicationEventPublisher eventPublisher;
 
     @Cacheable(value = "allInstruments", cacheManager = "instrumentCacheManager")
-    public List<InstrumentEntity> findAll() {
-        return instrumentRepository.findAllByOrderByNameAsc();
+    public List<InstrumentResponseDTO> findAll() {
+        return mapToResponseDTOList(instrumentRepository.findAllByOrderByNameAsc());
     }
 
     @Cacheable(value = "instrumentsByDam", key = "#damId", cacheManager = "instrumentCacheManager")
-    public List<InstrumentEntity> findByDamId(Long damId) {
-        return instrumentRepository.findByDamId(damId);
+    public List<InstrumentResponseDTO> findByDamId(Long damId) {
+        return mapToResponseDTOList(instrumentRepository.findByDamId(damId));
     }
 
     @Cacheable(value = "instrumentById", key = "#id", cacheManager = "instrumentCacheManager")
+    public InstrumentResponseDTO findByIdDTO(Long id) {
+        InstrumentEntity entity = instrumentRepository.findByIdWithBasicRelations(id)
+                .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
+        return mapToResponseDTO(entity);
+    }
+
     public InstrumentEntity findById(Long id) {
         return instrumentRepository.findByIdWithBasicRelations(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
     }
 
     @Cacheable(value = "instrumentWithDetails", key = "#id", cacheManager = "instrumentCacheManager")
-    public InstrumentEntity findWithAllDetails(Long id) {
-        return instrumentRepository.findWithCompleteDetailsById(id)
-                .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
+    public InstrumentResponseDTO findWithAllDetails(Long id) {
+        return mapToResponseDTO(instrumentRepository.findWithCompleteDetailsById(id)
+                .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id)));
     }
 
     @Cacheable(
@@ -98,8 +104,8 @@ public class InstrumentService {
             key = "#clientId + '_' + #active",
             cacheManager = "instrumentCacheManager"
     )
-    public List<InstrumentEntity> findByClientId(Long clientId, Boolean active) {
-        return instrumentRepository.findByClientIdOptimized(clientId, active);
+    public List<InstrumentResponseDTO> findByClientId(Long clientId, Boolean active) {
+        return mapToResponseDTOList(instrumentRepository.findByClientIdOptimized(clientId, active));
     }
 
     @Transactional
@@ -113,18 +119,17 @@ public class InstrumentService {
             cacheManager = "instrumentCacheManager"
     )
     public InstrumentEntity createComplete(CreateInstrumentRequest request) {
-        
+
         if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
-            
+
             request.setNoLimit(true);
 
-            
             if (request.getLinimetricRulerCode() != null
                     && instrumentRepository.findByLinimetricRulerCode(request.getLinimetricRulerCode()).isPresent()) {
                 throw new DuplicateResourceException("Já existe uma régua linimétrica com o código " + request.getLinimetricRulerCode());
             }
         } else {
-            
+
             validateRequest(request);
             validateUniqueAcronymsAcrossComponents(
                     request.getInputs(),
@@ -163,17 +168,15 @@ public class InstrumentService {
         instrument.setActive(true);
         instrument.setActiveForSection(request.getActiveForSection());
 
-        
         instrument.setIsLinimetricRuler(request.getIsLinimetricRuler());
         instrument.setLinimetricRulerCode(request.getLinimetricRulerCode());
 
         InstrumentEntity savedInstrument = instrumentRepository.save(instrument);
 
-        
         if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
             createLinimetricRulerComponents(savedInstrument);
         } else {
-            
+
             processInputs(savedInstrument, request.getInputs());
 
             if (request.getConstants() != null && !request.getConstants().isEmpty()) {
@@ -186,7 +189,6 @@ public class InstrumentService {
         savedInstrument = instrumentRepository.findWithActiveOutputsById(savedInstrument.getId())
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após criação"));
 
-        
         if (Boolean.FALSE.equals(savedInstrument.getIsLinimetricRuler())) {
             eventPublisher.publishEvent(new InstrumentCreatedEvent(savedInstrument));
         }
@@ -199,7 +201,6 @@ public class InstrumentService {
             return;
         }
 
-        
         if (request.getInputs() == null || request.getInputs().isEmpty()) {
             throw new InvalidInputException("Pelo menos um input é obrigatório para instrumentos normais");
         }
@@ -208,7 +209,6 @@ public class InstrumentService {
             throw new InvalidInputException("Pelo menos um output é obrigatório para instrumentos normais");
         }
 
-        
         if (!request.getNoLimit() && request.getOutputs().size() > 1) {
             boolean hasStatistical = request.getOutputs().get(0).getStatisticalLimit() != null;
             String firstLimitType = hasStatistical ? "estatístico" : "determinístico";
@@ -227,19 +227,17 @@ public class InstrumentService {
             }
         }
 
-        
         for (OutputDTO outputDTO : request.getOutputs()) {
             validateOutputRequest(outputDTO, request.getNoLimit());
         }
     }
 
     private void validateRequest(UpdateInstrumentRequest request) {
-        
+
         if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
             return;
         }
 
-        
         if (request.getInputs() == null || request.getInputs().isEmpty()) {
             throw new InvalidInputException("Pelo menos um input é obrigatório para instrumentos normais");
         }
@@ -248,7 +246,6 @@ public class InstrumentService {
             throw new InvalidInputException("Pelo menos um output é obrigatório para instrumentos normais");
         }
 
-        
         if (!request.getNoLimit() && request.getOutputs().size() > 1) {
             boolean hasStatistical = request.getOutputs().get(0).getStatisticalLimit() != null;
             String firstLimitType = hasStatistical ? "estatístico" : "determinístico";
@@ -267,7 +264,6 @@ public class InstrumentService {
             }
         }
 
-        
         for (OutputDTO outputDTO : request.getOutputs()) {
             validateOutputRequest(outputDTO, request.getNoLimit());
         }
@@ -362,7 +358,7 @@ public class InstrumentService {
                 .collect(Collectors.toSet());
 
         for (OutputDTO outputDTO : outputDTOs) {
-            
+
             if (!acronyms.add(outputDTO.getAcronym())) {
                 throw new DuplicateResourceException("Sigla de output duplicada: " + outputDTO.getAcronym());
             }
@@ -388,7 +384,6 @@ public class InstrumentService {
 
             OutputEntity savedOutput = outputRepository.save(output);
 
-            
             if (!instrument.getNoLimit()) {
                 if (outputDTO.getStatisticalLimit() != null) {
                     StatisticalLimitEntity statisticalLimit = new StatisticalLimitEntity();
@@ -427,23 +422,20 @@ public class InstrumentService {
     public InstrumentEntity update(Long id, UpdateInstrumentRequest request) {
         InstrumentEntity oldInstrument = findById(id);
 
-        
         if (!oldInstrument.getIsLinimetricRuler().equals(request.getIsLinimetricRuler())) {
             throw new InvalidInputException("Não é permitido alterar o tipo de instrumento. Uma vez criado como régua linimétrica ou instrumento normal, este atributo não pode ser modificado.");
         }
 
-        
         if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
-            
+
             request.setNoLimit(true);
 
-            
             if (request.getLinimetricRulerCode() != null
                     && instrumentRepository.existsByLinimetricRulerCodeAndIdNot(request.getLinimetricRulerCode(), id)) {
                 throw new DuplicateResourceException("Já existe uma régua linimétrica com o código " + request.getLinimetricRulerCode());
             }
         } else {
-            
+
             validateRequest(request);
             validateUniqueAcronymsAcrossComponents(
                     request.getInputs(),
@@ -456,8 +448,6 @@ public class InstrumentService {
             throw new DuplicateResourceException("Já existe um instrumento com esse nome nesta barragem");
         }
 
-        
-        
         if (!Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
 
             Set<String> newInputAcronyms = request.getInputs().stream()
@@ -470,7 +460,6 @@ public class InstrumentService {
                             .collect(Collectors.toSet())
                     : new HashSet<>();
 
-            
             for (OutputDTO outputDTO : request.getOutputs()) {
                 try {
                     validateEquation(outputDTO.getEquation(), newInputAcronyms, newConstantAcronyms);
@@ -480,7 +469,6 @@ public class InstrumentService {
                 }
             }
 
-            
             Map<String, InputEntity> existingInputsByAcronym = oldInstrument.getInputs().stream()
                     .collect(Collectors.toMap(
                             InputEntity::getAcronym,
@@ -515,17 +503,14 @@ public class InstrumentService {
                             }
                     ));
 
-            
             updateInstrumentBasicFields(oldInstrument, request);
 
-            
             processInputsForUpdate(oldInstrument, request.getInputs(), existingInputsByAcronym);
             if (request.getConstants() != null && !request.getConstants().isEmpty()) {
                 processConstantsForUpdate(oldInstrument, request.getConstants(), existingConstantsByAcronym);
             }
             processOutputsForUpdate(oldInstrument, request.getOutputs(), existingOutputsByAcronym);
 
-            
             deleteUnusedComponents(existingInputsByAcronym, existingConstantsByAcronym);
 
             instrumentRepository.save(oldInstrument);
@@ -534,7 +519,7 @@ public class InstrumentService {
             return instrumentRepository.findWithActiveOutputsById(id)
                     .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após atualização"));
         } else {
-            
+
             updateInstrumentBasicFields(oldInstrument, request);
             instrumentRepository.save(oldInstrument);
 
@@ -586,11 +571,10 @@ public class InstrumentService {
     }
 
     private void createLinimetricRulerComponents(InstrumentEntity instrument) {
-        
+
         MeasurementUnitEntity measurementUnit = measurementUnitRepository.findById(1L)
                 .orElseThrow(() -> new NotFoundException("Unidade de medida 'metros' não encontrada com ID: 1"));
 
-        
         InputEntity input = new InputEntity();
         input.setAcronym("LEI");
         input.setName("Leitura");
@@ -601,7 +585,6 @@ public class InstrumentService {
         inputRepository.save(input);
         instrument.getInputs().add(input);
 
-        
         OutputEntity output = new OutputEntity();
         output.setAcronym("NVL");
         output.setName("Nivel");
@@ -640,12 +623,10 @@ public class InstrumentService {
         instrument.setSection(section);
         instrument.setActiveForSection(request.getActiveForSection());
 
-        
         if (Boolean.TRUE.equals(instrument.getIsLinimetricRuler())) {
             instrument.setLinimetricRulerCode(request.getLinimetricRulerCode());
         }
 
-        
     }
 
     @Transactional
@@ -698,9 +679,10 @@ public class InstrumentService {
             key = "#damId + '_' + #instrumentTypeId + '_' + #sectionId + '_' + #active + '_' + #clientId",
             cacheManager = "instrumentCacheManager"
     )
-    public List<InstrumentEntity> findByFilters(Long damId, Long instrumentTypeId, Long sectionId, Boolean active, Long clientId) {
+    public List<InstrumentResponseDTO> findByFilters(Long damId, Long instrumentTypeId, Long sectionId, Boolean active, Long clientId) {
         log.debug("Cache miss: findByFilters({}, {}, {}, {}, {})", damId, instrumentTypeId, sectionId, active, clientId);
-        return instrumentRepository.findByFiltersOptimized(damId, instrumentTypeId, sectionId, active, clientId);
+        List<InstrumentEntity> instruments = instrumentRepository.findByFiltersOptimized(damId, instrumentTypeId, sectionId, active, clientId);
+        return mapToResponseDTOList(instruments);  // Use o método existente para mapear para DTOs
     }
 
     private void validateEquation(String equation, Set<String> inputAcronyms, Set<String> constantAcronyms) {
@@ -907,7 +889,6 @@ public class InstrumentService {
         int createdCount = 0;
         boolean significantChange = false;
 
-        
         if (!instrument.getNoLimit() && outputDTOs.size() > 1) {
             boolean hasStatistical = outputDTOs.get(0).getStatisticalLimit() != null;
             String firstLimitType = hasStatistical ? "estatístico" : "determinístico";
@@ -946,7 +927,6 @@ public class InstrumentService {
             if (output == null) {
                 significantChange = true;
 
-                
                 output = new OutputEntity();
                 output.setAcronym(outputDTO.getAcronym().toUpperCase());
                 output.setName(outputDTO.getName());
@@ -958,7 +938,6 @@ public class InstrumentService {
 
                 OutputEntity savedOutput = outputRepository.save(output);
 
-                
                 if (!instrument.getNoLimit()) {
                     if (outputDTO.getStatisticalLimit() != null) {
                         StatisticalLimitEntity statisticalLimit = new StatisticalLimitEntity();
@@ -992,16 +971,14 @@ public class InstrumentService {
                     significantChange = true;
                 }
 
-                
                 output.setName(outputDTO.getName());
                 output.setEquation(outputDTO.getEquation());
                 output.setPrecision(outputDTO.getPrecision());
                 output.setMeasurementUnit(measurementUnit);
                 output.setActive(true);
 
-                
                 if (instrument.getNoLimit()) {
-                    
+
                     if (output.getStatisticalLimit() != null) {
                         statisticalLimitRepository.delete(output.getStatisticalLimit());
                         output.setStatisticalLimit(null);
@@ -1011,15 +988,14 @@ public class InstrumentService {
                         output.setDeterministicLimit(null);
                     }
                 } else {
-                    
+
                     if (outputDTO.getStatisticalLimit() != null) {
-                        
+
                         if (output.getDeterministicLimit() != null) {
                             deterministicLimitRepository.delete(output.getDeterministicLimit());
                             output.setDeterministicLimit(null);
                         }
 
-                        
                         if (output.getStatisticalLimit() != null) {
                             output.getStatisticalLimit().setLowerValue(outputDTO.getStatisticalLimit().getLowerValue());
                             output.getStatisticalLimit().setUpperValue(outputDTO.getStatisticalLimit().getUpperValue());
@@ -1032,13 +1008,12 @@ public class InstrumentService {
                             output.setStatisticalLimit(statisticalLimit);
                         }
                     } else if (outputDTO.getDeterministicLimit() != null) {
-                        
+
                         if (output.getStatisticalLimit() != null) {
                             statisticalLimitRepository.delete(output.getStatisticalLimit());
                             output.setStatisticalLimit(null);
                         }
 
-                        
                         if (output.getDeterministicLimit() != null) {
                             output.getDeterministicLimit().setAttentionValue(outputDTO.getDeterministicLimit().getAttentionValue());
                             output.getDeterministicLimit().setAlertValue(outputDTO.getDeterministicLimit().getAlertValue());
@@ -1069,7 +1044,6 @@ public class InstrumentService {
                     }
                 }
 
-                
                 if (output.getDeterministicLimit() != null && outputDTO.getDeterministicLimit() != null) {
                     DeterministicLimitEntity limit = output.getDeterministicLimit();
                     boolean attentionChanged = !limit.getAttentionValue().equals(outputDTO.getDeterministicLimit().getAttentionValue());
@@ -1083,7 +1057,6 @@ public class InstrumentService {
             }
         }
 
-        
         for (OutputEntity unusedOutput : existingOutputsByAcronym.values()) {
             unusedOutput.setActive(false);
             outputRepository.save(unusedOutput);
@@ -1093,7 +1066,6 @@ public class InstrumentService {
             significantChange = true;
         }
 
-        
         if (significantChange) {
             instrument.setLastUpdateVariablesDate(LocalDateTime.now());
             log.info("Atualizada data de modificação de variáveis do instrumento ID: {} devido a mudanças nos outputs",
@@ -1106,25 +1078,22 @@ public class InstrumentService {
 
     private void deleteUnusedComponents(Map<String, InputEntity> unusedInputs, Map<String, ConstantEntity> unusedConstants) {
         for (InputEntity input : unusedInputs.values()) {
-            
+
             InstrumentEntity instrument = input.getInstrument();
             instrument.getInputs().remove(input);
             input.setInstrument(null);
             input.setMeasurementUnit(null);
 
-            
             inputRepository.delete(input);
         }
 
-        
         for (ConstantEntity constant : unusedConstants.values()) {
-            
+
             InstrumentEntity instrument = constant.getInstrument();
             instrument.getConstants().remove(constant);
             constant.setInstrument(null);
             constant.setMeasurementUnit(null);
 
-            
             constantRepository.delete(constant);
         }
     }
@@ -1164,7 +1133,6 @@ public class InstrumentService {
         dto.setLinimetricRulerCode(instrument.getLinimetricRulerCode());
         dto.setLastUpdateVariablesDate(instrument.getLastUpdateVariablesDate());
 
-        
         DamEntity dam = instrument.getDam();
         dto.setDamId(dam.getId());
         dto.setDamName(dam.getName());
@@ -1181,7 +1149,6 @@ public class InstrumentService {
 
         dto.setActiveForSection(instrument.getActiveForSection());
 
-        
         List<InputDTO> inputDTOs = new ArrayList<>(instrument.getInputs().size());
         for (InputEntity input : instrument.getInputs()) {
             InputDTO inputDTO = new InputDTO();
@@ -1199,7 +1166,6 @@ public class InstrumentService {
         }
         dto.setInputs(inputDTOs);
 
-        
         List<ConstantDTO> constantDTOs = new ArrayList<>(instrument.getConstants().size());
         for (ConstantEntity constant : instrument.getConstants()) {
             ConstantDTO constantDTO = new ConstantDTO();
@@ -1218,7 +1184,6 @@ public class InstrumentService {
         }
         dto.setConstants(constantDTOs);
 
-        
         List<OutputEntity> activeOutputs = instrument.getOutputs().stream()
                 .filter(OutputEntity::getActive)
                 .collect(Collectors.toList());
@@ -1237,7 +1202,6 @@ public class InstrumentService {
             outputDTO.setMeasurementUnitName(unit.getName());
             outputDTO.setMeasurementUnitAcronym(unit.getAcronym());
 
-            
             StatisticalLimitEntity statLimit = output.getStatisticalLimit();
             if (statLimit != null) {
                 StatisticalLimitDTO limitDTO = new StatisticalLimitDTO();
@@ -1247,7 +1211,6 @@ public class InstrumentService {
                 outputDTO.setStatisticalLimit(limitDTO);
             }
 
-            
             DeterministicLimitEntity detLimit = output.getDeterministicLimit();
             if (detLimit != null) {
                 DeterministicLimitDTO limitDTO = new DeterministicLimitDTO();

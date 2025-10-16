@@ -3,6 +3,8 @@ package com.geosegbar.exceptions.exception_handler;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.TransactionSystemException;
@@ -29,6 +31,8 @@ import jakarta.validation.ConstraintViolationException;
 
 @RestControllerAdvice
 public class RestExceptionHandler {
+
+    private static final Logger logger = LoggerFactory.getLogger(RestExceptionHandler.class);
 
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<WebResponseEntity<String>> handleNotFoundException(NotFoundException ex) {
@@ -151,6 +155,8 @@ public class RestExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<WebResponseEntity<String>> handleGeneralException(Exception ex) {
+        logger.error("Erro não tratado na aplicação: {}", ex.getMessage(), ex);
+
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(WebResponseEntity.error("Erro inesperado. Tente novamente mais tarde."));
     }

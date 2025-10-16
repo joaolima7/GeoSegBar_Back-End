@@ -34,22 +34,19 @@ public class InstrumentController {
 
     @GetMapping
     public ResponseEntity<WebResponseEntity<List<InstrumentResponseDTO>>> getAllInstruments() {
-        List<InstrumentEntity> instruments = instrumentService.findAll();
-        List<InstrumentResponseDTO> dtos = instrumentService.mapToResponseDTOList(instruments);
+        List<InstrumentResponseDTO> dtos = instrumentService.findAll();
         return ResponseEntity.ok(WebResponseEntity.success(dtos, "Instrumentos obtidos com sucesso!"));
     }
 
     @GetMapping("/dam/{damId}")
     public ResponseEntity<WebResponseEntity<List<InstrumentResponseDTO>>> getInstrumentsByDam(@PathVariable Long damId) {
-        List<InstrumentEntity> instruments = instrumentService.findByDamId(damId);
-        List<InstrumentResponseDTO> dtos = instrumentService.mapToResponseDTOList(instruments);
+        List<InstrumentResponseDTO> dtos = instrumentService.findByDamId(damId);
         return ResponseEntity.ok(WebResponseEntity.success(dtos, "Instrumentos da barragem obtidos com sucesso!"));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<WebResponseEntity<InstrumentResponseDTO>> getInstrumentById(@PathVariable Long id) {
-        InstrumentEntity instrument = instrumentService.findWithAllDetails(id);
-        InstrumentResponseDTO dto = instrumentService.mapToResponseDTO(instrument);
+        InstrumentResponseDTO dto = instrumentService.findWithAllDetails(id);
         return ResponseEntity.ok(WebResponseEntity.success(dto, "Instrumento obtido com sucesso!"));
     }
 
@@ -61,8 +58,7 @@ public class InstrumentController {
             @RequestParam(required = false) Boolean active,
             @RequestParam(required = false) Long clientId) {
 
-        List<InstrumentEntity> instruments = instrumentService.findByFilters(damId, instrumentTypeId, sectionId, active, clientId);
-        List<InstrumentResponseDTO> responseList = instrumentService.mapToResponseDTOList(instruments);
+        List<InstrumentResponseDTO> responseList = instrumentService.findByFilters(damId, instrumentTypeId, sectionId, active, clientId);
 
         return ResponseEntity.ok(WebResponseEntity.success(responseList, "Instrumentos obtidos com sucesso!"));
     }
@@ -71,8 +67,7 @@ public class InstrumentController {
     public ResponseEntity<WebResponseEntity<List<InstrumentResponseDTO>>> getInstrumentsByClient(
             @PathVariable Long clientId,
             @RequestParam(required = false) Boolean active) {
-        List<InstrumentEntity> instruments = instrumentService.findByClientId(clientId, active);
-        List<InstrumentResponseDTO> dtos = instrumentService.mapToResponseDTOList(instruments);
+        List<InstrumentResponseDTO> dtos = instrumentService.findByClientId(clientId, active);
 
         return ResponseEntity.ok(WebResponseEntity.success(
                 dtos,

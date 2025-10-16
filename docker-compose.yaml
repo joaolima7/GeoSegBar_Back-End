@@ -4,16 +4,16 @@ services:
     container_name: geosegbar-postgres-dev
     restart: unless-stopped
     environment:
-      POSTGRES_DB: geosegbar_dev
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: Geometr!s@
-      TZ: "America/Sao_Paulo"
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      TZ: ${TZ}
     ports:
-      - "5432:5432"
+      - "${DB_PORT}:5432"
     volumes:
       - postgres-dev-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -25,10 +25,10 @@ services:
     container_name: geosegbar-redis-dev
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT}:6379"
     volumes:
       - redis-dev-data:/data
-    command: redis-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy volatile-lru
+    command: redis-server --save 60 1 --loglevel warning --maxmemory ${REDIS_MAXMEMORY} --maxmemory-policy volatile-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -49,13 +49,33 @@ services:
       redis-dev:
         condition: service_healthy
     ports:
-      - "9090:9090"
+      - "${SERVER_PORT}:9090"
     environment:
-      - SPRING_PROFILES_ACTIVE=dev
-      - TZ=America/Sao_Paulo
-      - JAVA_OPTS=-Xms512m -Xmx1024m -XX:+UseG1GC
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE}
+      - TZ=${TZ}
+      - JAVA_OPTS=${JAVA_OPTS}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - MAIL_HOST=${MAIL_HOST}
+      - MAIL_PORT=${MAIL_PORT}
+      - MAIL_USERNAME=${MAIL_USERNAME}
+      - MAIL_PASSWORD=${MAIL_PASSWORD}
+      - FILE_UPLOAD_DIR=${FILE_UPLOAD_DIR}
+      - FILE_BASE_URL=${FILE_BASE_URL}
+      - FILE_PSB_DIR=${FILE_PSB_DIR}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - ANA_API_IDENTIFIER=${ANA_API_IDENTIFIER}
+      - ANA_API_PASSWORD=${ANA_API_PASSWORD}
+      - ANA_API_AUTH_URL=${ANA_API_AUTH_URL}
+      - ANA_API_TELEMETRY_URL=${ANA_API_TELEMETRY_URL}
     volumes:
-      - ./storage-dev:/home/wwgeomprod/public_html/storage/app/public
+      - ./storage-dev:${FILE_UPLOAD_DIR}
       - ./logs:/app/logs
     networks:
       - geosegbar-network

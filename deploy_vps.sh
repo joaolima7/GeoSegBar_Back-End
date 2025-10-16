@@ -1,9 +1,23 @@
 #!/bin/bash
-# filepath: /Users/joaoremonato/Projects/SpringBoot/GeoSegBar_Back-End/deploy_vps.sh
 
 set -e
 
 echo "🚀 Iniciando deploy da API GeoSegBar em PRODUÇÃO..."
+
+# Verificar se o arquivo .env.prod existe
+if [ ! -f .env.prod ]; then
+    echo "❌ Arquivo .env.prod não encontrado!"
+    echo "📝 Crie o arquivo .env.prod com as variáveis de produção:"
+    echo "   cp .env.example .env.prod"
+    echo "   # Edite .env.prod com as configurações de produção"
+    exit 1
+fi
+
+# Carregar variáveis do .env.prod
+export $(cat .env.prod | grep -v '^#' | xargs)
+
+echo "📦 Carregando variáveis de ambiente do arquivo .env.prod..."
+echo "🔧 Profile ativo: ${SPRING_PROFILES_ACTIVE}"
 
 # Verificar se Docker está rodando
 if ! docker info > /dev/null 2>&1; then
@@ -14,7 +28,9 @@ fi
 # Criar rede se não existir
 docker network create geosegbar-network 2>/dev/null || true
 
-# Verificar se o Redis existe e está rodando
+# ============================================
+# REDIS
+# ============================================
 if docker ps -q -f name=redis-prod | grep -q .; then
     echo "✅ Redis já está rodando"
 elif docker ps -a -q -f name=redis-prod | grep -q .; then
@@ -24,27 +40,27 @@ elif docker ps -a -q -f name=redis-prod | grep -q .; then
 else
     echo "🔄 Container do Redis não encontrado. Criando..."
     
-    # Verificar se existe um volume para o Redis
     if ! docker volume ls -q -f name=redis-prod-data | grep -q .; then
         echo "📦 Criando volume para Redis..."
         docker volume create redis-prod-data
     fi
     
-    # Iniciar container do Redis
     echo "🚀 Iniciando Redis..."
     docker run -d \
       --name redis-prod \
       --restart unless-stopped \
       --network geosegbar-network \
-      -p 6379:6379 \
+      -p ${REDIS_PORT}:6379 \
       -v redis-prod-data:/data \
-      redis:7-alpine redis-server --save 60 1 --loglevel warning --maxmemory 512mb --maxmemory-policy volatile-lru
+      redis:7-alpine redis-server --save 60 1 --loglevel warning --maxmemory ${REDIS_MAXMEMORY} --maxmemory-policy volatile-lru
       
     echo "⏳ Aguardando Redis inicializar..."
     sleep 5
 fi
 
-# Verificar se o banco de dados existe e está rodando
+# ============================================
+# POSTGRESQL
+# ============================================
 if docker ps -q -f name=postgres-prod | grep -q .; then
     echo "✅ Banco de dados já está rodando"
 elif docker ps -a -q -f name=postgres-prod | grep -q .; then
@@ -56,22 +72,21 @@ elif docker ps -a -q -f name=postgres-prod | grep -q .; then
 else
     echo "🛢️ Container do banco de dados não encontrado. Criando..."
     
-    # Verificar se existe um volume para o banco de dados
     if ! docker volume ls -q -f name=postgres-prod-data | grep -q .; then
         echo "📦 Criando volume para banco de dados..."
         docker volume create postgres-prod-data
     fi
     
-    # Iniciar container do banco
     echo "🚀 Iniciando banco de dados PostgreSQL..."
     docker run -d \
       --name postgres-prod \
       --restart unless-stopped \
       --network geosegbar-network \
-      -p 5433:5432 \
-      -e POSTGRES_DB=geosegbar_prod \
-      -e POSTGRES_USER=postgres \
-      -e POSTGRES_PASSWORD=Geometr!s@ \
+      -p ${DB_PORT}:5432 \
+      -e POSTGRES_DB=${DB_NAME} \
+      -e POSTGRES_USER=${DB_USERNAME} \
+      -e POSTGRES_PASSWORD=${DB_PASSWORD} \
+      -e TZ=${TZ} \
       -v postgres-prod-data:/var/lib/postgresql/data \
       postgres:16-alpine
       
@@ -79,47 +94,63 @@ else
     sleep 15
 fi
 
-# Parar e remover container atual da API (se existir)
+# ============================================
+# APPLICATION
+# ============================================
 echo "🛑 Parando container atual da API..."
 docker stop geosegbar-api-prod 2>/dev/null || echo "   Container não estava rodando"
 docker rm geosegbar-api-prod 2>/dev/null || echo "   Container não existia"
 
-# Fazer pull das mudanças
 echo "📥 Atualizando código..."
 git pull origin main
 
-# Construir nova imagem
 echo "🔨 Construindo nova imagem Docker..."
 docker build -t geosegbar-prod:latest .
 
-# Subir novo container da API
 echo "🚀 Subindo novo container da API..."
 docker run -d \
   --name geosegbar-api-prod \
   --restart unless-stopped \
   --network geosegbar-network \
-  -p 9090:9090 \
-  -e SPRING_PROFILES_ACTIVE=prod \
-  -e JAVA_OPTS="-Xms1024m -Xmx2048m -XX:+UseG1GC" \
-  -v /home/wwgeomprod/public_html/storage/app/public:/home/wwgeomprod/public_html/storage/app/public \
+  -p ${SERVER_PORT}:9090 \
+  -e SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE} \
+  -e JAVA_OPTS="${JAVA_OPTS}" \
+  -e DB_HOST=${DB_HOST} \
+  -e DB_PORT=${DB_PORT} \
+  -e DB_NAME=${DB_NAME} \
+  -e DB_USERNAME=${DB_USERNAME} \
+  -e DB_PASSWORD=${DB_PASSWORD} \
+  -e REDIS_HOST=${REDIS_HOST} \
+  -e REDIS_PORT=${REDIS_PORT} \
+  -e JWT_SECRET=${JWT_SECRET} \
+  -e MAIL_HOST=${MAIL_HOST} \
+  -e MAIL_PORT=${MAIL_PORT} \
+  -e MAIL_USERNAME=${MAIL_USERNAME} \
+  -e MAIL_PASSWORD=${MAIL_PASSWORD} \
+  -e FILE_UPLOAD_DIR=${FILE_UPLOAD_DIR} \
+  -e FILE_BASE_URL=${FILE_BASE_URL} \
+  -e FILE_PSB_DIR=${FILE_PSB_DIR} \
+  -e FRONTEND_URL=${FRONTEND_URL} \
+  -e ANA_API_IDENTIFIER=${ANA_API_IDENTIFIER} \
+  -e ANA_API_PASSWORD=${ANA_API_PASSWORD} \
+  -e ANA_API_AUTH_URL=${ANA_API_AUTH_URL} \
+  -e ANA_API_TELEMETRY_URL=${ANA_API_TELEMETRY_URL} \
+  -e TZ=${TZ} \
+  -v ${FILE_UPLOAD_DIR}:${FILE_UPLOAD_DIR} \
   -v $(pwd)/logs:/app/logs \
   geosegbar-prod:latest
 
-# Aguardar aplicação ficar pronta
 echo "⏳ Aguardando aplicação inicializar..."
 sleep 30
 
-# Verificar se a aplicação está rodando
 echo "🔍 Verificando status da aplicação..."
-if curl -f http://localhost:9090/actuator/health > /dev/null 2>&1; then
+if curl -f http://localhost:${SERVER_PORT}/actuator/health > /dev/null 2>&1; then
     echo "✅ Deploy em PRODUÇÃO realizado com sucesso!"
-    echo "🌐 API disponível em: http://localhost:9090"
+    echo "🌐 API disponível em: http://localhost:${SERVER_PORT}"
     
-    # Mostrar status dos containers
     echo "📊 Status dos containers:"
     docker ps --filter "name=geosegbar" --filter "name=postgres-prod" --filter "name=redis-prod"
     
-    # Limpar imagens não utilizadas
     docker image prune -f > /dev/null 2>&1 || true
     
 else

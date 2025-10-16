@@ -13,8 +13,10 @@ if [ ! -f .env.prod ]; then
     exit 1
 fi
 
-# Carregar variáveis do .env.prod
-export $(cat .env.prod | grep -v '^#' | xargs)
+# Carregar variáveis do .env.prod (método correto para lidar com valores com espaços)
+set -a
+source .env.prod
+set +a
 
 echo "📦 Carregando variáveis de ambiente do arquivo .env.prod..."
 echo "🔧 Profile ativo: ${SPRING_PROFILES_ACTIVE}"
@@ -113,29 +115,29 @@ docker run -d \
   --restart unless-stopped \
   --network geosegbar-network \
   -p ${SERVER_PORT}:9090 \
-  -e SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE} \
+  -e SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE}" \
   -e JAVA_OPTS="${JAVA_OPTS}" \
-  -e DB_HOST=${DB_HOST} \
-  -e DB_PORT=${DB_PORT} \
-  -e DB_NAME=${DB_NAME} \
-  -e DB_USERNAME=${DB_USERNAME} \
-  -e DB_PASSWORD=${DB_PASSWORD} \
-  -e REDIS_HOST=${REDIS_HOST} \
-  -e REDIS_PORT=${REDIS_PORT} \
-  -e JWT_SECRET=${JWT_SECRET} \
-  -e MAIL_HOST=${MAIL_HOST} \
-  -e MAIL_PORT=${MAIL_PORT} \
-  -e MAIL_USERNAME=${MAIL_USERNAME} \
-  -e MAIL_PASSWORD=${MAIL_PASSWORD} \
-  -e FILE_UPLOAD_DIR=${FILE_UPLOAD_DIR} \
-  -e FILE_BASE_URL=${FILE_BASE_URL} \
-  -e FILE_PSB_DIR=${FILE_PSB_DIR} \
-  -e FRONTEND_URL=${FRONTEND_URL} \
-  -e ANA_API_IDENTIFIER=${ANA_API_IDENTIFIER} \
-  -e ANA_API_PASSWORD=${ANA_API_PASSWORD} \
-  -e ANA_API_AUTH_URL=${ANA_API_AUTH_URL} \
-  -e ANA_API_TELEMETRY_URL=${ANA_API_TELEMETRY_URL} \
-  -e TZ=${TZ} \
+  -e DB_HOST="${DB_HOST}" \
+  -e DB_PORT="${DB_PORT}" \
+  -e DB_NAME="${DB_NAME}" \
+  -e DB_USERNAME="${DB_USERNAME}" \
+  -e DB_PASSWORD="${DB_PASSWORD}" \
+  -e REDIS_HOST="${REDIS_HOST}" \
+  -e REDIS_PORT="${REDIS_PORT}" \
+  -e JWT_SECRET="${JWT_SECRET}" \
+  -e MAIL_HOST="${MAIL_HOST}" \
+  -e MAIL_PORT="${MAIL_PORT}" \
+  -e MAIL_USERNAME="${MAIL_USERNAME}" \
+  -e MAIL_PASSWORD="${MAIL_PASSWORD}" \
+  -e FILE_UPLOAD_DIR="${FILE_UPLOAD_DIR}" \
+  -e FILE_BASE_URL="${FILE_BASE_URL}" \
+  -e FILE_PSB_DIR="${FILE_PSB_DIR}" \
+  -e FRONTEND_URL="${FRONTEND_URL}" \
+  -e ANA_API_IDENTIFIER="${ANA_API_IDENTIFIER}" \
+  -e ANA_API_PASSWORD="${ANA_API_PASSWORD}" \
+  -e ANA_API_AUTH_URL="${ANA_API_AUTH_URL}" \
+  -e ANA_API_TELEMETRY_URL="${ANA_API_TELEMETRY_URL}" \
+  -e TZ="${TZ}" \
   -v ${FILE_UPLOAD_DIR}:${FILE_UPLOAD_DIR} \
   -v $(pwd)/logs:/app/logs \
   geosegbar-prod:latest
@@ -151,6 +153,7 @@ if curl -f http://localhost:${SERVER_PORT}/actuator/health > /dev/null 2>&1; the
     echo "📊 Status dos containers:"
     docker ps --filter "name=geosegbar" --filter "name=postgres-prod" --filter "name=redis-prod"
     
+    echo "🧹 Limpando imagens não utilizadas..."
     docker image prune -f > /dev/null 2>&1 || true
     
 else

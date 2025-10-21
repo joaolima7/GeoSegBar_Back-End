@@ -79,8 +79,8 @@ public class DamEntity {
     @Column(length = 100)
     private String neighborhood;
 
-    @Size(max = 20, message = "O número do endereço deve ter no máximo 20 caracteres!")
-    @Column(length = 20)
+    @Size(max = 10, message = "O número do endereço deve ter no máximo 10 caracteres!")
+    @Column(length = 10)
     private String numberAddress;
 
     @NotBlank(message = "O nome da cidade é obrigatório!")

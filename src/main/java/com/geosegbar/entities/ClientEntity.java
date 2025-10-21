@@ -72,7 +72,6 @@ public class ClientEntity {
     @Column(nullable = false, length = 100)
     private String neighborhood;
 
-    @Pattern(regexp = "^[0-9]+$", message = "O número do endereço deve conter apenas números!")
     @Size(max = 10, message = "O número do endereço deve ter no máximo 10 caracteres!")
     @Column(length = 10)
     private String numberAddress;

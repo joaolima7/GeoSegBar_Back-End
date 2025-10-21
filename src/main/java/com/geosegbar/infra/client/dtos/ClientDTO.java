@@ -33,7 +33,6 @@ public class ClientDTO {
     @Size(max = 100, message = "O nome do bairro deve ter no máximo 100 caracteres!")
     private String neighborhood;
 
-    @Pattern(regexp = "^[0-9]+$", message = "O número do endereço deve conter apenas números!")
     @Size(max = 10, message = "O número do endereço deve ter no máximo 10 caracteres!")
     private String numberAddress;
 

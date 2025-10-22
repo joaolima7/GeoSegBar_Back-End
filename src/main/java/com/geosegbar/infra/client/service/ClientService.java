@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.UserEntity;
+import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.FileStorageException;
 import com.geosegbar.exceptions.NotFoundException;
@@ -37,6 +38,11 @@ public class ClientService {
     public void deleteById(Long id) {
         ClientEntity client = clientRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Cliente não encontrado para exclusão!"));
+
+        if (!client.getDams().isEmpty() || !client.getDamPermissions().isEmpty() || !client.getUsers().isEmpty()) {
+            throw new BusinessRuleException(
+                    "Não é possível excluir cliente devido as dependências existentes, recomenda-se inativar o cliente se necessário.");
+        }
 
         if (client.getLogoPath() != null) {
             fileStorageService.deleteFile(client.getLogoPath());

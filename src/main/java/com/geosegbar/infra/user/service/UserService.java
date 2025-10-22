@@ -26,6 +26,7 @@ import com.geosegbar.entities.SexEntity;
 import com.geosegbar.entities.StatusEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.entities.VerificationCodeEntity;
+import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
@@ -146,6 +147,13 @@ public class UserService {
             throw new InvalidInputException("O usuário do sistema não pode ser excluído.");
         }
 
+        // Verificar usuários criados por este usuário
+        if (!user.getCreatedUsers().isEmpty() || !user.getReadings().isEmpty() || !user.getPsbFoldersCreated().isEmpty() || !user.getPsbFilesUploaded().isEmpty() || !user.getSharedFolders().isEmpty()) {
+            throw new BusinessRuleException(
+                    "Não é possível excluir o usuário, pois existem registros associados a ele, desative o usuário se necessário.");
+        }
+
+        // Se chegou até aqui, podemos remover as permissões e então o usuário
         documentationPermissionService.deleteByUserSafely(user.getId());
         attributionsPermissionService.deleteByUserSafely(user.getId());
         instrumentationPermissionService.deleteByUserSafely(user.getId());

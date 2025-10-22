@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.entities.MeasurementUnitEntity;
+import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.measurement_unit.persistence.jpa.MeasurementUnitRepository;
@@ -107,6 +108,11 @@ public class MeasurementUnitService {
     @Transactional
     public void delete(Long id) {
         MeasurementUnitEntity measurementUnit = findById(id);
+        if (!measurementUnit.getConstants().isEmpty() || !measurementUnit.getOutputs().isEmpty() || !measurementUnit.getInputs().isEmpty()) {
+            throw new BusinessRuleException("Não é possível excluir a unidade de medida pois existem registros associados a ela.");
+        }
+
+        // Se chegou até aqui, é seguro excluir
         measurementUnitRepository.delete(measurementUnit);
     }
 

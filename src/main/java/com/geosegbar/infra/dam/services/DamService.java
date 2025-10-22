@@ -22,6 +22,7 @@ import com.geosegbar.entities.RiskCategoryEntity;
 import com.geosegbar.entities.SecurityLevelEntity;
 import com.geosegbar.entities.StatusEntity;
 import com.geosegbar.entities.UserEntity;
+import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.exceptions.UnauthorizedException;
@@ -268,8 +269,13 @@ public class DamService {
 
     @Transactional
     public void deleteById(Long id) {
-        damRepository.findById(id)
+        DamEntity dam = damRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada para exclusão!"));
+
+        if (!dam.getChecklists().isEmpty() || !dam.getChecklistResponses().isEmpty() || !dam.getSections().isEmpty() || !dam.getDamPermissions().isEmpty() || !dam.getInstruments().isEmpty()) {
+            throw new BusinessRuleException(
+                    "Não é possível excluir a barragem devido as dependências existentes, recomenda-se inativar a barragem se necessário.");
+        }
 
         damRepository.deleteById(id);
     }

@@ -29,6 +29,7 @@ import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.classification_dam.peristence.ClassificationDamRepository;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.dtos.CreateDamCompleteRequest;
+import com.geosegbar.infra.dam.dtos.DamStatusUpdateDTO;
 import com.geosegbar.infra.dam.dtos.LevelRequestDTO;
 import com.geosegbar.infra.dam.dtos.ReservoirRequestDTO;
 import com.geosegbar.infra.dam.dtos.UpdateDamRequest;
@@ -69,6 +70,24 @@ public class DamService {
         DamEntity dam = findById(id);
         Hibernate.initialize(dam.getSections());
         return dam;
+    }
+
+    @Transactional
+    public DamEntity updateStatus(Long damId, DamStatusUpdateDTO statusUpdateDTO) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getAttributionsPermission().getEditDam()) {
+                throw new UnauthorizedException("Usuário não tem permissão para modificar status de barragens!");
+            }
+        }
+
+        DamEntity dam = findById(damId);
+
+        StatusEntity status = statusRepository.findById(statusUpdateDTO.getStatusId())
+                .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + statusUpdateDTO.getStatusId()));
+
+        dam.setStatus(status);
+        return damRepository.save(dam);
     }
 
     public List<DamEntity> findAllWithSections() {

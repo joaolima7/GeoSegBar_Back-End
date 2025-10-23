@@ -50,6 +50,7 @@ import com.geosegbar.infra.user.dto.LoginResponseDTO;
 import com.geosegbar.infra.user.dto.UserClientAssociationDTO;
 import com.geosegbar.infra.user.dto.UserCreateDTO;
 import com.geosegbar.infra.user.dto.UserPasswordUpdateDTO;
+import com.geosegbar.infra.user.dto.UserStatusUpdateDTO;
 import com.geosegbar.infra.user.dto.UserUpdateDTO;
 import com.geosegbar.infra.user.persistence.jpa.UserRepository;
 import com.geosegbar.infra.verification_code.dto.ForgotPasswordRequestDTO;
@@ -129,6 +130,28 @@ public class UserService {
         } catch (Exception e) {
             log.error("Erro ao criar usuário do sistema: {}", e.getMessage(), e);
         }
+    }
+
+    @Transactional
+    public UserEntity updateStatus(Long userId, UserStatusUpdateDTO statusUpdateDTO) {
+        UserEntity user = findEntityByIdWithAllDetails(userId);
+
+        if (isSystemUser(user)) {
+            throw new InvalidInputException("O usuário SISTEMA não pode ser modificado.");
+        }
+
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getAttributionsPermission().getEditUser()) {
+                throw new UnauthorizedException("Usuário não tem permissão para modificar status de usuários!");
+            }
+        }
+
+        StatusEntity status = statusRepository.findById(statusUpdateDTO.getStatusId())
+                .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + statusUpdateDTO.getStatusId()));
+
+        user.setStatus(status);
+        return userRepository.save(user);
     }
 
     @Transactional

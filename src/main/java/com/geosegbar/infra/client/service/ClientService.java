@@ -9,15 +9,18 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.ClientEntity;
+import com.geosegbar.entities.StatusEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.FileStorageException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.client.dtos.ClientDTO;
+import com.geosegbar.infra.client.dtos.ClientStatusUpdateDTO;
 import com.geosegbar.infra.client.dtos.LogoUpdateDTO;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.file_storage.FileStorageService;
+import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
 import com.geosegbar.infra.user.dto.UserClientAssociationDTO;
 import com.geosegbar.infra.user.persistence.jpa.UserRepository;
 import com.geosegbar.infra.user.service.UserService;
@@ -33,6 +36,7 @@ public class ClientService {
     private final FileStorageService fileStorageService;
     private final UserRepository userRepository;
     private final UserService userService;
+    private final StatusRepository statusRepository;
 
     @Transactional
     public void deleteById(Long id) {
@@ -49,6 +53,17 @@ public class ClientService {
         }
 
         clientRepository.deleteById(id);
+    }
+
+    @Transactional
+    public ClientEntity updateStatus(Long clientId, ClientStatusUpdateDTO statusUpdateDTO) {
+        ClientEntity client = findById(clientId);
+
+        StatusEntity status = statusRepository.findById(statusUpdateDTO.getStatusId())
+                .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + statusUpdateDTO.getStatusId()));
+
+        client.setStatus(status);
+        return clientRepository.save(client);
     }
 
     @Transactional

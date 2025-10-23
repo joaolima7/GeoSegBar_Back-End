@@ -21,6 +21,7 @@ import com.geosegbar.infra.user.dto.LoginResponseDTO;
 import com.geosegbar.infra.user.dto.UserClientAssociationDTO;
 import com.geosegbar.infra.user.dto.UserCreateDTO;
 import com.geosegbar.infra.user.dto.UserPasswordUpdateDTO;
+import com.geosegbar.infra.user.dto.UserStatusUpdateDTO;
 import com.geosegbar.infra.user.dto.UserUpdateDTO;
 import com.geosegbar.infra.user.service.UserService;
 import com.geosegbar.infra.verification_code.dto.ForgotPasswordRequestDTO;
@@ -150,6 +151,19 @@ public class UserController {
         UserEntity updatedUser = userService.updateUserClients(id, clientAssociationDTO);
         WebResponseEntity<UserEntity> response
                 = WebResponseEntity.success(updatedUser, "Clientes do usuário atualizados com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}/status")
+    public ResponseEntity<WebResponseEntity<UserEntity>> updateUserStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody UserStatusUpdateDTO statusUpdateDTO) {
+
+        UserEntity updatedUser = userService.updateStatus(id, statusUpdateDTO);
+        WebResponseEntity<UserEntity> response = WebResponseEntity.success(
+                updatedUser,
+                "Status do usuário atualizado com sucesso!"
+        );
         return ResponseEntity.ok(response);
     }
 

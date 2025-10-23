@@ -246,19 +246,39 @@ public class InstrumentGraphPatternService {
         }
 
         if (property.getOutput() != null) {
+            GraphPatternDetailResponseDTO.MeasurementUnitDTO measurementUnitDTO = null;
+            if (property.getOutput().getMeasurementUnit() != null) {
+                measurementUnitDTO = new GraphPatternDetailResponseDTO.MeasurementUnitDTO(
+                        property.getOutput().getMeasurementUnit().getId(),
+                        property.getOutput().getMeasurementUnit().getName(),
+                        property.getOutput().getMeasurementUnit().getAcronym()
+                );
+            }
+
             dto.setOutput(new GraphPatternDetailResponseDTO.RelatedOutputDTO(
                     property.getOutput().getId(),
                     property.getOutput().getAcronym(),
-                    property.getOutput().getName()
+                    property.getOutput().getName(),
+                    measurementUnitDTO
             ));
         }
 
         if (property.getConstant() != null) {
+            GraphPatternDetailResponseDTO.MeasurementUnitDTO measurementUnitDTO = null;
+            if (property.getConstant().getMeasurementUnit() != null) {
+                measurementUnitDTO = new GraphPatternDetailResponseDTO.MeasurementUnitDTO(
+                        property.getConstant().getMeasurementUnit().getId(),
+                        property.getConstant().getMeasurementUnit().getName(),
+                        property.getConstant().getMeasurementUnit().getAcronym()
+                );
+            }
+
             dto.setConstant(new GraphPatternDetailResponseDTO.RelatedConstantDTO(
                     property.getConstant().getId(),
                     property.getConstant().getAcronym(),
                     property.getConstant().getName(),
-                    property.getConstant().getValue()
+                    property.getConstant().getValue(),
+                    measurementUnitDTO
             ));
         }
 
@@ -266,10 +286,20 @@ public class InstrumentGraphPatternService {
             var statLimit = property.getStatisticalLimit();
             GraphPatternDetailResponseDTO.RelatedOutputDTO outputDto = null;
             if (statLimit.getOutput() != null) {
+                GraphPatternDetailResponseDTO.MeasurementUnitDTO measurementUnitDTO = null;
+                if (statLimit.getOutput().getMeasurementUnit() != null) {
+                    measurementUnitDTO = new GraphPatternDetailResponseDTO.MeasurementUnitDTO(
+                            statLimit.getOutput().getMeasurementUnit().getId(),
+                            statLimit.getOutput().getMeasurementUnit().getName(),
+                            statLimit.getOutput().getMeasurementUnit().getAcronym()
+                    );
+                }
+
                 outputDto = new GraphPatternDetailResponseDTO.RelatedOutputDTO(
                         statLimit.getOutput().getId(),
                         statLimit.getOutput().getAcronym(),
-                        statLimit.getOutput().getName()
+                        statLimit.getOutput().getName(),
+                        measurementUnitDTO
                 );
             }
             dto.setStatisticalLimit(new GraphPatternDetailResponseDTO.RelatedStatisticalLimitDTO(
@@ -284,10 +314,20 @@ public class InstrumentGraphPatternService {
             var detLimit = property.getDeterministicLimit();
             GraphPatternDetailResponseDTO.RelatedOutputDTO outputDto = null;
             if (detLimit.getOutput() != null) {
+                GraphPatternDetailResponseDTO.MeasurementUnitDTO measurementUnitDTO = null;
+                if (detLimit.getOutput().getMeasurementUnit() != null) {
+                    measurementUnitDTO = new GraphPatternDetailResponseDTO.MeasurementUnitDTO(
+                            detLimit.getOutput().getMeasurementUnit().getId(),
+                            detLimit.getOutput().getMeasurementUnit().getName(),
+                            detLimit.getOutput().getMeasurementUnit().getAcronym()
+                    );
+                }
+
                 outputDto = new GraphPatternDetailResponseDTO.RelatedOutputDTO(
                         detLimit.getOutput().getId(),
                         detLimit.getOutput().getAcronym(),
-                        detLimit.getOutput().getName()
+                        detLimit.getOutput().getName(),
+                        measurementUnitDTO
                 );
             }
             dto.setDeterministicLimit(new GraphPatternDetailResponseDTO.RelatedDeterministicLimitDTO(

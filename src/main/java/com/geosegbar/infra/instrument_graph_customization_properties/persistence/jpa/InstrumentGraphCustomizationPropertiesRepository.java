@@ -23,9 +23,16 @@ public interface InstrumentGraphCustomizationPropertiesRepository extends JpaRep
             @QueryHint(name = "org.hibernate.cacheable", value = "true"))
     @Query("SELECT DISTINCT p FROM InstrumentGraphCustomizationPropertiesEntity p "
             + "LEFT JOIN FETCH p.output o "
+            + "LEFT JOIN FETCH o.measurementUnit "
             + "LEFT JOIN FETCH p.statisticalLimit sl "
+            + "LEFT JOIN FETCH sl.output slo "
+            + "LEFT JOIN FETCH slo.measurementUnit "
             + "LEFT JOIN FETCH p.deterministicLimit dl "
+            + "LEFT JOIN FETCH dl.output dlo "
+            + "LEFT JOIN FETCH dlo.measurementUnit "
             + "LEFT JOIN FETCH p.instrument i "
+            + "LEFT JOIN FETCH p.constant c "
+            + "LEFT JOIN FETCH c.measurementUnit "
             + "WHERE p.pattern.id = :patternId")
     List<InstrumentGraphCustomizationPropertiesEntity> findByPatternId(@Param("patternId") Long patternId);
 

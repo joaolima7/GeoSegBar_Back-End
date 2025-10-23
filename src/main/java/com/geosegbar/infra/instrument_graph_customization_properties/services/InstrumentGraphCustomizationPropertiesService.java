@@ -756,19 +756,39 @@ public class InstrumentGraphCustomizationPropertiesService {
         }
 
         if (property.getOutput() != null) {
+            GraphPropertiesResponseDTO.MeasurementUnitDTO measurementUnitDTO = null;
+            if (property.getOutput().getMeasurementUnit() != null) {
+                measurementUnitDTO = new GraphPropertiesResponseDTO.MeasurementUnitDTO(
+                        property.getOutput().getMeasurementUnit().getId(),
+                        property.getOutput().getMeasurementUnit().getName(),
+                        property.getOutput().getMeasurementUnit().getAcronym()
+                );
+            }
+
             dto.setOutput(new GraphPropertiesResponseDTO.OutputDetailDTO(
                     property.getOutput().getId(),
                     property.getOutput().getAcronym(),
-                    property.getOutput().getName()
+                    property.getOutput().getName(),
+                    measurementUnitDTO
             ));
         }
 
         if (property.getConstant() != null) {
+            GraphPropertiesResponseDTO.MeasurementUnitDTO measurementUnitDTO = null;
+            if (property.getConstant().getMeasurementUnit() != null) {
+                measurementUnitDTO = new GraphPropertiesResponseDTO.MeasurementUnitDTO(
+                        property.getConstant().getMeasurementUnit().getId(),
+                        property.getConstant().getMeasurementUnit().getName(),
+                        property.getConstant().getMeasurementUnit().getAcronym()
+                );
+            }
+
             dto.setConstant(new GraphPropertiesResponseDTO.ConstantDetailDTO(
                     property.getConstant().getId(),
                     property.getConstant().getAcronym(),
                     property.getConstant().getName(),
-                    property.getConstant().getValue()
+                    property.getConstant().getValue(),
+                    measurementUnitDTO
             ));
         }
 
@@ -776,10 +796,20 @@ public class InstrumentGraphCustomizationPropertiesService {
             StatisticalLimitEntity statLimit = property.getStatisticalLimit();
             GraphPropertiesResponseDTO.OutputDetailDTO outputDto = null;
             if (statLimit.getOutput() != null) {
+                GraphPropertiesResponseDTO.MeasurementUnitDTO measurementUnitDTO = null;
+                if (statLimit.getOutput().getMeasurementUnit() != null) {
+                    measurementUnitDTO = new GraphPropertiesResponseDTO.MeasurementUnitDTO(
+                            statLimit.getOutput().getMeasurementUnit().getId(),
+                            statLimit.getOutput().getMeasurementUnit().getName(),
+                            statLimit.getOutput().getMeasurementUnit().getAcronym()
+                    );
+                }
+
                 outputDto = new GraphPropertiesResponseDTO.OutputDetailDTO(
                         statLimit.getOutput().getId(),
                         statLimit.getOutput().getAcronym(),
-                        statLimit.getOutput().getName()
+                        statLimit.getOutput().getName(),
+                        measurementUnitDTO
                 );
             }
             dto.setStatisticalLimit(new GraphPropertiesResponseDTO.StatisticalLimitDetailDTO(
@@ -794,10 +824,20 @@ public class InstrumentGraphCustomizationPropertiesService {
             DeterministicLimitEntity detLimit = property.getDeterministicLimit();
             GraphPropertiesResponseDTO.OutputDetailDTO outputDto = null;
             if (detLimit.getOutput() != null) {
+                GraphPropertiesResponseDTO.MeasurementUnitDTO measurementUnitDTO = null;
+                if (detLimit.getOutput().getMeasurementUnit() != null) {
+                    measurementUnitDTO = new GraphPropertiesResponseDTO.MeasurementUnitDTO(
+                            detLimit.getOutput().getMeasurementUnit().getId(),
+                            detLimit.getOutput().getMeasurementUnit().getName(),
+                            detLimit.getOutput().getMeasurementUnit().getAcronym()
+                    );
+                }
+
                 outputDto = new GraphPropertiesResponseDTO.OutputDetailDTO(
                         detLimit.getOutput().getId(),
                         detLimit.getOutput().getAcronym(),
-                        detLimit.getOutput().getName()
+                        detLimit.getOutput().getName(),
+                        measurementUnitDTO
                 );
             }
             dto.setDeterministicLimit(new GraphPropertiesResponseDTO.DeterministicLimitDetailDTO(

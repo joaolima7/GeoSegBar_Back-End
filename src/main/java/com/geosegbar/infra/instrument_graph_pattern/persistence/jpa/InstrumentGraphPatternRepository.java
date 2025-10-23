@@ -28,12 +28,16 @@ public interface InstrumentGraphPatternRepository extends JpaRepository<Instrume
             + "LEFT JOIN FETCH p.axes a "
             + "LEFT JOIN FETCH p.properties prop "
             + "LEFT JOIN FETCH prop.instrument "
-            + "LEFT JOIN FETCH prop.output "
-            + "LEFT JOIN FETCH prop.constant "
+            + "LEFT JOIN FETCH prop.output o "
+            + "LEFT JOIN FETCH o.measurementUnit "
+            + "LEFT JOIN FETCH prop.constant c "
+            + "LEFT JOIN FETCH c.measurementUnit "
             + "LEFT JOIN FETCH prop.statisticalLimit sl "
-            + "LEFT JOIN FETCH sl.output "
+            + "LEFT JOIN FETCH sl.output so "
+            + "LEFT JOIN FETCH so.measurementUnit "
             + "LEFT JOIN FETCH prop.deterministicLimit dl "
-            + "LEFT JOIN FETCH dl.output "
+            + "LEFT JOIN FETCH dl.output do "
+            + "LEFT JOIN FETCH do.measurementUnit "
             + "WHERE p.id = :patternId")
     Optional<InstrumentGraphPatternEntity> findByIdWithAllDetails(@Param("patternId") Long patternId);
 

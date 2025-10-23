@@ -100,6 +100,8 @@ public class GraphPatternDetailResponseDTO {
         private Long id;
         private String acronym;
         private String name;
+        private MeasurementUnitDTO measurementUnit;
+
     }
 
     @Data
@@ -134,5 +136,17 @@ public class GraphPatternDetailResponseDTO {
         private String acronym;
         private String name;
         private Double value;
+        private MeasurementUnitDTO measurementUnit;
+
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class MeasurementUnitDTO {
+
+        private Long id;
+        private String name;
+        private String acronym;
     }
 }

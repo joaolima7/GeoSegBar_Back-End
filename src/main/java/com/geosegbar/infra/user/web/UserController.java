@@ -67,9 +67,9 @@ public class UserController {
             @RequestParam(required = false) Long roleId,
             @RequestParam(required = false) Long clientId,
             @RequestParam(required = false) Long statusId,
-            @RequestParam(required = false) Boolean isAdminManagement) {
+            @RequestParam(required = false) Boolean isManagement) {
 
-        List<UserEntity> users = userService.findByFilters(roleId, clientId, statusId, isAdminManagement);
+        List<UserEntity> users = userService.findByFilters(roleId, clientId, statusId, isManagement);
         WebResponseEntity<List<UserEntity>> response = WebResponseEntity.success(
                 users,
                 "Usuários filtrados obtidos com sucesso!"

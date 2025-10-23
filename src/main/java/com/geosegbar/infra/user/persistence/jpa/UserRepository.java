@@ -33,29 +33,17 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
             + "LEFT JOIN FETCH u.clients c "
             + "LEFT JOIN FETCH u.sex "
             + "LEFT JOIN FETCH u.status "
-            + "LEFT JOIN FETCH u.role "
-            + "LEFT JOIN FETCH u.createdBy cb "
-            + "WHERE u.name != 'SISTEMA' "
-            + "AND u.email != 'noreply@geometrisa-prod.com.br' "
-            + "AND (:statusId IS NULL OR u.status.id = :statusId) "
-            + "ORDER BY u.id ASC")
-    List<UserEntity> findAllForAdminManagement(@Param("statusId") Long statusId);
-
-    @QueryHints(
-            @QueryHint(name = "org.hibernate.cacheable", value = "true"))
-    @Query("SELECT DISTINCT u FROM UserEntity u "
-            + "LEFT JOIN FETCH u.clients c "
-            + "LEFT JOIN FETCH u.sex "
-            + "LEFT JOIN FETCH u.status "
             + "LEFT JOIN FETCH u.role r "
             + "LEFT JOIN FETCH u.createdBy cb "
             + "WHERE u.name != 'SISTEMA' "
             + "AND u.email != 'noreply@geometrisa-prod.com.br' "
-            + "AND r.name = 'COLLABORATOR' "
-            + "AND c.id = :clientId "
             + "AND (:statusId IS NULL OR u.status.id = :statusId) "
+            + "AND ("
+            + "    (c.id = :clientId) "
+            + "    OR (r.name = 'COLLABORATOR' AND (SELECT COUNT(uc) FROM u.clients uc) = 0)"
+            + ") "
             + "ORDER BY u.id ASC")
-    List<UserEntity> findCollaboratorsByClient(
+    List<UserEntity> findByClientIncludingUnassignedCollaborators(
             @Param("clientId") Long clientId,
             @Param("statusId") Long statusId);
 

@@ -201,31 +201,22 @@ public class UserService {
     }
 
     @Transactional()
-    public List<UserEntity> findByFilters(Long roleId, Long clientId, Long statusId, Boolean isAdminManagement) {
-        List<UserEntity> result = new ArrayList<>();
-
-        // Validação: se isAdminManagement é false, clientId é obrigatório
-        if (isAdminManagement != null && !isAdminManagement && clientId == null) {
-            if (result.add(AuthenticatedUserUtil.getCurrentUser())) {
-                return result;
+    public List<UserEntity> findByFilters(Long roleId, Long clientId, Long statusId, Boolean isManagement) {
+        if (isManagement != null && isManagement) {
+            // Validação: clientId é obrigatório quando isManagement é true
+            if (clientId == null) {
+                throw new InvalidInputException("O cliente é obrigatorio!");
             }
+
+            return userRepository.findByClientIncludingUnassignedCollaborators(clientId, statusId);
         }
 
-        // Fluxo 1: Gestão administrativa (todos os usuários do sistema, exceto SISTEMA)
-        if (isAdminManagement != null && isAdminManagement) {
-            result = userRepository.findAllForAdminManagement(statusId);
-        } // Fluxo 2: Colaboradores de um cliente específico (excluindo SISTEMA)
-        else if (isAdminManagement != null && !isAdminManagement && clientId != null) {
-            result = userRepository.findCollaboratorsByClient(clientId, statusId);
-        } // Fluxo 3: Filtro padrão com exclusão do usuário SISTEMA
-        else {
-            result = userRepository.findByRoleAndClientWithDetails(roleId, clientId, statusId);
+        List<UserEntity> result = userRepository.findByRoleAndClientWithDetails(roleId, clientId, statusId);
 
-            // Filtrar usuário SISTEMA do resultado
-            result = result.stream()
-                    .filter(user -> !isSystemUser(user))
-                    .collect(java.util.stream.Collectors.toList());
-        }
+        // Filtrar usuário SISTEMA do resultado
+        result = result.stream()
+                .filter(user -> !isSystemUser(user))
+                .collect(java.util.stream.Collectors.toList());
 
         return result;
     }
@@ -246,7 +237,6 @@ public class UserService {
         userEntity.setSex(userDTO.getSex());
         userEntity.setStatus(userDTO.getStatus());
         userEntity.setRole(userDTO.getRole());
-        userEntity.setClients(userDTO.getClients());
 
         if (userDTO.getCreatedById() != null) {
             UserEntity creator = userRepository.findById(userDTO.getCreatedById())
@@ -287,6 +277,16 @@ public class UserService {
             RoleEntity role = roleRepository.findById(userEntity.getRole().getId())
                     .orElseThrow(() -> new NotFoundException("Role não encontrada com ID: " + userEntity.getRole().getId()));
             userEntity.setRole(role);
+        }
+
+        if (userEntity.getRole() != null && userEntity.getRole().getName() == RoleEnum.ADMIN) {
+            userEntity.setClients(new HashSet<>());
+        } else {
+            if (userDTO.getClients() != null) {
+                userEntity.setClients(userDTO.getClients());
+            } else {
+                userEntity.setClients(new HashSet<>());
+            }
         }
 
         String generatedPassword = GenerateRandomPassword.execute();
@@ -429,6 +429,12 @@ public class UserService {
     public UserEntity updateUserClients(Long userId, UserClientAssociationDTO clientAssociationDTO) {
         AuthenticatedUserUtil.checkAdminPermission();
         UserEntity user = findEntityByIdWithAllDetails(userId);
+
+        // Se o usuário alvo for ADMIN, ignorar associação de clients
+        if (user.getRole() != null && user.getRole().getName() == RoleEnum.ADMIN) {
+            // Não altera clients de admin — retorna sem modificações
+            return user;
+        }
 
         Set<ClientEntity> oldClients = new HashSet<>(user.getClients());
 
@@ -709,6 +715,11 @@ public class UserService {
             attributionsPermissionService.deleteByUserSafely(user.getId());
             instrumentationPermissionService.deleteByUserSafely(user.getId());
             routineInspectionPermissionService.deleteByUserSafely(user.getId());
+
+            if (!user.getClients().isEmpty()) {
+                user.getClients().clear();
+                userRepository.save(user);
+            }
         }
     }
 

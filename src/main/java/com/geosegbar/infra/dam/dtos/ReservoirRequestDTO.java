@@ -9,6 +9,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ReservoirRequestDTO {
+
+    private Long id;
+
     @NotNull(message = "As informações de nível são obrigatórias!")
     private LevelRequestDTO level;
 }

@@ -248,7 +248,7 @@ public class UserService {
             throw new DuplicateResourceException("Já existe um usuário com o email informado!");
         }
 
-        if (userEntity.getPhone() != null && userRepository.existsByPhone(userEntity.getPhone())) {
+        if (userEntity.getPhone() != null && !userEntity.getPhone().isEmpty() && userRepository.existsByPhone(userEntity.getPhone())) {
             throw new DuplicateResourceException("Já existe um usuário com o telefone informado!");
         }
 
@@ -344,7 +344,7 @@ public class UserService {
             throw new DuplicateResourceException("Já existe um usuário com o email informado!");
         }
 
-        if (userDTO.getPhone() != null) {
+        if (userDTO.getPhone() != null && !userDTO.getPhone().isEmpty()) {
             if (userRepository.existsByPhoneAndIdNot(userDTO.getPhone(), id)) {
                 throw new DuplicateResourceException("Já existe um usuário com o telefone informado!");
             }

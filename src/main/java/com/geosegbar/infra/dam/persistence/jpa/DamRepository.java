@@ -32,14 +32,20 @@ public interface DamRepository extends JpaRepository<DamEntity, Long> {
     @EntityGraph(attributePaths = {"psbFolders"})
     Optional<DamEntity> findWithPsbFoldersById(Long id);
 
-    @EntityGraph(attributePaths = {"reservoirs"})
-    Optional<DamEntity> findWithReservoirsById(Long id);
+    @Query("SELECT DISTINCT d FROM DamEntity d "
+            + "LEFT JOIN FETCH d.reservoirs r "
+            + "LEFT JOIN FETCH r.level "
+            + "WHERE d.id = :id")
+    Optional<DamEntity> findWithReservoirsById(@Param("id") Long id);
 
     @EntityGraph(attributePaths = {"psbFolders"})
     List<DamEntity> findWithPsbFoldersByClientId(Long clientId);
 
-    @EntityGraph(attributePaths = {"reservoirs"})
-    List<DamEntity> findWithReservoirsByClientId(Long clientId);
+    @Query("SELECT DISTINCT d FROM DamEntity d "
+            + "LEFT JOIN FETCH d.reservoirs r "
+            + "LEFT JOIN FETCH r.level "
+            + "WHERE d.client.id = :clientId")
+    List<DamEntity> findWithReservoirsByClientId(@Param("clientId") Long clientId);
 
     @Query("SELECT DISTINCT d FROM DamEntity d "
             + "WHERE (:clientId IS NULL OR d.client.id = :clientId) "
@@ -48,8 +54,10 @@ public interface DamRepository extends JpaRepository<DamEntity, Long> {
             @Param("clientId") Long clientId,
             @Param("statusId") Long statusId);
 
-    @EntityGraph(attributePaths = {"psbFolders", "reservoirs"})
     @Query("SELECT DISTINCT d FROM DamEntity d "
+            + "LEFT JOIN FETCH d.psbFolders "
+            + "LEFT JOIN FETCH d.reservoirs r "
+            + "LEFT JOIN FETCH r.level "
             + "WHERE (:clientId IS NULL OR d.client.id = :clientId) "
             + "AND (:statusId IS NULL OR d.status.id = :statusId)")
     List<DamEntity> findWithDetailsByClientAndStatus(

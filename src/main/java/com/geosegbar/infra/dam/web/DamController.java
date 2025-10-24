@@ -18,6 +18,7 @@ import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.infra.dam.dtos.CreateDamCompleteRequest;
 import com.geosegbar.infra.dam.dtos.DamStatusUpdateDTO;
+import com.geosegbar.infra.dam.dtos.UpdateDamCompleteRequest;
 import com.geosegbar.infra.dam.dtos.UpdateDamRequest;
 import com.geosegbar.infra.dam.services.DamService;
 
@@ -94,6 +95,19 @@ public class DamController {
         WebResponseEntity<DamEntity> response = WebResponseEntity.success(
                 updatedDam,
                 "Status da barragem atualizado com sucesso!"
+        );
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}/complete")
+    public ResponseEntity<WebResponseEntity<DamEntity>> updateCompleteDam(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateDamCompleteRequest request) {
+
+        DamEntity updatedDam = damService.updateCompleteWithRelationships(id, request);
+        WebResponseEntity<DamEntity> response = WebResponseEntity.success(
+                updatedDam,
+                "Barragem atualizada com sucesso!"
         );
         return ResponseEntity.ok(response);
     }

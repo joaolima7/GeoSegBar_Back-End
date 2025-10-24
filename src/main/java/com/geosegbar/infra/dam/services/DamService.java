@@ -32,6 +32,7 @@ import com.geosegbar.infra.dam.dtos.CreateDamCompleteRequest;
 import com.geosegbar.infra.dam.dtos.DamStatusUpdateDTO;
 import com.geosegbar.infra.dam.dtos.LevelRequestDTO;
 import com.geosegbar.infra.dam.dtos.ReservoirRequestDTO;
+import com.geosegbar.infra.dam.dtos.UpdateDamCompleteRequest;
 import com.geosegbar.infra.dam.dtos.UpdateDamRequest;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.documentation_dam.persistence.DocumentationDamRepository;
@@ -428,5 +429,309 @@ public class DamService {
 
     public boolean existsByNameAndIdNot(String name, Long id) {
         return damRepository.existsByNameAndIdNot(name, id);
+    }
+
+    @Transactional
+    public DamEntity updateCompleteWithRelationships(Long damId, UpdateDamCompleteRequest request) {
+        // ==========================================
+        // 1. VALIDAÇÕES DE SEGURANÇA
+        // ==========================================
+
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getAttributionsPermission().getEditDam()) {
+                throw new UnauthorizedException("Usuário não tem permissão para editar barragens!");
+            }
+        }
+
+        // ==========================================
+        // 2. BUSCAR BARRAGEM EXISTENTE
+        // ==========================================
+        DamEntity existingDam = damRepository.findById(damId)
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + damId));
+
+        // ==========================================
+        // 3. VALIDAR CLIENTE E STATUS
+        // ==========================================
+        ClientEntity client = clientRepository.findById(request.getClientId())
+                .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + request.getClientId()));
+
+        StatusEntity status = statusRepository.findById(request.getStatusId())
+                .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + request.getStatusId()));
+
+        // ==========================================
+        // 4. VALIDAR DUPLICIDADE DE NOME
+        // ==========================================
+        if (!existingDam.getName().equals(request.getName()) || !existingDam.getClient().getId().equals(client.getId())) {
+            if (damRepository.existsByNameAndClientIdAndIdNot(request.getName(), client.getId(), damId)) {
+                throw new DuplicateResourceException("Já existe uma barragem com este nome para este cliente!");
+            }
+        }
+
+        // ==========================================
+        // 5. ATUALIZAR DADOS BÁSICOS DA BARRAGEM
+        // ==========================================
+        existingDam.setName(request.getName());
+        existingDam.setLatitude(request.getLatitude());
+        existingDam.setLongitude(request.getLongitude());
+        existingDam.setStreet(request.getStreet());
+        existingDam.setNeighborhood(request.getNeighborhood());
+        existingDam.setNumberAddress(request.getNumberAddress());
+        existingDam.setCity(request.getCity());
+        existingDam.setState(request.getState());
+        existingDam.setZipCode(request.getZipCode());
+        existingDam.setClient(client);
+        existingDam.setStatus(status);
+        existingDam.setLinkPSB(request.getLinkPSB());
+        existingDam.setLinkLegislation(request.getLinkLegislation());
+
+        // ==========================================
+        // 6. PROCESSAR LOGO (SE FORNECIDO)
+        // ==========================================
+        if (request.getLogoBase64() == null) {
+            // NULL: Remover logo existente
+            if (existingDam.getLogoPath() != null) {
+                fileStorageService.deleteFile(existingDam.getLogoPath());
+                existingDam.setLogoPath(null);
+            }
+        } else if (!request.getLogoBase64().isEmpty()) {
+            // BASE64 VÁLIDO: Atualizar logo
+            // Remover logo antigo se existir
+            if (existingDam.getLogoPath() != null) {
+                fileStorageService.deleteFile(existingDam.getLogoPath());
+            }
+
+            String base64Image = request.getLogoBase64();
+            if (base64Image.contains(",")) {
+                base64Image = base64Image.split(",")[1];
+            }
+
+            byte[] imageBytes = Base64.getDecoder().decode(base64Image);
+            String logoUrl = fileStorageService.storeFileFromBytes(
+                    imageBytes,
+                    "logo_" + damId + ".jpg",
+                    "image/jpeg",
+                    "logos"
+            );
+            existingDam.setLogoPath(logoUrl);
+        }
+        // STRING VAZIA: Ignora (não faz nada, mantém o existente)
+
+        // ==========================================
+        // 7. PROCESSAR IMAGEM DA BARRAGEM
+        // ==========================================
+        // null = remove, "" = ignora, base64 válido = atualiza
+        if (request.getDamImageBase64() == null) {
+            // NULL: Remover imagem existente
+            if (existingDam.getDamImagePath() != null) {
+                fileStorageService.deleteFile(existingDam.getDamImagePath());
+                existingDam.setDamImagePath(null);
+            }
+        } else if (!request.getDamImageBase64().isEmpty()) {
+            // BASE64 VÁLIDO: Atualizar imagem
+            // Remover imagem antiga se existir
+            if (existingDam.getDamImagePath() != null) {
+                fileStorageService.deleteFile(existingDam.getDamImagePath());
+            }
+
+            String base64Image = request.getDamImageBase64();
+            if (base64Image.contains(",")) {
+                base64Image = base64Image.split(",")[1];
+            }
+
+            byte[] imageBytes = Base64.getDecoder().decode(base64Image);
+            String damImageUrl = fileStorageService.storeFileFromBytes(
+                    imageBytes,
+                    "dam_image_" + damId + ".jpg",
+                    "image/jpeg",
+                    "dam_images"
+            );
+            existingDam.setDamImagePath(damImageUrl);
+        }
+
+        // Salvar alterações básicas
+        DamEntity savedDam = damRepository.save(existingDam);
+
+        // Criar referência final para uso nas lambdas
+        final DamEntity finalDam = savedDam;
+
+        // ==========================================
+        // 8. ATUALIZAR/CRIAR DOCUMENTATION DAM
+        // ==========================================
+        DocumentationDamEntity documentationDam = documentationDamRepository.findByDamId(damId)
+                .orElseGet(() -> {
+                    DocumentationDamEntity newDoc = new DocumentationDamEntity();
+                    newDoc.setDam(finalDam);
+                    return newDoc;
+                });
+
+        documentationDam.setLastUpdatePAE(request.getLastUpdatePAE());
+        documentationDam.setNextUpdatePAE(request.getNextUpdatePAE());
+        documentationDam.setLastUpdatePSB(request.getLastUpdatePSB());
+        documentationDam.setNextUpdatePSB(request.getNextUpdatePSB());
+        documentationDam.setLastUpdateRPSB(request.getLastUpdateRPSB());
+        documentationDam.setNextUpdateRPSB(request.getNextUpdateRPSB());
+        documentationDam.setLastAchievementISR(request.getLastAchievementISR());
+        documentationDam.setNextAchievementISR(request.getNextAchievementISR());
+        documentationDam.setLastAchievementChecklist(request.getLastAchievementChecklist());
+        documentationDam.setNextAchievementChecklist(request.getNextAchievementChecklist());
+        documentationDam.setLastFillingFSB(request.getLastFillingFSB());
+        documentationDam.setNextFillingFSB(request.getNextFillingFSB());
+        documentationDam.setLastInternalSimulation(request.getLastInternalSimulation());
+        documentationDam.setNextInternalSimulation(request.getNextInternalSimulation());
+        documentationDam.setLastExternalSimulation(request.getLastExternalSimulation());
+        documentationDam.setNextExternalSimulation(request.getNextExternalSimulation());
+
+        documentationDamRepository.save(documentationDam);
+
+        // ==========================================
+        // 9. ATUALIZAR/CRIAR REGULATORY DAM
+        // ==========================================
+        RegulatoryDamEntity regulatoryDam = regulatoryDamRepository.findByDamId(damId)
+                .orElseGet(() -> {
+                    RegulatoryDamEntity newReg = new RegulatoryDamEntity();
+                    newReg.setDam(finalDam);
+                    return newReg;
+                });
+
+        regulatoryDam.setFramePNSB(request.getFramePNSB());
+        regulatoryDam.setRepresentativeName(request.getRepresentativeName());
+        regulatoryDam.setRepresentativeEmail(request.getRepresentativeEmail());
+        regulatoryDam.setRepresentativePhone(request.getRepresentativePhone());
+        regulatoryDam.setTechnicalManagerName(request.getTechnicalManagerName());
+        regulatoryDam.setTechnicalManagerEmail(request.getTechnicalManagerEmail());
+        regulatoryDam.setTechnicalManagerPhone(request.getTechnicalManagerPhone());
+        regulatoryDam.setSupervisoryBodyName(request.getSupervisoryBodyName());
+
+        // Atualizar entidades relacionadas opcionais
+        if (request.getSecurityLevelId() != null) {
+            SecurityLevelEntity securityLevel = securityLevelRepository.findById(request.getSecurityLevelId())
+                    .orElseThrow(() -> new NotFoundException("Nível de segurança não encontrado"));
+            regulatoryDam.setSecurityLevel(securityLevel);
+        } else {
+            regulatoryDam.setSecurityLevel(null);
+        }
+
+        if (request.getRiskCategoryId() != null) {
+            RiskCategoryEntity riskCategory = riskCategoryRepository.findById(request.getRiskCategoryId())
+                    .orElseThrow(() -> new NotFoundException("Categoria de risco não encontrada"));
+            regulatoryDam.setRiskCategory(riskCategory);
+        } else {
+            regulatoryDam.setRiskCategory(null);
+        }
+
+        if (request.getPotentialDamageId() != null) {
+            PotentialDamageEntity potentialDamage = potentialDamageRepository.findById(request.getPotentialDamageId())
+                    .orElseThrow(() -> new NotFoundException("Dano potencial não encontrado"));
+            regulatoryDam.setPotentialDamage(potentialDamage);
+        } else {
+            regulatoryDam.setPotentialDamage(null);
+        }
+
+        if (request.getClassificationDamId() != null) {
+            ClassificationDamEntity classificationDam = classificationDamRepository.findById(request.getClassificationDamId())
+                    .orElseThrow(() -> new NotFoundException("Classificação da barragem não encontrada"));
+            regulatoryDam.setClassificationDam(classificationDam);
+        } else {
+            regulatoryDam.setClassificationDam(null);
+        }
+
+        regulatoryDamRepository.save(regulatoryDam);
+
+        // ==========================================
+        // 10. GERENCIAR RESERVOIRS
+        // ==========================================
+        if (request.getReservoirs() != null) {
+            // Buscar todos os reservatórios atuais da barragem
+            List<ReservoirEntity> currentReservoirs = reservoirRepository.findByDamIdOrderByCreatedAtDesc(damId);
+            Set<Long> receivedReservoirIds = new HashSet<>();
+
+            // Processar cada reservatório recebido no request
+            for (ReservoirRequestDTO reservoirDTO : request.getReservoirs()) {
+                if (reservoirDTO.getId() != null) {
+                    // ==========================================
+                    // ATUALIZAR RESERVATÓRIO EXISTENTE
+                    // ==========================================
+
+                    ReservoirEntity existingReservoir = reservoirRepository.findById(reservoirDTO.getId())
+                            .orElseThrow(() -> new NotFoundException(
+                            "Reservatório não encontrado com ID: " + reservoirDTO.getId()));
+
+                    // Validar que o reservatório pertence à barragem correta
+                    if (!existingReservoir.getDam().getId().equals(damId)) {
+                        throw new BusinessRuleException(
+                                "Reservatório com ID " + reservoirDTO.getId() + " não pertence a esta barragem!");
+                    }
+
+                    // Processar/atualizar o level
+                    LevelEntity level = processLevelForUpdate(reservoirDTO.getLevel(), existingReservoir.getLevel());
+                    existingReservoir.setLevel(level);
+
+                    reservoirRepository.save(existingReservoir);
+                    receivedReservoirIds.add(reservoirDTO.getId());
+                } else {
+                    // ==========================================
+                    // CRIAR NOVO RESERVATÓRIO
+                    // ==========================================
+
+                    LevelEntity level = processLevel(reservoirDTO.getLevel());
+
+                    ReservoirEntity newReservoir = new ReservoirEntity();
+                    newReservoir.setDam(finalDam);
+                    newReservoir.setLevel(level);
+
+                    ReservoirEntity savedReservoir = reservoirRepository.save(newReservoir);
+                    receivedReservoirIds.add(savedReservoir.getId());
+                }
+            }
+
+            // ==========================================
+            // REMOVER RESERVATÓRIOS NÃO PRESENTES NO REQUEST
+            // ==========================================
+            List<ReservoirEntity> reservoirsToDelete = currentReservoirs.stream()
+                    .filter(reservoir -> !receivedReservoirIds.contains(reservoir.getId()))
+                    .collect(java.util.stream.Collectors.toList());
+
+            if (!reservoirsToDelete.isEmpty()) {
+                reservoirRepository.deleteAll(reservoirsToDelete);
+            }
+        }
+
+        // ==========================================
+        // 11. RETORNAR BARRAGEM ATUALIZADA COM DETALHES
+        // ==========================================
+        return findById(damId);
+    }
+
+    /**
+     * Processa a atualização de um Level existente ou cria um novo
+     *
+     * @param levelDTO Dados do level recebidos no request
+     * @param currentLevel Level atual do reservoir
+     * @return LevelEntity processado
+     */
+    private LevelEntity processLevelForUpdate(LevelRequestDTO levelDTO, LevelEntity currentLevel) {
+        // Se passou um ID de level específico, usar esse
+        if (levelDTO.getId() != null) {
+            return levelRepository.findById(levelDTO.getId())
+                    .orElseThrow(() -> new NotFoundException("Nível não encontrado com ID: " + levelDTO.getId()));
+        }
+
+        // Se o nome mudou, buscar ou criar um novo level
+        if (!currentLevel.getName().equals(levelDTO.getName())) {
+            return levelRepository.findByName(levelDTO.getName())
+                    .orElseGet(() -> {
+                        LevelEntity newLevel = new LevelEntity();
+                        newLevel.setName(levelDTO.getName());
+                        newLevel.setValue(levelDTO.getValue());
+                        newLevel.setUnitLevel(levelDTO.getUnitLevel());
+                        return levelRepository.save(newLevel);
+                    });
+        }
+
+        // Se apenas os valores mudaram, atualizar o level existente
+        currentLevel.setValue(levelDTO.getValue());
+        currentLevel.setUnitLevel(levelDTO.getUnitLevel());
+        return levelRepository.save(currentLevel);
     }
 }

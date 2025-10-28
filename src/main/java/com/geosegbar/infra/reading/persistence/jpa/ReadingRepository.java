@@ -265,4 +265,19 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
     ORDER BY instrument_id, row_num
     """, nativeQuery = true)
     List<Object[]> findLatestDistinctDateHoursByClientId(@Param("clientId") Long clientId, @Param("limit") int limit);
+
+    @Query("SELECT DISTINCT r FROM ReadingEntity r "
+            + "LEFT JOIN FETCH r.instrument i "
+            + "LEFT JOIN FETCH r.output o "
+            + "LEFT JOIN FETCH r.user u "
+            + "LEFT JOIN FETCH r.inputValues iv "
+            + "WHERE r.instrument.id = :instrumentId "
+            + "AND r.active = true "
+            + "AND (CAST(:startDate AS date) IS NULL OR r.date >= :startDate) "
+            + "AND (CAST(:endDate AS date) IS NULL OR r.date <= :endDate) "
+            + "ORDER BY r.date DESC, r.hour DESC")
+    List<ReadingEntity> findByInstrumentIdForExport(
+            @Param("instrumentId") Long instrumentId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
 }

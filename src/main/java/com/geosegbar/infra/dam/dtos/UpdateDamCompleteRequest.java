@@ -16,9 +16,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class UpdateDamCompleteRequest {
 
-    // ==========================================
-    // DADOS BÁSICOS DA BARRAGEM
-    // ==========================================
     @NotBlank(message = "Nome da barragem é obrigatório")
     private String name;
 
@@ -39,13 +36,9 @@ public class UpdateDamCompleteRequest {
     @NotNull(message = "Status é obrigatório")
     private Long statusId;
 
-    // Base64 das imagens (opcional - se não enviar, mantém a existente)
     private String logoBase64;
     private String damImageBase64;
 
-    // ==========================================
-    // DOCUMENTATION DAM
-    // ==========================================
     private LocalDate lastUpdatePAE;
     private LocalDate nextUpdatePAE;
     private LocalDate lastUpdatePSB;
@@ -63,9 +56,6 @@ public class UpdateDamCompleteRequest {
     private LocalDate lastExternalSimulation;
     private LocalDate nextExternalSimulation;
 
-    // ==========================================
-    // REGULATORY DAM
-    // ==========================================
     @NotNull(message = "Frame PNSB é obrigatório")
     private Boolean framePNSB;
 
@@ -83,15 +73,11 @@ public class UpdateDamCompleteRequest {
     private String technicalManagerPhone;
     private String supervisoryBodyName;
 
-    // IDs das entidades relacionadas (opcionais)
     private Long securityLevelId;
     private Long riskCategoryId;
     private Long potentialDamageId;
     private Long classificationDamId;
 
-    // ==========================================
-    // RESERVOIRS
-    // ==========================================
     @Valid
     private List<ReservoirRequestDTO> reservoirs;
 }

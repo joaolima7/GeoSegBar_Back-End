@@ -164,7 +164,15 @@ public class BulkReadingImportService {
                             if (c.getCellType() == CellType.NUMERIC) {
                                 v = c.getNumericCellValue();
                             } else {
-                                String ss = c.getStringCellValue().trim().replace(",", ".");
+                                String ss = c.getStringCellValue().trim();
+                                // Normaliza: remove espaços e substitui vírgula por ponto
+                                ss = ss.replace(",", ".").replace(" ", "");
+
+                                // Valida se contém apenas números, ponto e sinal
+                                if (!ss.matches("^-?\\d+(\\.\\d+)?$")) {
+                                    throw new NumberFormatException("Formato inválido");
+                                }
+
                                 v = Double.parseDouble(ss);
                             }
                         } catch (NumberFormatException | IllegalStateException ex) {

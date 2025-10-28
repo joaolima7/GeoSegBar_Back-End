@@ -19,6 +19,7 @@ import com.geosegbar.infra.client.dtos.ClientDTO;
 import com.geosegbar.infra.client.dtos.ClientStatusUpdateDTO;
 import com.geosegbar.infra.client.dtos.LogoUpdateDTO;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
+import com.geosegbar.infra.client.utils.ClientStatusChangeHandler;
 import com.geosegbar.infra.file_storage.FileStorageService;
 import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
 import com.geosegbar.infra.user.dto.UserClientAssociationDTO;
@@ -37,6 +38,7 @@ public class ClientService {
     private final UserRepository userRepository;
     private final UserService userService;
     private final StatusRepository statusRepository;
+    private final ClientStatusChangeHandler statusChangeHandler;
 
     @Transactional
     public void deleteById(Long id) {
@@ -59,10 +61,12 @@ public class ClientService {
     public ClientEntity updateStatus(Long clientId, ClientStatusUpdateDTO statusUpdateDTO) {
         ClientEntity client = findById(clientId);
 
-        StatusEntity status = statusRepository.findById(statusUpdateDTO.getStatusId())
+        StatusEntity newStatus = statusRepository.findById(statusUpdateDTO.getStatusId())
                 .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + statusUpdateDTO.getStatusId()));
 
-        client.setStatus(status);
+        statusChangeHandler.handleStatusChange(client, newStatus);
+
+        client.setStatus(newStatus);
         return clientRepository.save(client);
     }
 
@@ -78,13 +82,10 @@ public class ClientService {
 
         ClientEntity clientEntity = convertDTOToEntity(clientDTO);
 
-        // Processar logo
         processLogoUpdate(clientEntity, clientDTO.getLogoBase64(), null);
 
-        // Salvar cliente primeiro para obter o ID
         ClientEntity savedClient = clientRepository.save(clientEntity);
 
-        // Associar usuários ao cliente
         if (clientDTO.getUserIds() != null && !clientDTO.getUserIds().isEmpty()) {
             associateUsersToClient(savedClient, clientDTO.getUserIds());
         }
@@ -107,13 +108,14 @@ public class ClientService {
 
         ClientEntity clientEntity = convertDTOToEntity(clientDTO);
 
-        // Processar logo
+        if (clientDTO.getStatus() != null) {
+            statusChangeHandler.handleStatusChange(existingClient, clientDTO.getStatus());
+        }
+
         processLogoUpdate(clientEntity, clientDTO.getLogoBase64(), existingClient);
 
-        // Salvar cliente atualizado
         ClientEntity savedClient = clientRepository.save(clientEntity);
 
-        // Processar associação de usuários
         processUserAssociations(savedClient, clientDTO.getUserIds());
 
         return savedClient;
@@ -124,7 +126,6 @@ public class ClientService {
             return;
         }
 
-        // Buscar usuários por IDs
         List<UserEntity> users = userRepository.findByIdInWithClients(userIds);
 
         if (users.size() != userIds.size()) {
@@ -136,32 +137,28 @@ public class ClientService {
             throw new NotFoundException("Usuários não encontrados com IDs: " + missingIds);
         }
 
-        // Para cada usuário, atualizar seus clientes usando o UserService
         for (UserEntity user : users) {
-            // Criar DTO com o cliente atual
+
             UserClientAssociationDTO associationDTO = new UserClientAssociationDTO();
             Set<Long> clientIdsForUser = new HashSet<>();
             clientIdsForUser.add(client.getId());
             associationDTO.setClientIds(clientIdsForUser);
 
-            // Usar o método do UserService que já gerencia DamPermissions
             userService.updateUserClients(user.getId(), associationDTO);
         }
     }
 
     private void processUserAssociations(ClientEntity client, Set<Long> userIds) {
-        // Se userIds é null, não modificar associações
+
         if (userIds == null) {
             return;
         }
 
-        // Buscar usuários atualmente associados a este cliente
         List<UserEntity> currentUsers = userRepository.findByClientId(client.getId());
 
-        // Se userIds está vazio, remover todas as associações
         if (userIds.isEmpty()) {
             for (UserEntity user : currentUsers) {
-                // Remover o cliente do usuário usando o UserService
+
                 UserClientAssociationDTO associationDTO = new UserClientAssociationDTO();
                 associationDTO.setClientIds(new HashSet<>());
                 userService.updateUserClients(user.getId(), associationDTO);
@@ -169,33 +166,29 @@ public class ClientService {
             return;
         }
 
-        // Obter IDs dos usuários atualmente associados
         Set<Long> currentUserIds = currentUsers.stream()
                 .map(UserEntity::getId)
                 .collect(Collectors.toSet());
 
-        // Identificar usuários a serem adicionados e removidos
         Set<Long> usersToAdd = new HashSet<>(userIds);
         usersToAdd.removeAll(currentUserIds);
 
         Set<Long> usersToRemove = new HashSet<>(currentUserIds);
         usersToRemove.removeAll(userIds);
 
-        // Remover usuários
         if (!usersToRemove.isEmpty()) {
             List<UserEntity> usersToRemoveList = currentUsers.stream()
                     .filter(u -> usersToRemove.contains(u.getId()))
                     .collect(Collectors.toList());
 
             for (UserEntity user : usersToRemoveList) {
-                // Remover o cliente usando o UserService
+
                 UserClientAssociationDTO associationDTO = new UserClientAssociationDTO();
                 associationDTO.setClientIds(new HashSet<>());
                 userService.updateUserClients(user.getId(), associationDTO);
             }
         }
 
-        // Adicionar novos usuários
         if (!usersToAdd.isEmpty()) {
             List<UserEntity> usersToAddList = userRepository.findByIdInWithClients(usersToAdd);
 
@@ -209,7 +202,7 @@ public class ClientService {
             }
 
             for (UserEntity user : usersToAddList) {
-                // Associar o cliente usando o UserService
+
                 UserClientAssociationDTO associationDTO = new UserClientAssociationDTO();
                 Set<Long> clientIdsForUser = new HashSet<>();
                 clientIdsForUser.add(client.getId());

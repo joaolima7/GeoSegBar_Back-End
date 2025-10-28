@@ -74,6 +74,13 @@ public class DamService {
     }
 
     @Transactional
+    public int synchronizeClientDamsStatus(Long clientId, StatusEntity status) {
+        int updatedCount = damRepository.updateStatusByClientId(clientId, status);
+
+        return updatedCount;
+    }
+
+    @Transactional
     public DamEntity updateStatus(Long damId, DamStatusUpdateDTO statusUpdateDTO) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();

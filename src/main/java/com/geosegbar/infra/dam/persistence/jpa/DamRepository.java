@@ -5,12 +5,14 @@ import java.util.Optional;
 
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.DamEntity;
+import com.geosegbar.entities.StatusEntity;
 
 @Repository
 public interface DamRepository extends JpaRepository<DamEntity, Long> {
@@ -31,6 +33,10 @@ public interface DamRepository extends JpaRepository<DamEntity, Long> {
 
     @EntityGraph(attributePaths = {"psbFolders"})
     Optional<DamEntity> findWithPsbFoldersById(Long id);
+
+    @Modifying
+    @Query("UPDATE DamEntity d SET d.status = :status WHERE d.client.id = :clientId")
+    int updateStatusByClientId(@Param("clientId") Long clientId, @Param("status") StatusEntity status);
 
     @Query("SELECT DISTINCT d FROM DamEntity d "
             + "LEFT JOIN FETCH d.reservoirs r "

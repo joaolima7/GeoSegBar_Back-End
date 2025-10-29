@@ -98,14 +98,21 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
             + "LEFT JOIN FETCH u.status "
             + "LEFT JOIN FETCH u.role "
             + "LEFT JOIN FETCH u.createdBy cb "
-            + "WHERE (:roleId IS NULL OR u.role.id = :roleId) "
-            + "AND (:clientId IS NULL OR c.id = :clientId) "
+            + "WHERE u.name != 'SISTEMA' "
+            + "AND u.email != 'noreply@geometrisa-prod.com.br' "
+            + "AND (:roleId IS NULL OR u.role.id = :roleId) "
             + "AND (:statusId IS NULL OR u.status.id = :statusId) "
+            + "AND ("
+            + "    (:clientId IS NULL) "
+            + "    OR (c.id = :clientId) "
+            + "    OR (:withoutClient = true AND (SELECT COUNT(uc) FROM u.clients uc) = 0)"
+            + ") "
             + "ORDER BY u.id ASC")
     List<UserEntity> findByRoleAndClientWithDetails(
             @Param("roleId") Long roleId,
             @Param("clientId") Long clientId,
-            @Param("statusId") Long statusId);
+            @Param("statusId") Long statusId,
+            @Param("withoutClient") Boolean withoutClient);
 
     @QueryHints(
             @QueryHint(name = "org.hibernate.cacheable", value = "true"))

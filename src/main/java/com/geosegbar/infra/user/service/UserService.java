@@ -201,7 +201,7 @@ public class UserService {
     }
 
     @Transactional()
-    public List<UserEntity> findByFilters(Long roleId, Long clientId, Long statusId, Boolean isManagement) {
+    public List<UserEntity> findByFilters(Long roleId, Long clientId, Long statusId, Boolean isManagement, Boolean withoutClient) {
         if (isManagement != null && isManagement) {
             // Validação: clientId é obrigatório quando isManagement é true
             if (clientId == null) {
@@ -211,14 +211,23 @@ public class UserService {
             return userRepository.findByClientIncludingUnassignedCollaborators(clientId, statusId);
         }
 
-        List<UserEntity> result = userRepository.findByRoleAndClientWithDetails(roleId, clientId, statusId);
+        // Se withoutClient for null, define como false por padrão
+        Boolean includeWithoutClient = withoutClient != null ? withoutClient : false;
 
-        // Filtrar usuário SISTEMA do resultado
-        result = result.stream()
+        List<UserEntity> result = userRepository.findByRoleAndClientWithDetails(
+                roleId,
+                clientId,
+                statusId,
+                includeWithoutClient
+        );
+
+        // Filtrar usuário SISTEMA do resultado e garantir unicidade usando LinkedHashSet
+        // LinkedHashSet mantém a ordem de inserção
+        return result.stream()
                 .filter(user -> !isSystemUser(user))
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new))
+                .stream()
                 .collect(java.util.stream.Collectors.toList());
-
-        return result;
     }
 
     @Transactional

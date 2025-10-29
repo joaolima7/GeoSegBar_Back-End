@@ -28,6 +28,8 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 @EnableCaching
 public class CacheManagerConfig {
 
+    private static final Duration DEFAULT_CACHE_TTL = Duration.ofHours(1);
+
     private ObjectMapper redisObjectMapper() {
         PolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator
                 .builder()
@@ -37,12 +39,10 @@ public class CacheManagerConfig {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
 
-        // Configurações específicas para Hibernate
         mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
         mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-        mapper.registerModule(new Hibernate5JakartaModule());  // Adicionar módulo Hibernate
+        mapper.registerModule(new Hibernate5JakartaModule());
 
-        // Outras configurações
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         mapper.activateDefaultTyping(ptv, ObjectMapper.DefaultTyping.NON_FINAL);
         mapper.enable(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY);
@@ -91,86 +91,86 @@ public class CacheManagerConfig {
     public CacheManager instrumentGraphCacheManager(RedisConnectionFactory connectionFactory) {
 
         Map<String, Duration> ttlByCache = new HashMap<>();
-        ttlByCache.put("graphPatternsByDam", Duration.ofMinutes(20));
-        ttlByCache.put("graphPatternById", Duration.ofMinutes(15));
-        ttlByCache.put("graphPatternsByInstrument", Duration.ofMinutes(15));
-        ttlByCache.put("folderWithPatterns", Duration.ofMinutes(18));
-        ttlByCache.put("damFoldersWithPatterns", Duration.ofMinutes(25));
-        ttlByCache.put("graphProperties", Duration.ofMinutes(12));
-        ttlByCache.put("graphAxes", Duration.ofMinutes(20));
+        ttlByCache.put("graphPatternsByDam", DEFAULT_CACHE_TTL);
+        ttlByCache.put("graphPatternById", DEFAULT_CACHE_TTL);
+        ttlByCache.put("graphPatternsByInstrument", DEFAULT_CACHE_TTL);
+        ttlByCache.put("folderWithPatterns", DEFAULT_CACHE_TTL);
+        ttlByCache.put("damFoldersWithPatterns", DEFAULT_CACHE_TTL);
+        ttlByCache.put("graphProperties", DEFAULT_CACHE_TTL);
+        ttlByCache.put("graphAxes", DEFAULT_CACHE_TTL);
 
-        return createRedisCacheManager(connectionFactory, ttlByCache, Duration.ofMinutes(15));
+        return createRedisCacheManager(connectionFactory, ttlByCache, DEFAULT_CACHE_TTL);
     }
 
     @Bean("instrumentTabulateCacheManager")
     public CacheManager instrumentTabulateCacheManager(RedisConnectionFactory connectionFactory) {
         Map<String, Duration> ttlByCache = new HashMap<>();
-        ttlByCache.put("tabulatePatterns", Duration.ofMinutes(15));
-        ttlByCache.put("tabulatePatternsByDam", Duration.ofMinutes(20));
-        ttlByCache.put("tabulatePatternsByFolder", Duration.ofMinutes(15));
-        ttlByCache.put("tabulateFolderWithPatterns", Duration.ofMinutes(18));
-        ttlByCache.put("damTabulateFoldersWithPatterns", Duration.ofMinutes(25));
+        ttlByCache.put("tabulatePatterns", DEFAULT_CACHE_TTL);
+        ttlByCache.put("tabulatePatternsByDam", DEFAULT_CACHE_TTL);
+        ttlByCache.put("tabulatePatternsByFolder", DEFAULT_CACHE_TTL);
+        ttlByCache.put("tabulateFolderWithPatterns", DEFAULT_CACHE_TTL);
+        ttlByCache.put("damTabulateFoldersWithPatterns", DEFAULT_CACHE_TTL);
 
-        return createRedisCacheManager(connectionFactory, ttlByCache, Duration.ofMinutes(15));
+        return createRedisCacheManager(connectionFactory, ttlByCache, DEFAULT_CACHE_TTL);
     }
 
     @Bean("checklistCacheManager")
     public CacheManager checklistCacheManager(RedisConnectionFactory connectionFactory) {
         Map<String, Duration> ttlByCache = new HashMap<>();
-        ttlByCache.put("checklistsByDam", Duration.ofMinutes(15));
-        ttlByCache.put("checklistsWithAnswersByDam", Duration.ofMinutes(10));
-        ttlByCache.put("checklistsWithAnswersByClient", Duration.ofMinutes(12));
-        ttlByCache.put("checklistById", Duration.ofMinutes(20));
-        ttlByCache.put("checklistForDam", Duration.ofMinutes(15));
-        ttlByCache.put("allChecklists", Duration.ofMinutes(10));
-        ttlByCache.put("allChecklistResponses", Duration.ofMinutes(10));
-        ttlByCache.put("checklistResponseById", Duration.ofMinutes(20));
-        ttlByCache.put("checklistResponsesByDam", Duration.ofMinutes(15));
-        ttlByCache.put("checklistResponseDetail", Duration.ofMinutes(20));
-        ttlByCache.put("checklistResponsesByUser", Duration.ofMinutes(15));
-        ttlByCache.put("checklistResponsesByDate", Duration.ofMinutes(15));
-        ttlByCache.put("damLastChecklist", Duration.ofMinutes(15));
-        ttlByCache.put("checklistResponsesByDamPaged", Duration.ofMinutes(10));
-        ttlByCache.put("checklistResponsesByUserPaged", Duration.ofMinutes(10));
-        ttlByCache.put("checklistResponsesByDatePaged", Duration.ofMinutes(10));
-        ttlByCache.put("allChecklistResponsesPaged", Duration.ofMinutes(10));
-        ttlByCache.put("checklistResponsesByClient", Duration.ofMinutes(12));
-        ttlByCache.put("clientLatestDetailedChecklistResponses", Duration.ofMinutes(15));
+        ttlByCache.put("checklistsByDam", DEFAULT_CACHE_TTL);
+        ttlByCache.put("checklistsWithAnswersByDam", DEFAULT_CACHE_TTL);
+        ttlByCache.put("checklistsWithAnswersByClient", DEFAULT_CACHE_TTL);
+        ttlByCache.put("checklistById", DEFAULT_CACHE_TTL);
+        ttlByCache.put("checklistForDam", DEFAULT_CACHE_TTL);
+        ttlByCache.put("allChecklists", DEFAULT_CACHE_TTL);
+        ttlByCache.put("allChecklistResponses", DEFAULT_CACHE_TTL);
+        ttlByCache.put("checklistResponseById", DEFAULT_CACHE_TTL);
+        ttlByCache.put("checklistResponsesByDam", DEFAULT_CACHE_TTL);
+        ttlByCache.put("checklistResponseDetail", DEFAULT_CACHE_TTL);
+        ttlByCache.put("checklistResponsesByUser", DEFAULT_CACHE_TTL);
+        ttlByCache.put("checklistResponsesByDate", DEFAULT_CACHE_TTL);
+        ttlByCache.put("damLastChecklist", DEFAULT_CACHE_TTL);
+        ttlByCache.put("checklistResponsesByDamPaged", DEFAULT_CACHE_TTL);
+        ttlByCache.put("checklistResponsesByUserPaged", DEFAULT_CACHE_TTL);
+        ttlByCache.put("checklistResponsesByDatePaged", DEFAULT_CACHE_TTL);
+        ttlByCache.put("allChecklistResponsesPaged", DEFAULT_CACHE_TTL);
+        ttlByCache.put("checklistResponsesByClient", DEFAULT_CACHE_TTL);
+        ttlByCache.put("clientLatestDetailedChecklistResponses", DEFAULT_CACHE_TTL);
 
-        return createRedisCacheManager(connectionFactory, ttlByCache, Duration.ofMinutes(12));
+        return createRedisCacheManager(connectionFactory, ttlByCache, DEFAULT_CACHE_TTL);
     }
 
     @Bean("instrumentCacheManager")
     public CacheManager instrumentCacheManager(RedisConnectionFactory connectionFactory) {
         Map<String, Duration> ttlByCache = new HashMap<>();
-        ttlByCache.put("instrumentById", Duration.ofMinutes(15));
-        ttlByCache.put("instrumentWithDetails", Duration.ofMinutes(12));
-        ttlByCache.put("instrumentsByClient", Duration.ofMinutes(10));
-        ttlByCache.put("instrumentsByFilters", Duration.ofMinutes(10));
-        ttlByCache.put("instrumentsByDam", Duration.ofMinutes(15));
-        ttlByCache.put("allInstruments", Duration.ofMinutes(5));
-        ttlByCache.put("instrumentResponseDTO", Duration.ofMinutes(10));
+        ttlByCache.put("instrumentById", DEFAULT_CACHE_TTL);
+        ttlByCache.put("instrumentWithDetails", DEFAULT_CACHE_TTL);
+        ttlByCache.put("instrumentsByClient", DEFAULT_CACHE_TTL);
+        ttlByCache.put("instrumentsByFilters", DEFAULT_CACHE_TTL);
+        ttlByCache.put("instrumentsByDam", DEFAULT_CACHE_TTL);
+        ttlByCache.put("allInstruments", DEFAULT_CACHE_TTL);
+        ttlByCache.put("instrumentResponseDTO", DEFAULT_CACHE_TTL);
 
-        return createRedisCacheManager(connectionFactory, ttlByCache, Duration.ofMinutes(10));
+        return createRedisCacheManager(connectionFactory, ttlByCache, DEFAULT_CACHE_TTL);
     }
 
     @Bean("readingCacheManager")
     public CacheManager readingCacheManager(RedisConnectionFactory connectionFactory) {
         Map<String, Duration> ttlByCache = new HashMap<>();
-        ttlByCache.put("readingsByInstrument", Duration.ofMinutes(30));
-        ttlByCache.put("instrumentLimitStatus", Duration.ofMinutes(15));
-        ttlByCache.put("clientInstrumentLatestGroupedReadings", Duration.ofHours(1));
-        ttlByCache.put("groupedReadings", Duration.ofMinutes(30));
-        ttlByCache.put("readingsByFiltersOptimized", Duration.ofMinutes(10));
-        ttlByCache.put("multiInstrumentReadings", Duration.ofMinutes(15));
-        ttlByCache.put("clientInstrumentLimitStatuses", Duration.ofMinutes(20));
-        ttlByCache.put("readingById", Duration.ofMinutes(60));
-        ttlByCache.put("readingResponseDTO", Duration.ofMinutes(30));
-        ttlByCache.put("readingExists", Duration.ofMinutes(20));
-        ttlByCache.put("latestReadings", Duration.ofMinutes(10));
-        ttlByCache.put("readingsByOutput", Duration.ofMinutes(20));
-        ttlByCache.put("readingsByFilters", Duration.ofMinutes(5));
+        ttlByCache.put("readingsByInstrument", DEFAULT_CACHE_TTL);
+        ttlByCache.put("instrumentLimitStatus", DEFAULT_CACHE_TTL);
+        ttlByCache.put("clientInstrumentLatestGroupedReadings", DEFAULT_CACHE_TTL);
+        ttlByCache.put("groupedReadings", DEFAULT_CACHE_TTL);
+        ttlByCache.put("readingsByFiltersOptimized", DEFAULT_CACHE_TTL);
+        ttlByCache.put("multiInstrumentReadings", DEFAULT_CACHE_TTL);
+        ttlByCache.put("clientInstrumentLimitStatuses", DEFAULT_CACHE_TTL);
+        ttlByCache.put("readingById", DEFAULT_CACHE_TTL);
+        ttlByCache.put("readingResponseDTO", DEFAULT_CACHE_TTL);
+        ttlByCache.put("readingExists", DEFAULT_CACHE_TTL);
+        ttlByCache.put("latestReadings", DEFAULT_CACHE_TTL);
+        ttlByCache.put("readingsByOutput", DEFAULT_CACHE_TTL);
+        ttlByCache.put("readingsByFilters", DEFAULT_CACHE_TTL);
 
-        return createRedisCacheManager(connectionFactory, ttlByCache, Duration.ofMinutes(10));
+        return createRedisCacheManager(connectionFactory, ttlByCache, DEFAULT_CACHE_TTL);
     }
 }

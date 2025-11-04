@@ -1,8 +1,10 @@
 package com.geosegbar.configs.redis;
 
 import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.convert.DurationUnit;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -32,11 +34,13 @@ public class RedisConfig {
     @Value("${spring.data.redis.password:}")
     private String redisPassword;
 
-    @Value("${spring.data.redis.timeout:2000}")
-    private long redisTimeout;
+    // ⭐ CORREÇÃO: Usar Duration ao invés de long
+    @Value("${spring.data.redis.timeout:2000ms}")
+    @DurationUnit(ChronoUnit.MILLIS)
+    private Duration redisTimeout;
 
     /**
-     * ⭐ NOVO: ClientResources com configuração otimizada
+     * ClientResources com configuração otimizada
      */
     @Bean(destroyMethod = "shutdown")
     public ClientResources clientResources() {
@@ -47,12 +51,11 @@ public class RedisConfig {
     }
 
     /**
-     * ⭐ NOVO: LettuceClientConfiguration com proteção contra read-only replica
+     * LettuceClientConfiguration com proteção contra read-only replica
      */
     @Bean
     public LettuceClientConfiguration lettuceClientConfiguration(ClientResources clientResources) {
 
-        // ✅ ClientOptions: cancela comandos automaticamente em timeout
         ClientOptions clientOptions = ClientOptions.builder()
                 .autoReconnect(true)
                 .pingBeforeActivateConnection(true)
@@ -66,13 +69,13 @@ public class RedisConfig {
         return LettuceClientConfiguration.builder()
                 .clientOptions(clientOptions)
                 .clientResources(clientResources)
-                .commandTimeout(Duration.ofMillis(redisTimeout))
-                .readFrom(ReadFrom.UPSTREAM) // ⭐ SEMPRE LÊ/ESCREVE NO MASTER
+                .commandTimeout(redisTimeout) // ✅ Agora funciona com Duration
+                .readFrom(ReadFrom.UPSTREAM)
                 .build();
     }
 
     /**
-     * ⭐ NOVO: RedisConnectionFactory com configuração standalone segura
+     * RedisConnectionFactory com configuração standalone segura
      */
     @Bean
     public RedisConnectionFactory redisConnectionFactory(
@@ -86,7 +89,6 @@ public class RedisConfig {
             standaloneConfig.setPassword(redisPassword);
         }
 
-        // ✅ Banco 0 (padrão)
         standaloneConfig.setDatabase(0);
 
         LettuceConnectionFactory factory = new LettuceConnectionFactory(
@@ -95,20 +97,19 @@ public class RedisConfig {
         );
 
         factory.setValidateConnection(true);
-        factory.setShareNativeConnection(false);  // ⭐ Não compartilhar conexão (mais seguro)
+        factory.setShareNativeConnection(false);
 
         return factory;
     }
 
     /**
-     * ⭐ NOVO: RedisTemplate com serialização JSON otimizada
+     * RedisTemplate com serialização JSON otimizada
      */
     @Bean
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
 
-        // Serializers
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
         GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer();
 
@@ -117,7 +118,7 @@ public class RedisConfig {
         template.setHashKeySerializer(stringSerializer);
         template.setHashValueSerializer(jsonSerializer);
 
-        template.setEnableTransactionSupport(false);  // ⚠️ Desabilitar transações (não é necessário para cache)
+        template.setEnableTransactionSupport(false);
         template.afterPropertiesSet();
 
         return template;

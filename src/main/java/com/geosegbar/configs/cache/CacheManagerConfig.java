@@ -5,7 +5,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -26,9 +28,22 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 @Configuration
 @EnableCaching
-public class CacheManagerConfig {
+public class CacheManagerConfig implements CachingConfigurer {
 
     private static final Duration DEFAULT_CACHE_TTL = Duration.ofHours(1);
+
+    // ⭐ INJETAR o ErrorHandler
+    private final CacheErrorHandler cacheErrorHandler;
+
+    public CacheManagerConfig(CacheErrorHandler cacheErrorHandler) {
+        this.cacheErrorHandler = cacheErrorHandler;
+    }
+
+    // ⭐ ATIVAR Error Handler (CRUCIAL!)
+    @Override
+    public CacheErrorHandler errorHandler() {
+        return cacheErrorHandler;
+    }
 
     private ObjectMapper redisObjectMapper() {
         PolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator
@@ -57,6 +72,7 @@ public class CacheManagerConfig {
 
         return RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(ttl)
+                .disableCachingNullValues() // ⭐ Adicionar essa linha (boa prática)
                 .serializeKeysWith(
                         RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(
@@ -110,6 +126,7 @@ public class CacheManagerConfig {
         ttlByCache.put("tabulatePatternsByFolder", DEFAULT_CACHE_TTL);
         ttlByCache.put("tabulateFolderWithPatterns", DEFAULT_CACHE_TTL);
         ttlByCache.put("damTabulateFoldersWithPatterns", DEFAULT_CACHE_TTL);
+        ttlByCache.put("tabulateFoldersByDam", DEFAULT_CACHE_TTL);  // ⭐ Adicionar (estava faltando)
 
         return createRedisCacheManager(connectionFactory, ttlByCache, DEFAULT_CACHE_TTL);
     }

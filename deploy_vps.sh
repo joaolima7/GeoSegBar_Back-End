@@ -35,10 +35,38 @@ docker network create geosegbar-network 2>/dev/null || true
 # ============================================
 if docker ps -q -f name=redis-prod | grep -q .; then
     echo "✅ Redis já está rodando"
+    
+    # ⭐ NOVO: Verificar se está em modo master
+    echo "🔍 Verificando role do Redis..."
+    REDIS_ROLE=$(docker exec redis-prod redis-cli INFO replication | grep "role:" | cut -d: -f2 | tr -d '\r')
+    
+    if [ "$REDIS_ROLE" != "master" ]; then
+        echo "⚠️  Redis está em modo: $REDIS_ROLE (esperado: master)"
+        echo "🔧 Forçando Redis para modo master..."
+        docker exec redis-prod redis-cli REPLICAOF NO ONE
+        echo "✅ Redis convertido para master"
+    else
+        echo "✅ Redis confirmado como master"
+    fi
+    
 elif docker ps -a -q -f name=redis-prod | grep -q .; then
     echo "🔄 Container do Redis existe mas está parado. Reiniciando..."
     docker start redis-prod
-    echo "✅ Redis reiniciado"
+    echo "⏳ Aguardando Redis inicializar..."
+    sleep 5
+    
+    # ⭐ NOVO: Verificar role após restart
+    echo "🔍 Verificando role do Redis..."
+    REDIS_ROLE=$(docker exec redis-prod redis-cli INFO replication | grep "role:" | cut -d: -f2 | tr -d '\r')
+    
+    if [ "$REDIS_ROLE" != "master" ]; then
+        echo "⚠️  Redis está em modo: $REDIS_ROLE (esperado: master)"
+        echo "🔧 Forçando Redis para modo master..."
+        docker exec redis-prod redis-cli REPLICAOF NO ONE
+        echo "✅ Redis convertido para master"
+    fi
+    
+    echo "✅ Redis reiniciado como master"
 else
     echo "🔄 Container do Redis não encontrado. Criando..."
     
@@ -54,10 +82,21 @@ else
       --network geosegbar-network \
       -p ${REDIS_PORT}:6379 \
       -v redis-prod-data:/data \
-      redis:7-alpine redis-server --save 60 1 --loglevel warning --maxmemory ${REDIS_MAXMEMORY} --maxmemory-policy volatile-lru
+      redis:7-alpine redis-server \
+      --save 60 1 \
+      --loglevel warning \
+      --maxmemory ${REDIS_MAXMEMORY:-256mb} \
+      --maxmemory-policy volatile-lru \
+      --appendonly yes \
+      --appendfsync everysec
       
     echo "⏳ Aguardando Redis inicializar..."
     sleep 5
+    
+    # ⭐ NOVO: Garantir que é master
+    echo "🔧 Garantindo que Redis está em modo master..."
+    docker exec redis-prod redis-cli REPLICAOF NO ONE
+    echo "✅ Redis criado e configurado como master"
 fi
 
 # ============================================

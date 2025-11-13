@@ -6,7 +6,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.CacheManager;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.common.enums.AnomalyOriginEnum;
@@ -75,19 +76,77 @@ public class ChecklistResponseSubmissionService {
     private final PVAnswerValidator pvAnswerValidator;
     private final DamRepository damRepository;
     private final AnomalyPhotoRepository anomalyPhotoRepository;
+    private final CacheManager checklistCacheManager; // ⭐ NOVO
+    private final RedisTemplate<String, Object> redisTemplate; // ⭐ NOVO
+
+    /**
+     * ⭐ NOVO: Invalida caches usando pattern matching do Redis
+     */
+    private void evictCachesByPattern(String cacheName, String pattern) {
+        try {
+            String fullPattern = cacheName + "::" + pattern;
+            Set<String> keys = redisTemplate.keys(fullPattern);
+
+            if (keys != null && !keys.isEmpty()) {
+                redisTemplate.delete(keys);
+            }
+        } catch (Exception e) {
+
+        }
+    }
+
+    /**
+     * ⭐ NOVO: Invalida caches de checklist response de forma granular
+     */
+    private void evictChecklistResponseCaches(Long damId, Long clientId, Long userId) {
+
+        // ✅ 1. Caches da barragem específica
+        var responsesByDamCache = checklistCacheManager.getCache("checklistResponsesByDam");
+        if (responsesByDamCache != null) {
+            responsesByDamCache.evict(damId);
+        }
+
+        // ✅ 2. Caches paginados da barragem (pattern matching)
+        evictCachesByPattern("checklistResponsesByDamPaged", damId + "_*");
+
+        // ✅ 3. Caches do cliente específico (pattern matching)
+        evictCachesByPattern("checklistResponsesByClient", clientId + "_*");
+        evictCachesByPattern("clientLatestDetailedChecklistResponses", clientId + "_*");
+
+        // ✅ 4. Caches do usuário específico (pattern matching)
+        var responsesByUserCache = checklistCacheManager.getCache("checklistResponsesByUser");
+        if (responsesByUserCache != null) {
+            responsesByUserCache.evict(userId);
+        }
+        evictCachesByPattern("checklistResponsesByUserPaged", userId + "_*");
+
+        // ✅ 5. Cache de última checklist da barragem
+        var damLastChecklistCache = checklistCacheManager.getCache("damLastChecklist");
+        if (damLastChecklistCache != null) {
+            damLastChecklistCache.evict(clientId);
+        }
+
+        // ✅ 6. Invalidar caches de CHECKLIST BASE (última resposta mudou!)
+        var checklistsWithAnswersByDamCache = checklistCacheManager.getCache("checklistsWithAnswersByDam");
+        if (checklistsWithAnswersByDamCache != null) {
+            checklistsWithAnswersByDamCache.evict(damId);
+        }
+
+        var checklistsWithAnswersByClientCache = checklistCacheManager.getCache("checklistsWithAnswersByClient");
+        if (checklistsWithAnswersByClientCache != null) {
+            checklistsWithAnswersByClientCache.evict(clientId);
+        }
+
+        // ✅ 7. Invalidar caches de data (pattern matching - afeta várias datas)
+        evictCachesByPattern("checklistResponsesByDate", "*");
+        evictCachesByPattern("checklistResponsesByDatePaged", "*");
+
+        // ✅ 8. Invalidar cache geral paginado (pattern matching)
+        evictCachesByPattern("allChecklistResponsesPaged", "*");
+    }
 
     @Transactional
-    @CacheEvict(
-            value = {
-                "allChecklistResponses", "checklistResponseById", "checklistResponsesByDam",
-                "checklistResponseDetail", "checklistResponsesByUser", "checklistResponsesByDate",
-                "damLastChecklist", "checklistsWithAnswersByDam", "checklistsWithAnswersByClient",
-                "checklistResponsesByDamPaged", "checklistResponsesByUserPaged", "checklistResponsesByDatePaged",
-                "allChecklistResponsesPaged", "checklistResponsesByClient", "clientLatestDetailedChecklistResponses"
-            },
-            allEntries = true,
-            cacheManager = "checklistCacheManager"
-    )
+    // ⚠️ REMOVIDO: @CacheEvict com allEntries = true
     public ChecklistResponseEntity submitChecklistResponse(ChecklistResponseSubmissionDTO submissionDto) {
         validateUserAccessToDam(submissionDto.getUserId(), submissionDto.getDamId());
 
@@ -126,6 +185,18 @@ public class ChecklistResponseSubmissionService {
                 }
             }
         }
+
+        // ⭐ NOVO: Obter clientId da barragem
+        DamEntity dam = damRepository.findById(submissionDto.getDamId())
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
+        Long clientId = dam.getClient().getId();
+
+        // ⭐ NOVO: Invalidar caches granulares APÓS salvar (dentro da transação)
+        evictChecklistResponseCaches(
+                submissionDto.getDamId(),
+                clientId,
+                submissionDto.getUserId()
+        );
 
         return checklistResponse;
     }

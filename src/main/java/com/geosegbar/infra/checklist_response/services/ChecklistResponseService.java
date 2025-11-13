@@ -6,12 +6,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.AnswerEntity;
@@ -47,6 +49,82 @@ public class ChecklistResponseService {
     private final QuestionnaireResponseRepository questionnaireResponseRepository;
     private final DamService damService;
     private final ClientRepository clientRepository;
+    private final CacheManager checklistCacheManager;
+    private final RedisTemplate<String, Object> redisTemplate;
+
+    /**
+     * ⭐ NOVO: Invalida caches usando pattern matching do Redis
+     */
+    private void evictCachesByPattern(String cacheName, String pattern) {
+        try {
+            String fullPattern = cacheName + "::" + pattern;
+            Set<String> keys = redisTemplate.keys(fullPattern);
+
+            if (keys != null && !keys.isEmpty()) {
+                redisTemplate.delete(keys);
+            }
+        } catch (Exception e) {
+        }
+    }
+
+    /**
+     * ⭐ NOVO: Invalida cache específico de um checklist response
+     */
+    private void evictChecklistResponseByIdCaches(Long responseId) {
+        var byIdCache = checklistCacheManager.getCache("checklistResponseById");
+        if (byIdCache != null) {
+            byIdCache.evict(responseId);
+        }
+
+        var detailCache = checklistCacheManager.getCache("checklistResponseDetail");
+        if (detailCache != null) {
+            detailCache.evict(responseId);
+        }
+    }
+
+    /**
+     * ⭐ NOVO: Invalida caches de checklist response de forma granular
+     */
+    private void evictChecklistResponseCaches(Long damId, Long clientId, Long userId) {
+
+        var responsesByDamCache = checklistCacheManager.getCache("checklistResponsesByDam");
+        if (responsesByDamCache != null) {
+            responsesByDamCache.evict(damId);
+        }
+
+        evictCachesByPattern("checklistResponsesByDamPaged", damId + "_*");
+
+        evictCachesByPattern("checklistResponsesByClient", clientId + "_*");
+        evictCachesByPattern("clientLatestDetailedChecklistResponses", clientId + "_*");
+
+        if (userId != null) {
+            var responsesByUserCache = checklistCacheManager.getCache("checklistResponsesByUser");
+            if (responsesByUserCache != null) {
+                responsesByUserCache.evict(userId);
+            }
+            evictCachesByPattern("checklistResponsesByUserPaged", userId + "_*");
+        }
+
+        var damLastChecklistCache = checklistCacheManager.getCache("damLastChecklist");
+        if (damLastChecklistCache != null) {
+            damLastChecklistCache.evict(clientId);
+        }
+
+        var checklistsWithAnswersByDamCache = checklistCacheManager.getCache("checklistsWithAnswersByDam");
+        if (checklistsWithAnswersByDamCache != null) {
+            checklistsWithAnswersByDamCache.evict(damId);
+        }
+
+        var checklistsWithAnswersByClientCache = checklistCacheManager.getCache("checklistsWithAnswersByClient");
+        if (checklistsWithAnswersByClientCache != null) {
+            checklistsWithAnswersByClientCache.evict(clientId);
+        }
+
+        evictCachesByPattern("checklistResponsesByDate", "*");
+        evictCachesByPattern("checklistResponsesByDatePaged", "*");
+
+        evictCachesByPattern("allChecklistResponsesPaged", "*");
+    }
 
     @Cacheable(value = "allChecklistResponses", key = "'all'", cacheManager = "checklistCacheManager")
     public List<ChecklistResponseEntity> findAll() {
@@ -67,43 +145,68 @@ public class ChecklistResponseService {
     }
 
     @Transactional
-    @CacheEvict(value = {"allChecklistResponses", "checklistResponseById", "checklistResponsesByDam",
-        "checklistResponseDetail", "checklistResponsesByUser", "checklistResponsesByDate",
-        "damLastChecklist", "checklistsWithAnswersByDam", "checklistsWithAnswersByClient"},
-            allEntries = true, cacheManager = "checklistCacheManager")
+
     public ChecklistResponseEntity save(ChecklistResponseEntity checklistResponse) {
         Long damId = checklistResponse.getDam().getId();
         DamEntity dam = damService.findById(damId);
         checklistResponse.setDam(dam);
 
-        return checklistResponseRepository.save(checklistResponse);
+        ChecklistResponseEntity saved = checklistResponseRepository.save(checklistResponse);
+
+        Long clientId = dam.getClient().getId();
+        Long userId = checklistResponse.getUser().getId();
+
+        evictChecklistResponseCaches(damId, clientId, userId);
+
+        return saved;
     }
 
     @Transactional
-    @CacheEvict(value = {"allChecklistResponses", "checklistResponseById", "checklistResponsesByDam",
-        "checklistResponseDetail", "checklistResponsesByUser", "checklistResponsesByDate",
-        "damLastChecklist", "checklistsWithAnswersByDam", "checklistsWithAnswersByClient"},
-            allEntries = true, cacheManager = "checklistCacheManager")
+
     public ChecklistResponseEntity update(ChecklistResponseEntity checklistResponse) {
-        checklistResponseRepository.findById(checklistResponse.getId())
+        ChecklistResponseEntity existing = checklistResponseRepository.findById(checklistResponse.getId())
                 .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para atualização!"));
 
-        Long damId = checklistResponse.getDam().getId();
-        DamEntity dam = damService.findById(damId);
-        checklistResponse.setDam(dam);
+        Long oldDamId = existing.getDam().getId();
+        DamEntity oldDam = damService.findById(oldDamId);
+        Long oldClientId = oldDam.getClient().getId();
+        Long oldUserId = existing.getUser().getId();
 
-        return checklistResponseRepository.save(checklistResponse);
+        Long newDamId = checklistResponse.getDam().getId();
+        DamEntity newDam = damService.findById(newDamId);
+        checklistResponse.setDam(newDam);
+        Long newClientId = newDam.getClient().getId();
+        Long newUserId = checklistResponse.getUser().getId();
+
+        ChecklistResponseEntity saved = checklistResponseRepository.save(checklistResponse);
+
+        evictChecklistResponseByIdCaches(checklistResponse.getId());
+
+        if (!oldDamId.equals(newDamId) || !oldClientId.equals(newClientId) || !oldUserId.equals(newUserId)) {
+            evictChecklistResponseCaches(oldDamId, oldClientId, oldUserId);
+        }
+
+        evictChecklistResponseCaches(newDamId, newClientId, newUserId);
+
+        return saved;
     }
 
     @Transactional
-    @CacheEvict(value = {"allChecklistResponses", "checklistResponseById", "checklistResponsesByDam",
-        "checklistResponseDetail", "checklistResponsesByUser", "checklistResponsesByDate",
-        "damLastChecklist", "checklistsWithAnswersByDam", "checklistsWithAnswersByClient"},
-            allEntries = true, cacheManager = "checklistCacheManager")
+
     public void deleteById(Long id) {
-        checklistResponseRepository.findById(id)
+        ChecklistResponseEntity existing = checklistResponseRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para exclusão!"));
+
+        Long damId = existing.getDam().getId();
+        DamEntity dam = damService.findById(damId);
+        Long clientId = dam.getClient().getId();
+        Long userId = existing.getUser().getId();
+
         checklistResponseRepository.deleteById(id);
+
+        evictChecklistResponseByIdCaches(id);
+
+        evictChecklistResponseCaches(damId, clientId, userId);
     }
 
     @Cacheable(value = "checklistResponsesByDam", key = "#damId", cacheManager = "checklistCacheManager")
@@ -122,7 +225,6 @@ public class ChecklistResponseService {
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByClientIdPaged(
             Long clientId, Pageable pageable) {
 
-        // ✅ SUBSTITUIR todo o método por esta consulta direta:
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByClientIdOptimized(clientId, pageable);
 
         List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
@@ -161,11 +263,9 @@ public class ChecklistResponseService {
         damInfo.setName(dam.getName());
         dto.setDam(damInfo);
 
-        // ✅ Usar consulta otimizada com EntityGraph
         List<QuestionnaireResponseEntity> questionnaireResponses
                 = questionnaireResponseRepository.findByChecklistResponseIdOptimized(checklistResponse.getId());
 
-        // ✅ REMOVER ou simplificar drasticamente o fallback
         if (questionnaireResponses.isEmpty()) {
             dto.setTemplates(new ArrayList<>());
             return dto;
@@ -249,7 +349,6 @@ public class ChecklistResponseService {
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByDamIdPaged(Long damId, Pageable pageable) {
         damService.findById(damId);
 
-        // ✅ Usar consulta otimizada com EntityGraph
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdOptimized(damId, pageable);
 
         List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
@@ -359,21 +458,19 @@ public class ChecklistResponseService {
             cacheManager = "checklistCacheManager"
     )
     public ClientDetailedChecklistResponsesDTO findLatestDetailedChecklistResponsesByClientId(Long clientId, int limit) {
-        // Verificar se o cliente existe
+
         ClientEntity client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + clientId));
 
-        // Obter os IDs das respostas mais recentes de checklist
         List<Long> responseIds = checklistResponseRepository.findLatestChecklistResponseIdsByClientIdAndLimit(clientId, limit);
 
         if (responseIds.isEmpty()) {
             return new ClientDetailedChecklistResponsesDTO(clientId, client.getName(), List.of());
         }
 
-        // Buscar as respostas detalhadas - aqui está a principal mudança
         List<ChecklistResponseEntity> responses = new ArrayList<>();
         for (Long id : responseIds) {
-            // Usando o método findByIdWithFullDetails para garantir que todos os relacionamentos sejam carregados
+
             ChecklistResponseEntity response = checklistResponseRepository.findByIdWithFullDetails(id)
                     .orElse(null);
             if (response != null) {
@@ -381,7 +478,6 @@ public class ChecklistResponseService {
             }
         }
 
-        // Agrupar por checklist
         Map<Long, ClientDetailedChecklistResponsesDTO.ChecklistWithDetailedResponsesDTO> checklistMap = new HashMap<>();
 
         for (ChecklistResponseEntity response : responses) {
@@ -397,12 +493,10 @@ public class ChecklistResponseService {
                             )
                     );
 
-            // Converter para DTO detalhado usando o método existente
             ChecklistResponseDetailDTO detailedDto = convertToDetailDto(response);
             checklistDto.getLatestResponses().add(detailedDto);
         }
 
-        // Criar o resultado final
         return new ClientDetailedChecklistResponsesDTO(
                 clientId,
                 client.getName(),

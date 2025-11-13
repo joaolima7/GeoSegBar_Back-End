@@ -2,6 +2,8 @@ package com.geosegbar.infra.input.services;
 
 import java.util.List;
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +31,18 @@ public class InputService {
     }
 
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(
+                value = {"instrumentById", "instrumentWithDetails", "instrumentResponseDTO"},
+                key = "#result.instrument.id",
+                cacheManager = "instrumentCacheManager"
+        ),
+        @CacheEvict(
+                value = {"instrumentsByDam", "instrumentsByFilters"},
+                allEntries = true,
+                cacheManager = "instrumentCacheManager"
+        )
+    })
     public void deleteById(Long id) {
         InputEntity input = findById(id);
         inputRepository.delete(input);

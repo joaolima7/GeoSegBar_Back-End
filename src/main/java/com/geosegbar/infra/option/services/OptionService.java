@@ -2,7 +2,10 @@ package com.geosegbar.infra.option.services;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
+import org.springframework.cache.CacheManager;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.OptionEntity;
@@ -12,17 +15,20 @@ import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
 import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OptionService {
 
     private final OptionRepository optionRepository;
+    private final CacheManager checklistCacheManager;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     @PostConstruct
     @Transactional
     public void initializeDefaultOptions() {
-
         createIfNotExists("NE", "Não Existe", 1);
         createIfNotExists("PV", "Primeira Vez", 2);
         createIfNotExists("AU", "Aumentou", 3);
@@ -30,7 +36,6 @@ public class OptionService {
         createIfNotExists("DS", "Desapareceu", 5);
         createIfNotExists("PC", "Permaneceu Constante", 6);
         createIfNotExists("NI", "Não Inspecionado", 7);
-
     }
 
     private void createIfNotExists(String label, String value, Integer orderIndex) {
@@ -45,23 +50,96 @@ public class OptionService {
         }
     }
 
+    /**
+     * ⭐ NOVO: Invalida TODOS os caches de checklist e checklistResponse
+     */
+    private void evictAllChecklistCaches() {
+        log.info("Invalidando TODOS os caches de checklist devido a mudança em Option");
+
+        var checklistByIdCache = checklistCacheManager.getCache("checklistById");
+        if (checklistByIdCache != null) {
+            checklistByIdCache.clear();
+        }
+
+        var checklistsByDamCache = checklistCacheManager.getCache("checklistsByDam");
+        if (checklistsByDamCache != null) {
+            checklistsByDamCache.clear();
+        }
+
+        var checklistsWithAnswersByDamCache = checklistCacheManager.getCache("checklistsWithAnswersByDam");
+        if (checklistsWithAnswersByDamCache != null) {
+            checklistsWithAnswersByDamCache.clear();
+        }
+
+        var checklistsWithAnswersByClientCache = checklistCacheManager.getCache("checklistsWithAnswersByClient");
+        if (checklistsWithAnswersByClientCache != null) {
+            checklistsWithAnswersByClientCache.clear();
+        }
+
+        evictCachesByPattern("checklistForDam", "*");
+
+        var checklistResponseByIdCache = checklistCacheManager.getCache("checklistResponseById");
+        if (checklistResponseByIdCache != null) {
+            checklistResponseByIdCache.clear();
+        }
+
+        var checklistResponseDetailCache = checklistCacheManager.getCache("checklistResponseDetail");
+        if (checklistResponseDetailCache != null) {
+            checklistResponseDetailCache.clear();
+        }
+
+        var checklistResponsesByDamCache = checklistCacheManager.getCache("checklistResponsesByDam");
+        if (checklistResponsesByDamCache != null) {
+            checklistResponsesByDamCache.clear();
+        }
+
+        evictCachesByPattern("checklistResponsesByDamPaged", "*");
+        evictCachesByPattern("checklistResponsesByClient", "*");
+        evictCachesByPattern("clientLatestDetailedChecklistResponses", "*");
+    }
+
+    private void evictCachesByPattern(String cacheName, String pattern) {
+        try {
+            String fullPattern = cacheName + "::" + pattern;
+            Set<String> keys = redisTemplate.keys(fullPattern);
+
+            if (keys != null && !keys.isEmpty()) {
+                redisTemplate.delete(keys);
+            }
+        } catch (Exception e) {
+        }
+    }
+
     @Transactional
     public void deleteById(Long id) {
         optionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Opção não encontrada para exclusão!"));
         optionRepository.deleteById(id);
+
+        evictAllChecklistCaches();
+        log.info("Opção {} deletada. Caches invalidados.", id);
     }
 
     @Transactional
     public OptionEntity save(OptionEntity option) {
-        return optionRepository.save(option);
+        OptionEntity saved = optionRepository.save(option);
+
+        evictAllChecklistCaches();
+        log.info("Opção {} criada. Caches invalidados.", saved.getId());
+
+        return saved;
     }
 
     @Transactional
     public OptionEntity update(OptionEntity option) {
         optionRepository.findById(option.getId())
                 .orElseThrow(() -> new NotFoundException("Opção não encontrada para atualização!"));
-        return optionRepository.save(option);
+        OptionEntity saved = optionRepository.save(option);
+
+        evictAllChecklistCaches();
+        log.info("Opção {} atualizada. Caches invalidados.", option.getId());
+
+        return saved;
     }
 
     public OptionEntity findById(Long id) {

@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,7 +42,11 @@ public class InstrumentGraphPatternFolderService {
     private final InstrumentGraphPatternService patternService;
 
     @Transactional
-    @CacheEvict(value = {"folderWithPatterns", "damFoldersWithPatterns"}, allEntries = true, cacheManager = "instrumentGraphCacheManager")
+    @CacheEvict(
+            value = {"folderWithPatterns", "damFoldersWithPatterns", "graphPatternsByDam"},
+            allEntries = true,
+            cacheManager = "instrumentGraphCacheManager"
+    )
     public FolderResponseDTO create(CreateFolderRequestDTO request) {
 
         if (folderRepository.existsByNameAndDamId(request.getName(), request.getDamId())) {
@@ -64,7 +69,19 @@ public class InstrumentGraphPatternFolderService {
     }
 
     @Transactional
-    @CacheEvict(value = {"folderWithPatterns", "damFoldersWithPatterns", "graphPatternsByDam"}, allEntries = true, cacheManager = "instrumentGraphCacheManager")
+    @Caching(evict = {
+        @CacheEvict(
+                value = "folderWithPatterns",
+                key = "#folderId",
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+
+        @CacheEvict(
+                value = {"damFoldersWithPatterns", "graphPatternsByDam"},
+                allEntries = true,
+                cacheManager = "instrumentGraphCacheManager"
+        )
+    })
     public FolderResponseDTO update(Long folderId, UpdateFolderRequestDTO request) {
         InstrumentGraphPatternFolder folder = findById(folderId);
 
@@ -90,9 +107,6 @@ public class InstrumentGraphPatternFolderService {
         return mapToResponseDTO(folder);
     }
 
-    /**
-     * Atualiza as associações de patterns com a pasta
-     */
     private void updatePatternAssociations(InstrumentGraphPatternFolder folder, List<Long> newPatternIds) {
 
         List<InstrumentGraphPatternEntity> currentPatterns = patternRepository.findByFolderId(folder.getId());
@@ -133,9 +147,6 @@ public class InstrumentGraphPatternFolderService {
         }
     }
 
-    /**
-     * Valida se os patterns existem e pertencem à mesma dam da pasta
-     */
     private void validatePatternsForFolder(InstrumentGraphPatternFolder folder, List<Long> patternIds) {
         if (patternIds.isEmpty()) {
             return;
@@ -160,9 +171,6 @@ public class InstrumentGraphPatternFolderService {
         }
     }
 
-    /**
-     * Remove todos os patterns da pasta
-     */
     private void removeAllPatternsFromFolder(List<InstrumentGraphPatternEntity> patterns) {
         if (!patterns.isEmpty()) {
             patterns.forEach(pattern -> pattern.setFolder(null));
@@ -171,7 +179,19 @@ public class InstrumentGraphPatternFolderService {
     }
 
     @Transactional
-    @CacheEvict(value = {"folderWithPatterns", "damFoldersWithPatterns", "graphPatternsByDam"}, allEntries = true, cacheManager = "instrumentGraphCacheManager")
+    @Caching(evict = {
+        @CacheEvict(
+                value = "folderWithPatterns",
+                key = "#folderId",
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+
+        @CacheEvict(
+                value = {"damFoldersWithPatterns", "graphPatternsByDam"},
+                allEntries = true,
+                cacheManager = "instrumentGraphCacheManager"
+        )
+    })
     public void delete(Long folderId) {
         InstrumentGraphPatternFolder folder = findById(folderId);
 

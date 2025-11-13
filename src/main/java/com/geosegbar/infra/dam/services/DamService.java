@@ -6,6 +6,10 @@ import java.util.List;
 import java.util.Set;
 
 import org.hibernate.Hibernate;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
@@ -66,6 +70,54 @@ public class DamService {
     private final LevelRepository levelRepository;
     private final ReservoirRepository reservoirRepository;
     private final PSBFolderService psbFolderService;
+    private final CacheManager checklistCacheManager;
+    private final RedisTemplate<String, Object> redisTemplate;
+
+    private void evictChecklistCachesForDam(Long damId, Long clientId) {
+
+        var checklistsByDamCache = checklistCacheManager.getCache("checklistsByDam");
+        if (checklistsByDamCache != null) {
+            checklistsByDamCache.evict(damId);
+        }
+
+        var checklistsWithAnswersByDamCache = checklistCacheManager.getCache("checklistsWithAnswersByDam");
+        if (checklistsWithAnswersByDamCache != null) {
+            checklistsWithAnswersByDamCache.evict(damId);
+        }
+
+        var checklistsWithAnswersByClientCache = checklistCacheManager.getCache("checklistsWithAnswersByClient");
+        if (checklistsWithAnswersByClientCache != null) {
+            checklistsWithAnswersByClientCache.evict(clientId);
+        }
+
+        evictCachesByPattern("checklistForDam", damId + "_*");
+
+        var checklistResponsesByDamCache = checklistCacheManager.getCache("checklistResponsesByDam");
+        if (checklistResponsesByDamCache != null) {
+            checklistResponsesByDamCache.evict(damId);
+        }
+
+        evictCachesByPattern("checklistResponsesByDamPaged", damId + "_*");
+        evictCachesByPattern("checklistResponsesByClient", clientId + "_*");
+        evictCachesByPattern("clientLatestDetailedChecklistResponses", clientId + "_*");
+
+        var damLastChecklistCache = checklistCacheManager.getCache("damLastChecklist");
+        if (damLastChecklistCache != null) {
+            damLastChecklistCache.evict(clientId);
+        }
+    }
+
+    private void evictCachesByPattern(String cacheName, String pattern) {
+        try {
+            String fullPattern = cacheName + "::" + pattern;
+            Set<String> keys = redisTemplate.keys(fullPattern);
+
+            if (keys != null && !keys.isEmpty()) {
+                redisTemplate.delete(keys);
+            }
+        } catch (Exception e) {
+        }
+    }
 
     public DamEntity findByIdWithSections(Long id) {
         DamEntity dam = findById(id);
@@ -81,6 +133,13 @@ public class DamService {
     }
 
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(
+                value = {"instrumentsByDam", "instrumentsByClient", "instrumentsByFilters"},
+                allEntries = true,
+                cacheManager = "instrumentCacheManager"
+        )
+    })
     public DamEntity updateStatus(Long damId, DamStatusUpdateDTO statusUpdateDTO) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -295,19 +354,79 @@ public class DamService {
     }
 
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(
+                value = {"instrumentsByDam", "instrumentsByClient", "instrumentsByFilters", "allInstruments"},
+                allEntries = true,
+                cacheManager = "instrumentCacheManager"
+        ),
+
+        @CacheEvict(
+                value = {
+                    "damFoldersWithPatterns",
+                    "folderWithPatterns",
+                    "graphPatternsByDam",
+                    "graphPatternsByInstrument",
+                    "graphPatternById",
+                    "graphProperties",
+                    "graphAxes"
+                },
+                allEntries = true,
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+
+        @CacheEvict(
+                value = {
+                    "damTabulateFoldersWithPatterns",
+                    "tabulateFoldersByDam",
+                    "tabulateFolderWithPatterns",
+                    "tabulatePatternsByDam",
+                    "tabulatePatternsByFolder",
+                    "tabulatePatterns"
+                },
+                allEntries = true,
+                cacheManager = "instrumentTabulateCacheManager"
+        )
+
+    })
     public void deleteById(Long id) {
         DamEntity dam = damRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada para exclusão!"));
 
-        if (!dam.getChecklists().isEmpty() || !dam.getChecklistResponses().isEmpty() || !dam.getSections().isEmpty() || !dam.getDamPermissions().isEmpty() || !dam.getInstruments().isEmpty()) {
+        if (!dam.getChecklists().isEmpty() || !dam.getChecklistResponses().isEmpty()
+                || !dam.getSections().isEmpty() || !dam.getDamPermissions().isEmpty()
+                || !dam.getInstruments().isEmpty()) {
             throw new BusinessRuleException(
                     "Não é possível excluir a barragem devido as dependências existentes, recomenda-se inativar a barragem se necessário.");
         }
 
+        Long clientId = dam.getClient().getId();
+
         damRepository.deleteById(id);
+
+        evictChecklistCachesForDam(id, clientId);
     }
 
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(
+                value = {"instrumentsByDam", "instrumentsByClient", "instrumentsByFilters", "allInstruments"},
+                allEntries = true,
+                cacheManager = "instrumentCacheManager"
+        ),
+
+        @CacheEvict(
+                value = {"damFoldersWithPatterns"},
+                allEntries = true,
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+
+        @CacheEvict(
+                value = {"damTabulateFoldersWithPatterns", "tabulateFoldersByDam"},
+                allEntries = true,
+                cacheManager = "instrumentTabulateCacheManager"
+        )
+    })
     public DamEntity updateBasicInfo(Long damId, UpdateDamRequest request) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -321,6 +440,8 @@ public class DamService {
 
         ClientEntity client = clientRepository.findById(request.getClientId())
                 .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + request.getClientId()));
+
+        Long oldClientId = existingDam.getClient().getId();
 
         if (!existingDam.getName().equals(request.getName()) || !existingDam.getClient().getId().equals(client.getId())) {
             if (damRepository.existsByNameAndClientIdAndIdNot(request.getName(), client.getId(), damId)) {
@@ -387,6 +508,12 @@ public class DamService {
 
         DamEntity updatedDam = damRepository.save(existingDam);
 
+        if (!oldClientId.equals(client.getId())) {
+            evictChecklistCachesForDam(damId, oldClientId);
+        }
+
+        evictChecklistCachesForDam(damId, client.getId());
+
         return findById(updatedDam.getId());
     }
 
@@ -439,10 +566,27 @@ public class DamService {
     }
 
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(
+                value = {"instrumentsByDam", "instrumentsByClient", "instrumentsByFilters", "allInstruments"},
+                allEntries = true,
+                cacheManager = "instrumentCacheManager"
+        ),
+
+        @CacheEvict(
+                value = {"damFoldersWithPatterns"},
+                allEntries = true,
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+
+        @CacheEvict(
+                value = {"damTabulateFoldersWithPatterns", "tabulateFoldersByDam"},
+                allEntries = true,
+                cacheManager = "instrumentTabulateCacheManager"
+        )
+
+    })
     public DamEntity updateCompleteWithRelationships(Long damId, UpdateDamCompleteRequest request) {
-        // ==========================================
-        // 1. VALIDAÇÕES DE SEGURANÇA
-        // ==========================================
 
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -451,33 +595,23 @@ public class DamService {
             }
         }
 
-        // ==========================================
-        // 2. BUSCAR BARRAGEM EXISTENTE
-        // ==========================================
         DamEntity existingDam = damRepository.findById(damId)
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + damId));
 
-        // ==========================================
-        // 3. VALIDAR CLIENTE E STATUS
-        // ==========================================
         ClientEntity client = clientRepository.findById(request.getClientId())
                 .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + request.getClientId()));
 
         StatusEntity status = statusRepository.findById(request.getStatusId())
                 .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + request.getStatusId()));
 
-        // ==========================================
-        // 4. VALIDAR DUPLICIDADE DE NOME
-        // ==========================================
+        Long oldClientId = existingDam.getClient().getId();
+
         if (!existingDam.getName().equals(request.getName()) || !existingDam.getClient().getId().equals(client.getId())) {
             if (damRepository.existsByNameAndClientIdAndIdNot(request.getName(), client.getId(), damId)) {
                 throw new DuplicateResourceException("Já existe uma barragem com este nome para este cliente!");
             }
         }
 
-        // ==========================================
-        // 5. ATUALIZAR DADOS BÁSICOS DA BARRAGEM
-        // ==========================================
         existingDam.setName(request.getName());
         existingDam.setLatitude(request.getLatitude());
         existingDam.setLongitude(request.getLongitude());
@@ -492,18 +626,14 @@ public class DamService {
         existingDam.setLinkPSB(request.getLinkPSB());
         existingDam.setLinkLegislation(request.getLinkLegislation());
 
-        // ==========================================
-        // 6. PROCESSAR LOGO (SE FORNECIDO)
-        // ==========================================
         if (request.getLogoBase64() == null) {
-            // NULL: Remover logo existente
+
             if (existingDam.getLogoPath() != null) {
                 fileStorageService.deleteFile(existingDam.getLogoPath());
                 existingDam.setLogoPath(null);
             }
         } else if (!request.getLogoBase64().isEmpty()) {
-            // BASE64 VÁLIDO: Atualizar logo
-            // Remover logo antigo se existir
+
             if (existingDam.getLogoPath() != null) {
                 fileStorageService.deleteFile(existingDam.getLogoPath());
             }
@@ -522,21 +652,15 @@ public class DamService {
             );
             existingDam.setLogoPath(logoUrl);
         }
-        // STRING VAZIA: Ignora (não faz nada, mantém o existente)
 
-        // ==========================================
-        // 7. PROCESSAR IMAGEM DA BARRAGEM
-        // ==========================================
-        // null = remove, "" = ignora, base64 válido = atualiza
         if (request.getDamImageBase64() == null) {
-            // NULL: Remover imagem existente
+
             if (existingDam.getDamImagePath() != null) {
                 fileStorageService.deleteFile(existingDam.getDamImagePath());
                 existingDam.setDamImagePath(null);
             }
         } else if (!request.getDamImageBase64().isEmpty()) {
-            // BASE64 VÁLIDO: Atualizar imagem
-            // Remover imagem antiga se existir
+
             if (existingDam.getDamImagePath() != null) {
                 fileStorageService.deleteFile(existingDam.getDamImagePath());
             }
@@ -556,15 +680,10 @@ public class DamService {
             existingDam.setDamImagePath(damImageUrl);
         }
 
-        // Salvar alterações básicas
         DamEntity savedDam = damRepository.save(existingDam);
 
-        // Criar referência final para uso nas lambdas
         final DamEntity finalDam = savedDam;
 
-        // ==========================================
-        // 8. ATUALIZAR/CRIAR DOCUMENTATION DAM
-        // ==========================================
         DocumentationDamEntity documentationDam = documentationDamRepository.findByDamId(damId)
                 .orElseGet(() -> {
                     DocumentationDamEntity newDoc = new DocumentationDamEntity();
@@ -591,9 +710,6 @@ public class DamService {
 
         documentationDamRepository.save(documentationDam);
 
-        // ==========================================
-        // 9. ATUALIZAR/CRIAR REGULATORY DAM
-        // ==========================================
         RegulatoryDamEntity regulatoryDam = regulatoryDamRepository.findByDamId(damId)
                 .orElseGet(() -> {
                     RegulatoryDamEntity newReg = new RegulatoryDamEntity();
@@ -610,7 +726,6 @@ public class DamService {
         regulatoryDam.setTechnicalManagerPhone(request.getTechnicalManagerPhone());
         regulatoryDam.setSupervisoryBodyName(request.getSupervisoryBodyName());
 
-        // Atualizar entidades relacionadas opcionais
         if (request.getSecurityLevelId() != null) {
             SecurityLevelEntity securityLevel = securityLevelRepository.findById(request.getSecurityLevelId())
                     .orElseThrow(() -> new NotFoundException("Nível de segurança não encontrado"));
@@ -645,41 +760,29 @@ public class DamService {
 
         regulatoryDamRepository.save(regulatoryDam);
 
-        // ==========================================
-        // 10. GERENCIAR RESERVOIRS
-        // ==========================================
         if (request.getReservoirs() != null) {
-            // Buscar todos os reservatórios atuais da barragem
+
             List<ReservoirEntity> currentReservoirs = reservoirRepository.findByDamIdOrderByCreatedAtDesc(damId);
             Set<Long> receivedReservoirIds = new HashSet<>();
 
-            // Processar cada reservatório recebido no request
             for (ReservoirRequestDTO reservoirDTO : request.getReservoirs()) {
                 if (reservoirDTO.getId() != null) {
-                    // ==========================================
-                    // ATUALIZAR RESERVATÓRIO EXISTENTE
-                    // ==========================================
 
                     ReservoirEntity existingReservoir = reservoirRepository.findById(reservoirDTO.getId())
                             .orElseThrow(() -> new NotFoundException(
                             "Reservatório não encontrado com ID: " + reservoirDTO.getId()));
 
-                    // Validar que o reservatório pertence à barragem correta
                     if (!existingReservoir.getDam().getId().equals(damId)) {
                         throw new BusinessRuleException(
                                 "Reservatório com ID " + reservoirDTO.getId() + " não pertence a esta barragem!");
                     }
 
-                    // Processar/atualizar o level
                     LevelEntity level = processLevelForUpdate(reservoirDTO.getLevel(), existingReservoir.getLevel());
                     existingReservoir.setLevel(level);
 
                     reservoirRepository.save(existingReservoir);
                     receivedReservoirIds.add(reservoirDTO.getId());
                 } else {
-                    // ==========================================
-                    // CRIAR NOVO RESERVATÓRIO
-                    // ==========================================
 
                     LevelEntity level = processLevel(reservoirDTO.getLevel());
 
@@ -692,9 +795,6 @@ public class DamService {
                 }
             }
 
-            // ==========================================
-            // REMOVER RESERVATÓRIOS NÃO PRESENTES NO REQUEST
-            // ==========================================
             List<ReservoirEntity> reservoirsToDelete = currentReservoirs.stream()
                     .filter(reservoir -> !receivedReservoirIds.contains(reservoir.getId()))
                     .collect(java.util.stream.Collectors.toList());
@@ -704,9 +804,12 @@ public class DamService {
             }
         }
 
-        // ==========================================
-        // 11. RETORNAR BARRAGEM ATUALIZADA COM DETALHES
-        // ==========================================
+        if (!oldClientId.equals(client.getId())) {
+            evictChecklistCachesForDam(damId, oldClientId);
+        }
+
+        evictChecklistCachesForDam(damId, client.getId());
+
         return findById(damId);
     }
 
@@ -718,13 +821,12 @@ public class DamService {
      * @return LevelEntity processado
      */
     private LevelEntity processLevelForUpdate(LevelRequestDTO levelDTO, LevelEntity currentLevel) {
-        // Se passou um ID de level específico, usar esse
+
         if (levelDTO.getId() != null) {
             return levelRepository.findById(levelDTO.getId())
                     .orElseThrow(() -> new NotFoundException("Nível não encontrado com ID: " + levelDTO.getId()));
         }
 
-        // Se o nome mudou, buscar ou criar um novo level
         if (!currentLevel.getName().equals(levelDTO.getName())) {
             return levelRepository.findByName(levelDTO.getName())
                     .orElseGet(() -> {
@@ -736,7 +838,6 @@ public class DamService {
                     });
         }
 
-        // Se apenas os valores mudaram, atualizar o level existente
         currentLevel.setValue(levelDTO.getValue());
         currentLevel.setUnitLevel(levelDTO.getUnitLevel());
         return levelRepository.save(currentLevel);

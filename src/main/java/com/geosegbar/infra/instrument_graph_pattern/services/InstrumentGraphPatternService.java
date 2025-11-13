@@ -6,6 +6,7 @@ import java.util.stream.Collectors;
 import org.hibernate.Hibernate;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -76,8 +77,20 @@ public class InstrumentGraphPatternService {
         return patternDTOs;
     }
 
-    @CacheEvict(value = {"graphPatternById", "graphPatternsByInstrument", "graphPatternsByDam", "folderWithPatterns", "damFoldersWithPatterns"},
-            allEntries = true, cacheManager = "instrumentGraphCacheManager")
+    @Caching(evict = {
+        @CacheEvict(
+                value = "graphPatternById",
+                key = "#id",
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+
+        @CacheEvict(
+                value = {"graphPatternsByInstrument", "graphPatternsByDam",
+                    "folderWithPatterns", "damFoldersWithPatterns"},
+                allEntries = true,
+                cacheManager = "instrumentGraphCacheManager"
+        )
+    })
     public GraphPatternDetailResponseDTO updateNameGraphPattern(Long id, String newName) {
         InstrumentGraphPatternEntity pattern = findById(id);
         if (patternRepository.existsByNameAndInstrumentId(newName, pattern.getInstrument().getId())) {
@@ -97,8 +110,26 @@ public class InstrumentGraphPatternService {
     }
 
     @Transactional
-    @CacheEvict(value = {"graphPatternById", "graphPatternsByInstrument", "graphPatternsByDam", "folderWithPatterns", "damFoldersWithPatterns", "graphProperties", "graphAxes"},
-            allEntries = true, cacheManager = "instrumentGraphCacheManager")
+    @Caching(evict = {
+        @CacheEvict(
+                value = "graphPatternById",
+                key = "#patternId",
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+
+        @CacheEvict(
+                value = {"graphAxes", "graphProperties"},
+                key = "#patternId",
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+
+        @CacheEvict(
+                value = {"graphPatternsByInstrument", "graphPatternsByDam",
+                    "folderWithPatterns", "damFoldersWithPatterns"},
+                allEntries = true,
+                cacheManager = "instrumentGraphCacheManager"
+        )
+    })
     public void deleteById(Long patternId) {
         findById(patternId);
         patternRepository.deleteById(patternId);
@@ -106,8 +137,12 @@ public class InstrumentGraphPatternService {
     }
 
     @Transactional
-    @CacheEvict(value = {"graphPatternsByInstrument", "graphPatternsByDam", "folderWithPatterns", "damFoldersWithPatterns"},
-            allEntries = true, cacheManager = "instrumentGraphCacheManager")
+    @CacheEvict(
+            value = {"graphPatternsByInstrument", "graphPatternsByDam",
+                "folderWithPatterns", "damFoldersWithPatterns"},
+            allEntries = true,
+            cacheManager = "instrumentGraphCacheManager"
+    )
     public GraphPatternResponseDTO create(CreateGraphPatternRequest request) {
         if (patternRepository.existsByNameAndInstrumentId(request.getName(), request.getInstrumentId())) {
             throw new DuplicateResourceException(

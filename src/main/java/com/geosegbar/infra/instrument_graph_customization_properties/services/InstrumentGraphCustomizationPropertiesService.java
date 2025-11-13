@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -62,8 +63,30 @@ public class InstrumentGraphCustomizationPropertiesService {
     private final ConstantService constantService;
 
     @Transactional
-    @CacheEvict(value = {"graphProperties", "graphPatternById", "graphPatternsByInstrument", "graphPatternsByDam", "folderWithPatterns", "damFoldersWithPatterns"},
-            allEntries = true, cacheManager = "instrumentGraphCacheManager")
+    @Caching(evict = {
+        @CacheEvict(
+                value = "graphPatternById",
+                key = "#patternId",
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+
+        @CacheEvict(
+                value = "graphProperties",
+                key = "'pattern-' + #patternId",
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+        @CacheEvict(
+                value = "graphProperties",
+                key = "'pattern-properties-' + #patternId",
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+
+        @CacheEvict(
+                value = {"folderWithPatterns", "damFoldersWithPatterns", "graphPatternsByInstrument"},
+                allEntries = true,
+                cacheManager = "instrumentGraphCacheManager"
+        )
+    })
     public void updateProperties(Long patternId, UpdateGraphPropertiesRequestDTO req) {
         InstrumentGraphPatternEntity pattern = patternService.findById(patternId);
         List<InstrumentGraphCustomizationPropertiesEntity> existingProperties = propertiesRepository.findByPatternId(patternId);
@@ -189,8 +212,36 @@ public class InstrumentGraphCustomizationPropertiesService {
     }
 
     @Transactional
-    @CacheEvict(value = {"graphProperties", "graphPatternById", "graphPatternsByInstrument", "graphPatternsByDam", "folderWithPatterns", "damFoldersWithPatterns"},
-            allEntries = true, cacheManager = "instrumentGraphCacheManager")
+    @Caching(evict = {
+        @CacheEvict(
+                value = "graphPatternById",
+                key = "#result.patternId",
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+
+        @CacheEvict(
+                value = "graphProperties",
+                key = "'pattern-' + #result.patternId",
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+        @CacheEvict(
+                value = "graphProperties",
+                key = "'pattern-properties-' + #result.patternId",
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+
+        @CacheEvict(
+                value = "graphProperties",
+                key = "'property-' + #propertyId",
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+
+        @CacheEvict(
+                value = {"folderWithPatterns", "damFoldersWithPatterns", "graphPatternsByInstrument"},
+                allEntries = true,
+                cacheManager = "instrumentGraphCacheManager"
+        )
+    })
     public PropertyResponseDTO updateProperty(Long propertyId, UpdatePropertyRequestDTO req) {
         InstrumentGraphCustomizationPropertiesEntity property = propertiesRepository.findById(propertyId)
                 .orElseThrow(() -> new NotFoundException("Propriedade não encontrada com ID: " + propertyId));
@@ -207,8 +258,30 @@ public class InstrumentGraphCustomizationPropertiesService {
     }
 
     @Transactional
-    @CacheEvict(value = {"graphProperties", "graphPatternById", "graphPatternsByInstrument", "graphPatternsByDam", "folderWithPatterns", "damFoldersWithPatterns"},
-            allEntries = true, cacheManager = "instrumentGraphCacheManager")
+    @Caching(evict = {
+        @CacheEvict(
+                value = "graphPatternById",
+                key = "#patternId",
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+
+        @CacheEvict(
+                value = "graphProperties",
+                key = "'pattern-' + #patternId",
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+        @CacheEvict(
+                value = "graphProperties",
+                key = "'pattern-properties-' + #patternId",
+                cacheManager = "instrumentGraphCacheManager"
+        ),
+
+        @CacheEvict(
+                value = {"folderWithPatterns", "damFoldersWithPatterns", "graphPatternsByInstrument"},
+                allEntries = true,
+                cacheManager = "instrumentGraphCacheManager"
+        )
+    })
     public UpdatePropertiesBatchResponseDTO updatePropertiesBatch(Long patternId, UpdatePropertiesBatchRequestDTO req) {
         patternService.findById(patternId);
 

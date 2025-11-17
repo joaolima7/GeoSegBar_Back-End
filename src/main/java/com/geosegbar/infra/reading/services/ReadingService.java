@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.geosegbar.common.enums.LimitStatusEnum;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.common.utils.DateFormatter;
+import com.geosegbar.configs.metrics.CustomMetricsService;
 import com.geosegbar.entities.DeterministicLimitEntity;
 import com.geosegbar.entities.InputEntity;
 import com.geosegbar.entities.InstrumentEntity;
@@ -71,6 +72,7 @@ public class ReadingService {
     private final UserRepository userRepository;
     private final CacheManager readingCacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final CustomMetricsService metricsService; // ⭐ ADICIONAR
 
     // ==========================================
     // MÉTODOS UTILITÁRIOS DE CACHE
@@ -183,10 +185,20 @@ public class ReadingService {
             }
         }
 
-        List<ReadingEntity> readings = readingRepository.findByInstrumentIdOptimized(instrumentId);
-        return readings.stream()
-                .map(this::mapToResponseDTOOptimized)
-                .collect(Collectors.toList());
+        return metricsService.recordCacheOperation(() -> {
+            List<ReadingEntity> readings = readingRepository.findByInstrumentIdOptimized(instrumentId);
+
+            // ⭐ ADICIONAR: Registrar hit/miss do cache
+            if (readings.isEmpty()) {
+                metricsService.incrementCacheMiss();
+            } else {
+                metricsService.incrementCacheHit();
+            }
+
+            return readings.stream()
+                    .map(this::mapToResponseDTOOptimized)
+                    .collect(Collectors.toList());
+        });
     }
 
     @Cacheable(value = "readingExists", key = "#instrumentId + '_' + #date", cacheManager = "readingCacheManager")
@@ -526,80 +538,88 @@ public class ReadingService {
 
         validateInputValues(instrument, request.getInputValues());
 
-        Map<String, Double> formattedInputValues = new HashMap<>();
-        for (InputEntity input : instrument.getInputs()) {
-            Double inputValue = request.getInputValues().get(input.getAcronym());
-            if (inputValue != null) {
-                Double formattedValue = formatToSpecificPrecision(inputValue, input.getPrecision());
-                formattedInputValues.put(input.getAcronym(), formattedValue);
+        // ⭐ ADICIONAR: Medir tempo total de criação + registrar métricas
+        return metricsService.recordReadingCreation(() -> {
+
+            Map<String, Double> formattedInputValues = new HashMap<>();
+            for (InputEntity input : instrument.getInputs()) {
+                Double inputValue = request.getInputValues().get(input.getAcronym());
+                if (inputValue != null) {
+                    Double formattedValue = formatToSpecificPrecision(inputValue, input.getPrecision());
+                    formattedInputValues.put(input.getAcronym(), formattedValue);
+                }
             }
-        }
 
-        Set<ReadingInputValueEntity> sharedInputValues = new HashSet<>();
-        Map<String, String> inputNames = instrument.getInputs().stream()
-                .collect(Collectors.toMap(InputEntity::getAcronym, InputEntity::getName));
+            Set<ReadingInputValueEntity> sharedInputValues = new HashSet<>();
+            Map<String, String> inputNames = instrument.getInputs().stream()
+                    .collect(Collectors.toMap(InputEntity::getAcronym, InputEntity::getName));
 
-        for (Map.Entry<String, Double> entry : formattedInputValues.entrySet()) {
-            ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
-            inputValue.setInputAcronym(entry.getKey());
-            inputValue.setInputName(inputNames.get(entry.getKey()));
-            inputValue.setValue(entry.getValue());
+            for (Map.Entry<String, Double> entry : formattedInputValues.entrySet()) {
+                ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
+                inputValue.setInputAcronym(entry.getKey());
+                inputValue.setInputName(inputNames.get(entry.getKey()));
+                inputValue.setValue(entry.getValue());
 
-            ReadingInputValueEntity savedInputValue = readingInputValueRepository.save(inputValue);
-            sharedInputValues.add(savedInputValue);
-        }
+                ReadingInputValueEntity savedInputValue = readingInputValueRepository.save(inputValue);
+                sharedInputValues.add(savedInputValue);
+            }
 
-        List<ReadingEntity> createdReadings = new ArrayList<>();
-        Set<Long> affectedOutputIds = new HashSet<>();
+            List<ReadingEntity> createdReadings = new ArrayList<>();
+            Set<Long> affectedOutputIds = new HashSet<>();
 
-        for (OutputEntity output : activeOutputs) {
+            for (OutputEntity output : activeOutputs) {
 
-            Double calculatedValue = outputCalculationService.calculateOutput(output, request, formattedInputValues);
+                Double calculatedValue = outputCalculationService.calculateOutput(output, request, formattedInputValues);
 
-            ReadingEntity reading = new ReadingEntity();
-            reading.setDate(request.getDate());
-            reading.setHour(request.getHour());
-            reading.setCalculatedValue(calculatedValue);
-            reading.setInstrument(instrument);
-            reading.setOutput(output);
-            reading.setUser(currentUser);
-            reading.setActive(true);
-            reading.setComment(request.getComment());
+                ReadingEntity reading = new ReadingEntity();
+                reading.setDate(request.getDate());
+                reading.setHour(request.getHour());
+                reading.setCalculatedValue(calculatedValue);
+                reading.setInstrument(instrument);
+                reading.setOutput(output);
+                reading.setUser(currentUser);
+                reading.setActive(true);
+                reading.setComment(request.getComment());
 
-            LimitStatusEnum limitStatus = determineLimitStatus(instrument, calculatedValue, output);
-            reading.setLimitStatus(limitStatus);
+                LimitStatusEnum limitStatus = determineLimitStatus(instrument, calculatedValue, output);
+                reading.setLimitStatus(limitStatus);
 
-            reading.setInputValues(sharedInputValues);
+                reading.setInputValues(sharedInputValues);
 
-            ReadingEntity savedReading = readingRepository.save(reading);
-            createdReadings.add(savedReading);
-            affectedOutputIds.add(output.getId());
-        }
+                ReadingEntity savedReading = readingRepository.save(reading);
+                createdReadings.add(savedReading);
+                affectedOutputIds.add(output.getId());
+            }
 
-        // ⭐ INVALIDAÇÃO GRANULAR OTIMIZADA
-        log.info("Invalidando caches após criação de {} readings para instrumento {}",
-                createdReadings.size(), instrumentId);
+            // ⭐ ADICIONAR: Incrementar métricas de negócio
+            metricsService.incrementReadingsCreated(createdReadings.size());
+            metricsService.incrementReadingsForInstrument(instrumentId, createdReadings.size());
 
-        // ✅ Invalidar caches do instrumento (granular)
-        evictReadingCachesForInstrument(instrumentId);
+            // ⭐ INVALIDAÇÃO GRANULAR OTIMIZADA
+            log.info("Invalidando caches após criação de {} readings para instrumento {}",
+                    createdReadings.size(), instrumentId);
 
-        // ✅ Invalidar cache de cada output afetado (granular)
-        affectedOutputIds.forEach(this::evictReadingCachesForOutput);
+            // ✅ Invalidar caches do instrumento (granular)
+            evictReadingCachesForInstrument(instrumentId);
 
-        // ✅ Invalidar cache de existência para a data (granular)
-        evictReadingExistsCache(instrumentId, request.getDate());
+            // ✅ Invalidar cache de cada output afetado (granular)
+            affectedOutputIds.forEach(this::evictReadingCachesForOutput);
 
-        // ✅ Invalidar caches agregados do cliente (granular)
-        evictClientReadingCaches(instrument.getDam().getClient().getId());
+            // ✅ Invalidar cache de existência para a data (granular)
+            evictReadingExistsCache(instrumentId, request.getDate());
 
-        // ⭐ OTIMIZADO: Invalidar apenas filtros e multi-instrument deste instrumento
-        Set<Long> affectedInstruments = Set.of(instrumentId);
-        evictFilterCachesForInstruments(affectedInstruments);
-        evictMultiInstrumentCachesForInstruments(affectedInstruments);
+            // ✅ Invalidar caches agregados do cliente (granular)
+            evictClientReadingCaches(instrument.getDam().getClient().getId());
 
-        return createdReadings.stream()
-                .map(this::mapToResponseDTO)
-                .collect(Collectors.toList());
+            // ⭐ OTIMIZADO: Invalidar apenas filtros e multi-instrument deste instrumento
+            Set<Long> affectedInstruments = Set.of(instrumentId);
+            evictFilterCachesForInstruments(affectedInstruments);
+            evictMultiInstrumentCachesForInstruments(affectedInstruments);
+
+            return createdReadings.stream()
+                    .map(this::mapToResponseDTO)
+                    .collect(Collectors.toList());
+        });
     }
 
     @Transactional

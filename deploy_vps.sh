@@ -2,7 +2,7 @@
 
 set -e
 
-echo "🚀 Iniciando deploy da API GeoSegBar em PRODUÇÃO..."
+echo "🚀 Iniciando deploy da API GeoSegBar em PRODUÇÃO com monitoramento..."
 
 # Verificar se o arquivo .env.prod existe
 if [ ! -f .env.prod ]; then
@@ -13,7 +13,7 @@ if [ ! -f .env.prod ]; then
     exit 1
 fi
 
-# Carregar variáveis do .env.prod (método correto para lidar com valores com espaços)
+# Carregar variáveis do .env.prod
 set -a
 source .env.prod
 set +a
@@ -30,13 +30,148 @@ fi
 # Criar rede se não existir
 docker network create geosegbar-network 2>/dev/null || true
 
+# Criar diretórios necessários
+echo "📁 Criando diretórios necessários..."
+mkdir -p ${FILE_UPLOAD_DIR}
+mkdir -p ${FILE_PSB_DIR}
+mkdir -p ./logs
+mkdir -p ./prometheus-prod
+mkdir -p ./grafana-prod/provisioning/datasources
+mkdir -p ./grafana-prod/provisioning/dashboards
+mkdir -p ./grafana-prod/dashboards
+
+# ============================================
+# CONFIGURAÇÕES DO PROMETHEUS (PRODUÇÃO)
+# ============================================
+if [ ! -f ./prometheus-prod/prometheus.yml ]; then
+    echo "📝 Criando configuração do Prometheus para produção..."
+    cat > ./prometheus-prod/prometheus.yml << 'EOF'
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  external_labels:
+    environment: 'production'
+    cluster: 'geosegbar'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files:
+  - 'alerts.yml'
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'geosegbar-api'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['geosegbar-api-prod:9090']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'geosegbar-api-prod'
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter-prod:9121']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'redis-prod'
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter-prod:9187']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'postgres-prod'
+EOF
+    echo "✅ prometheus.yml criado para produção"
+fi
+
+if [ ! -f ./prometheus-prod/alerts.yml ]; then
+    echo "📝 Criando alertas do Prometheus para produção..."
+    cat > ./prometheus-prod/alerts.yml << 'EOF'
+groups:
+  - name: geosegbar_production_alerts
+    interval: 30s
+    rules:
+      - alert: APIDown
+        expr: up{job="geosegbar-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API GeoSegBar PRODUÇÃO está DOWN"
+          description: "A API não está respondendo há mais de 2 minutos"
+
+      - alert: HighErrorRate
+        expr: rate(http_server_requests_seconds_count{status=~"5.."}[10m]) > 0.02
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Taxa de erros 5xx alta em PRODUÇÃO"
+          description: "Taxa de erros 5xx acima de 2% nos últimos 10 minutos"
+
+      - alert: HighMemoryUsage
+        expr: (jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Uso de memória heap alto em PRODUÇÃO"
+          description: "Uso de memória heap acima de 85%"
+
+      - alert: DatabaseDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL está DOWN"
+          description: "Banco de dados PostgreSQL não está respondendo"
+
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis está DOWN"
+          description: "Redis Cache não está respondendo"
+EOF
+    echo "✅ alerts.yml criado para produção"
+fi
+
+# Copiar datasources e dashboards do desenvolvimento (se existirem)
+if [ -f ./grafana/provisioning/datasources/prometheus.yml ]; then
+    cp ./grafana/provisioning/datasources/prometheus.yml ./grafana-prod/provisioning/datasources/
+    echo "✅ Datasources copiados"
+fi
+
+if [ -f ./grafana/provisioning/dashboards/default.yml ]; then
+    cp ./grafana/provisioning/dashboards/default.yml ./grafana-prod/provisioning/dashboards/
+    echo "✅ Configuração de dashboards copiada"
+fi
+
+# Copiar dashboards JSON
+if [ -d ./grafana/dashboards ]; then
+    cp -r ./grafana/dashboards/* ./grafana-prod/dashboards/ 2>/dev/null || true
+    echo "✅ Dashboards JSON copiados"
+fi
+
 # ============================================
 # REDIS
 # ============================================
 if docker ps -q -f name=redis-prod | grep -q .; then
     echo "✅ Redis já está rodando"
     
-    # ⭐ NOVO: Verificar se está em modo master
     echo "🔍 Verificando role do Redis..."
     REDIS_ROLE=$(docker exec redis-prod redis-cli INFO replication | grep "role:" | cut -d: -f2 | tr -d '\r')
     
@@ -55,7 +190,6 @@ elif docker ps -a -q -f name=redis-prod | grep -q .; then
     echo "⏳ Aguardando Redis inicializar..."
     sleep 5
     
-    # ⭐ NOVO: Verificar role após restart
     echo "🔍 Verificando role do Redis..."
     REDIS_ROLE=$(docker exec redis-prod redis-cli INFO replication | grep "role:" | cut -d: -f2 | tr -d '\r')
     
@@ -85,7 +219,7 @@ else
       redis:7-alpine redis-server \
       --save 60 1 \
       --loglevel warning \
-      --maxmemory ${REDIS_MAXMEMORY:-256mb} \
+      --maxmemory ${REDIS_MAXMEMORY:-512mb} \
       --maxmemory-policy volatile-lru \
       --appendonly yes \
       --appendfsync everysec
@@ -93,10 +227,26 @@ else
     echo "⏳ Aguardando Redis inicializar..."
     sleep 5
     
-    # ⭐ NOVO: Garantir que é master
     echo "🔧 Garantindo que Redis está em modo master..."
     docker exec redis-prod redis-cli REPLICAOF NO ONE
     echo "✅ Redis criado e configurado como master"
+fi
+
+# ============================================
+# REDIS EXPORTER
+# ============================================
+if docker ps -q -f name=redis-exporter-prod | grep -q .; then
+    echo "✅ Redis Exporter já está rodando"
+else
+    echo "🔄 Iniciando Redis Exporter..."
+    docker run -d \
+      --name redis-exporter-prod \
+      --restart unless-stopped \
+      --network geosegbar-network \
+      -p 9121:9121 \
+      oliver006/redis_exporter:v1.55.0-alpine \
+      --redis.addr=redis-prod:6379
+    echo "✅ Redis Exporter iniciado"
 fi
 
 # ============================================
@@ -133,6 +283,23 @@ else
       
     echo "⏳ Aguardando banco de dados inicializar..."
     sleep 15
+fi
+
+# ============================================
+# POSTGRES EXPORTER
+# ============================================
+if docker ps -q -f name=postgres-exporter-prod | grep -q .; then
+    echo "✅ Postgres Exporter já está rodando"
+else
+    echo "🔄 Iniciando Postgres Exporter..."
+    docker run -d \
+      --name postgres-exporter-prod \
+      --restart unless-stopped \
+      --network geosegbar-network \
+      -p 9187:9187 \
+      -e DATA_SOURCE_NAME="postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres-prod:5432/${DB_NAME}?sslmode=disable" \
+      prometheuscommunity/postgres-exporter:v0.15.0
+    echo "✅ Postgres Exporter iniciado"
 fi
 
 # ============================================
@@ -184,14 +351,88 @@ docker run -d \
 echo "⏳ Aguardando aplicação inicializar..."
 sleep 30
 
+# ============================================
+# PROMETHEUS
+# ============================================
+if docker ps -q -f name=prometheus-prod | grep -q .; then
+    echo "🔄 Reiniciando Prometheus..."
+    docker stop prometheus-prod
+    docker rm prometheus-prod
+fi
+
+if ! docker volume ls -q -f name=prometheus-prod-data | grep -q .; then
+    docker volume create prometheus-prod-data
+fi
+
+echo "🚀 Iniciando Prometheus..."
+docker run -d \
+  --name prometheus-prod \
+  --restart unless-stopped \
+  --network geosegbar-network \
+  -p 9091:9090 \
+  -v $(pwd)/prometheus-prod/prometheus.yml:/etc/prometheus/prometheus.yml:ro \
+  -v $(pwd)/prometheus-prod/alerts.yml:/etc/prometheus/alerts.yml:ro \
+  -v prometheus-prod-data:/prometheus \
+  prom/prometheus:v2.48.0 \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --storage.tsdb.path=/prometheus \
+  --web.console.libraries=/etc/prometheus/console_libraries \
+  --web.console.templates=/etc/prometheus/consoles \
+  --web.enable-lifecycle \
+  --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}
+
+# ============================================
+# GRAFANA
+# ============================================
+if docker ps -q -f name=grafana-prod | grep -q .; then
+    echo "🔄 Reiniciando Grafana..."
+    docker stop grafana-prod
+    docker rm grafana-prod
+fi
+
+if ! docker volume ls -q -f name=grafana-prod-data | grep -q .; then
+    docker volume create grafana-prod-data
+fi
+
+echo "🚀 Iniciando Grafana..."
+docker run -d \
+  --name grafana-prod \
+  --restart unless-stopped \
+  --network geosegbar-network \
+  -p 3001:3000 \
+  -e GF_SECURITY_ADMIN_USER=admin \
+  -e GF_SECURITY_ADMIN_PASSWORD="${GRAFANA_PASSWORD}" \
+  -e GF_INSTALL_PLUGINS=redis-datasource \
+  -e GF_SERVER_ROOT_URL=http://localhost:3001 \
+  -e GF_USERS_ALLOW_SIGN_UP=false \
+  -v grafana-prod-data:/var/lib/grafana \
+  -v $(pwd)/grafana-prod/provisioning:/etc/grafana/provisioning:ro \
+  -v $(pwd)/grafana-prod/dashboards:/etc/grafana/dashboards:ro \
+  grafana/grafana:10.2.2
+
+echo "⏳ Aguardando monitoramento inicializar..."
+sleep 10
+
+# ============================================
+# VERIFICAÇÃO
+# ============================================
 echo "🔍 Verificando status da aplicação..."
 if curl -f http://localhost:${SERVER_PORT}/actuator/health > /dev/null 2>&1; then
     echo "✅ Deploy em PRODUÇÃO realizado com sucesso!"
-    echo "🌐 API disponível em: http://localhost:${SERVER_PORT}"
-    
+    echo ""
+    echo "📡 SERVIÇOS DISPONÍVEIS:"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🌐 API:           http://localhost:${SERVER_PORT}"
+    echo "📊 Prometheus:    http://localhost:9091"
+    echo "📈 Grafana:       http://localhost:3001 (admin / ${GRAFANA_PASSWORD})"
+    echo "🗄️  PostgreSQL:    localhost:${DB_PORT}"
+    echo "🔴 Redis:         localhost:${REDIS_PORT}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
     echo "📊 Status dos containers:"
-    docker ps --filter "name=geosegbar" --filter "name=postgres-prod" --filter "name=redis-prod"
+    docker ps --filter "name=geosegbar" --filter "name=postgres-prod" --filter "name=redis-prod" --filter "name=prometheus-prod" --filter "name=grafana-prod"
     
+    echo ""
     echo "🧹 Limpando imagens não utilizadas..."
     docker image prune -f > /dev/null 2>&1 || true
     
@@ -207,4 +448,5 @@ else
     exit 1
 fi
 
-echo "🎉 Deploy em PRODUÇÃO concluído!"
+echo ""
+echo "🎉 Deploy em PRODUÇÃO concluído com monitoramento completo!"

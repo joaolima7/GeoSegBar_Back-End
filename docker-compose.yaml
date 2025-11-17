@@ -12,73 +12,138 @@ services:
       - "${DB_PORT}:5432"
     volumes:
       - postgres-dev-data:/var/lib/postgresql/data
+    networks:
+      - geosegbar-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - geosegbar-network
 
   redis-dev:
     image: redis:7-alpine
     container_name: geosegbar-redis-dev
     restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning --maxmemory ${REDIS_MAXMEMORY} --maxmemory-policy volatile-lru --appendonly yes --appendfsync everysec
     ports:
       - "${REDIS_PORT}:6379"
     volumes:
       - redis-dev-data:/data
-    command: redis-server --save 60 1 --loglevel warning --maxmemory ${REDIS_MAXMEMORY} --maxmemory-policy volatile-lru
+    networks:
+      - geosegbar-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
-      timeout: 5s
+      timeout: 3s
       retries: 5
-    networks:
-      - geosegbar-network
 
   geosegbar-api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: geosegbar-api
-    restart: unless-stopped
+    build: .
+    container_name: geosegbar-api-dev
     depends_on:
       postgres-dev:
         condition: service_healthy
       redis-dev:
         condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - DB_HOST=postgres-dev
+      - REDIS_HOST=redis-dev
+    env_file:
+      - .env
     ports:
       - "${SERVER_PORT}:9090"
-    environment:
-      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE}
-      - TZ=${TZ}
-      - JAVA_OPTS=${JAVA_OPTS}
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
-      - DB_NAME=${DB_NAME}
-      - DB_USERNAME=${DB_USERNAME}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - REDIS_HOST=${REDIS_HOST}
-      - REDIS_PORT=${REDIS_PORT}
-      - JWT_SECRET=${JWT_SECRET}
-      - MAIL_HOST=${MAIL_HOST}
-      - MAIL_PORT=${MAIL_PORT}
-      - MAIL_USERNAME=${MAIL_USERNAME}
-      - MAIL_PASSWORD=${MAIL_PASSWORD}
-      - FILE_UPLOAD_DIR=${FILE_UPLOAD_DIR}
-      - FILE_BASE_URL=${FILE_BASE_URL}
-      - FILE_PSB_DIR=${FILE_PSB_DIR}
-      - FRONTEND_URL=${FRONTEND_URL}
-      - ANA_API_IDENTIFIER=${ANA_API_IDENTIFIER}
-      - ANA_API_PASSWORD=${ANA_API_PASSWORD}
-      - ANA_API_AUTH_URL=${ANA_API_AUTH_URL}
-      - ANA_API_TELEMETRY_URL=${ANA_API_TELEMETRY_URL}
-    volumes:
-      - ./storage-dev:${FILE_UPLOAD_DIR}
-      - ./logs:/app/logs
     networks:
       - geosegbar-network
+    restart: unless-stopped
+    volumes:
+      # ⭐ CORRIGIDO: Path absoluto no container
+      - ./storage/uploads:/app/uploads
+      - ./logs:/app/logs
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:9090/actuator/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: prometheus-dev
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--web.enable-lifecycle"
+      - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9091:9090"
+    networks:
+      - geosegbar-network
+    depends_on:
+      - geosegbar-api
+
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: grafana-dev
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+      - GF_INSTALL_PLUGINS=redis-datasource
+      - GF_SERVER_ROOT_URL=http://localhost:3001
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    networks:
+      - geosegbar-network
+    depends_on:
+      - prometheus
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.55.0-alpine
+    container_name: redis-exporter-dev
+    restart: unless-stopped
+    command:
+      - "--redis.addr=redis-dev:6379"
+    ports:
+      - "9121:9121"
+    networks:
+      - geosegbar-network
+    depends_on:
+      - redis-dev
+    platform: linux/amd64
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: postgres-exporter-dev
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres-dev:5432/${DB_NAME}?sslmode=disable"
+    ports:
+      - "9187:9187"
+    networks:
+      - geosegbar-network
+    depends_on:
+      - postgres-dev
 
 networks:
   geosegbar-network:
@@ -86,6 +151,6 @@ networks:
 
 volumes:
   postgres-dev-data:
-    driver: local
   redis-dev-data:
-    driver: local
+  prometheus-data:
+  grafana-data:

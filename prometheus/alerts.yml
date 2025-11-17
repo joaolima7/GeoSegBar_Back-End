@@ -1,0 +1,105 @@
+groups:
+  - name: api_performance_alerts
+    interval: 30s
+    rules:
+      # ⚠️ Latência P95 alta
+      - alert: HighLatencyP95
+        expr: histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le, uri)) > 2
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "Latência P95 alta detectada"
+          description: "Endpoint {{ $labels.uri }} com P95 = {{ $value | humanizeDuration }} (threshold: 2s)"
+
+      # ⚠️ Taxa de erro 5xx alta
+      - alert: HighErrorRate5xx
+        expr: sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) / sum(rate(http_server_requests_seconds_count[5m])) > 0.05
+        for: 3m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Taxa de erro 5xx acima de 5%"
+          description: "{{ $value | humanizePercentage }} de requests com erro 5xx nos últimos 5 minutos"
+
+      # ⚠️ Uso de memória heap alto
+      - alert: HighHeapMemoryUsage
+        expr: (jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "Uso de memória heap acima de 85%"
+          description: "Heap usage: {{ $value | humanizePercentage }}"
+
+      # ⚠️ GC pausando muito
+      - alert: HighGCPauseTime
+        expr: rate(jvm_gc_pause_seconds_sum[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "Tempo de pausa do GC muito alto"
+          description: "GC está pausando por {{ $value | humanizeDuration }} nos últimos 5 minutos"
+
+      # ⚠️ Pool de conexões DB esgotado
+      - alert: DatabaseConnectionPoolExhausted
+        expr: hikaricp_connections_active / hikaricp_connections_max > 0.90
+        for: 5m
+        labels:
+          severity: critical
+          category: database
+        annotations:
+          summary: "Pool de conexões DB acima de 90%"
+          description: "{{ $value | humanizePercentage }} do pool em uso"
+
+      # ⚠️ Cache miss rate alto
+      - alert: HighCacheMissRate
+        expr: sum(rate(cache_gets_total{result="miss"}[10m])) / sum(rate(cache_gets_total[10m])) > 0.60
+        for: 10m
+        labels:
+          severity: warning
+          category: cache
+        annotations:
+          summary: "Taxa de cache miss acima de 60%"
+          description: "Cache miss rate: {{ $value | humanizePercentage }}"
+
+  - name: infrastructure_alerts
+    interval: 30s
+    rules:
+      # ⚠️ API está down
+      - alert: APIDown
+        expr: up{job="geosegbar-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "API GeoSegBar está DOWN"
+          description: "A API não está respondendo há mais de 1 minuto"
+
+      # ⚠️ Redis está down
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: cache
+        annotations:
+          summary: "Redis está DOWN"
+          description: "Redis não está respondendo há mais de 2 minutos"
+
+      # ⚠️ PostgreSQL está down
+      - alert: PostgresDown
+        expr: up{job="postgres"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: database
+        annotations:
+          summary: "PostgreSQL está DOWN"
+          description: "PostgreSQL não está respondendo há mais de 2 minutos"

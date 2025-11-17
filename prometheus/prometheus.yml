@@ -1,0 +1,47 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'geosegbar'
+    environment: 'production'
+
+# Configuração de alertas
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Regras de alertas
+rule_files:
+  - '/etc/prometheus/alerts.yml'
+
+# Scrape configs
+scrape_configs:
+  # ⭐ Monitorar a API Spring Boot
+  - job_name: 'geosegbar-api'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['geosegbar-api:9090']
+        labels:
+          application: 'geosegbar-api'
+          service: 'backend'
+
+  # ⭐ Monitorar o próprio Prometheus
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ⭐ Monitorar Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: 'cache'
+
+  # ⭐ Monitorar PostgreSQL
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'database'

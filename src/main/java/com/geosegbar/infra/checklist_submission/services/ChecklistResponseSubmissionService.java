@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import com.geosegbar.common.enums.AnomalyOriginEnum;
 import com.geosegbar.common.enums.TypeQuestionEnum;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
+import com.geosegbar.configs.metrics.CustomMetricsService;
 import com.geosegbar.entities.AnomalyEntity;
 import com.geosegbar.entities.AnomalyPhotoEntity;
 import com.geosegbar.entities.AnomalyStatusEntity;
@@ -78,6 +79,7 @@ public class ChecklistResponseSubmissionService {
     private final AnomalyPhotoRepository anomalyPhotoRepository;
     private final CacheManager checklistCacheManager; // ⭐ NOVO
     private final RedisTemplate<String, Object> redisTemplate; // ⭐ NOVO
+    private final CustomMetricsService metricsService; // ⭐ ADICIONAR
 
     /**
      * ⭐ NOVO: Invalida caches usando pattern matching do Redis
@@ -162,43 +164,53 @@ public class ChecklistResponseSubmissionService {
             }
         }
 
-        ChecklistResponseEntity checklistResponse = createChecklistResponse(submissionDto);
+        return metricsService.recordDatabaseQuery(() -> {
 
-        validateAllRequiredQuestionnaires(submissionDto);
-        validatePVAnswersHaveRequiredFields(submissionDto);
+            ChecklistResponseEntity checklistResponse = createChecklistResponse(submissionDto);
 
-        for (QuestionnaireResponseSubmissionDTO questionnaireDto : submissionDto.getQuestionnaireResponses()) {
-            validateAllQuestionsAnswered(questionnaireDto);
+            validateAllRequiredQuestionnaires(submissionDto);
+            validatePVAnswersHaveRequiredFields(submissionDto);
 
-            QuestionnaireResponseEntity questionnaireResponse = createQuestionnaireResponse(questionnaireDto, checklistResponse);
+            int totalQuestionnaires = 0;
 
-            for (AnswerSubmissionDTO answerDto : questionnaireDto.getAnswers()) {
-                createAnswer(answerDto, questionnaireResponse);
+            for (QuestionnaireResponseSubmissionDTO questionnaireDto : submissionDto.getQuestionnaireResponses()) {
+                validateAllQuestionsAnswered(questionnaireDto);
 
-                if (pvAnswerValidator.isPVAnswer(answerDto)) {
-                    createAnomalyFromPVAnswer(
-                            answerDto,
-                            submissionDto.getUserId(),
-                            submissionDto.getDamId(),
-                            questionnaireDto.getTemplateQuestionnaireId()
-                    );
+                QuestionnaireResponseEntity questionnaireResponse = createQuestionnaireResponse(questionnaireDto, checklistResponse);
+                totalQuestionnaires++;
+
+                for (AnswerSubmissionDTO answerDto : questionnaireDto.getAnswers()) {
+                    createAnswer(answerDto, questionnaireResponse);
+
+                    if (pvAnswerValidator.isPVAnswer(answerDto)) {
+                        createAnomalyFromPVAnswer(
+                                answerDto,
+                                submissionDto.getUserId(),
+                                submissionDto.getDamId(),
+                                questionnaireDto.getTemplateQuestionnaireId()
+                        );
+                    }
                 }
             }
-        }
 
-        // ⭐ NOVO: Obter clientId da barragem
-        DamEntity dam = damRepository.findById(submissionDto.getDamId())
-                .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
-        Long clientId = dam.getClient().getId();
+            metricsService.incrementChecklistsSubmitted();
+            metricsService.incrementQuestionnairesAnswered(totalQuestionnaires);
 
-        // ⭐ NOVO: Invalidar caches granulares APÓS salvar (dentro da transação)
-        evictChecklistResponseCaches(
-                submissionDto.getDamId(),
-                clientId,
-                submissionDto.getUserId()
-        );
+            // ⭐ NOVO: Obter clientId da barragem
+            DamEntity dam = damRepository.findById(submissionDto.getDamId())
+                    .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
+            Long clientId = dam.getClient().getId();
 
-        return checklistResponse;
+            // ⭐ NOVO: Invalidar caches granulares APÓS salvar (dentro da transação)
+            evictChecklistResponseCaches(
+                    submissionDto.getDamId(),
+                    clientId,
+                    submissionDto.getUserId()
+            );
+
+            return checklistResponse;
+        });
+
     }
 
     private void validateUserAccessToDam(Long userId, Long damId) {

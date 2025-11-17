@@ -27,6 +27,11 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
+                .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers("/actuator/health/**").permitAll()
+                .requestMatchers("/actuator/info").permitAll()
+                .requestMatchers("/actuator/prometheus").permitAll()
+                .requestMatchers("/actuator/metrics/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/user/login/initiate").permitAll()
                 .requestMatchers(HttpMethod.POST, "/user/login/verify").permitAll()
                 .requestMatchers(HttpMethod.POST, "/user/register").permitAll()

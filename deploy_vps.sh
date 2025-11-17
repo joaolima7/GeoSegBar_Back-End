@@ -149,20 +149,47 @@ EOF
     echo "✅ alerts.yml criado para produção"
 fi
 
-# Copiar datasources e dashboards do desenvolvimento (se existirem)
-if [ -f ./grafana/provisioning/datasources/prometheus.yml ]; then
-    cp ./grafana/provisioning/datasources/prometheus.yml ./grafana-prod/provisioning/datasources/
-    echo "✅ Datasources copiados"
-fi
+echo "📝 Criando datasource do Prometheus para produção..."
+cat > ./grafana-prod/provisioning/datasources/prometheus.yml << 'EOF'
+apiVersion: 1
 
-if [ -f ./grafana/provisioning/dashboards/default.yml ]; then
-    cp ./grafana/provisioning/dashboards/default.yml ./grafana-prod/provisioning/dashboards/
-    echo "✅ Configuração de dashboards copiada"
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus-prod:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: "30s"
+      queryTimeout: "60s"
+EOF
+echo "✅ Datasource Prometheus configurado para produção"
+
+# Criar configuração de dashboards
+if [ ! -f ./grafana-prod/provisioning/dashboards/default.yml ]; then
+    echo "📝 Criando configuração de dashboards..."
+    cat > ./grafana-prod/provisioning/dashboards/default.yml << 'EOF'
+apiVersion: 1
+
+providers:
+  - name: 'Default'
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/dashboards
+EOF
+    echo "✅ Configuração de dashboards criada"
 fi
 
 # Copiar dashboards JSON
 if [ -d ./grafana/dashboards ]; then
-    cp -r ./grafana/dashboards/* ./grafana-prod/dashboards/ 2>/dev/null || true
+    mkdir -p ./grafana-prod/dashboards
+    cp -r ./grafana/dashboards/*.json ./grafana-prod/dashboards/ 2>/dev/null || true
     echo "✅ Dashboards JSON copiados"
 fi
 

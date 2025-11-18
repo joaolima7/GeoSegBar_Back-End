@@ -793,30 +793,34 @@ public class ReadingService {
         Set<Long> affectedOutputIds = new HashSet<>();
         Set<Long> affectedClientIds = new HashSet<>();
 
-        for (Long readingId : readingIds) {
+        // ⭐ OTIMIZAÇÃO: Buscar todas as readings de uma vez com query otimizada
+        List<ReadingEntity> readings = readingRepository.findAllByIdWithMinimalData(readingIds);
+
+        // ⭐ VALIDAR: Se algum ID não foi encontrado
+        Set<Long> foundIds = readings.stream().map(ReadingEntity::getId).collect(Collectors.toSet());
+        List<Long> notFoundIds = readingIds.stream()
+                .filter(id -> !foundIds.contains(id))
+                .collect(Collectors.toList());
+
+        // Adicionar IDs não encontrados como falhas
+        for (Long notFoundId : notFoundIds) {
+            failedOperations.add(new BulkToggleActiveResponseDTO.FailedOperation(
+                    notFoundId,
+                    "Leitura não encontrada com ID: " + notFoundId
+            ));
+        }
+
+        // ⭐ PROCESSAR EM BATCH
+        for (ReadingEntity reading : readings) {
             try {
-                ReadingEntity reading = readingRepository.findById(readingId)
-                        .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + readingId));
-
                 reading.setActive(active);
-                readingRepository.save(reading);
-                successfulIds.add(readingId);
 
-                // Rastrear afetados
+                // Rastrear afetados ANTES de salvar (evitar lazy loading)
                 affectedInstrumentIds.add(reading.getInstrument().getId());
                 affectedOutputIds.add(reading.getOutput().getId());
                 affectedClientIds.add(reading.getInstrument().getDam().getClient().getId());
 
-                // Invalidar cache específico da reading
-                var readingCache = readingCacheManager.getCache("readingById");
-                if (readingCache != null) {
-                    readingCache.evict(readingId);
-                }
-
-                var responseDTOCache = readingCacheManager.getCache("readingResponseDTO");
-                if (responseDTOCache != null) {
-                    responseDTOCache.evict(readingId);
-                }
+                successfulIds.add(reading.getId());
 
             } catch (Exception e) {
                 String errorMessage = e.getMessage();
@@ -825,14 +829,33 @@ public class ReadingService {
                 }
 
                 failedOperations.add(new BulkToggleActiveResponseDTO.FailedOperation(
-                        readingId,
+                        reading.getId(),
                         errorMessage
                 ));
             }
         }
 
+        // ⭐ SALVAR TODAS DE UMA VEZ (batch update)
+        if (!readings.isEmpty()) {
+            readingRepository.saveAll(readings);
+            log.info("Bulk toggle: {} readings atualizadas com sucesso", successfulIds.size());
+        }
+
         // ⭐ INVALIDAÇÃO GRANULAR OTIMIZADA (após processar todos)
         log.info("Invalidando caches após bulk toggle de {} readings", successfulIds.size());
+
+        // ✅ Invalidar cache específico de cada reading
+        var readingCache = readingCacheManager.getCache("readingById");
+        var responseDTOCache = readingCacheManager.getCache("readingResponseDTO");
+
+        for (Long readingId : successfulIds) {
+            if (readingCache != null) {
+                readingCache.evict(readingId);
+            }
+            if (responseDTOCache != null) {
+                responseDTOCache.evict(readingId);
+            }
+        }
 
         // ✅ Invalidar caches de cada instrumento afetado (granular)
         affectedInstrumentIds.forEach(this::evictReadingCachesForInstrument);

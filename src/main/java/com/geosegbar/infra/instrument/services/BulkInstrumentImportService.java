@@ -239,7 +239,8 @@ public class BulkInstrumentImportService {
             ir.instrumentTypeName = getString(r, idx, "Tipo de Instrumento");
             ir.sectionName = getString(r, idx, "Seção");
 
-            ir.isLinimetricRuler = getBoolean(r, idx, "Régua Linimétrica");
+            Boolean isLinimetricRulerValue = getBoolean(r, idx, "Régua Linimétrica");
+            ir.isLinimetricRuler = (isLinimetricRulerValue != null) ? isLinimetricRulerValue : false;
 
             Long code = getLong(r, idx, "Código ANA");
             if (code == null) {
@@ -288,7 +289,7 @@ public class BulkInstrumentImportService {
                 d.setAcronym(getString(row, idx, "Sigla"));
                 d.setName(getString(row, idx, "Nome"));
                 d.setPrecision(getInt(row, idx, "Precisão"));
-                d.setMeasurementUnitId(fetchUnit(getString(row, idx, "Unidade de Medida"), unitMap));
+                d.setMeasurementUnitId(fetchUnit(getString(row, idx, "Unidade de Medida").toUpperCase(), unitMap));
                 dto = (T) d;
 
             } else if (clz.equals(ConstantDTO.class)) {
@@ -297,7 +298,7 @@ public class BulkInstrumentImportService {
                 d.setName(getString(row, idx, "Nome"));
                 d.setPrecision(getInt(row, idx, "Precisão"));
                 d.setValue(getDouble(row, idx, "Valor"));
-                d.setMeasurementUnitId(fetchUnit(getString(row, idx, "Unidade de Medida"), unitMap));
+                d.setMeasurementUnitId(fetchUnit(getString(row, idx, "Unidade de Medida").toUpperCase(), unitMap));
                 dto = (T) d;
 
             } else {
@@ -306,7 +307,7 @@ public class BulkInstrumentImportService {
                 d.setName(getString(row, idx, "Nome"));
                 d.setEquation(getString(row, idx, "Equação"));
                 d.setPrecision(getInt(row, idx, "Precisão"));
-                d.setMeasurementUnitId(fetchUnit(getString(row, idx, "Unidade de Medida"), unitMap));
+                d.setMeasurementUnitId(fetchUnit(getString(row, idx, "Unidade de Medida").toUpperCase(), unitMap));
                 dto = (T) d;
             }
             map.computeIfAbsent(id, k -> new ArrayList<>()).add(dto);
@@ -441,7 +442,7 @@ public class BulkInstrumentImportService {
         Boolean noLimit;
         String sectionName;
 
-        Boolean isLinimetricRuler;
+        Boolean isLinimetricRuler = false;
         Long linimetricRulerCode;
 
         CreateInstrumentRequest toRequest(ImportInstrumentsRequest meta, Long resolvedSectionId) {

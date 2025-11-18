@@ -165,6 +165,10 @@ public class InstrumentService {
     )
     public InstrumentEntity createComplete(CreateInstrumentRequest request) {
 
+        if (request.getIsLinimetricRuler() == null) {
+            request.setIsLinimetricRuler(false);
+        }
+
         if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
 
             request.setNoLimit(true);

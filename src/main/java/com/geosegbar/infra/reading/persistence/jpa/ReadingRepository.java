@@ -38,6 +38,14 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
 
     List<ReadingEntity> findByInstrumentIdAndLimitStatus(Long instrumentId, LimitStatusEnum limitStatus);
 
+    @Query("SELECT r FROM ReadingEntity r "
+            + "JOIN FETCH r.instrument i "
+            + "JOIN FETCH i.dam d "
+            + "JOIN FETCH d.client c "
+            + "JOIN FETCH r.output o "
+            + "WHERE r.id IN :ids")
+    List<ReadingEntity> findAllByIdWithMinimalData(@Param("ids") List<Long> ids);
+
     @EntityGraph(attributePaths = {"user", "instrument", "output", "inputValues"})
     @Query("SELECT r FROM ReadingEntity r WHERE r.instrument.id = :instrumentId "
             + "AND r.date = :date AND r.hour = :hour AND r.active = true")

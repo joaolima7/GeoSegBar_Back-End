@@ -893,4 +893,76 @@ public class UserService {
         return userRepository.findByEmail(systemUserEmail)
                 .orElseThrow(() -> new NotFoundException("Usuário do sistema não encontrado!"));
     }
+
+    @Transactional
+    public void recreateDamPermissionsForClientCollaborators(Long clientId) {
+        ClientEntity client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + clientId));
+
+        // Buscar todos os colaboradores associados a este cliente
+        List<UserEntity> collaborators = userRepository.findByClientIdAndRole(clientId, RoleEnum.COLLABORATOR);
+
+        for (UserEntity collaborator : collaborators) {
+            // Remover permissões antigas deste cliente
+            deleteDamPermissionsForSpecificClients(collaborator, Set.of(client));
+
+            // Recriar permissões baseadas nas barragens atuais
+            createDamPermissionsForSpecificClients(collaborator, Set.of(client));
+        }
+
+        log.info("DamPermissions recriadas para {} colaboradores do cliente ID: {}",
+                collaborators.size(), clientId);
+    }
+
+    @Transactional
+    public void removeDamPermissionsForDam(Long damId, Long clientId) {
+        DamEntity dam = damRepository.findById(damId)
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + damId));
+
+        ClientEntity client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + clientId));
+
+        // Buscar todos os colaboradores deste cliente
+        List<UserEntity> collaborators = userRepository.findByClientIdAndRole(clientId, RoleEnum.COLLABORATOR);
+
+        for (UserEntity collaborator : collaborators) {
+            // Remover permissão específica desta barragem
+            damPermissionRepository.deleteByUserAndDamAndClient(collaborator, dam, client);
+        }
+
+        log.info("DamPermissions da barragem ID {} removidas para {} colaboradores do cliente ID: {}",
+                damId, collaborators.size(), clientId);
+    }
+
+    @Transactional
+    public void createDamPermissionsForDam(Long damId, Long clientId) {
+        DamEntity dam = damRepository.findById(damId)
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + damId));
+
+        ClientEntity client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + clientId));
+
+        // Buscar todos os colaboradores deste cliente
+        List<UserEntity> collaborators = userRepository.findByClientIdAndRole(clientId, RoleEnum.COLLABORATOR);
+
+        for (UserEntity collaborator : collaborators) {
+            // Verificar se já existe permissão
+            if (damPermissionRepository.existsByUserAndDamAndClient(collaborator, dam, client)) {
+                continue;
+            }
+
+            // Criar nova permissão
+            DamPermissionEntity permission = new DamPermissionEntity();
+            permission.setUser(collaborator);
+            permission.setDam(dam);
+            permission.setClient(client);
+            permission.setHasAccess(false);
+            permission.setCreatedAt(LocalDateTime.now());
+
+            damPermissionRepository.save(permission);
+        }
+
+        log.info("DamPermissions da barragem ID {} criadas para {} colaboradores do cliente ID: {}",
+                damId, collaborators.size(), clientId);
+    }
 }

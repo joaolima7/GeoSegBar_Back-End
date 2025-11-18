@@ -49,6 +49,7 @@ import com.geosegbar.infra.reservoir.persistence.ReservoirRepository;
 import com.geosegbar.infra.risk_category.persistence.RiskCategoryRepository;
 import com.geosegbar.infra.security_level.persistence.SecurityLevelRepository;
 import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
+import com.geosegbar.infra.user.service.UserService;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -72,6 +73,7 @@ public class DamService {
     private final PSBFolderService psbFolderService;
     private final CacheManager checklistCacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final UserService userService;
 
     private void evictChecklistCachesForDam(Long damId, Long clientId) {
 
@@ -452,6 +454,9 @@ public class DamService {
         StatusEntity status = statusRepository.findById(request.getStatusId())
                 .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + request.getStatusId()));
 
+        // ⭐ DETECTAR MUDANÇA DE CLIENTE
+        boolean clientChanged = !oldClientId.equals(client.getId());
+
         existingDam.setName(request.getName());
         existingDam.setLatitude(request.getLatitude());
         existingDam.setLongitude(request.getLongitude());
@@ -508,11 +513,20 @@ public class DamService {
 
         DamEntity updatedDam = damRepository.save(existingDam);
 
-        if (!oldClientId.equals(client.getId())) {
-            evictChecklistCachesForDam(damId, oldClientId);
-        }
+        // ⭐ SINCRONIZAR DAM PERMISSIONS SE HOUVE MUDANÇA DE CLIENTE
+        if (clientChanged) {
+            // Remover permissões do cliente antigo
+            userService.removeDamPermissionsForDam(damId, oldClientId);
 
-        evictChecklistCachesForDam(damId, client.getId());
+            // Criar permissões para o novo cliente
+            userService.createDamPermissionsForDam(damId, client.getId());
+
+            // Invalidar caches de ambos os clientes
+            evictChecklistCachesForDam(damId, oldClientId);
+            evictChecklistCachesForDam(damId, client.getId());
+        } else {
+            evictChecklistCachesForDam(damId, client.getId());
+        }
 
         return findById(updatedDam.getId());
     }
@@ -611,6 +625,9 @@ public class DamService {
                 throw new DuplicateResourceException("Já existe uma barragem com este nome para este cliente!");
             }
         }
+
+        // ⭐ DETECTAR MUDANÇA DE CLIENTE
+        boolean clientChanged = !oldClientId.equals(client.getId());
 
         existingDam.setName(request.getName());
         existingDam.setLatitude(request.getLatitude());
@@ -804,11 +821,20 @@ public class DamService {
             }
         }
 
-        if (!oldClientId.equals(client.getId())) {
-            evictChecklistCachesForDam(damId, oldClientId);
-        }
+        // ⭐ SINCRONIZAR DAM PERMISSIONS SE HOUVE MUDANÇA DE CLIENTE
+        if (clientChanged) {
+            // Remover permissões do cliente antigo
+            userService.removeDamPermissionsForDam(damId, oldClientId);
 
-        evictChecklistCachesForDam(damId, client.getId());
+            // Criar permissões para o novo cliente
+            userService.createDamPermissionsForDam(damId, client.getId());
+
+            // Invalidar caches de ambos os clientes
+            evictChecklistCachesForDam(damId, oldClientId);
+            evictChecklistCachesForDam(damId, client.getId());
+        } else {
+            evictChecklistCachesForDam(damId, client.getId());
+        }
 
         return findById(damId);
     }

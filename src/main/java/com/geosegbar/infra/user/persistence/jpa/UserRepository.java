@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import com.geosegbar.common.enums.RoleEnum;
 import com.geosegbar.entities.UserEntity;
 
 import jakarta.persistence.QueryHint;
@@ -21,6 +22,15 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
             + "LEFT JOIN FETCH u.clients c "
             + "WHERE u.id IN :ids")
     List<UserEntity> findByIdInWithClients(@Param("ids") Set<Long> ids);
+
+    @Query("SELECT DISTINCT u FROM UserEntity u "
+            + "JOIN u.clients c "
+            + "WHERE c.id = :clientId "
+            + "AND u.role.name = :roleName")
+    List<UserEntity> findByClientIdAndRole(
+            @Param("clientId") Long clientId,
+            @Param("roleName") RoleEnum roleName
+    );
 
     @Query("SELECT u FROM UserEntity u "
             + "JOIN u.clients c "

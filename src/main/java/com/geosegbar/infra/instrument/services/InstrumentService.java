@@ -19,6 +19,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.common.utils.ExpressionEvaluator;
 import com.geosegbar.entities.ConstantEntity;
 import com.geosegbar.entities.DamEntity;
@@ -30,9 +31,11 @@ import com.geosegbar.entities.MeasurementUnitEntity;
 import com.geosegbar.entities.OutputEntity;
 import com.geosegbar.entities.SectionEntity;
 import com.geosegbar.entities.StatisticalLimitEntity;
+import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.constant.persistence.jpa.ConstantRepository;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.deterministic_limit.persistence.jpa.DeterministicLimitRepository;
@@ -117,16 +120,29 @@ public class InstrumentService {
 
     @Cacheable(value = "allInstruments", cacheManager = "instrumentCacheManager")
     public List<InstrumentResponseDTO> findAll() {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getViewInstruments()) {
+                throw new UnauthorizedException("Usuário não tem permissão para visualizar instrumentos!");
+            }
+        }
         return mapToResponseDTOList(instrumentRepository.findAllByOrderByNameAsc());
     }
 
     @Cacheable(value = "instrumentsByDam", key = "#damId", cacheManager = "instrumentCacheManager")
     public List<InstrumentResponseDTO> findByDamId(Long damId) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getViewInstruments()) {
+                throw new UnauthorizedException("Usuário não tem permissão para visualizar instrumentos!");
+            }
+        }
         return mapToResponseDTOList(instrumentRepository.findByDamId(damId));
     }
 
     @Cacheable(value = "instrumentById", key = "#id", cacheManager = "instrumentCacheManager")
     public InstrumentResponseDTO findByIdDTO(Long id) {
+
         InstrumentEntity entity = instrumentRepository.findByIdWithBasicRelations(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
         return mapToResponseDTO(entity);
@@ -139,6 +155,12 @@ public class InstrumentService {
 
     @Cacheable(value = "instrumentWithDetails", key = "#id", cacheManager = "instrumentCacheManager")
     public InstrumentResponseDTO findWithAllDetails(Long id) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getViewInstruments()) {
+                throw new UnauthorizedException("Usuário não tem permissão para visualizar instrumentos!");
+            }
+        }
         return mapToResponseDTO(instrumentRepository.findWithCompleteDetailsById(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id)));
     }
@@ -149,6 +171,12 @@ public class InstrumentService {
             cacheManager = "instrumentCacheManager"
     )
     public List<InstrumentResponseDTO> findByClientId(Long clientId, Boolean active) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getViewInstruments()) {
+                throw new UnauthorizedException("Usuário não tem permissão para visualizar instrumentos!");
+            }
+        }
         return mapToResponseDTOList(instrumentRepository.findByClientIdOptimized(clientId, active));
     }
 
@@ -164,6 +192,12 @@ public class InstrumentService {
             cacheManager = "instrumentCacheManager"
     )
     public InstrumentEntity createComplete(CreateInstrumentRequest request) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getEditInstruments()) {
+                throw new UnauthorizedException("Usuário não tem permissão para criar instrumentos!");
+            }
+        }
 
         if (request.getIsLinimetricRuler() == null) {
             request.setIsLinimetricRuler(false);
@@ -500,6 +534,13 @@ public class InstrumentService {
         )
     })
     public InstrumentEntity update(Long id, UpdateInstrumentRequest request) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getEditInstruments()) {
+                throw new UnauthorizedException("Usuário não tem permissão para editar instrumentos!");
+            }
+        }
+
         InstrumentEntity oldInstrument = findById(id);
         Long clientId = oldInstrument.getDam().getClient().getId();
 
@@ -766,6 +807,13 @@ public class InstrumentService {
         )
     })
     public void delete(Long id) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getEditInstruments()) {
+                throw new UnauthorizedException("Usuário não tem permissão para deletar instrumentos!");
+            }
+        }
+
         InstrumentEntity instrument = findById(id);
         Long clientId = instrument.getDam().getClient().getId();
 
@@ -843,6 +891,13 @@ public class InstrumentService {
 
     })
     public InstrumentEntity toggleActiveInstrument(Long id, Boolean active) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getEditInstruments()) {
+                throw new UnauthorizedException("Usuário não tem permissão para alterar status de instrumentos!");
+            }
+        }
+
         InstrumentEntity instrument = findById(id);
         Long clientId = instrument.getDam().getClient().getId();
 
@@ -868,7 +923,12 @@ public class InstrumentService {
             cacheManager = "instrumentCacheManager"
     )
     public List<InstrumentResponseDTO> findByFilters(Long damId, Long instrumentTypeId, Long sectionId, Boolean active, Long clientId) {
-        log.debug("Cache miss: findByFilters({}, {}, {}, {}, {})", damId, instrumentTypeId, sectionId, active, clientId);
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getViewInstruments()) {
+                throw new UnauthorizedException("Usuário não tem permissão para visualizar instrumentos!");
+            }
+        }
         List<InstrumentEntity> instruments = instrumentRepository.findByFiltersOptimized(damId, instrumentTypeId, sectionId, active, clientId);
         return mapToResponseDTOList(instruments);
     }
@@ -1301,6 +1361,13 @@ public class InstrumentService {
         )
     })
     public InstrumentEntity toggleSectionVisibility(Long id, Boolean active) {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+            if (!userLogged.getInstrumentationPermission().getEditInstruments()) {
+                throw new UnauthorizedException("Usuário não tem permissão para alterar visibilidade de instrumentos nas seções!");
+            }
+        }
+
         InstrumentEntity instrument = findById(id);
         instrument.setActiveForSection(active);
         InstrumentEntity saved = instrumentRepository.save(instrument);

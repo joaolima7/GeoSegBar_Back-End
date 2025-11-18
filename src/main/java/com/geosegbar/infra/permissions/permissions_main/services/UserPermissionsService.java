@@ -193,6 +193,15 @@ public class UserPermissionsService {
             permission.setEditSections(updateDTO.getEditSections());
         }
 
+        // ⭐ NOVOS CAMPOS
+        if (updateDTO.getViewInstruments() != null) {
+            permission.setViewInstruments(updateDTO.getViewInstruments());
+        }
+
+        if (updateDTO.getEditInstruments() != null) {
+            permission.setEditInstruments(updateDTO.getEditInstruments());
+        }
+
         instrumentationPermissionRepository.save(permission);
         log.info("Updated instrumentation permission for user {}", user.getId());
     }

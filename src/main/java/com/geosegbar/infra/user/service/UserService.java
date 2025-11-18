@@ -836,6 +836,9 @@ public class UserService {
             instrPermissionDTO.setEditRead(sourceInstrPermission.getEditRead());
             instrPermissionDTO.setViewSections(sourceInstrPermission.getViewSections());
             instrPermissionDTO.setEditSections(sourceInstrPermission.getEditSections());
+            // ⭐ NOVOS CAMPOS
+            instrPermissionDTO.setViewInstruments(sourceInstrPermission.getViewInstruments());
+            instrPermissionDTO.setEditInstruments(sourceInstrPermission.getEditInstruments());
             instrumentationPermissionService.createOrUpdate(instrPermissionDTO);
         } catch (NotFoundException e) {
             instrumentationPermissionService.createDefaultPermission(targetUser);

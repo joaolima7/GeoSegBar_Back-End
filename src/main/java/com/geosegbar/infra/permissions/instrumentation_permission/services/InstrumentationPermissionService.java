@@ -64,6 +64,9 @@ public class InstrumentationPermissionService {
         permission.setViewSections(permissionDTO.getViewSections());
         permission.setEditSections(permissionDTO.getEditSections());
 
+        permission.setViewInstruments(permissionDTO.getViewInstruments());
+        permission.setEditInstruments(permissionDTO.getEditInstruments());
+
         return instrPermissionRepository.save(permission);
     }
 
@@ -127,6 +130,9 @@ public class InstrumentationPermissionService {
         permission.setEditRead(false);
         permission.setViewSections(false);
         permission.setEditSections(false);
+
+        permission.setViewInstruments(false);
+        permission.setEditInstruments(false);
 
         InstrumentationPermissionEntity savedPermission = instrPermissionRepository.save(permission);
         return savedPermission;

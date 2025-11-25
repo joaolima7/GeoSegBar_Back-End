@@ -34,42 +34,45 @@ public class ShareFolderService {
     @Transactional(readOnly = true)
     public List<ShareFolderEntity> findAllByUser(Long userId) {
         UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
         return shareFolderRepository.findBySharedBy(user);
     }
 
     @Transactional(readOnly = true)
     public List<ShareFolderEntity> findAllByFolder(Long folderId) {
         PSBFolderEntity folder = psbFolderRepository.findById(folderId)
-                .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
+                .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada!"));
         return shareFolderRepository.findByPsbFolder(folder);
     }
 
     @Transactional(readOnly = true)
     public ShareFolderEntity findByToken(String token) {
         return shareFolderRepository.findByToken(token)
-                .orElseThrow(() -> new NotFoundException("Link de compartilhamento não encontrado"));
+                .orElseThrow(() -> new NotFoundException("Link de compartilhamento não encontrado!"));
     }
 
     @Transactional
     public ShareFolderEntity create(CreateShareFolderRequest request) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getSharePSB()) {
-                throw new NotFoundException("Usuário não tem permissão para compartilhar pastas PSB");
+                throw new NotFoundException("Usuário não tem permissão para compartilhar pastas PSB!");
             }
         }
 
         PSBFolderEntity folder = psbFolderRepository.findById(request.getPsbFolderId())
-                .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
+                .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada!"));
 
         UserEntity sharedBy = userRepository.findById(request.getSharedById())
-                .orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
 
-        boolean alreadyShared = shareFolderRepository.existsByPsbFolderIdAndSharedWithEmail(
-                folder.getId(), request.getSharedWithEmail());
+        List<ShareFolderEntity> validShares = shareFolderRepository.findValidSharesByFolderAndEmail(
+                folder.getId(),
+                request.getSharedWithEmail(),
+                LocalDateTime.now()
+        );
 
-        if (alreadyShared) {
-            throw new ShareFolderException("Esta pasta já foi compartilhada com este email");
+        if (!validShares.isEmpty()) {
+            throw new ShareFolderException("Esta pasta já possui um compartilhamento válido com este email!");
         }
 
         ShareFolderEntity shareFolder = new ShareFolderEntity();
@@ -84,7 +87,8 @@ public class ShareFolderService {
                 request.getSharedWithEmail(),
                 sharedBy.getName(),
                 folder.getName(),
-                savedShare.getToken()
+                savedShare.getToken(),
+                request.getCustomMessage()
         );
 
         return savedShare;
@@ -109,12 +113,12 @@ public class ShareFolderService {
     public void deleteShare(Long shareId) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getSharePSB()) {
-                throw new NotFoundException("Usuário não tem permissão para excluir compartilhamentos de pastas PSB");
+                throw new NotFoundException("Usuário não tem permissão para excluir compartilhamentos de pastas PSB!");
             }
         }
 
         ShareFolderEntity shareFolder = shareFolderRepository.findById(shareId)
-                .orElseThrow(() -> new NotFoundException("Link de compartilhamento não encontrado"));
+                .orElseThrow(() -> new NotFoundException("Link de compartilhamento não encontrado!"));
 
         shareFolderRepository.delete(shareFolder);
     }

@@ -1,51 +1,91 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pasta Compartilhada</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             line-height: 1.6;
-            color: #333;
+            color: #333333;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
         }
 
         .container {
             max-width: 600px;
             margin: 0 auto;
             padding: 20px;
-            border: 1px solid #ddd;
+            background-color: #ffffff;
             border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
 
         .header {
-            background-color: #0066cc;
-            color: white;
-            padding: 10px;
             text-align: center;
-            border-radius: 5px 5px 0 0;
+            padding: 20px 0;
+            border-bottom: 1px solid #eeeeee;
+        }
+
+        .header img {
+            max-height: 70px;
         }
 
         .content {
-            padding: 20px;
+            padding: 30px 20px;
+        }
+
+        .folder-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #0066cc;
+            margin: 15px 0;
+        }
+
+        .custom-message {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #0066cc;
+            border-radius: 4px;
         }
 
         .button {
             display: inline-block;
             background-color: #0066cc;
-            color: white;
-            padding: 10px 20px;
+            color: white !important;
+            padding: 12px 30px;
             text-decoration: none;
             border-radius: 5px;
             margin: 20px 0;
+            font-weight: bold;
+        }
+
+        .button:hover {
+            background-color: #0052a3;
         }
 
         .footer {
-            margin-top: 30px;
             text-align: center;
+            padding: 20px;
             font-size: 12px;
-            color: #666;
+            color: #888888;
+            border-top: 1px solid #eeeeee;
+            margin-top: 20px;
+        }
+
+        .primary-color {
+            color: #0066cc;
+        }
+
+        .info-box {
+            background-color: #e7f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
         }
     </style>
 </head>
@@ -53,19 +93,39 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Pasta Compartilhada com Você</h1>
+            <h2 class="primary-color">GeoSegBar</h2>
         </div>
         <div class="content">
+            <h2>Pasta Compartilhada com Você</h2>
             <p>Olá,</p>
-            <p><strong th:text="${sharedByName}"></strong> compartilhou uma pasta com você no sistema GeoSegBar.</p>
-            <p>Pasta: <strong th:text="${folderName}"></strong></p>
+            <p><strong th:text="${sharedByName}">Usuário</strong> compartilhou uma pasta com você no sistema GeoSegBar.
+            </p>
+
+            <div class="info-box">
+                <p style="margin: 0;"><strong>Pasta:</strong></p>
+                <p class="folder-name" th:text="${folderName}">Nome da Pasta</p>
+            </div>
+
+            <!-- ⭐ MENSAGEM PERSONALIZADA EM HTML -->
+            <div th:if="${customMessage != null and customMessage != ''}" class="custom-message">
+                <div th:utext="${customMessage}">
+                    <!-- Mensagem personalizada será renderizada aqui -->
+                </div>
+            </div>
+
             <p>Clique no botão abaixo para acessar os arquivos compartilhados:</p>
-            <a class="button" th:href="${accessLink}">Acessar Pasta Compartilhada</a>
-            <p>Este link é pessoal. Não o compartilhe com terceiros.</p>
+
+            <div style="text-align: center;">
+                <a class="button" th:href="${accessLink}">Acessar Pasta Compartilhada</a>
+            </div>
+
+            <p style="margin-top: 30px; font-size: 14px; color: #666;">
+                <strong>Importante:</strong> Este link é pessoal e intransferível. Não o compartilhe com terceiros.
+            </p>
         </div>
         <div class="footer">
+            <p>© 2025 GeoSegBar. Todos os direitos reservados.</p>
             <p>Este é um email automático, por favor não responda.</p>
-            <p>&copy; 2025 GeoSegBar - Sistema de Gestão de Barragens</p>
         </div>
     </div>
 </body>

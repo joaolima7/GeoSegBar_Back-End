@@ -22,6 +22,7 @@ import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.InvalidTokenException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.exceptions.ShareFolderException;
 import com.geosegbar.exceptions.TokenExpiredException;
 import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.exceptions.UnsupportedFileTypeException;
@@ -97,6 +98,12 @@ public class RestExceptionHandler {
     @ExceptionHandler(UnsupportedFileTypeException.class)
     public ResponseEntity<WebResponseEntity<String>> handleUnsupportedFileTypeException(UnsupportedFileTypeException ex) {
         return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                .body(WebResponseEntity.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(ShareFolderException.class)
+    public ResponseEntity<WebResponseEntity<String>> handleShareFolderException(ShareFolderException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(WebResponseEntity.error(ex.getMessage()));
     }
 

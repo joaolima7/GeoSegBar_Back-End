@@ -99,7 +99,7 @@ public class EmailService {
     }
 
     @Async
-    public void sendShareFolderEmail(String to, String sharedByName, String folderName, String token) {
+    public void sendShareFolderEmail(String to, String sharedByName, String folderName, String token, String customMessage) {
         try {
             MimeMessage mimeMessage = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
@@ -112,6 +112,7 @@ public class EmailService {
             context.setVariable("sharedByName", sharedByName);
             context.setVariable("folderName", folderName);
             context.setVariable("accessLink", frontendUrl + "/shared/folder/" + token);
+            context.setVariable("customMessage", customMessage);
 
             String content = templateEngine.process("emails/share-folder", context);
             helper.setText(content, true);

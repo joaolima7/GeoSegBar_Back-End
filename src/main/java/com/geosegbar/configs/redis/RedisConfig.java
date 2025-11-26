@@ -34,7 +34,6 @@ public class RedisConfig {
     @Value("${spring.data.redis.password:}")
     private String redisPassword;
 
-    // ⭐ CORREÇÃO: Usar Duration ao invés de long
     @Value("${spring.data.redis.timeout:2000ms}")
     @DurationUnit(ChronoUnit.MILLIS)
     private Duration redisTimeout;
@@ -45,9 +44,10 @@ public class RedisConfig {
     @Bean(destroyMethod = "shutdown")
     public ClientResources clientResources() {
         return DefaultClientResources.builder()
-                .ioThreadPoolSize(4)
-                .computationThreadPoolSize(4)
+                .ioThreadPoolSize(3)
+                .computationThreadPoolSize(3)
                 .build();
+
     }
 
     /**
@@ -63,13 +63,14 @@ public class RedisConfig {
                 .socketOptions(SocketOptions.builder()
                         .connectTimeout(Duration.ofSeconds(5))
                         .keepAlive(true)
+                        .tcpNoDelay(true)
                         .build())
                 .build();
 
         return LettuceClientConfiguration.builder()
                 .clientOptions(clientOptions)
                 .clientResources(clientResources)
-                .commandTimeout(redisTimeout) // ✅ Agora funciona com Duration
+                .commandTimeout(redisTimeout)
                 .readFrom(ReadFrom.UPSTREAM)
                 .build();
     }

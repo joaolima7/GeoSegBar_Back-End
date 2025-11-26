@@ -25,10 +25,8 @@ public class RedisHealthIndicator implements HealthIndicator {
         try {
             RedisConnection connection = connectionFactory.getConnection();
 
-            // ✅ Testar comando PING
             String pong = connection.ping();
 
-            // ✅ Verificar role (DEVE SER master)
             Properties info = connection.serverCommands().info("replication");
             String role = info.getProperty("role");
 

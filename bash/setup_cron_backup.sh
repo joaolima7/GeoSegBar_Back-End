@@ -4,9 +4,9 @@ set -e
 
 echo "⏰ Configurando backup automático do banco de dados..."
 
-# Diretório do projeto
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP_SCRIPT="$PROJECT_DIR/backup_database_prod.sh"
+# ✅ CORRIGIDO: Volta para o diretório raiz do projeto
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BACKUP_SCRIPT="$PROJECT_DIR/bash/backup_database_prod.sh"  # ✅ Caminho atualizado
 
 # Verificar se o script existe
 if [ ! -f "$BACKUP_SCRIPT" ]; then
@@ -18,7 +18,7 @@ fi
 chmod +x "$BACKUP_SCRIPT"
 
 # Configurar cron job (executar diariamente às 2h da manhã)
-CRON_TIME="0 2 * * *"  # Minuto Hora Dia Mês DiaDaSemana
+CRON_TIME="0 2 * * *"
 CRON_JOB="$CRON_TIME $BACKUP_SCRIPT >> $PROJECT_DIR/logs/cron_backup.log 2>&1"
 
 # Verificar se já existe

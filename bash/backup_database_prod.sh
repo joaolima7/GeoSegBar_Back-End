@@ -1,21 +1,21 @@
 #!/bin/bash
-# filepath: /Users/joaoremonato/Projects/SpringBoot/GeoSegBar_Back-End/backup_database_prod.sh
 
 set -e
 
 # ==========================================
 # CONFIGURAÇÕES
 # ==========================================
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# ✅ CORRIGIDO: Volta para raiz do projeto
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_FILE="$SCRIPT_DIR/logs/backup.log"
 BACKUP_BASE_DIR="/home/wwgeomprod/backups/database"
-RETENTION_DAYS=30  # Manter backups dos últimos 30 dias
+RETENTION_DAYS=30
 
 # Cores para output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # ==========================================
 # FUNÇÕES
@@ -106,10 +106,6 @@ if gzip -f "$BACKUP_FILE" 2>> "$LOG_FILE"; then
     log_success "Backup comprimido com sucesso!"
     log "   Arquivo: $COMPRESSED_FILE"
     log "   Tamanho após compressão: $COMPRESSED_SIZE"
-    
-    # Calcular taxa de compressão
-    ORIGINAL_SIZE=$(stat -f%z "$COMPRESSED_FILE" 2>/dev/null || stat -c%s "$COMPRESSED_FILE")
-    log "   Taxa de compressão: ~70-80%"
 else
     log_warning "Falha ao comprimir, mas backup original está disponível"
     COMPRESSED_FILE="$BACKUP_FILE"
@@ -122,7 +118,6 @@ fi
 log "🔍 Validando integridade do backup..."
 
 if [ -f "$COMPRESSED_FILE" ] && [ -s "$COMPRESSED_FILE" ]; then
-    # Verificar se o arquivo gzip é válido
     if gzip -t "$COMPRESSED_FILE" 2>> "$LOG_FILE"; then
         log_success "Integridade do backup validada!"
     else
@@ -160,8 +155,8 @@ fi
 
 log "📊 Estatísticas de backups:"
 
-TOTAL_BACKUPS=$(find "$BACKUP_BASE_DIR" -name "*.sql.gz" -type f | wc -l)
-TOTAL_SIZE=$(du -sh "$BACKUP_BASE_DIR" 2>/dev/null | cut -f1)
+TOTAL_BACKUPS=$(find "$BACKUP_BASE_DIR" -name "*.sql.gz" -type f 2>/dev/null | wc -l)
+TOTAL_SIZE=$(du -sh "$BACKUP_BASE_DIR" 2>/dev/null | cut -f1 || echo "0B")
 
 log "   Total de backups: $TOTAL_BACKUPS"
 log "   Espaço total usado: $TOTAL_SIZE"

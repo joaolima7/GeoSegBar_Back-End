@@ -4,6 +4,10 @@ set -e
 
 echo "🚀 Iniciando ambiente de desenvolvimento com monitoramento..."
 
+# ✅ CORRIGIDO: Define o diretório raiz do projeto
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$SCRIPT_DIR"  # ✅ Garante que comandos executem da raiz
+
 # Verificar se o arquivo .env existe
 if [ ! -f .env ]; then
     echo "❌ Arquivo .env não encontrado!"

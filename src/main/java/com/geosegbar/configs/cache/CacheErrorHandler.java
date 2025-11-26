@@ -13,12 +13,12 @@ public class CacheErrorHandler implements org.springframework.cache.interceptor.
     public void handleCacheGetError(RuntimeException exception, Cache cache, Object key) {
         log.warn("⚠️  Erro ao buscar cache: cache={}, key={}, error={}",
                 cache.getName(), key, exception.getMessage());
-        // ✅ Continua sem cache (aplicação não quebra)
+
     }
 
     @Override
     public void handleCachePutError(RuntimeException exception, Cache cache, Object key, Object value) {
-        // ⚠️ Verificar se é erro de read-only
+
         if (exception.getMessage() != null && exception.getMessage().contains("READONLY")) {
             log.error("❌ ERRO CRÍTICO: Redis está em modo READ-ONLY! cache={}, key={}",
                     cache.getName(), key);
@@ -27,7 +27,7 @@ public class CacheErrorHandler implements org.springframework.cache.interceptor.
             log.error("❌ Erro ao escrever cache: cache={}, key={}, error={}",
                     cache.getName(), key, exception.getMessage());
         }
-        // ✅ NÃO lança exceção - aplicação continua funcionando sem cache
+
     }
 
     @Override

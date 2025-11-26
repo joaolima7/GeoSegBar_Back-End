@@ -32,14 +32,12 @@ public class CacheManagerConfig implements CachingConfigurer {
 
     private static final Duration DEFAULT_CACHE_TTL = Duration.ofHours(1);
 
-    // ⭐ INJETAR o ErrorHandler
     private final CacheErrorHandler cacheErrorHandler;
 
     public CacheManagerConfig(CacheErrorHandler cacheErrorHandler) {
         this.cacheErrorHandler = cacheErrorHandler;
     }
 
-    // ⭐ ATIVAR Error Handler (CRUCIAL!)
     @Override
     public CacheErrorHandler errorHandler() {
         return cacheErrorHandler;
@@ -72,7 +70,7 @@ public class CacheManagerConfig implements CachingConfigurer {
 
         return RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(ttl)
-                .disableCachingNullValues() // ⭐ Adicionar essa linha (boa prática)
+                .disableCachingNullValues()
                 .serializeKeysWith(
                         RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(
@@ -126,7 +124,7 @@ public class CacheManagerConfig implements CachingConfigurer {
         ttlByCache.put("tabulatePatternsByFolder", DEFAULT_CACHE_TTL);
         ttlByCache.put("tabulateFolderWithPatterns", DEFAULT_CACHE_TTL);
         ttlByCache.put("damTabulateFoldersWithPatterns", DEFAULT_CACHE_TTL);
-        ttlByCache.put("tabulateFoldersByDam", DEFAULT_CACHE_TTL);  // ⭐ Adicionar (estava faltando)
+        ttlByCache.put("tabulateFoldersByDam", DEFAULT_CACHE_TTL);
 
         return createRedisCacheManager(connectionFactory, ttlByCache, DEFAULT_CACHE_TTL);
     }

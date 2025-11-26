@@ -1,3 +1,5 @@
+#!/bin/bash
+
 set -e
 
 if [ -z "$1" ]; then
@@ -6,7 +8,8 @@ if [ -z "$1" ]; then
     
     echo ""
     echo "Backups disponíveis:"
-    find ./database_backups -type f -name "*.sql*" | sort
+    # ✅ CORRIGIDO: Caminho relativo ao projeto
+    find ../database_backups -type f -name "*.sql*" 2>/dev/null | sort || echo "Nenhum backup encontrado"
     exit 1
 fi
 
@@ -26,9 +29,12 @@ if [ ! -f "$BACKUP_FILE" ]; then
     exit 1
 fi
 
+# ✅ CORRIGIDO: Caminho para .env.prod
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 # Carregar variáveis de ambiente de produção
 set -a
-source .env.prod
+source "$SCRIPT_DIR/.env.prod"
 set +a
 
 echo "⚠️ Esta operação irá substituir todos os dados atuais pelos dados do backup."
@@ -63,7 +69,8 @@ echo "🔄 Limpando o cache Redis..."
 docker exec redis-prod redis-cli FLUSHALL
 
 echo "🚀 Reiniciando a aplicação..."
-# Usar o script de deploy existente para reiniciar a aplicação
-./deploy_vps.sh
+# ✅ CORRIGIDO: Caminho para deploy script
+cd "$SCRIPT_DIR"
+./bash/deploy_vps.sh || docker compose -f docker-compose.prod.yaml up -d geosegbar-api
 
 echo "✅ Restauração concluída com sucesso!"

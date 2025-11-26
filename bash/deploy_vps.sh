@@ -4,6 +4,10 @@ set -e
 
 echo "🚀 Iniciando deploy da API GeoSegBar em PRODUÇÃO com monitoramento..."
 
+# ✅ CORRIGIDO: Define o diretório raiz do projeto
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$SCRIPT_DIR"  # ✅ Garante que comandos executem da raiz
+
 # Verificar se o arquivo .env.prod existe
 if [ ! -f .env.prod ]; then
     echo "❌ Arquivo .env.prod não encontrado!"
@@ -372,7 +376,7 @@ docker run -d \
   -e ANA_API_TELEMETRY_URL="${ANA_API_TELEMETRY_URL}" \
   -e TZ="${TZ}" \
   -v ${FILE_UPLOAD_DIR}:${FILE_UPLOAD_DIR} \
-  -v $(pwd)/logs:/app/logs \
+  -v $SCRIPT_DIR/logs:/app/logs \
   geosegbar-prod:latest
 
 echo "⏳ Aguardando aplicação inicializar..."
@@ -397,8 +401,8 @@ docker run -d \
   --restart unless-stopped \
   --network geosegbar-network \
   -p 9091:9090 \
-  -v $(pwd)/prometheus-prod/prometheus.yml:/etc/prometheus/prometheus.yml:ro \
-  -v $(pwd)/prometheus-prod/alerts.yml:/etc/prometheus/alerts.yml:ro \
+  -v $SCRIPT_DIR/prometheus-prod/prometheus.yml:/etc/prometheus/prometheus.yml:ro \
+  -v $SCRIPT_DIR/prometheus-prod/alerts.yml:/etc/prometheus/alerts.yml:ro \
   -v prometheus-prod-data:/prometheus \
   prom/prometheus:v2.48.0 \
   --config.file=/etc/prometheus/prometheus.yml \
@@ -433,8 +437,8 @@ docker run -d \
   -e GF_SERVER_ROOT_URL=http://localhost:3001 \
   -e GF_USERS_ALLOW_SIGN_UP=false \
   -v grafana-prod-data:/var/lib/grafana \
-  -v $(pwd)/grafana-prod/provisioning:/etc/grafana/provisioning:ro \
-  -v $(pwd)/grafana-prod/dashboards:/etc/grafana/dashboards:ro \
+  -v $SCRIPT_DIR/grafana-prod/provisioning:/etc/grafana/provisioning:ro \
+  -v $SCRIPT_DIR/grafana-prod/dashboards:/etc/grafana/dashboards:ro \
   grafana/grafana:10.2.2
 
 echo "⏳ Aguardando monitoramento inicializar..."

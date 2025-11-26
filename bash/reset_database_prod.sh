@@ -1,3 +1,5 @@
+#!/bin/bash
+
 set -e
 
 echo "⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️"
@@ -22,9 +24,12 @@ if [ "$confirmacao" != "RESET" ]; then
     exit 1
 fi
 
+# ✅ CORRIGIDO: Caminho para .env.prod
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 # Carregar variáveis de ambiente de produção
 set -a
-source .env.prod
+source "$SCRIPT_DIR/.env.prod"
 set +a
 
 echo "🛑 Parando a aplicação..."
@@ -41,7 +46,8 @@ echo "🔄 Limpando o cache Redis..."
 docker exec redis-prod redis-cli FLUSHALL
 
 echo "🚀 Reiniciando a aplicação..."
-# Usar o script de deploy existente
-./deploy_vps.sh
+# ✅ CORRIGIDO: Caminho para deploy script
+cd "$SCRIPT_DIR"
+./bash/deploy_vps.sh || docker compose -f docker-compose.prod.yaml up -d geosegbar-api
 
 echo "🎉 Reset do banco de dados concluído com sucesso!"

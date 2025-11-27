@@ -7,21 +7,27 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,16 +50,18 @@ import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.reading.dtos.BulkToggleActiveResponseDTO;
 import com.geosegbar.infra.reading.dtos.InstrumentGroupedReadingsDTO;
+import com.geosegbar.infra.reading.dtos.InstrumentGroupedReadingsDTO.GroupedDateHourReadingsDTO;
 import com.geosegbar.infra.reading.dtos.InstrumentLimitStatusDTO;
 import com.geosegbar.infra.reading.dtos.InstrumentReadingsDTO;
 import com.geosegbar.infra.reading.dtos.InstrumentReadingsDTO.MultiInstrumentReadingsResponseDTO;
 import com.geosegbar.infra.reading.dtos.PagedReadingResponseDTO;
 import com.geosegbar.infra.reading.dtos.ReadingRequestDTO;
 import com.geosegbar.infra.reading.dtos.ReadingResponseDTO;
+import com.geosegbar.infra.reading.dtos.ReadingResponseDTO.UserInfoDTO;
 import com.geosegbar.infra.reading.dtos.UpdateReadingRequestDTO;
 import com.geosegbar.infra.reading.persistence.jpa.ReadingRepository;
+import com.geosegbar.infra.reading.projections.InstrumentLimitStatusProjection;
 import com.geosegbar.infra.reading_input_value.dtos.ReadingInputValueDTO;
-import com.geosegbar.infra.reading_input_value.persistence.jpa.ReadingInputValueRepository;
 import com.geosegbar.infra.user.persistence.jpa.UserRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -65,386 +73,358 @@ import lombok.extern.slf4j.Slf4j;
 public class ReadingService {
 
     private final ReadingRepository readingRepository;
-    private final ReadingInputValueRepository readingInputValueRepository;
     private final InstrumentRepository instrumentRepository;
     private final OutputCalculationService outputCalculationService;
     private final ClientRepository clientRepository;
     private final UserRepository userRepository;
     private final CacheManager readingCacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
-    private final CustomMetricsService metricsService; // ⭐ ADICIONAR
+    private final CustomMetricsService metricsService;
+
+    // ⭐ OTIMIZAÇÃO: Prioridade de status crítico pré-computada (O(1) lookup)
+    private static final Map<LimitStatusEnum, Integer> STATUS_PRIORITY;
+    private static final List<LimitStatusEnum> CRITICAL_STATUS_ORDER;
+
+    static {
+        STATUS_PRIORITY = new EnumMap<>(LimitStatusEnum.class);
+        STATUS_PRIORITY.put(LimitStatusEnum.EMERGENCIA, 5);
+        STATUS_PRIORITY.put(LimitStatusEnum.ALERTA, 4);
+        STATUS_PRIORITY.put(LimitStatusEnum.ATENCAO, 3);
+        STATUS_PRIORITY.put(LimitStatusEnum.INFERIOR, 2);
+        STATUS_PRIORITY.put(LimitStatusEnum.SUPERIOR, 1);
+        STATUS_PRIORITY.put(LimitStatusEnum.NORMAL, 0);
+
+        CRITICAL_STATUS_ORDER = List.of(
+                LimitStatusEnum.EMERGENCIA,
+                LimitStatusEnum.ALERTA,
+                LimitStatusEnum.ATENCAO,
+                LimitStatusEnum.INFERIOR,
+                LimitStatusEnum.SUPERIOR
+        );
+    }
+
+    // ⭐ OTIMIZAÇÃO: Paginação e ordenação padrão reutilizáveis
+    private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "date", "hour");
 
     // ==========================================
-    // MÉTODOS UTILITÁRIOS DE CACHE
+    // ⭐ CACHE UTILITIES - MÁXIMA PERFORMANCE
     // ==========================================
+    /**
+     * ⭐ OTIMIZADO: SCAN em batch com pipeline implícito
+     */
     private void evictCachesByPattern(String cacheName, String pattern) {
         try {
             String fullPattern = cacheName + "::" + pattern;
-            Set<String> keys = redisTemplate.keys(fullPattern);
+            ScanOptions options = ScanOptions.scanOptions()
+                    .match(fullPattern)
+                    .count(500) // ⭐ Aumentado para menos roundtrips
+                    .build();
 
-            if (keys != null && !keys.isEmpty()) {
-                log.debug("Invalidando {} keys do cache {} com pattern {}",
-                        keys.size(), cacheName, pattern);
-                redisTemplate.delete(keys);
+            Set<String> keysToDelete = new HashSet<>(64);
+            try (Cursor<String> cursor = redisTemplate.scan(options)) {
+                cursor.forEachRemaining(keysToDelete::add);
+            }
+
+            if (!keysToDelete.isEmpty()) {
+                redisTemplate.delete(keysToDelete);
+                log.debug("Cache evicted: {} keys from {}", keysToDelete.size(), cacheName);
             }
         } catch (Exception e) {
-            log.warn("Erro ao invalidar cache por pattern: cacheName={}, pattern={}",
-                    cacheName, pattern, e);
+            log.warn("Cache eviction failed: {}::{}", cacheName, pattern, e);
         }
     }
 
     /**
-     * Invalida caches granulares de um instrumento específico
+     * ⭐ OTIMIZADO: Eviction em batch para múltiplos instrumentos
      */
-    /**
-     * ⭐ OTIMIZADO: Invalida caches granulares de um instrumento específico
-     */
-    private void evictReadingCachesForInstrument(Long instrumentId) {
-        log.debug("Invalidando caches do instrumento {}", instrumentId);
-
-        // ✅ Invalidar cache por instrumento (simples)
-        var cache = readingCacheManager.getCache("readingsByInstrument");
-        if (cache != null) {
-            cache.evict(instrumentId);
+    private void evictReadingCachesForInstruments(Set<Long> instrumentIds) {
+        if (instrumentIds.isEmpty()) {
+            return;
         }
 
-        // ⭐ OTIMIZADO: Usar pattern para invalidar todos os limites deste instrumento
-        evictCachesByPattern("instrumentLimitStatus", instrumentId + "_*");
+        Cache instrumentCache = readingCacheManager.getCache("readingsByInstrument");
 
-        // ⭐ OTIMIZADO: Usar pattern para invalidar todas as paginações de groupedReadings
-        evictCachesByPattern("groupedReadings", instrumentId + "_*");
-    }
-
-    /**
-     * Invalida caches granulares de um output específico
-     */
-    private void evictReadingCachesForOutput(Long outputId) {
-        log.debug("Invalidando caches do output {}", outputId);
-
-        var cache = readingCacheManager.getCache("readingsByOutput");
-        if (cache != null) {
-            cache.evict(outputId);
+        for (Long instrumentId : instrumentIds) {
+            if (instrumentCache != null) {
+                instrumentCache.evict(instrumentId);
+            }
+            evictCachesByPattern("instrumentLimitStatus", instrumentId + "_*");
+            evictCachesByPattern("groupedReadings", instrumentId + "_*");
+            evictCachesByPattern("readingsByFilters", instrumentId + "_*");
         }
     }
 
-    /**
-     * Invalida cache de existência de reading para uma data específica
-     */
+    private void evictReadingCachesForOutputs(Set<Long> outputIds) {
+        if (outputIds.isEmpty()) {
+            return;
+        }
+
+        Cache outputCache = readingCacheManager.getCache("readingsByOutput");
+        if (outputCache != null) {
+            outputIds.forEach(outputCache::evict);
+        }
+    }
+
+    private void evictClientReadingCaches(Long clientId) {
+        evictCachesByPattern("clientInstrumentLimitStatuses", clientId + "_*");
+        evictCachesByPattern("clientInstrumentLatestGroupedReadings", clientId + "_*");
+    }
+
     private void evictReadingExistsCache(Long instrumentId, LocalDate date) {
-        log.debug("Invalidando cache de existência: instrumento {} data {}", instrumentId, date);
-
-        var cache = readingCacheManager.getCache("readingExists");
+        Cache cache = readingCacheManager.getCache("readingExists");
         if (cache != null) {
             cache.evict(instrumentId + "_" + date);
         }
     }
 
-    /**
-     * Invalida caches de cliente (agregações)
-     */
-    private void evictClientReadingCaches(Long clientId) {
-        log.debug("Invalidando caches agregados do cliente {}", clientId);
+    private void evictSingleReadingCaches(Long readingId) {
+        Cache readingCache = readingCacheManager.getCache("readingById");
+        Cache responseDTOCache = readingCacheManager.getCache("readingResponseDTO");
 
-        // ⭐ OTIMIZADO: Usar pattern para invalidar todos os limites deste cliente
-        evictCachesByPattern("clientInstrumentLimitStatuses", clientId + "_*");
-
-        // ⭐ OTIMIZADO: Usar pattern para invalidar todas as groupedReadings deste cliente
-        evictCachesByPattern("clientInstrumentLatestGroupedReadings", clientId + "_*");
-    }
-
-    private void evictFilterCachesForInstruments(Set<Long> instrumentIds) {
-        log.debug("Invalidando caches de filtros para {} instrumentos", instrumentIds.size());
-
-        for (Long instrumentId : instrumentIds) {
-            // Invalidar apenas filtros que envolvem este instrumento
-            evictCachesByPattern("readingsByFilters", instrumentId + "_*");
+        if (readingCache != null) {
+            readingCache.evict(readingId);
         }
-    }
-
-    private void evictMultiInstrumentCachesForInstruments(Set<Long> instrumentIds) {
-        log.debug("Invalidando caches multi-instrument para {} instrumentos", instrumentIds.size());
-
-        // Para multi-instrument, precisamos invalidar caches que CONTENHAM qualquer dos IDs afetados
-        // Como a key é uma concatenação de IDs, usamos pattern matching
-        for (Long instrumentId : instrumentIds) {
-            evictCachesByPattern("multiInstrumentReadings", "*_" + instrumentId + "_*");
-            evictCachesByPattern("multiInstrumentReadings", instrumentId + "_*");
-            evictCachesByPattern("multiInstrumentReadings", "*_" + instrumentId);
+        if (responseDTOCache != null) {
+            responseDTOCache.evict(readingId);
         }
     }
 
     // ==========================================
-    // MÉTODOS DE CONSULTA (CACHEABLE)
+    // ⭐ CONSULTAS - MÁXIMA PERFORMANCE
     // ==========================================
     @Cacheable(value = "readingsByInstrument", key = "#instrumentId", cacheManager = "readingCacheManager")
+    @Transactional(readOnly = true)
     public List<ReadingResponseDTO> findByInstrumentId(Long instrumentId) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getViewRead()) {
-                throw new UnauthorizedException("Usuário não tem permissão para visualizar leituras!");
-            }
-        }
+        validateViewPermission();
 
-        return metricsService.recordCacheOperation(() -> {
-            List<ReadingEntity> readings = readingRepository.findByInstrumentIdOptimized(instrumentId);
-
-            // ⭐ ADICIONAR: Registrar hit/miss do cache
-            if (readings.isEmpty()) {
-                metricsService.incrementCacheMiss();
-            } else {
-                metricsService.incrementCacheHit();
-            }
-
-            return readings.stream()
-                    .map(this::mapToResponseDTOOptimized)
-                    .collect(Collectors.toList());
-        });
+        return readingRepository.findByInstrumentIdWithAllRelations(instrumentId)
+                .stream()
+                .map(this::mapToResponseDTO)
+                .collect(Collectors.toList());
     }
 
     @Cacheable(value = "readingExists", key = "#instrumentId + '_' + #date", cacheManager = "readingCacheManager")
+    @Transactional(readOnly = true)
     public boolean existsByInstrumentAndDate(Long instrumentId, LocalDate date) {
         return readingRepository.existsByInstrumentIdAndDate(instrumentId, date);
     }
 
     @Cacheable(value = "instrumentLimitStatus", key = "#instrumentId + '_' + #limit", cacheManager = "readingCacheManager")
+    @Transactional(readOnly = true)
     public InstrumentLimitStatusDTO getInstrumentLimitStatus(Long instrumentId, int limit) {
         InstrumentEntity instrument = instrumentRepository.findById(instrumentId)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + instrumentId));
 
-        Pageable pageable = PageRequest.of(0, limit);
-        List<ReadingEntity> recentReadings = readingRepository.findTopNByInstrumentIdOptimized(instrumentId, pageable);
+        List<ReadingEntity> recentReadings = readingRepository.findTopNByInstrumentIdOptimized(
+                instrumentId, PageRequest.of(0, limit));
 
         if (recentReadings.isEmpty()) {
-            return createInstrumentLimitStatusDTO(instrument, LimitStatusEnum.NORMAL, null);
+            return buildInstrumentLimitStatusDTO(instrument, LimitStatusEnum.NORMAL, null);
         }
 
-        LocalDate mostRecentDate = recentReadings.stream()
-                .map(ReadingEntity::getDate)
-                .max(LocalDate::compareTo)
-                .orElse(null);
+        // ⭐ OTIMIZADO: Encontrar mais recente em uma passagem
+        ReadingEntity latest = recentReadings.stream()
+                .max(Comparator.comparing(ReadingEntity::getDate)
+                        .thenComparing(ReadingEntity::getHour))
+                .orElse(recentReadings.get(0));
 
-        if (mostRecentDate != null) {
-            List<ReadingEntity> readingsOfMostRecentDate = recentReadings.stream()
-                    .filter(r -> r.getDate().equals(mostRecentDate))
-                    .collect(Collectors.toList());
+        LocalDate latestDate = latest.getDate();
+        LocalTime latestHour = latest.getHour();
 
-            LocalTime mostRecentHour = readingsOfMostRecentDate.stream()
-                    .map(ReadingEntity::getHour)
-                    .max(LocalTime::compareTo)
-                    .orElse(null);
+        // ⭐ OTIMIZADO: Filtrar e encontrar status crítico em uma passagem
+        LimitStatusEnum mostCritical = recentReadings.stream()
+                .filter(r -> r.getDate().equals(latestDate) && r.getHour().equals(latestHour))
+                .map(ReadingEntity::getLimitStatus)
+                .max(Comparator.comparingInt(s -> STATUS_PRIORITY.getOrDefault(s, 0)))
+                .orElse(LimitStatusEnum.NORMAL);
 
-            if (mostRecentHour != null) {
-                List<ReadingEntity> mostRecentReadings = readingsOfMostRecentDate.stream()
-                        .filter(r -> r.getHour().equals(mostRecentHour))
-                        .collect(Collectors.toList());
-
-                LimitStatusEnum mostCriticalStatus = findMostCriticalStatus(mostRecentReadings);
-
-                String formattedDateTime = mostRecentDate + " " + mostRecentHour;
-
-                return createInstrumentLimitStatusDTO(instrument, mostCriticalStatus, formattedDateTime);
-            }
-        }
-
-        ReadingEntity firstReading = recentReadings.get(0);
-        return createInstrumentLimitStatusDTO(
-                instrument,
-                firstReading.getLimitStatus(),
-                firstReading.getDate() + " " + firstReading.getHour());
+        return buildInstrumentLimitStatusDTO(instrument, mostCritical, latestDate + " " + latestHour);
     }
 
+    /**
+     * ⭐ SUPER OTIMIZADO: Query única com Window Function
+     */
     @Cacheable(value = "clientInstrumentLimitStatuses", key = "#clientId + '_' + #limit", cacheManager = "readingCacheManager")
+    @Transactional(readOnly = true)
     public List<InstrumentLimitStatusDTO> getAllInstrumentLimitStatusesByClientId(Long clientId, int limit) {
         clientRepository.findById(clientId)
                 .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + clientId));
 
-        List<InstrumentLimitStatusDTO> results = new ArrayList<>();
+        List<InstrumentLimitStatusProjection> projections
+                = readingRepository.findLatestLimitStatusByClientId(clientId, limit);
 
-        List<InstrumentEntity> activeInstruments = instrumentRepository.findByFiltersOptimized(
-                null, null, null, true, clientId
-        );
+        List<InstrumentEntity> allActiveInstruments
+                = instrumentRepository.findByFiltersOptimized(null, null, null, true, clientId);
 
-        for (InstrumentEntity instrument : activeInstruments) {
-            Pageable pageable = PageRequest.of(0, limit);
-            List<ReadingEntity> recentReadings = readingRepository.findTopNByInstrumentIdOrderByDateDescHourDesc(
-                    instrument.getId(), pageable);
+        if (projections.isEmpty()) {
+            return allActiveInstruments.stream()
+                    .map(i -> buildInstrumentLimitStatusDTO(i, LimitStatusEnum.NORMAL, null))
+                    .collect(Collectors.toList());
+        }
 
-            if (recentReadings.isEmpty()) {
-                results.add(createInstrumentLimitStatusDTO(instrument, LimitStatusEnum.NORMAL, null));
-            } else {
-                LocalDate mostRecentDate = recentReadings.stream()
-                        .map(ReadingEntity::getDate)
-                        .max(LocalDate::compareTo)
-                        .orElse(null);
+        // ⭐ OTIMIZADO: Processar projeções agrupadas por instrumento
+        Map<Long, List<InstrumentLimitStatusProjection>> byInstrument = projections.stream()
+                .collect(Collectors.groupingBy(InstrumentLimitStatusProjection::getInstrumentId));
 
-                if (mostRecentDate != null) {
-                    List<ReadingEntity> readingsOfMostRecentDate = recentReadings.stream()
-                            .filter(r -> r.getDate().equals(mostRecentDate))
-                            .collect(Collectors.toList());
+        List<InstrumentLimitStatusDTO> results = new ArrayList<>(allActiveInstruments.size());
 
-                    LocalTime mostRecentHour = readingsOfMostRecentDate.stream()
-                            .map(ReadingEntity::getHour)
-                            .max(LocalTime::compareTo)
-                            .orElse(null);
+        for (Map.Entry<Long, List<InstrumentLimitStatusProjection>> entry : byInstrument.entrySet()) {
+            List<InstrumentLimitStatusProjection> instrumentReadings = entry.getValue();
+            InstrumentLimitStatusProjection first = instrumentReadings.get(0);
 
-                    if (mostRecentHour != null) {
-                        List<ReadingEntity> mostRecentReadings = readingsOfMostRecentDate.stream()
-                                .filter(r -> r.getHour().equals(mostRecentHour))
-                                .collect(Collectors.toList());
+            LocalDate latestDate = first.getReadingDate();
+            LocalTime latestHour = first.getReadingHour();
 
-                        LimitStatusEnum mostCriticalStatus = findMostCriticalStatus(mostRecentReadings);
+            // ⭐ CORRIGIDO: Converter String para Enum
+            LimitStatusEnum mostCritical = instrumentReadings.stream()
+                    .filter(p -> p.getReadingDate().equals(latestDate) && p.getReadingHour().equals(latestHour))
+                    .map(p -> parseLimitStatus(p.getLimitStatus()))
+                    .max(Comparator.comparingInt(s -> STATUS_PRIORITY.getOrDefault(s, 0)))
+                    .orElse(LimitStatusEnum.NORMAL);
 
-                        String formattedDateTime = mostRecentDate + " " + mostRecentHour;
+            results.add(buildInstrumentLimitStatusDTOFromProjection(first, mostCritical, latestDate + " " + latestHour));
+        }
 
-                        results.add(createInstrumentLimitStatusDTO(
-                                instrument, mostCriticalStatus, formattedDateTime));
-                    }
-                }
+        // Adicionar instrumentos sem readings
+        Set<Long> instrumentsWithReadings = byInstrument.keySet();
+        for (InstrumentEntity instrument : allActiveInstruments) {
+            if (!instrumentsWithReadings.contains(instrument.getId())) {
+                results.add(buildInstrumentLimitStatusDTO(instrument, LimitStatusEnum.NORMAL, null));
             }
         }
 
         return results;
     }
 
-    @Cacheable(value = "readingsByOutput", key = "#outputId", cacheManager = "readingCacheManager")
-    public List<ReadingResponseDTO> findByOutputId(Long outputId) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getViewRead()) {
-                throw new UnauthorizedException("Usuário não autorizado a visualizar leituras!");
-            }
+    private LimitStatusEnum parseLimitStatus(String status) {
+        if (status == null) {
+            return LimitStatusEnum.NORMAL;
         }
+        try {
+            return LimitStatusEnum.valueOf(status);
+        } catch (IllegalArgumentException e) {
+            log.warn("LimitStatus inválido: {}", status);
+            return LimitStatusEnum.NORMAL;
+        }
+    }
 
-        List<ReadingEntity> readings = readingRepository.findByOutputIdOptimized(outputId);
-        return readings.stream()
-                .map(this::mapToResponseDTOOptimized)
+    @Cacheable(value = "readingsByOutput", key = "#outputId", cacheManager = "readingCacheManager")
+    @Transactional(readOnly = true)
+    public List<ReadingResponseDTO> findByOutputId(Long outputId) {
+        validateViewPermission();
+
+        return readingRepository.findByOutputIdWithAllRelations(outputId)
+                .stream()
+                .map(this::mapToResponseDTO)
                 .collect(Collectors.toList());
     }
 
     @Cacheable(value = "readingById", key = "#id", cacheManager = "readingCacheManager")
+    @Transactional(readOnly = true)
     public ReadingEntity findById(Long id) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getViewRead()) {
-                throw new UnauthorizedException("Usuário não autorizado a visualizar leituras!");
-            }
-        }
-        ReadingEntity reading = readingRepository.findById(id)
+        validateViewPermission();
+
+        return readingRepository.findByIdWithAllRelations(id)
                 .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
-
-        List<ReadingInputValueEntity> inputValues = readingInputValueRepository.findByReadingId(id);
-        reading.setInputValues(new HashSet<>(inputValues));
-
-        return reading;
-    }
-
-    @Cacheable(value = "readingResponseDTO", key = "#reading.id", cacheManager = "readingCacheManager")
-    public ReadingResponseDTO mapToResponseDTO(ReadingEntity reading) {
-        ReadingResponseDTO dto = new ReadingResponseDTO();
-        dto.setId(reading.getId());
-        dto.setDate(reading.getDate());
-        dto.setHour(reading.getHour());
-        dto.setCalculatedValue(reading.getCalculatedValue());
-        dto.setLimitStatus(reading.getLimitStatus());
-        dto.setInstrumentId(reading.getInstrument().getId());
-        dto.setInstrumentName(reading.getInstrument().getName());
-        dto.setOutputId(reading.getOutput().getId());
-        dto.setOutputName(reading.getOutput().getName());
-        dto.setOutputAcronym(reading.getOutput().getAcronym());
-        dto.setComment(reading.getComment());
-        dto.setActive(reading.getActive());
-
-        if (reading.getUser() != null) {
-            dto.setCreatedBy(new ReadingResponseDTO.UserInfoDTO(
-                    reading.getUser().getId(),
-                    reading.getUser().getName(),
-                    reading.getUser().getEmail()
-            ));
-        }
-
-        dto.setInputValues(getInputValuesForReading(reading));
-
-        return dto;
     }
 
     @Cacheable(
             value = "groupedReadings",
             key = "#instrumentId + '_' + #active + '_' + #pageable.pageNumber + '_' + #pageable.pageSize",
-            cacheManager = "readingCacheManager"
-    )
+            cacheManager = "readingCacheManager")
+    @Transactional(readOnly = true)
     public PagedReadingResponseDTO<ReadingResponseDTO> findGroupedReadingsFlatByInstrument(
             Long instrumentId, Boolean active, Pageable pageable) {
 
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getViewRead()) {
-                throw new UnauthorizedException("Usuário não tem permissão para visualizar leituras");
-            }
+        validateViewPermission();
+
+        Page<Object[]> dateHourPage = readingRepository.findDistinctDateHourByInstrumentIdAndActive(
+                instrumentId, active, pageable);
+
+        if (dateHourPage.isEmpty()) {
+            return createEmptyPagedResponse(dateHourPage);
         }
 
-        Page<Object[]> dateHourPage = readingRepository.findDistinctDateHourByInstrumentIdAndActive(instrumentId, active, pageable);
+        // ⭐ OTIMIZADO: Extrair datas/horas em uma passagem
+        int size = dateHourPage.getContent().size();
+        List<LocalDate> dates = new ArrayList<>(size);
+        List<LocalTime> hours = new ArrayList<>(size);
 
-        List<ReadingResponseDTO> allReadings = new ArrayList<>();
         for (Object[] dh : dateHourPage.getContent()) {
-            LocalDate date = (LocalDate) dh[0];
-            LocalTime hour = (LocalTime) dh[1];
-            List<ReadingEntity> readings = readingRepository.findByInstrumentIdAndDateAndHourAndActive(
-                    instrumentId, date, hour, active);
-
-            List<ReadingResponseDTO> dtos = readings.stream()
-                    .map(this::mapToResponseDTOOptimized)
-                    .collect(Collectors.toList());
-
-            allReadings.addAll(dtos);
+            dates.add((LocalDate) dh[0]);
+            hours.add((LocalTime) dh[1]);
         }
 
-        return new PagedReadingResponseDTO<>(
-                allReadings,
-                dateHourPage.getNumber(),
-                dateHourPage.getSize(),
-                dateHourPage.getTotalElements(),
-                dateHourPage.getTotalPages(),
-                dateHourPage.isLast(),
-                dateHourPage.isFirst()
-        );
+        List<ReadingResponseDTO> dtos = readingRepository
+                .findByInstrumentIdAndDateHoursWithAllRelations(instrumentId, dates, hours, active)
+                .stream()
+                .map(this::mapToResponseDTO)
+                .collect(Collectors.toList());
+
+        return createPagedResponse(dtos, dateHourPage);
     }
 
+    /**
+     * ⭐ SUPER OTIMIZADO: Mínimas queries possíveis
+     */
     @Cacheable(
             value = "clientInstrumentLatestGroupedReadings",
             key = "#clientId + '_' + #limit",
-            cacheManager = "readingCacheManager"
-    )
+            cacheManager = "readingCacheManager")
     @Transactional(readOnly = true)
     public List<InstrumentGroupedReadingsDTO> findLatestGroupedReadingsByClientId(Long clientId, int limit) {
-
         List<Object[]> latestDateHours = readingRepository.findLatestDistinctDateHoursByClientId(clientId, limit);
 
         if (latestDateHours.isEmpty()) {
             return List.of();
         }
 
-        Map<Long, List<Object[]>> instrumentDateHoursMap = new HashMap<>();
+        // ⭐ OTIMIZADO: Processar metadata em uma passagem
+        Set<Long> instrumentIds = new HashSet<>();
+        Map<Long, List<DateTimePair>> instrumentDateHoursMap = new HashMap<>();
+
         for (Object[] row : latestDateHours) {
             Long instrumentId = ((Number) row[0]).longValue();
-            java.sql.Date sqlDate = (java.sql.Date) row[1];
-            java.sql.Time sqlTime = (java.sql.Time) row[2];
+            instrumentIds.add(instrumentId);
 
-            LocalDate date = sqlDate.toLocalDate();
-            LocalTime hour = sqlTime.toLocalTime();
+            LocalDate date = ((java.sql.Date) row[1]).toLocalDate();
+            LocalTime hour = ((java.sql.Time) row[2]).toLocalTime();
 
             instrumentDateHoursMap
                     .computeIfAbsent(instrumentId, k -> new ArrayList<>())
-                    .add(new Object[]{date, hour});
+                    .add(new DateTimePair(date, hour));
         }
 
-        List<InstrumentGroupedReadingsDTO> result = new ArrayList<>();
+        // ⭐ OTIMIZADO: Duas queries totais
+        Map<Long, InstrumentEntity> instrumentsMap = instrumentRepository.findAllById(instrumentIds)
+                .stream()
+                .collect(Collectors.toMap(InstrumentEntity::getId, Function.identity()));
 
-        for (Map.Entry<Long, List<Object[]>> entry : instrumentDateHoursMap.entrySet()) {
+        List<ReadingEntity> allReadings = readingRepository
+                .findByInstrumentIdsAndActiveTrueWithAllRelations(new ArrayList<>(instrumentIds));
+
+        // ⭐ OTIMIZADO: Indexar readings por instrumento e dateTime
+        Map<Long, Map<String, List<ReadingEntity>>> readingsByInstrumentAndDateTime = new HashMap<>();
+        for (ReadingEntity reading : allReadings) {
+            Long instId = reading.getInstrument().getId();
+            String dateTimeKey = reading.getDate() + " " + reading.getHour();
+
+            readingsByInstrumentAndDateTime
+                    .computeIfAbsent(instId, k -> new HashMap<>())
+                    .computeIfAbsent(dateTimeKey, k -> new ArrayList<>())
+                    .add(reading);
+        }
+
+        // Construir resultado
+        List<InstrumentGroupedReadingsDTO> result = new ArrayList<>(instrumentIds.size());
+
+        for (Map.Entry<Long, List<DateTimePair>> entry : instrumentDateHoursMap.entrySet()) {
             Long instrumentId = entry.getKey();
-            List<Object[]> dateHours = entry.getValue();
+            InstrumentEntity instrument = instrumentsMap.get(instrumentId);
 
-            InstrumentEntity instrument = instrumentRepository.findById(instrumentId)
-                    .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + instrumentId));
+            if (instrument == null) {
+                continue;
+            }
 
             InstrumentGroupedReadingsDTO instrumentDTO = new InstrumentGroupedReadingsDTO();
             instrumentDTO.setInstrumentId(instrument.getId());
@@ -452,31 +432,27 @@ public class ReadingService {
             instrumentDTO.setInstrumentType(instrument.getInstrumentType().getName());
             instrumentDTO.setDamId(instrument.getDam().getId());
             instrumentDTO.setDamName(instrument.getDam().getName());
-            instrumentDTO.setGroupedReadings(new ArrayList<>());
 
-            for (Object[] dateHour : dateHours) {
-                LocalDate date = (LocalDate) dateHour[0];
-                LocalTime hour = (LocalTime) dateHour[1];
+            Map<String, List<ReadingEntity>> readingsByDateTime
+                    = readingsByInstrumentAndDateTime.getOrDefault(instrumentId, Map.of());
 
-                List<ReadingEntity> readings = readingRepository.findByInstrumentIdAndDateAndHourAndActiveTrue(
-                        instrumentId, date, hour);
+            List<GroupedDateHourReadingsDTO> groupedReadings = new ArrayList<>();
+
+            for (DateTimePair dtp : entry.getValue()) {
+                String dateHourKey = dtp.date + " " + dtp.hour;
+                List<ReadingEntity> readings = readingsByDateTime.getOrDefault(dateHourKey, List.of());
 
                 if (!readings.isEmpty()) {
-
-                    String dateHourKey = date.toString() + " " + hour.toString();
-                    InstrumentGroupedReadingsDTO.GroupedDateHourReadingsDTO group
-                            = new InstrumentGroupedReadingsDTO.GroupedDateHourReadingsDTO();
+                    GroupedDateHourReadingsDTO group = new GroupedDateHourReadingsDTO();
                     group.setDateTime(dateHourKey);
-
-                    List<ReadingResponseDTO> readingDTOs = readings.stream()
-                            .map(this::mapToResponseDTOOptimized)
-                            .collect(Collectors.toList());
-
-                    group.setReadings(readingDTOs);
-                    instrumentDTO.getGroupedReadings().add(group);
+                    group.setReadings(readings.stream()
+                            .map(this::mapToResponseDTO)
+                            .collect(Collectors.toList()));
+                    groupedReadings.add(group);
                 }
             }
 
+            instrumentDTO.setGroupedReadings(groupedReadings);
             result.add(instrumentDTO);
         }
 
@@ -484,46 +460,30 @@ public class ReadingService {
     }
 
     // ==========================================
-    // MÉTODOS DE MODIFICAÇÃO (COM CACHE EVICT GRANULAR)
+    // ⭐ MODIFICAÇÕES - MÁXIMA PERFORMANCE
     // ==========================================
     @Transactional
     public List<ReadingResponseDTO> create(Long instrumentId, ReadingRequestDTO request, boolean skipPermissionCheck) {
-        UserEntity currentUser;
-
         LocalTime truncatedHour = request.getHour().withNano(0);
-
         LocalDateTime readingDateTime = LocalDateTime.of(request.getDate(), truncatedHour);
         LocalDateTime now = LocalDateTime.now();
 
-        LocalDateTime readingDateTimeTruncated = readingDateTime.truncatedTo(ChronoUnit.MINUTES);
-        LocalDateTime nowTruncated = now.truncatedTo(ChronoUnit.MINUTES);
-
-        if (readingDateTimeTruncated.isAfter(nowTruncated)) {
+        // Validações
+        if (readingDateTime.truncatedTo(ChronoUnit.MINUTES).isAfter(now.truncatedTo(ChronoUnit.MINUTES))) {
             throw new InvalidInputException("Não é possível criar leituras com data e hora futura. "
                     + "Data/hora informada: " + DateFormatter.formatDateTime(readingDateTime)
                     + ", Data/hora atual: " + DateFormatter.formatDateTime(now));
         }
 
-        if (readingRepository.existsByInstrumentIdAndDateAndHourAndActive(instrumentId, request.getDate(), truncatedHour, true)) {
+        if (readingRepository.existsByInstrumentIdAndDateAndHourAndActive(
+                instrumentId, request.getDate(), truncatedHour, true)) {
             throw new InvalidInputException("Já existe leitura registrada para este instrumento na mesma data e hora ("
                     + request.getDate() + " " + truncatedHour + ")");
         }
 
         request.setHour(truncatedHour);
 
-        if (skipPermissionCheck) {
-            String systemUserEmail = "noreply@geometrisa-prod.com.br";
-            currentUser = userRepository.findByEmail(systemUserEmail)
-                    .orElseThrow(() -> new NotFoundException("Usuário do sistema não encontrado!"));
-        } else {
-            currentUser = AuthenticatedUserUtil.getCurrentUser();
-
-            if (!AuthenticatedUserUtil.isAdmin()) {
-                if (!currentUser.getInstrumentationPermission().getEditRead()) {
-                    throw new UnauthorizedException("Usuário não autorizado a criar leituras!");
-                }
-            }
-        }
+        UserEntity currentUser = resolveCurrentUser(skipPermissionCheck);
 
         InstrumentEntity instrument = instrumentRepository.findWithActiveOutputsById(instrumentId)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + instrumentId));
@@ -538,37 +498,25 @@ public class ReadingService {
 
         validateInputValues(instrument, request.getInputValues());
 
-        // ⭐ ADICIONAR: Medir tempo total de criação + registrar métricas
         return metricsService.recordReadingCreation(() -> {
-
+            // ⭐ OTIMIZADO: Pré-processar inputs uma vez
             Map<String, Double> formattedInputValues = new HashMap<>();
+            Map<String, String> inputNames = new HashMap<>();
+
             for (InputEntity input : instrument.getInputs()) {
                 Double inputValue = request.getInputValues().get(input.getAcronym());
                 if (inputValue != null) {
-                    Double formattedValue = formatToSpecificPrecision(inputValue, input.getPrecision());
-                    formattedInputValues.put(input.getAcronym(), formattedValue);
+                    formattedInputValues.put(input.getAcronym(),
+                            formatToSpecificPrecision(inputValue, input.getPrecision()));
+                    inputNames.put(input.getAcronym(), input.getName());
                 }
             }
 
-            Set<ReadingInputValueEntity> sharedInputValues = new HashSet<>();
-            Map<String, String> inputNames = instrument.getInputs().stream()
-                    .collect(Collectors.toMap(InputEntity::getAcronym, InputEntity::getName));
-
-            for (Map.Entry<String, Double> entry : formattedInputValues.entrySet()) {
-                ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
-                inputValue.setInputAcronym(entry.getKey());
-                inputValue.setInputName(inputNames.get(entry.getKey()));
-                inputValue.setValue(entry.getValue());
-
-                ReadingInputValueEntity savedInputValue = readingInputValueRepository.save(inputValue);
-                sharedInputValues.add(savedInputValue);
-            }
-
-            List<ReadingEntity> createdReadings = new ArrayList<>();
-            Set<Long> affectedOutputIds = new HashSet<>();
+            // ⭐ OTIMIZADO: Criar todas as readings antes de salvar
+            List<ReadingEntity> readingsToSave = new ArrayList<>(activeOutputs.size());
+            Set<Long> affectedOutputIds = new HashSet<>(activeOutputs.size());
 
             for (OutputEntity output : activeOutputs) {
-
                 Double calculatedValue = outputCalculationService.calculateOutput(output, request, formattedInputValues);
 
                 ReadingEntity reading = new ReadingEntity();
@@ -580,41 +528,33 @@ public class ReadingService {
                 reading.setUser(currentUser);
                 reading.setActive(true);
                 reading.setComment(request.getComment());
+                reading.setLimitStatus(determineLimitStatus(instrument, calculatedValue, output));
 
-                LimitStatusEnum limitStatus = determineLimitStatus(instrument, calculatedValue, output);
-                reading.setLimitStatus(limitStatus);
+                // ⭐ OTIMIZADO: InputValues vinculados diretamente (cascade automático)
+                Set<ReadingInputValueEntity> inputValuesSet = new HashSet<>(formattedInputValues.size());
+                for (Map.Entry<String, Double> entry : formattedInputValues.entrySet()) {
+                    ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
+                    inputValue.setInputAcronym(entry.getKey());
+                    inputValue.setInputName(inputNames.get(entry.getKey()));
+                    inputValue.setValue(entry.getValue());
+                    inputValue.setReading(reading);
+                    inputValuesSet.add(inputValue);
+                }
+                reading.setInputValues(inputValuesSet);
 
-                reading.setInputValues(sharedInputValues);
-
-                ReadingEntity savedReading = readingRepository.save(reading);
-                createdReadings.add(savedReading);
+                readingsToSave.add(reading);
                 affectedOutputIds.add(output.getId());
             }
 
-            // ⭐ ADICIONAR: Incrementar métricas de negócio
+            // ⭐ OTIMIZADO: Salvar todas de uma vez
+            List<ReadingEntity> createdReadings = readingRepository.saveAll(readingsToSave);
+
             metricsService.incrementReadingsCreated(createdReadings.size());
             metricsService.incrementReadingsForInstrument(instrumentId, createdReadings.size());
 
-            // ⭐ INVALIDAÇÃO GRANULAR OTIMIZADA
-            log.info("Invalidando caches após criação de {} readings para instrumento {}",
-                    createdReadings.size(), instrumentId);
-
-            // ✅ Invalidar caches do instrumento (granular)
-            evictReadingCachesForInstrument(instrumentId);
-
-            // ✅ Invalidar cache de cada output afetado (granular)
-            affectedOutputIds.forEach(this::evictReadingCachesForOutput);
-
-            // ✅ Invalidar cache de existência para a data (granular)
-            evictReadingExistsCache(instrumentId, request.getDate());
-
-            // ✅ Invalidar caches agregados do cliente (granular)
-            evictClientReadingCaches(instrument.getDam().getClient().getId());
-
-            // ⭐ OTIMIZADO: Invalidar apenas filtros e multi-instrument deste instrumento
-            Set<Long> affectedInstruments = Set.of(instrumentId);
-            evictFilterCachesForInstruments(affectedInstruments);
-            evictMultiInstrumentCachesForInstruments(affectedInstruments);
+            // ⭐ OTIMIZADO: Cache eviction em batch
+            evictCachesAfterCreate(instrumentId, affectedOutputIds,
+                    instrument.getDam().getClient().getId(), request.getDate());
 
             return createdReadings.stream()
                     .map(this::mapToResponseDTO)
@@ -624,14 +564,9 @@ public class ReadingService {
 
     @Transactional
     public ReadingResponseDTO updateReading(Long id, UpdateReadingRequestDTO request) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getEditRead()) {
-                throw new UnauthorizedException("Usuário não autorizado a editar leituras!");
-            }
-        }
+        validateEditPermission();
 
-        ReadingEntity reading = readingRepository.findById(id)
+        ReadingEntity reading = readingRepository.findByIdWithAllRelations(id)
                 .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
 
         if (!reading.getActive()) {
@@ -642,254 +577,106 @@ public class ReadingService {
         Long instrumentId = instrument.getId();
         Long outputId = reading.getOutput().getId();
         LocalDate originalDate = reading.getDate();
+        LocalTime originalHour = reading.getHour();
 
         boolean isUpdatingInputValues = request.getInputValues() != null && !request.getInputValues().isEmpty();
 
         if (isUpdatingInputValues) {
-            LocalDateTime readingDateTime = LocalDateTime.of(reading.getDate(), reading.getHour());
+            LocalDateTime readingDateTime = LocalDateTime.of(originalDate, originalHour);
             if (instrument.getLastUpdateVariablesDate() != null
                     && instrument.getLastUpdateVariablesDate().isAfter(readingDateTime)) {
-                throw new InvalidInputException("Não é possível editar os valores desta leitura pois as variáveis do instrumento foram alteradas após o registro.");
+                throw new InvalidInputException(
+                        "Não é possível editar os valores desta leitura pois as variáveis do instrumento foram alteradas após o registro.");
             }
         }
-
-        LocalTime originalHour = reading.getHour();
 
         LocalDate newDate = request.getDate() != null ? request.getDate() : originalDate;
-        LocalTime newHour = request.getHour() != null ? request.getHour() : originalHour;
+        LocalTime newHour = request.getHour() != null ? request.getHour().withNano(0) : originalHour;
 
-        if (newHour != null) {
-            newHour = newHour.withNano(0);
-        }
-
-        boolean isDateTimeChanged = (request.getDate() != null && !Objects.equals(newDate, originalDate))
-                || (request.getHour() != null && !Objects.equals(newHour, originalHour));
+        boolean isDateTimeChanged = !Objects.equals(newDate, originalDate) || !Objects.equals(newHour, originalHour);
 
         if (isDateTimeChanged) {
-            LocalDateTime newDateTime = LocalDateTime.of(newDate, newHour);
-            LocalDateTime now = LocalDateTime.now();
-
-            LocalDateTime newDateTimeTruncated = newDateTime.truncatedTo(ChronoUnit.MINUTES);
-            LocalDateTime nowTruncated = now.truncatedTo(ChronoUnit.MINUTES);
-
-            if (newDateTimeTruncated.isAfter(nowTruncated)) {
-                throw new InvalidInputException("Não é possível atualizar leituras para data e hora futura. "
-                        + "Data/hora informada: " + DateFormatter.formatDateTime(newDateTime)
-                        + ", Data/hora atual: " + DateFormatter.formatDateTime(now));
-            }
-
-            List<ReadingEntity> existingReadings;
-
-            if (originalDate == null || originalHour == null) {
-                existingReadings = readingRepository.findByInstrumentIdAndDateAndHourActiveTrue(
-                        instrumentId, newDate, newHour);
-            } else {
-                existingReadings = readingRepository.findByInstrumentIdAndDateAndHourExcludingSpecific(
-                        instrumentId, newDate, newHour, originalDate, originalHour);
-            }
-
-            if (!existingReadings.isEmpty()) {
-                throw new InvalidInputException("Já existe leitura registrada para este instrumento na mesma data e hora ("
-                        + newDate + " " + newHour + ")");
-            }
+            validateDateTimeChange(newDate, newHour, instrumentId, id);
         }
 
-        UserEntity newUser = null;
-        if (request.getUserId() != null) {
-            newUser = userRepository.findById(request.getUserId())
-                    .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + request.getUserId()));
-        }
+        UserEntity newUser = request.getUserId() != null
+                ? userRepository.findById(request.getUserId())
+                        .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + request.getUserId()))
+                : null;
 
         if (isUpdatingInputValues) {
-            updateInputValues(instrumentId, originalDate, originalHour, request.getInputValues());
+            updateInputValuesForGroup(instrumentId, originalDate, originalHour, request.getInputValues(), instrument);
         }
 
-        List<ReadingEntity> groupReadings = readingRepository.findAllReadingsInGroup(
+        // ⭐ OTIMIZADO: Atualizar grupo em batch
+        List<ReadingEntity> groupReadings = readingRepository.findAllReadingsInGroupWithRelations(
                 instrumentId, originalDate, originalHour);
 
-        boolean isUpdatingComment = request.getComment() != null;
+        boolean hasChanges = updateGroupReadings(groupReadings, request, newDate, newHour, newUser, isDateTimeChanged);
 
-        for (ReadingEntity groupReading : groupReadings) {
-            boolean changed = false;
-
-            if (isDateTimeChanged) {
-                groupReading.setDate(newDate);
-                groupReading.setHour(newHour);
-                changed = true;
-            }
-
-            if (newUser != null) {
-                groupReading.setUser(newUser);
-                changed = true;
-            }
-
-            if (isUpdatingComment) {
-                groupReading.setComment(request.getComment());
-                changed = true;
-            }
-
-            if (changed) {
-                readingRepository.save(groupReading);
-                log.info("Atualizada reading {} com data/hora/usuário/comentário", groupReading.getId());
-            }
+        if (hasChanges) {
+            readingRepository.saveAll(groupReadings);
         }
 
-        // ⭐ INVALIDAÇÃO GRANULAR OTIMIZADA
-        log.info("Invalidando caches após atualização da reading {}", id);
+        // ⭐ Cache eviction
+        evictCachesAfterUpdate(id, instrumentId, outputId, instrument.getDam().getClient().getId(),
+                originalDate, newDate, isDateTimeChanged);
 
-        // ✅ Invalidar cache específico da reading
-        var readingCache = readingCacheManager.getCache("readingById");
-        if (readingCache != null) {
-            readingCache.evict(id);
-        }
-
-        var responseDTOCache = readingCacheManager.getCache("readingResponseDTO");
-        if (responseDTOCache != null) {
-            responseDTOCache.evict(id);
-        }
-
-        // ✅ Invalidar caches do instrumento (granular)
-        evictReadingCachesForInstrument(instrumentId);
-
-        // ✅ Invalidar cache do output (granular)
-        evictReadingCachesForOutput(outputId);
-
-        // ✅ Se data mudou, invalidar ambas as datas
-        if (isDateTimeChanged) {
-            evictReadingExistsCache(instrumentId, originalDate);
-            evictReadingExistsCache(instrumentId, newDate);
-        } else {
-            evictReadingExistsCache(instrumentId, originalDate);
-        }
-
-        // ✅ Invalidar caches agregados do cliente (granular)
-        evictClientReadingCaches(instrument.getDam().getClient().getId());
-
-        // ⭐ OTIMIZADO: Invalidar apenas filtros e multi-instrument deste instrumento
-        Set<Long> affectedInstruments = Set.of(instrumentId);
-        evictFilterCachesForInstruments(affectedInstruments);
-        evictMultiInstrumentCachesForInstruments(affectedInstruments);
-
-        ReadingEntity updatedReading = readingRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Leitura não encontrada após atualização"));
-
-        return mapToResponseDTO(updatedReading);
+        return mapToResponseDTO(readingRepository.findByIdWithAllRelations(id)
+                .orElseThrow(() -> new NotFoundException("Leitura não encontrada após atualização")));
     }
 
     @Transactional
     public BulkToggleActiveResponseDTO bulkToggleActive(Boolean active, List<Long> readingIds) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getEditRead()) {
-                throw new UnauthorizedException("Usuário não autorizado a alterar status de leituras!");
-            }
-        }
+        validateEditPermission();
 
-        List<Long> successfulIds = new ArrayList<>();
+        List<Long> successfulIds = new ArrayList<>(readingIds.size());
         List<BulkToggleActiveResponseDTO.FailedOperation> failedOperations = new ArrayList<>();
 
-        // Rastrear instrumentos e outputs afetados
         Set<Long> affectedInstrumentIds = new HashSet<>();
         Set<Long> affectedOutputIds = new HashSet<>();
         Set<Long> affectedClientIds = new HashSet<>();
 
-        // ⭐ OTIMIZAÇÃO: Buscar todas as readings de uma vez com query otimizada
+        // ⭐ OTIMIZADO: Buscar todas de uma vez
         List<ReadingEntity> readings = readingRepository.findAllByIdWithMinimalData(readingIds);
-
-        // ⭐ VALIDAR: Se algum ID não foi encontrado
         Set<Long> foundIds = readings.stream().map(ReadingEntity::getId).collect(Collectors.toSet());
-        List<Long> notFoundIds = readingIds.stream()
-                .filter(id -> !foundIds.contains(id))
-                .collect(Collectors.toList());
 
-        // Adicionar IDs não encontrados como falhas
-        for (Long notFoundId : notFoundIds) {
-            failedOperations.add(new BulkToggleActiveResponseDTO.FailedOperation(
-                    notFoundId,
-                    "Leitura não encontrada com ID: " + notFoundId
-            ));
-        }
-
-        // ⭐ PROCESSAR EM BATCH
-        for (ReadingEntity reading : readings) {
-            try {
-                reading.setActive(active);
-
-                // Rastrear afetados ANTES de salvar (evitar lazy loading)
-                affectedInstrumentIds.add(reading.getInstrument().getId());
-                affectedOutputIds.add(reading.getOutput().getId());
-                affectedClientIds.add(reading.getInstrument().getDam().getClient().getId());
-
-                successfulIds.add(reading.getId());
-
-            } catch (Exception e) {
-                String errorMessage = e.getMessage();
-                if (errorMessage == null || errorMessage.isEmpty()) {
-                    errorMessage = "Erro interno do servidor";
-                }
-
+        // Registrar não encontrados
+        for (Long requestedId : readingIds) {
+            if (!foundIds.contains(requestedId)) {
                 failedOperations.add(new BulkToggleActiveResponseDTO.FailedOperation(
-                        reading.getId(),
-                        errorMessage
-                ));
+                        requestedId, "Leitura não encontrada com ID: " + requestedId));
             }
         }
 
-        // ⭐ SALVAR TODAS DE UMA VEZ (batch update)
+        // ⭐ OTIMIZADO: Processar em batch
+        for (ReadingEntity reading : readings) {
+            reading.setActive(active);
+            affectedInstrumentIds.add(reading.getInstrument().getId());
+            affectedOutputIds.add(reading.getOutput().getId());
+            affectedClientIds.add(reading.getInstrument().getDam().getClient().getId());
+            successfulIds.add(reading.getId());
+        }
+
         if (!readings.isEmpty()) {
             readingRepository.saveAll(readings);
-            log.info("Bulk toggle: {} readings atualizadas com sucesso", successfulIds.size());
+            log.info("Bulk toggle: {} readings atualizadas", successfulIds.size());
         }
 
-        // ⭐ INVALIDAÇÃO GRANULAR OTIMIZADA (após processar todos)
-        log.info("Invalidando caches após bulk toggle de {} readings", successfulIds.size());
-
-        // ✅ Invalidar cache específico de cada reading
-        var readingCache = readingCacheManager.getCache("readingById");
-        var responseDTOCache = readingCacheManager.getCache("readingResponseDTO");
-
-        for (Long readingId : successfulIds) {
-            if (readingCache != null) {
-                readingCache.evict(readingId);
-            }
-            if (responseDTOCache != null) {
-                responseDTOCache.evict(readingId);
-            }
-        }
-
-        // ✅ Invalidar caches de cada instrumento afetado (granular)
-        affectedInstrumentIds.forEach(this::evictReadingCachesForInstrument);
-
-        // ✅ Invalidar caches de cada output afetado (granular)
-        affectedOutputIds.forEach(this::evictReadingCachesForOutput);
-
-        // ✅ Invalidar caches de cada cliente afetado (granular)
+        // ⭐ Cache eviction em batch
+        successfulIds.forEach(this::evictSingleReadingCaches);
+        evictReadingCachesForInstruments(affectedInstrumentIds);
+        evictReadingCachesForOutputs(affectedOutputIds);
         affectedClientIds.forEach(this::evictClientReadingCaches);
 
-        // ⭐ OTIMIZADO: Invalidar apenas filtros e multi-instrument dos instrumentos afetados
-        evictFilterCachesForInstruments(affectedInstrumentIds);
-        evictMultiInstrumentCachesForInstruments(affectedInstrumentIds);
-
-        BulkToggleActiveResponseDTO response = new BulkToggleActiveResponseDTO();
-        response.setSuccessfulIds(successfulIds);
-        response.setFailedOperations(failedOperations);
-        response.setTotalProcessed(readingIds.size());
-        response.setSuccessCount(successfulIds.size());
-        response.setFailureCount(failedOperations.size());
-
-        return response;
+        return buildBulkToggleResponse(readingIds.size(), successfulIds, failedOperations);
     }
 
     @Transactional
     public void delete(Long id) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getEditRead()) {
-                throw new UnauthorizedException("Usuário não autorizado a excluir leituras!");
-            }
-        }
+        validateEditPermission();
 
-        ReadingEntity reading = readingRepository.findById(id)
+        ReadingEntity reading = readingRepository.findByIdWithAllRelations(id)
                 .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
 
         Long instrumentId = reading.getInstrument().getId();
@@ -897,114 +684,54 @@ public class ReadingService {
         Long clientId = reading.getInstrument().getDam().getClient().getId();
         LocalDate date = reading.getDate();
 
-        Set<ReadingInputValueEntity> inputValues = new HashSet<>(reading.getInputValues());
-        reading.getInputValues().clear();
-        readingRepository.save(reading);
-
-        for (ReadingInputValueEntity inputValue : inputValues) {
-            inputValue.getReadings().remove(reading);
-
-            if (inputValue.getReadings().isEmpty()) {
-                readingInputValueRepository.delete(inputValue);
-            } else {
-                readingInputValueRepository.save(inputValue);
-            }
-        }
-
+        // ⭐ Com @OneToMany orphanRemoval=true, cascade deleta inputValues automaticamente
         readingRepository.delete(reading);
         log.info("Leitura excluída: ID {}", id);
 
-        // ⭐ INVALIDAÇÃO GRANULAR OTIMIZADA
-        log.info("Invalidando caches após deleção da reading {}", id);
-
-        // ✅ Invalidar cache específico da reading
-        var readingCache = readingCacheManager.getCache("readingById");
-        if (readingCache != null) {
-            readingCache.evict(id);
-        }
-
-        var responseDTOCache = readingCacheManager.getCache("readingResponseDTO");
-        if (responseDTOCache != null) {
-            responseDTOCache.evict(id);
-        }
-
-        // ✅ Invalidar caches do instrumento (granular)
-        evictReadingCachesForInstrument(instrumentId);
-
-        // ✅ Invalidar cache do output (granular)
-        evictReadingCachesForOutput(outputId);
-
-        // ✅ Invalidar cache de existência para a data (granular)
+        // Cache eviction
+        evictSingleReadingCaches(id);
+        evictReadingCachesForInstruments(Set.of(instrumentId));
+        evictReadingCachesForOutputs(Set.of(outputId));
         evictReadingExistsCache(instrumentId, date);
-
-        // ✅ Invalidar caches agregados do cliente (granular)
         evictClientReadingCaches(clientId);
-
-        // ⭐ OTIMIZADO: Invalidar apenas filtros e multi-instrument deste instrumento
-        Set<Long> affectedInstruments = Set.of(instrumentId);
-        evictFilterCachesForInstruments(affectedInstruments);
-        evictMultiInstrumentCachesForInstruments(affectedInstruments);
     }
 
     // ==========================================
-    // MÉTODOS SEM MODIFICAÇÃO (continuam iguais)
+    // CONSULTAS ADICIONAIS
     // ==========================================
     @Transactional(readOnly = true)
-    public PagedReadingResponseDTO<ReadingResponseDTO> findByMultipleInstruments(
-            List<Long> instrumentIds,
-            LocalDate startDate,
-            LocalDate endDate,
-            LimitStatusEnum limitStatus,
-            Boolean active,
-            Pageable pageable) {
+    public PagedReadingResponseDTO<ReadingResponseDTO> findByInstrumentId(Long instrumentId, Pageable pageable) {
+        pageable = ensureDefaultSort(pageable);
 
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getViewRead()) {
-                throw new UnauthorizedException("Usuário não tem permissão para visualizar leituras!");
-            }
-        }
+        Page<ReadingEntity> readings = readingRepository.findByInstrumentIdWithAllRelations(instrumentId, pageable);
+        return createPagedResponse(readings.map(this::mapToResponseDTO));
+    }
+
+    @Transactional(readOnly = true)
+    public PagedReadingResponseDTO<ReadingResponseDTO> findByMultipleInstruments(
+            List<Long> instrumentIds, LocalDate startDate, LocalDate endDate,
+            LimitStatusEnum limitStatus, Boolean active, Pageable pageable) {
+
+        validateViewPermission();
 
         if (instrumentIds == null || instrumentIds.isEmpty()) {
             throw new InvalidInputException("É necessário fornecer pelo menos um ID de instrumento!");
         }
 
-        if (pageable.getSort().isUnsorted()) {
-            pageable = PageRequest.of(
-                    pageable.getPageNumber(),
-                    pageable.getPageSize(),
-                    Sort.by(Sort.Direction.DESC, "date", "hour")
-            );
-        }
-
+        pageable = ensureDefaultSort(pageable);
         Boolean activeFilter = active != null ? active : true;
 
-        Page<ReadingEntity> readings = readingRepository.findByMultipleInstrumentsWithFilters(
+        Page<ReadingEntity> readings = readingRepository.findByMultipleInstrumentsWithAllRelations(
                 instrumentIds, startDate, endDate, limitStatus, activeFilter, pageable);
 
-        Page<ReadingResponseDTO> dtoPage = readings.map(this::mapToResponseDTOOptimized);
-
-        return new PagedReadingResponseDTO<>(
-                dtoPage.getContent(),
-                dtoPage.getNumber(),
-                dtoPage.getSize(),
-                dtoPage.getTotalElements(),
-                dtoPage.getTotalPages(),
-                dtoPage.isLast(),
-                dtoPage.isFirst()
-        );
+        return createPagedResponse(readings.map(this::mapToResponseDTO));
     }
 
     @Transactional(readOnly = true)
     public PagedReadingResponseDTO<ReadingResponseDTO> findGroupedReadingsFlatByMultipleInstruments(
             List<Long> instrumentIds, Pageable pageable) {
 
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getViewRead()) {
-                throw new UnauthorizedException("Usuário não tem permissão para visualizar leituras");
-            }
-        }
+        validateViewPermission();
 
         if (instrumentIds == null || instrumentIds.isEmpty()) {
             throw new InvalidInputException("É necessário fornecer pelo menos um ID de instrumento");
@@ -1012,92 +739,45 @@ public class ReadingService {
 
         Page<Object[]> dateHourPage = readingRepository.findDistinctDateHourByMultipleInstrumentIds(instrumentIds, pageable);
 
-        List<ReadingResponseDTO> allReadings = new ArrayList<>();
+        if (dateHourPage.isEmpty()) {
+            return createEmptyPagedResponse(dateHourPage);
+        }
+
+        List<LocalDate> dates = new ArrayList<>(dateHourPage.getContent().size());
+        List<LocalTime> hours = new ArrayList<>(dateHourPage.getContent().size());
 
         for (Object[] dh : dateHourPage.getContent()) {
-            LocalDate date = (LocalDate) dh[0];
-            LocalTime hour = (LocalTime) dh[1];
-
-            List<ReadingEntity> readings = readingRepository.findByMultipleInstrumentIdsAndDateAndHourAndActiveTrue(
-                    instrumentIds, date, hour);
-
-            List<ReadingResponseDTO> dtos = readings.stream()
-                    .map(this::mapToResponseDTOOptimized)
-                    .collect(Collectors.toList());
-
-            allReadings.addAll(dtos);
+            dates.add((LocalDate) dh[0]);
+            hours.add((LocalTime) dh[1]);
         }
 
-        return new PagedReadingResponseDTO<>(
-                allReadings,
-                dateHourPage.getNumber(),
-                dateHourPage.getSize(),
-                dateHourPage.getTotalElements(),
-                dateHourPage.getTotalPages(),
-                dateHourPage.isLast(),
-                dateHourPage.isFirst()
-        );
-    }
+        List<ReadingResponseDTO> dtos = readingRepository
+                .findByMultipleInstrumentIdsAndDateHoursWithAllRelations(instrumentIds, dates, hours)
+                .stream()
+                .map(this::mapToResponseDTO)
+                .collect(Collectors.toList());
 
-    public PagedReadingResponseDTO<ReadingResponseDTO> findByInstrumentId(Long instrumentId, Pageable pageable) {
-        if (pageable.getSort().isUnsorted()) {
-            pageable = PageRequest.of(
-                    pageable.getPageNumber(),
-                    pageable.getPageSize(),
-                    Sort.by(Sort.Direction.DESC, "date", "hour")
-            );
-        }
-
-        Page<ReadingEntity> readings = readingRepository.findByInstrumentIdOptimized(instrumentId, pageable);
-        Page<ReadingResponseDTO> dtoPage = readings.map(this::mapToResponseDTOOptimized);
-
-        return new PagedReadingResponseDTO<>(
-                dtoPage.getContent(),
-                dtoPage.getNumber(),
-                dtoPage.getSize(),
-                dtoPage.getTotalElements(),
-                dtoPage.getTotalPages(),
-                dtoPage.isLast(),
-                dtoPage.isFirst()
-        );
+        return createPagedResponse(dtos, dateHourPage);
     }
 
     @Cacheable(
             value = "readingsByFilters",
             key = "#instrumentId + '_' + #outputId + '_' + #startDate + '_' + #endDate + '_' + "
             + "#limitStatus + '_' + #active + '_' + #pageable.pageNumber + '_' + #pageable.pageSize",
-            cacheManager = "readingCacheManager"
-    )
-    public PagedReadingResponseDTO<ReadingResponseDTO> findByFilters(Long instrumentId, Long outputId, LocalDate startDate, LocalDate endDate,
+            cacheManager = "readingCacheManager")
+    @Transactional(readOnly = true)
+    public PagedReadingResponseDTO<ReadingResponseDTO> findByFilters(
+            Long instrumentId, Long outputId, LocalDate startDate, LocalDate endDate,
             LimitStatusEnum limitStatus, Boolean active, Pageable pageable) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getViewRead()) {
-                throw new UnauthorizedException("Usuário não autorizado a visualizar leituras!");
-            }
-        }
-        if (pageable.getSort().isUnsorted()) {
-            pageable = PageRequest.of(
-                    pageable.getPageNumber(),
-                    pageable.getPageSize(),
-                    Sort.by(Sort.Direction.DESC, "date", "hour")
-            );
-        }
 
+        validateViewPermission();
+        pageable = ensureDefaultSort(pageable);
         Boolean activeFilter = active != null ? active : true;
 
-        Page<ReadingEntity> readings = readingRepository.findByFiltersOptimized(instrumentId, outputId, startDate, endDate, limitStatus, activeFilter, pageable);
-        Page<ReadingResponseDTO> dtoPage = readings.map(this::mapToResponseDTOOptimized);
+        Page<ReadingEntity> readings = readingRepository.findByFiltersWithAllRelations(
+                instrumentId, outputId, startDate, endDate, limitStatus, activeFilter, pageable);
 
-        return new PagedReadingResponseDTO<>(
-                dtoPage.getContent(),
-                dtoPage.getNumber(),
-                dtoPage.getSize(),
-                dtoPage.getTotalElements(),
-                dtoPage.getTotalPages(),
-                dtoPage.isLast(),
-                dtoPage.isFirst()
-        );
+        return createPagedResponse(readings.map(this::mapToResponseDTO));
     }
 
     @Cacheable(
@@ -1105,15 +785,11 @@ public class ReadingService {
             key = "T(org.springframework.util.StringUtils).collectionToDelimitedString(#instrumentIds, '_') + '_' + "
             + "T(org.springframework.util.StringUtils).collectionToDelimitedString(#outputIds, '_') + '_' + "
             + "#startDate + '_' + #endDate + '_' + #pageSize",
-            cacheManager = "readingCacheManager"
-    )
+            cacheManager = "readingCacheManager")
     @Transactional(readOnly = true)
     public MultiInstrumentReadingsResponseDTO findLatestReadingsForMultipleInstruments(
-            List<Long> instrumentIds,
-            List<Long> outputIds,
-            LocalDate startDate,
-            LocalDate endDate,
-            int pageSize) {
+            List<Long> instrumentIds, List<Long> outputIds,
+            LocalDate startDate, LocalDate endDate, int pageSize) {
 
         Set<Long> uniqueInstrumentIds = new HashSet<>();
 
@@ -1122,107 +798,92 @@ public class ReadingService {
         }
 
         if (outputIds != null && !outputIds.isEmpty()) {
-            Set<Long> instrumentIdsFromOutputs = readingRepository.findInstrumentIdsByOutputIds(outputIds);
-            uniqueInstrumentIds.addAll(instrumentIdsFromOutputs);
+            uniqueInstrumentIds.addAll(readingRepository.findInstrumentIdsByOutputIds(outputIds));
         }
 
         if (uniqueInstrumentIds.isEmpty()) {
-            return new MultiInstrumentReadingsResponseDTO(
-                    List.of(),
-                    pageSize,
-                    0
-            );
+            return new MultiInstrumentReadingsResponseDTO(List.of(), pageSize, 0);
         }
 
-        List<InstrumentEntity> instruments = instrumentRepository.findAllById(uniqueInstrumentIds);
+        // ⭐ OTIMIZADO: Duas queries totais
+        Map<Long, InstrumentEntity> instrumentsMap = instrumentRepository.findAllById(uniqueInstrumentIds)
+                .stream()
+                .collect(Collectors.toMap(InstrumentEntity::getId, Function.identity()));
 
-        List<InstrumentReadingsDTO> result = new ArrayList<>();
+        List<ReadingEntity> allReadings = readingRepository.findLatestReadingsByInstrumentIdsWithAllRelations(
+                new ArrayList<>(uniqueInstrumentIds), startDate, endDate, pageSize);
 
-        for (InstrumentEntity instrument : instruments) {
-            List<Long> readingIds;
+        Map<Long, List<ReadingEntity>> readingsByInstrument = allReadings.stream()
+                .collect(Collectors.groupingBy(r -> r.getInstrument().getId()));
 
-            if (startDate != null && endDate != null) {
-                readingIds = readingRepository.findLatestReadingIdsByInstrumentIdAndDateRange(
-                        instrument.getId(), startDate, endDate, pageSize);
-            } else if (startDate != null) {
-                readingIds = readingRepository.findLatestReadingIdsByInstrumentIdAndStartDate(
-                        instrument.getId(), startDate, pageSize);
-            } else if (endDate != null) {
-                readingIds = readingRepository.findLatestReadingIdsByInstrumentIdAndEndDate(
-                        instrument.getId(), endDate, pageSize);
-            } else {
-                readingIds = readingRepository.findLatestReadingIdsByInstrumentId(
-                        instrument.getId(), pageSize);
-            }
+        List<InstrumentReadingsDTO> result = new ArrayList<>(uniqueInstrumentIds.size());
 
-            if (readingIds.isEmpty()) {
-                result.add(new InstrumentReadingsDTO(
-                        instrument.getId(),
-                        instrument.getName(),
-                        instrument.getInstrumentType().getName(),
-                        List.of()
-                ));
+        for (Long instId : uniqueInstrumentIds) {
+            InstrumentEntity instrument = instrumentsMap.get(instId);
+            if (instrument == null) {
                 continue;
             }
 
-            List<ReadingEntity> readings = readingRepository.findByIdIn(readingIds);
-
-            List<ReadingResponseDTO> readingDTOs = readings.stream()
-                    .map(this::mapToResponseDTOOptimized)
+            List<ReadingResponseDTO> readingDTOs = readingsByInstrument
+                    .getOrDefault(instId, List.of())
+                    .stream()
+                    .map(this::mapToResponseDTO)
                     .collect(Collectors.toList());
 
             result.add(new InstrumentReadingsDTO(
                     instrument.getId(),
                     instrument.getName(),
                     instrument.getInstrumentType().getName(),
-                    readingDTOs
-            ));
+                    readingDTOs));
         }
 
-        return new MultiInstrumentReadingsResponseDTO(
-                result,
-                pageSize,
-                uniqueInstrumentIds.size()
-        );
+        return new MultiInstrumentReadingsResponseDTO(result, pageSize, uniqueInstrumentIds.size());
     }
 
     // ==========================================
-    // MÉTODOS AUXILIARES (sem modificação)
+    // ⭐ MÉTODOS AUXILIARES PRIVADOS
     // ==========================================
-    private LimitStatusEnum findMostCriticalStatus(List<ReadingEntity> readings) {
-        if (readings.stream().anyMatch(r -> r.getLimitStatus() == LimitStatusEnum.EMERGENCIA)) {
-            return LimitStatusEnum.EMERGENCIA;
+    private void validateViewPermission() {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity user = AuthenticatedUserUtil.getCurrentUser();
+            if (!user.getInstrumentationPermission().getViewRead()) {
+                throw new UnauthorizedException("Usuário não tem permissão para visualizar leituras!");
+            }
         }
-        if (readings.stream().anyMatch(r -> r.getLimitStatus() == LimitStatusEnum.ALERTA)) {
-            return LimitStatusEnum.ALERTA;
-        }
-        if (readings.stream().anyMatch(r -> r.getLimitStatus() == LimitStatusEnum.ATENCAO)) {
-            return LimitStatusEnum.ATENCAO;
-        }
-        if (readings.stream().anyMatch(r -> r.getLimitStatus() == LimitStatusEnum.INFERIOR)) {
-            return LimitStatusEnum.INFERIOR;
-        }
-        if (readings.stream().anyMatch(r -> r.getLimitStatus() == LimitStatusEnum.SUPERIOR)) {
-            return LimitStatusEnum.SUPERIOR;
-        }
-        return LimitStatusEnum.NORMAL;
     }
 
-    private InstrumentLimitStatusDTO createInstrumentLimitStatusDTO(
-            InstrumentEntity instrument, LimitStatusEnum status, String lastReadingDate) {
+    private void validateEditPermission() {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity user = AuthenticatedUserUtil.getCurrentUser();
+            if (!user.getInstrumentationPermission().getEditRead()) {
+                throw new UnauthorizedException("Usuário não autorizado a modificar leituras!");
+            }
+        }
+    }
 
-        InstrumentLimitStatusDTO dto = new InstrumentLimitStatusDTO();
-        dto.setInstrumentId(instrument.getId());
-        dto.setInstrumentName(instrument.getName());
-        dto.setInstrumentType(instrument.getInstrumentType().getName());
-        dto.setDamId(instrument.getDam().getId());
-        dto.setDamName(instrument.getDam().getName());
-        dto.setClientId(instrument.getDam().getClient().getId());
-        dto.setClientName(instrument.getDam().getClient().getName());
-        dto.setLimitStatus(status);
-        dto.setLastReadingDate(lastReadingDate);
+    private UserEntity resolveCurrentUser(boolean skipPermissionCheck) {
+        if (skipPermissionCheck) {
+            return userRepository.findByEmail("noreply@geometrisa-prod.com.br")
+                    .orElseThrow(() -> new NotFoundException("Usuário do sistema não encontrado!"));
+        }
 
-        return dto;
+        UserEntity currentUser = AuthenticatedUserUtil.getCurrentUser();
+        if (!AuthenticatedUserUtil.isAdmin() && !currentUser.getInstrumentationPermission().getEditRead()) {
+            throw new UnauthorizedException("Usuário não autorizado a criar leituras!");
+        }
+        return currentUser;
+    }
+
+    private void validateDateTimeChange(LocalDate newDate, LocalTime newHour, Long instrumentId, Long excludeId) {
+        LocalDateTime newDateTime = LocalDateTime.of(newDate, newHour);
+        if (newDateTime.truncatedTo(ChronoUnit.MINUTES).isAfter(LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES))) {
+            throw new InvalidInputException("Não é possível atualizar leituras para data e hora futura.");
+        }
+
+        if (readingRepository.existsByInstrumentIdAndDateAndHourExcludingId(instrumentId, newDate, newHour, excludeId)) {
+            throw new InvalidInputException("Já existe leitura registrada para este instrumento na mesma data e hora ("
+                    + newDate + " " + newHour + ")");
+        }
     }
 
     private void validateInputValues(InstrumentEntity instrument, Map<String, Double> inputValues) {
@@ -1247,104 +908,89 @@ public class ReadingService {
         }
     }
 
-    private List<ReadingInputValueDTO> getInputValuesForReading(ReadingEntity reading) {
-        List<ReadingInputValueEntity> inputValues = readingInputValueRepository.findByReadingId(reading.getId());
-        return inputValues.stream()
-                .map(this::mapToInputValueDTO)
-                .collect(Collectors.toList());
-    }
+    private void updateInputValuesForGroup(Long instrumentId, LocalDate date, LocalTime hour,
+            Map<String, Double> newInputValues, InstrumentEntity instrument) {
 
-    private void updateInputValues(Long instrumentId, LocalDate date, LocalTime hour, Map<String, Double> newInputValues) {
-
-        List<ReadingEntity> groupReadings = readingRepository.findAllReadingsInGroup(instrumentId, date, hour);
+        List<ReadingEntity> groupReadings = readingRepository.findAllReadingsInGroupWithRelations(
+                instrumentId, date, hour);
 
         if (groupReadings.isEmpty()) {
             throw new NotFoundException("Não foram encontradas leituras para este grupo");
         }
 
-        log.info("Atualizando valores de input para {} leituras do grupo {}/{}",
-                groupReadings.size(), date, hour);
-
-        InstrumentEntity instrument = instrumentRepository.findById(instrumentId)
-                .orElseThrow(() -> new NotFoundException("Instrumento não encontrado"));
-
         Map<String, InputEntity> instrumentInputs = instrument.getInputs().stream()
-                .collect(Collectors.toMap(InputEntity::getAcronym, input -> input));
+                .collect(Collectors.toMap(InputEntity::getAcronym, Function.identity()));
 
         for (String inputAcronym : newInputValues.keySet()) {
             if (!instrumentInputs.containsKey(inputAcronym)) {
-                throw new InvalidInputException("Input com acrônimo '" + inputAcronym
-                        + "' não encontrado no instrumento");
+                throw new InvalidInputException("Input com acrônimo '" + inputAcronym + "' não encontrado no instrumento");
             }
         }
 
-        Set<ReadingInputValueEntity> uniqueInputValues = new HashSet<>();
-        for (ReadingEntity reading : groupReadings) {
-            uniqueInputValues.addAll(reading.getInputValues());
-        }
-
-        Map<String, ReadingInputValueEntity> inputValuesByAcronym = uniqueInputValues.stream()
-                .collect(Collectors.toMap(ReadingInputValueEntity::getInputAcronym, value -> value));
-
+        // Coletar valores atuais
         Map<String, Double> calculationInputs = new HashMap<>();
-        for (ReadingInputValueEntity value : uniqueInputValues) {
-            calculationInputs.put(value.getInputAcronym(), value.getValue());
+        for (ReadingEntity reading : groupReadings) {
+            for (ReadingInputValueEntity riv : reading.getInputValues()) {
+                calculationInputs.putIfAbsent(riv.getInputAcronym(), riv.getValue());
+            }
         }
 
+        // Verificar mudanças
         boolean inputsChanged = false;
         for (Map.Entry<String, Double> entry : newInputValues.entrySet()) {
-            String acronym = entry.getKey();
-            Double newValue = entry.getValue();
-            Double oldValue = calculationInputs.get(acronym);
-
-            if (!Objects.equals(oldValue, newValue)) {
+            if (!Objects.equals(calculationInputs.get(entry.getKey()), entry.getValue())) {
                 inputsChanged = true;
-                calculationInputs.put(acronym, newValue);
-
-                ReadingInputValueEntity inputValue = inputValuesByAcronym.get(acronym);
-                if (inputValue != null) {
-                    log.info("Atualizando valor para {}: {} → {}", acronym, oldValue, newValue);
-                    inputValue.setValue(newValue);
-                    readingInputValueRepository.save(inputValue);
-                }
+                calculationInputs.put(entry.getKey(), entry.getValue());
             }
         }
 
         if (inputsChanged) {
-            log.info("Recalculando valores para todas as {} readings do grupo", groupReadings.size());
-
             for (ReadingEntity reading : groupReadings) {
+                // Atualizar inputValues
+                for (ReadingInputValueEntity riv : reading.getInputValues()) {
+                    Double newValue = newInputValues.get(riv.getInputAcronym());
+                    if (newValue != null) {
+                        riv.setValue(newValue);
+                    }
+                }
+
+                // Recalcular
                 OutputEntity output = reading.getOutput();
-
-                Double oldValue = reading.getCalculatedValue();
-                Double newCalculatedValue = outputCalculationService.calculateOutput(
-                        output, null, calculationInputs);
-
+                Double newCalculatedValue = outputCalculationService.calculateOutput(output, null, calculationInputs);
                 reading.setCalculatedValue(newCalculatedValue);
-
-                LimitStatusEnum newLimitStatus = determineLimitStatus(instrument, newCalculatedValue, output);
-                reading.setLimitStatus(newLimitStatus);
-
-                log.info("Reading {}: Output {} recalculado: {} → {}",
-                        reading.getId(), output.getAcronym(), oldValue, newCalculatedValue);
-
-                readingRepository.save(reading);
+                reading.setLimitStatus(determineLimitStatus(instrument, newCalculatedValue, output));
             }
-        } else {
-            log.info("Nenhum valor de input foi alterado, não é necessário recalcular");
+
+            readingRepository.saveAll(groupReadings);
         }
     }
 
-    private ReadingInputValueDTO mapToInputValueDTO(ReadingInputValueEntity entity) {
-        ReadingInputValueDTO dto = new ReadingInputValueDTO();
-        dto.setInputAcronym(entity.getInputAcronym());
-        dto.setInputName(entity.getInputName());
-        dto.setValue(entity.getValue());
-        return dto;
+    private boolean updateGroupReadings(List<ReadingEntity> groupReadings, UpdateReadingRequestDTO request,
+            LocalDate newDate, LocalTime newHour, UserEntity newUser, boolean isDateTimeChanged) {
+
+        boolean hasChanges = false;
+        boolean isUpdatingComment = request.getComment() != null;
+
+        for (ReadingEntity groupReading : groupReadings) {
+            if (isDateTimeChanged) {
+                groupReading.setDate(newDate);
+                groupReading.setHour(newHour);
+                hasChanges = true;
+            }
+            if (newUser != null) {
+                groupReading.setUser(newUser);
+                hasChanges = true;
+            }
+            if (isUpdatingComment) {
+                groupReading.setComment(request.getComment());
+                hasChanges = true;
+            }
+        }
+
+        return hasChanges;
     }
 
     private LimitStatusEnum determineLimitStatus(InstrumentEntity instrument, Double value, OutputEntity output) {
-
         if (Boolean.TRUE.equals(instrument.getNoLimit())) {
             return LimitStatusEnum.NORMAL;
         }
@@ -1377,7 +1023,10 @@ public class ReadingService {
         return LimitStatusEnum.NORMAL;
     }
 
-    private ReadingResponseDTO mapToResponseDTOOptimized(ReadingEntity reading) {
+    // ==========================================
+    // ⭐ MAPEAMENTO DTO - MÁXIMA PERFORMANCE
+    // ==========================================
+    public ReadingResponseDTO mapToResponseDTO(ReadingEntity reading) {
         ReadingResponseDTO dto = new ReadingResponseDTO();
         dto.setId(reading.getId());
         dto.setDate(reading.getDate());
@@ -1393,28 +1042,151 @@ public class ReadingService {
         dto.setActive(reading.getActive());
 
         if (reading.getUser() != null) {
-            dto.setCreatedBy(new ReadingResponseDTO.UserInfoDTO(
+            dto.setCreatedBy(new UserInfoDTO(
                     reading.getUser().getId(),
                     reading.getUser().getName(),
-                    reading.getUser().getEmail()
-            ));
+                    reading.getUser().getEmail()));
         }
 
-        List<ReadingInputValueDTO> inputValueDTOs = reading.getInputValues().stream()
+        // ⭐ InputValues já carregados via JOIN FETCH
+        dto.setInputValues(reading.getInputValues().stream()
                 .map(this::mapToInputValueDTO)
-                .collect(Collectors.toList());
-        dto.setInputValues(inputValueDTOs);
+                .collect(Collectors.toList()));
 
         return dto;
+    }
+
+    private ReadingInputValueDTO mapToInputValueDTO(ReadingInputValueEntity entity) {
+        ReadingInputValueDTO dto = new ReadingInputValueDTO();
+        dto.setInputAcronym(entity.getInputAcronym());
+        dto.setInputName(entity.getInputName());
+        dto.setValue(entity.getValue());
+        return dto;
+    }
+
+    private InstrumentLimitStatusDTO buildInstrumentLimitStatusDTO(
+            InstrumentEntity instrument, LimitStatusEnum status, String lastReadingDate) {
+
+        InstrumentLimitStatusDTO dto = new InstrumentLimitStatusDTO();
+        dto.setInstrumentId(instrument.getId());
+        dto.setInstrumentName(instrument.getName());
+        dto.setInstrumentType(instrument.getInstrumentType().getName());
+        dto.setInstrumentTypeId(instrument.getInstrumentType().getId());
+        dto.setDamId(instrument.getDam().getId());
+        dto.setDamName(instrument.getDam().getName());
+        dto.setClientId(instrument.getDam().getClient().getId());
+        dto.setClientName(instrument.getDam().getClient().getName());
+        dto.setLimitStatus(status);
+        dto.setLastReadingDate(lastReadingDate);
+        return dto;
+    }
+
+    private InstrumentLimitStatusDTO buildInstrumentLimitStatusDTOFromProjection(
+            InstrumentLimitStatusProjection projection, LimitStatusEnum status, String lastReadingDate) {
+
+        InstrumentLimitStatusDTO dto = new InstrumentLimitStatusDTO();
+        dto.setInstrumentId(projection.getInstrumentId());
+        dto.setInstrumentName(projection.getInstrumentName());
+        dto.setInstrumentType(projection.getInstrumentTypeName());
+        dto.setInstrumentTypeId(projection.getInstrumentTypeId());
+        dto.setDamId(projection.getDamId());
+        dto.setDamName(projection.getDamName());
+        dto.setClientId(projection.getClientId());
+        dto.setClientName(projection.getClientName());
+        dto.setLimitStatus(status);
+        dto.setLastReadingDate(lastReadingDate);
+        return dto;
+    }
+
+    // ==========================================
+    // ⭐ HELPERS
+    // ==========================================
+    private Pageable ensureDefaultSort(Pageable pageable) {
+        if (pageable.getSort().isUnsorted()) {
+            return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), DEFAULT_SORT);
+        }
+        return pageable;
+    }
+
+    private <T> PagedReadingResponseDTO<T> createPagedResponse(Page<T> page) {
+        return new PagedReadingResponseDTO<>(
+                page.getContent(),
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages(),
+                page.isLast(),
+                page.isFirst());
+    }
+
+    private <T> PagedReadingResponseDTO<T> createPagedResponse(List<T> content, Page<?> page) {
+        return new PagedReadingResponseDTO<>(
+                content,
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages(),
+                page.isLast(),
+                page.isFirst());
+    }
+
+    private <T> PagedReadingResponseDTO<T> createEmptyPagedResponse(Page<?> page) {
+        return new PagedReadingResponseDTO<>(
+                List.of(),
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages(),
+                page.isLast(),
+                page.isFirst());
+    }
+
+    private BulkToggleActiveResponseDTO buildBulkToggleResponse(
+            int totalProcessed, List<Long> successfulIds,
+            List<BulkToggleActiveResponseDTO.FailedOperation> failedOperations) {
+
+        BulkToggleActiveResponseDTO response = new BulkToggleActiveResponseDTO();
+        response.setSuccessfulIds(successfulIds);
+        response.setFailedOperations(failedOperations);
+        response.setTotalProcessed(totalProcessed);
+        response.setSuccessCount(successfulIds.size());
+        response.setFailureCount(failedOperations.size());
+        return response;
+    }
+
+    private void evictCachesAfterCreate(Long instrumentId, Set<Long> outputIds, Long clientId, LocalDate date) {
+        evictReadingCachesForInstruments(Set.of(instrumentId));
+        evictReadingCachesForOutputs(outputIds);
+        evictReadingExistsCache(instrumentId, date);
+        evictClientReadingCaches(clientId);
+    }
+
+    private void evictCachesAfterUpdate(Long readingId, Long instrumentId, Long outputId,
+            Long clientId, LocalDate originalDate, LocalDate newDate, boolean isDateTimeChanged) {
+
+        evictSingleReadingCaches(readingId);
+        evictReadingCachesForInstruments(Set.of(instrumentId));
+        evictReadingCachesForOutputs(Set.of(outputId));
+        evictReadingExistsCache(instrumentId, originalDate);
+
+        if (isDateTimeChanged && !originalDate.equals(newDate)) {
+            evictReadingExistsCache(instrumentId, newDate);
+        }
+
+        evictClientReadingCaches(clientId);
     }
 
     private Double formatToSpecificPrecision(Double value, Integer precision) {
         if (value == null || precision == null) {
             return value;
         }
+        return BigDecimal.valueOf(value)
+                .setScale(precision, RoundingMode.HALF_UP)
+                .doubleValue();
+    }
 
-        BigDecimal bd = BigDecimal.valueOf(value);
-        bd = bd.setScale(precision, RoundingMode.HALF_UP);
-        return bd.doubleValue();
+    // ⭐ Record para evitar criação de arrays
+    private record DateTimePair(LocalDate date, LocalTime hour) {
+
     }
 }

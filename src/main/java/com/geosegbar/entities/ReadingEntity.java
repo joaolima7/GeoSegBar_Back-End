@@ -19,9 +19,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.JoinTable;
-import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -51,8 +50,8 @@ import lombok.Setter;
     @Index(name = "idx_reading_active_date", columnList = "active, date DESC"),
     @Index(name = "idx_reading_status_date", columnList = "limit_status, date DESC"),
     @Index(name = "idx_reading_instrument_output_date", columnList = "instrument_id, output_id, date DESC"),
-    @Index(name = "idx_reading_user_active_date", columnList = "user_id, active, date DESC")
-})
+    @Index(name = "idx_reading_user_active_date", columnList = "user_id, active, date DESC"),
+    @Index(name = "idx_reading_instrument_status_date", columnList = "instrument_id, limit_status, date DESC"),})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -101,16 +100,8 @@ public class ReadingEntity {
     @JsonIgnoreProperties({"instrument"})
     private OutputEntity output;
 
-    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE})
-    @JoinTable(
-            name = "reading_input_value_mapping",
-            joinColumns = @JoinColumn(name = "reading_id"),
-            inverseJoinColumns = @JoinColumn(name = "input_value_id"),
-            indexes = {
-                @Index(name = "idx_rivm_reading", columnList = "reading_id"),
-                @Index(name = "idx_rivm_input_value", columnList = "input_value_id")
-            }
-    )
-    @JsonIgnoreProperties({"readings"})
+    @OneToMany(mappedBy = "reading", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JsonIgnoreProperties({"reading"})
+    @org.hibernate.annotations.BatchSize(size = 50)
     private Set<ReadingInputValueEntity> inputValues = new HashSet<>();
 }

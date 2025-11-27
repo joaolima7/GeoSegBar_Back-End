@@ -13,11 +13,50 @@ import com.geosegbar.entities.ReadingInputValueEntity;
 @Repository
 public interface ReadingInputValueRepository extends JpaRepository<ReadingInputValueEntity, Long> {
 
-    @Query("SELECT riv FROM ReadingInputValueEntity riv JOIN riv.readings r WHERE r.id = :readingId")
-    List<ReadingInputValueEntity> findByReadingId(@Param("readingId") Long readingId);
+    /**
+     * ⭐ OTIMIZADO: Busca direta por FK (sem JOIN na tabela de junção) Antes:
+     * SELECT riv FROM ReadingInputValueEntity riv JOIN riv.readings r WHERE
+     * r.id = :readingId Agora: SELECT riv FROM ReadingInputValueEntity riv
+     * WHERE riv.reading.id = :readingId
+     */
+    List<ReadingInputValueEntity> findByReadingId(Long readingId);
 
+    /**
+     * ⭐ NOVO: Busca em batch para eliminar N+1 Permite carregar inputValues de
+     * múltiplas readings de uma vez
+     */
+    @Query("SELECT riv FROM ReadingInputValueEntity riv WHERE riv.reading.id IN :readingIds")
+    List<ReadingInputValueEntity> findByReadingIdIn(@Param("readingIds") List<Long> readingIds);
+
+    /**
+     * ⭐ OTIMIZADO: Delete direto por FK
+     */
     @Modifying
-    @Query("DELETE FROM ReadingInputValueEntity riv WHERE riv.id IN "
-            + "(SELECT riv.id FROM ReadingInputValueEntity riv JOIN riv.readings r WHERE r.id = :readingId)")
+    @Query("DELETE FROM ReadingInputValueEntity riv WHERE riv.reading.id = :readingId")
     void deleteByReadingId(@Param("readingId") Long readingId);
+
+    /**
+     * ⭐ NOVO: Delete em batch
+     */
+    @Modifying
+    @Query("DELETE FROM ReadingInputValueEntity riv WHERE riv.reading.id IN :readingIds")
+    void deleteByReadingIdIn(@Param("readingIds") List<Long> readingIds);
+
+    /**
+     * ⭐ NOVO: Verifica se existem inputValues para uma reading
+     */
+    boolean existsByReadingId(Long readingId);
+
+    /**
+     * ⭐ NOVO: Conta inputValues por reading
+     */
+    long countByReadingId(Long readingId);
+
+    /**
+     * ⭐ NOVO: Busca inputValue específico por reading e acronym
+     */
+    @Query("SELECT riv FROM ReadingInputValueEntity riv WHERE riv.reading.id = :readingId AND riv.inputAcronym = :acronym")
+    ReadingInputValueEntity findByReadingIdAndInputAcronym(
+            @Param("readingId") Long readingId,
+            @Param("acronym") String acronym);
 }

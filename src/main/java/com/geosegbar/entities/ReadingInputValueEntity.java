@@ -1,17 +1,16 @@
 package com.geosegbar.entities;
 
-import java.util.HashSet;
-import java.util.Set;
-
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
-import jakarta.persistence.ManyToMany;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -22,7 +21,10 @@ import lombok.Setter;
 
 @Entity
 @Table(name = "reading_input_value", indexes = {
-    @Index(name = "idx_reading_input_value_acronym", columnList = "inputAcronym"),})
+    @Index(name = "idx_reading_input_value_reading", columnList = "reading_id"),
+    @Index(name = "idx_reading_input_value_acronym", columnList = "inputAcronym"),
+    @Index(name = "idx_reading_input_value_reading_acronym", columnList = "reading_id, inputAcronym")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -45,7 +47,8 @@ public class ReadingInputValueEntity {
     @Column(nullable = false)
     private Double value;
 
-    @ManyToMany(mappedBy = "inputValues")
-    @JsonIgnoreProperties({"inputValues"})
-    private Set<ReadingEntity> readings = new HashSet<>();
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reading_id", nullable = false)
+    @JsonIgnoreProperties({"inputValues", "instrument", "output", "user"})
+    private ReadingEntity reading;
 }

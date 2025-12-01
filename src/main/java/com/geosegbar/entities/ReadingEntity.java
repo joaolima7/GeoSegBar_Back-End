@@ -102,6 +102,5 @@ public class ReadingEntity {
 
     @OneToMany(mappedBy = "reading", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JsonIgnoreProperties({"reading"})
-    @org.hibernate.annotations.BatchSize(size = 50)
     private Set<ReadingInputValueEntity> inputValues = new HashSet<>();
 }

@@ -1,0 +1,68 @@
+{
+    "dashboard": {
+        "title": "Reading Service Performance",
+        "panels": [
+            {
+                "title": "Request Latency (P95, P99)",
+                "targets": [
+                    {
+                        "expr": "histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{uri=~\".*reading.*\"}[5m]))",
+                        "legendFormat": "P95 - {{uri}}"
+                    },
+                    {
+                        "expr": "histogram_quantile(0.99, rate(http_server_requests_seconds_bucket{uri=~\".*reading.*\"}[5m]))",
+                        "legendFormat": "P99 - {{uri}}"
+                    }
+                ]
+            },
+            {
+                "title": "Top 10 Slowest Methods",
+                "targets": [
+                    {
+                        "expr": "topk(10, rate(service_ReadingService_seconds_sum[5m]) / rate(service_ReadingService_seconds_count[5m]))"
+                    }
+                ]
+            },
+            {
+                "title": "Database Query Performance",
+                "targets": [
+                    {
+                        "expr": "rate(hibernate_query_execution_seconds_sum[5m]) / rate(hibernate_query_execution_seconds_count[5m])",
+                        "legendFormat": "Avg Query Time - {{query_type}}"
+                    }
+                ]
+            },
+            {
+                "title": "Cache Hit Rate",
+                "targets": [
+                    {
+                        "expr": "sum(rate(cache_gets_total{result=\"hit\"}[5m])) / sum(rate(cache_gets_total[5m])) * 100",
+                        "legendFormat": "Hit Rate %"
+                    }
+                ]
+            },
+            {
+                "title": "HikariCP Pool Usage",
+                "targets": [
+                    {
+                        "expr": "hikaricp_connections_active",
+                        "legendFormat": "Active Connections"
+                    },
+                    {
+                        "expr": "hikaricp_connections_idle",
+                        "legendFormat": "Idle Connections"
+                    }
+                ]
+            },
+            {
+                "title": "Slow Queries Count",
+                "targets": [
+                    {
+                        "expr": "increase(slow_queries_total[1m])",
+                        "legendFormat": "{{query_type}}"
+                    }
+                ]
+            }
+        ]
+    }
+}

@@ -604,22 +604,28 @@ public class InstrumentGraphCustomizationPropertiesService {
             List<InstrumentGraphCustomizationPropertiesEntity> existingProperties,
             Set<Long> currentIds, Set<Long> newIds) {
 
+        // Identifica instrumentos para remover
         Set<Long> idsToRemove = new HashSet<>(currentIds);
         idsToRemove.removeAll(newIds);
 
+        // ⭐ CORRIGIDO: Remove AMBOS tipos de instrumento
         for (Long idToRemove : idsToRemove) {
             existingProperties.stream()
-                    .filter(p -> p.getCustomizationType() == CustomizationTypeEnum.INSTRUMENT
-                    && p.getInstrument() != null && p.getInstrument().getId().equals(idToRemove))
+                    .filter(p -> (p.getCustomizationType() == CustomizationTypeEnum.INSTRUMENT
+                    || p.getCustomizationType() == CustomizationTypeEnum.LINIMETRIC_RULER) // ✅ ADICIONADO
+                    && p.getInstrument() != null
+                    && p.getInstrument().getId().equals(idToRemove))
                     .forEach(propertiesRepository::delete);
         }
 
+        // Identifica instrumentos para adicionar
         Set<Long> idsToAdd = new HashSet<>(newIds);
         idsToAdd.removeAll(currentIds);
 
         for (Long idToAdd : idsToAdd) {
             InstrumentEntity instrument = instrumentService.findById(idToAdd);
 
+            // ⭐ Lógica existente - está correta
             CustomizationTypeEnum customizationType = Boolean.TRUE.equals(instrument.getIsLinimetricRuler())
                     ? CustomizationTypeEnum.LINIMETRIC_RULER
                     : CustomizationTypeEnum.INSTRUMENT;

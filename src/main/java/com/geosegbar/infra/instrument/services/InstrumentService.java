@@ -49,6 +49,7 @@ import com.geosegbar.infra.instrument.dtos.OutputDTO;
 import com.geosegbar.infra.instrument.dtos.StatisticalLimitDTO;
 import com.geosegbar.infra.instrument.dtos.UpdateInstrumentRequest;
 import com.geosegbar.infra.instrument.events.InstrumentCreatedEvent;
+import com.geosegbar.infra.instrument.events.LinimetricRulerCreatedEvent;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.instrument_type.persistence.jpa.InstrumentTypeRepository;
 import com.geosegbar.infra.measurement_unit.persistence.jpa.MeasurementUnitRepository;
@@ -274,6 +275,10 @@ public class InstrumentService {
 
         if (Boolean.FALSE.equals(savedInstrument.getIsLinimetricRuler())) {
             eventPublisher.publishEvent(new InstrumentCreatedEvent(savedInstrument));
+        } else if (Boolean.TRUE.equals(savedInstrument.getIsLinimetricRuler())
+                && savedInstrument.getLinimetricRulerCode() != null) {
+            eventPublisher.publishEvent(new LinimetricRulerCreatedEvent(this, savedInstrument));
+            log.info("Evento de coleta hidrotelemetrica disparado para instrumento: {}", savedInstrument.getName());
         }
 
         return savedInstrument;
@@ -544,6 +549,9 @@ public class InstrumentService {
         InstrumentEntity oldInstrument = findById(id);
         Long clientId = oldInstrument.getDam().getClient().getId();
 
+        // Armazenar código antigo para comparação
+        Long oldLinimetricCode = oldInstrument.getLinimetricRulerCode();
+
         if (!oldInstrument.getIsLinimetricRuler().equals(request.getIsLinimetricRuler())) {
             throw new InvalidInputException("Não é permitido alterar o tipo de instrumento. Uma vez criado como régua linimétrica ou instrumento normal, este atributo não pode ser modificado.");
         }
@@ -642,14 +650,28 @@ public class InstrumentService {
             return instrumentRepository.findWithActiveOutputsById(id)
                     .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após atualização"));
         } else {
-
             updateInstrumentBasicFields(oldInstrument, request);
             instrumentRepository.save(oldInstrument);
 
             evictReadingCachesForInstrument(id, clientId);
 
-            return instrumentRepository.findWithActiveOutputsById(id)
+            InstrumentEntity updatedInstrument = instrumentRepository.findWithActiveOutputsById(id)
                     .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após atualização"));
+
+            // Verificar se houve mudança no código linimétrico ou se passou a ter código
+            Long newLinimetricCode = updatedInstrument.getLinimetricRulerCode();
+
+            boolean codeChanged = (oldLinimetricCode == null && newLinimetricCode != null)
+                    || (oldLinimetricCode != null && !oldLinimetricCode.equals(newLinimetricCode));
+
+            if (codeChanged && newLinimetricCode != null) {
+                // Disparar coleta assíncrona de dados telemetricos
+                eventPublisher.publishEvent(new LinimetricRulerCreatedEvent(this, updatedInstrument));
+                log.info("Evento de coleta hidrotelemetrica disparado após atualização do instrumento: {} (código alterado de {} para {})",
+                        updatedInstrument.getName(), oldLinimetricCode, newLinimetricCode);
+            }
+
+            return updatedInstrument;
         }
     }
 

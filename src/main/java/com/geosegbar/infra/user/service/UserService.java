@@ -203,11 +203,7 @@ public class UserService {
     @Transactional()
     public List<UserEntity> findByFilters(Long roleId, Long clientId, Long statusId, Boolean isManagement, Boolean withoutClient) {
         if (isManagement != null && isManagement) {
-            // Validação: clientId é obrigatório quando isManagement é true
-            if (clientId == null) {
-                throw new InvalidInputException("O cliente é obrigatorio!");
-            }
-
+            // Se clientId for fornecido, filtra por ele; caso contrário, retorna todos (incluindo colaboradores sem cliente)
             return userRepository.findByClientIncludingUnassignedCollaborators(clientId, statusId);
         }
 

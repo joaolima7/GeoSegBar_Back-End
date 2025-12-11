@@ -49,7 +49,8 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
             + "AND u.email != 'noreply@geometrisa-prod.com.br' "
             + "AND (:statusId IS NULL OR u.status.id = :statusId) "
             + "AND ("
-            + "    (c.id = :clientId) "
+            + "    (:clientId IS NULL) "
+            + "    OR (c.id = :clientId) "
             + "    OR (r.name = 'COLLABORATOR' AND (SELECT COUNT(uc) FROM u.clients uc) = 0)"
             + ") "
             + "ORDER BY u.id ASC")

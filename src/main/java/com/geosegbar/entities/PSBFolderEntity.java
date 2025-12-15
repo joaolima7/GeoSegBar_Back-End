@@ -40,7 +40,9 @@ import lombok.Setter;
     @Index(name = "idx_psb_folder_created_by", columnList = "created_by"),
     @Index(name = "idx_psb_folder_dam_idx", columnList = "dam_id, folder_index"),
     @Index(name = "idx_psb_folder_dam_name", columnList = "dam_id, name"),
-    @Index(name = "idx_psb_folder_updated_at", columnList = "updated_at")
+    @Index(name = "idx_psb_folder_updated_at", columnList = "updated_at"),
+    @Index(name = "idx_psb_folder_parent_id", columnList = "parent_folder_id"),
+    @Index(name = "idx_psb_folder_parent_idx", columnList = "parent_folder_id, folder_index")
 })
 public class PSBFolderEntity {
 
@@ -66,11 +68,21 @@ public class PSBFolderEntity {
     @Column(name = "color", nullable = true)
     private FolderColorEnum color = FolderColorEnum.BLUE;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "dam_id", nullable = false)
     @JsonIgnoreProperties({"psbFolders", "reservoirs", "regulatoryDam", "documentationDam",
         "checklists", "checklistResponses", "damPermissions"})
     private DamEntity dam;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_folder_id")
+    @JsonIgnoreProperties({"subfolders", "files", "parentFolder", "shareLinks"})
+    private PSBFolderEntity parentFolder;
+
+    @OneToMany(mappedBy = "parentFolder", cascade = CascadeType.ALL,
+            orphanRemoval = true, fetch = FetchType.LAZY)
+    @JsonIgnoreProperties({"parentFolder", "dam"})
+    private Set<PSBFolderEntity> subfolders = new HashSet<>();
 
     @OneToMany(mappedBy = "psbFolder", cascade = CascadeType.ALL,
             orphanRemoval = true, fetch = FetchType.LAZY)

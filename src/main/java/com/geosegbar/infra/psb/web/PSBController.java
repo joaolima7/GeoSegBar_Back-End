@@ -35,61 +35,75 @@ public class PSBController {
 
     private final PSBFolderService psbFolderService;
     private final PSBFileService psbFileService;
-    
+
     // --- Folder Endpoints ---
-    
     @GetMapping("/folders/dam/{damId}")
     public ResponseEntity<WebResponseEntity<List<PSBFolderEntity>>> getFoldersByDamId(@PathVariable Long damId) {
         List<PSBFolderEntity> folders = psbFolderService.findAllByDamId(damId);
         WebResponseEntity<List<PSBFolderEntity>> response = WebResponseEntity.success(
-                folders, "Pastas PSB obtidas com sucesso");
+                folders, "Pastas raiz PSB obtidas com sucesso!");
         return ResponseEntity.ok(response);
     }
-    
+
+    @GetMapping("/folders/{parentFolderId}/subfolders")
+    public ResponseEntity<WebResponseEntity<List<PSBFolderEntity>>> getSubfolders(@PathVariable Long parentFolderId) {
+        List<PSBFolderEntity> subfolders = psbFolderService.findSubfolders(parentFolderId);
+        WebResponseEntity<List<PSBFolderEntity>> response = WebResponseEntity.success(
+                subfolders, "Subpastas obtidas com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/folders/dam/{damId}/complete")
+    public ResponseEntity<WebResponseEntity<List<PSBFolderEntity>>> getCompleteHierarchy(@PathVariable Long damId) {
+        List<PSBFolderEntity> completeStructure = psbFolderService.findCompleteHierarchyByDamId(damId);
+        WebResponseEntity<List<PSBFolderEntity>> response = WebResponseEntity.success(
+                completeStructure, "Estrutura completa PSB obtida com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/folders/{id}")
     public ResponseEntity<WebResponseEntity<PSBFolderEntity>> getFolderById(@PathVariable Long id) {
         PSBFolderEntity folder = psbFolderService.findById(id);
         WebResponseEntity<PSBFolderEntity> response = WebResponseEntity.success(
-                folder, "Pasta PSB obtida com sucesso");
+                folder, "Pasta PSB obtida com sucesso!");
         return ResponseEntity.ok(response);
     }
-    
+
     @PostMapping("/folders")
     public ResponseEntity<WebResponseEntity<PSBFolderEntity>> createFolder(
             @Valid @RequestBody CreatePSBFolderRequest request) {
         PSBFolderEntity folder = psbFolderService.create(request);
         WebResponseEntity<PSBFolderEntity> response = WebResponseEntity.success(
-                folder, "Pasta PSB criada com sucesso");
+                folder, "Pasta PSB criada com sucesso!");
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
-    
+
     @PutMapping("/folders/{id}")
     public ResponseEntity<WebResponseEntity<PSBFolderEntity>> updateFolder(
             @PathVariable Long id, @Valid @RequestBody CreatePSBFolderRequest request) {
         PSBFolderEntity folder = psbFolderService.update(id, request);
         WebResponseEntity<PSBFolderEntity> response = WebResponseEntity.success(
-                folder, "Pasta PSB atualizada com sucesso");
+                folder, "Pasta PSB atualizada com sucesso!");
         return ResponseEntity.ok(response);
     }
-    
+
     @DeleteMapping("/folders/{id}")
     public ResponseEntity<WebResponseEntity<Void>> deleteFolder(@PathVariable Long id) {
         psbFolderService.delete(id);
         WebResponseEntity<Void> response = WebResponseEntity.success(
-                null, "Pasta PSB excluída com sucesso");
+                null, "Pasta PSB excluída com sucesso!");
         return ResponseEntity.ok(response);
     }
-    
+
     // --- File Endpoints ---
-    
     @GetMapping("/files/folder/{folderId}")
     public ResponseEntity<WebResponseEntity<List<PSBFileEntity>>> getFilesByFolderId(@PathVariable Long folderId) {
         List<PSBFileEntity> files = psbFileService.findByFolderId(folderId);
         WebResponseEntity<List<PSBFileEntity>> response = WebResponseEntity.success(
-                files, "Arquivos PSB obtidos com sucesso");
+                files, "Arquivos PSB obtidos com sucesso!");
         return ResponseEntity.ok(response);
     }
-    
+
     @PostMapping("/files/upload/{folderId}")
     public ResponseEntity<WebResponseEntity<PSBFileEntity>> uploadFile(
             @PathVariable Long folderId,
@@ -97,27 +111,27 @@ public class PSBController {
             @RequestParam("uploadedById") Long uploadedById) {
         PSBFileEntity psbFile = psbFileService.uploadFile(folderId, file, uploadedById);
         WebResponseEntity<PSBFileEntity> response = WebResponseEntity.success(
-                psbFile, "Arquivo PSB enviado com sucesso");
+                psbFile, "Arquivo PSB enviado com sucesso!");
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
-    
+
     @GetMapping("/files/download/{fileId}")
     public ResponseEntity<Resource> downloadFile(@PathVariable Long fileId) {
         PSBFileEntity file = psbFileService.findById(fileId);
         Resource resource = psbFileService.downloadFile(fileId);
-        
+
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(file.getContentType()))
-                .header(HttpHeaders.CONTENT_DISPOSITION, 
+                .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"" + file.getOriginalFilename() + "\"")
                 .body(resource);
     }
-    
+
     @DeleteMapping("/files/{fileId}")
     public ResponseEntity<WebResponseEntity<Void>> deleteFile(@PathVariable Long fileId) {
         psbFileService.deleteFile(fileId);
         WebResponseEntity<Void> response = WebResponseEntity.success(
-                null, "Arquivo PSB excluído com sucesso");
+                null, "Arquivo PSB excluído com sucesso!");
         return ResponseEntity.ok(response);
     }
 }

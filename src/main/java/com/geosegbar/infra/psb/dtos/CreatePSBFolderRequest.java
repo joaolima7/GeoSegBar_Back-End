@@ -13,20 +13,22 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CreatePSBFolderRequest {
-    
+
     @NotBlank(message = "O nome da pasta é obrigatório")
     private String name;
-    
+
     @NotNull(message = "O índice da pasta é obrigatório")
     @Min(value = 1, message = "O índice deve ser um número positivo")
     private Integer folderIndex;
-    
+
     private String description;
-    
+
     @NotNull(message = "ID da barragem é obrigatório")
     private Long damId;
 
     private Long createdById;
+
+    private Long parentFolderId;
 
     private FolderColorEnum color = FolderColorEnum.BLUE;
 }

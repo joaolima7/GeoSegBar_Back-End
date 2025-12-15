@@ -821,6 +821,12 @@ public class DamService {
             }
         }
 
+        // ⭐ SINCRONIZAR PASTAS PSB RAIZ
+        if (request.getPsbFolders() != null && !request.getPsbFolders().isEmpty()) {
+            UserEntity currentUser = AuthenticatedUserUtil.getCurrentUser();
+            psbFolderService.syncRootFolders(finalDam, request.getPsbFolders(), currentUser.getId());
+        }
+
         // ⭐ SINCRONIZAR DAM PERMISSIONS SE HOUVE MUDANÇA DE CLIENTE
         if (clientChanged) {
             // Remover permissões do cliente antigo

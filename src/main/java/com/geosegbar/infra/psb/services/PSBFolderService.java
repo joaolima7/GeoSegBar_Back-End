@@ -479,4 +479,159 @@ public class PSBFolderService {
 
         return false;
     }
+
+    @Transactional
+    public void syncRootFolders(DamEntity dam, List<com.geosegbar.infra.psb.dtos.PSBFolderUpdateDTO> psbFolderDTOs,
+            Long updatedById) {
+        if (psbFolderDTOs == null || psbFolderDTOs.isEmpty()) {
+
+            return;
+        }
+
+        UserEntity updater = userRepository.findById(updatedById)
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
+
+        List<PSBFolderEntity> existingRootFolders = psbFolderRepository
+                .findByDamIdAndParentFolderIsNullOrderByFolderIndexAsc(dam.getId());
+
+        List<Long> sentFolderIds = psbFolderDTOs.stream()
+                .map(com.geosegbar.infra.psb.dtos.PSBFolderUpdateDTO::getId)
+                .filter(id -> id != null)
+                .toList();
+
+        // Deleta pastas não enviadas SEM reindexação (será feita ao final)
+        for (PSBFolderEntity existingFolder : existingRootFolders) {
+            if (!sentFolderIds.contains(existingFolder.getId())) {
+                log.info("Deletando pasta raiz não enviada: {}", existingFolder.getName());
+                deleteWithoutReindex(existingFolder);
+            }
+        }
+
+        // Força a execução dos DELETEs no banco antes de criar/atualizar
+        psbFolderRepository.flush();
+
+        // Processa atualizações e criações
+        for (com.geosegbar.infra.psb.dtos.PSBFolderUpdateDTO folderDTO : psbFolderDTOs) {
+            if (folderDTO.getId() != null) {
+
+                updateRootFolder(folderDTO, dam, updater);
+            } else {
+
+                createRootFolder(folderDTO, dam, updater);
+            }
+        }
+    }
+
+    /**
+     * Deleta uma pasta raiz sem reindexar as demais. Usado internamente pelo
+     * syncRootFolders para evitar conflitos de índice.
+     */
+    private void deleteWithoutReindex(PSBFolderEntity folderToDelete) {
+        try {
+            Path folderPath = Paths.get(folderToDelete.getServerPath());
+            if (Files.exists(folderPath)) {
+                Files.walk(folderPath)
+                        .sorted((a, b) -> b.toString().length() - a.toString().length())
+                        .forEach(path -> {
+                            try {
+                                Files.delete(path);
+                            } catch (Exception e) {
+                                log.error("Erro ao deletar: " + path + ": " + e.getMessage());
+                            }
+                        });
+                log.info("Pasta e subpastas excluídas fisicamente: {}", folderPath);
+            }
+        } catch (Exception e) {
+            log.error("Erro ao deletar diretório: {}", e.getMessage());
+        }
+
+        psbFolderRepository.delete(folderToDelete);
+    }
+
+    @SuppressWarnings("unused")
+    private void updateRootFolder(com.geosegbar.infra.psb.dtos.PSBFolderUpdateDTO folderDTO,
+            DamEntity dam, UserEntity updater) {
+        PSBFolderEntity folder = psbFolderRepository.findById(folderDTO.getId())
+                .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada: " + folderDTO.getId()));
+
+        if (folder.getParentFolder() != null) {
+            throw new BusinessRuleException("Pasta " + folderDTO.getId() + " não é uma pasta raiz");
+        }
+        if (!folder.getDam().getId().equals(dam.getId())) {
+            throw new BusinessRuleException("Pasta " + folderDTO.getId() + " não pertence a esta barragem");
+        }
+
+        if (psbFolderRepository.existsByDamIdAndNameAndParentFolderIsNull(dam.getId(), folderDTO.getName())
+                && !folder.getName().equals(folderDTO.getName())) {
+            throw new DuplicateResourceException("Já existe uma pasta raiz com este nome nesta barragem");
+        }
+
+        if (psbFolderRepository.existsByDamIdAndFolderIndexAndParentFolderIsNull(dam.getId(), folderDTO.getFolderIndex())
+                && !folder.getFolderIndex().equals(folderDTO.getFolderIndex())) {
+            throw new DuplicateResourceException("Já existe uma pasta raiz com este índice nesta barragem");
+        }
+
+        boolean needsPathUpdate = !folder.getName().equals(folderDTO.getName())
+                || !folder.getFolderIndex().equals(folderDTO.getFolderIndex());
+
+        folder.setName(folderDTO.getName());
+        folder.setFolderIndex(folderDTO.getFolderIndex());
+        folder.setDescription(folderDTO.getDescription());
+        folder.setColor(folderDTO.getColor());
+        folder.setUpdatedAt(LocalDateTime.now());
+
+        if (needsPathUpdate) {
+            String oldPath = folder.getServerPath();
+            String newPath = createFolderPath(dam.getId(), folderDTO.getFolderIndex(), folderDTO.getName());
+
+            try {
+                Path sourcePath = Paths.get(oldPath);
+                Path targetPath = Paths.get(newPath);
+
+                if (Files.exists(sourcePath) && !sourcePath.equals(targetPath)) {
+                    Files.move(sourcePath, targetPath);
+                    log.info("Pasta movida de {} para {}", sourcePath, targetPath);
+                }
+
+                folder.setServerPath(newPath);
+
+                updateSubfoldersPath(folder);
+
+            } catch (IOException e) {
+                log.error("Erro ao mover pasta: {}", e.getMessage());
+                throw new BusinessRuleException("Erro ao atualizar caminho da pasta no storage");
+            }
+        }
+
+        psbFolderRepository.save(folder);
+        log.info("Pasta raiz atualizada: {} (ID: {})", folder.getName(), folder.getId());
+    }
+
+    private void createRootFolder(com.geosegbar.infra.psb.dtos.PSBFolderUpdateDTO folderDTO,
+            DamEntity dam, UserEntity creator) {
+
+        if (psbFolderRepository.existsByDamIdAndNameAndParentFolderIsNull(dam.getId(), folderDTO.getName())) {
+            throw new DuplicateResourceException("Já existe uma pasta raiz com este nome nesta barragem");
+        }
+
+        if (psbFolderRepository.existsByDamIdAndFolderIndexAndParentFolderIsNull(dam.getId(), folderDTO.getFolderIndex())) {
+            throw new DuplicateResourceException("Já existe uma pasta raiz com este índice nesta barragem");
+        }
+
+        String folderPath = createFolderPath(dam.getId(), folderDTO.getFolderIndex(), folderDTO.getName());
+        ensureDirectoryExists(folderPath);
+
+        PSBFolderEntity folder = new PSBFolderEntity();
+        folder.setName(folderDTO.getName());
+        folder.setFolderIndex(folderDTO.getFolderIndex());
+        folder.setDescription(folderDTO.getDescription());
+        folder.setDam(dam);
+        folder.setParentFolder(null);
+        folder.setServerPath(folderPath);
+        folder.setCreatedBy(creator);
+        folder.setColor(folderDTO.getColor());
+
+        psbFolderRepository.save(folder);
+        log.info("Nova pasta raiz criada: {} (Índice: {})", folder.getName(), folder.getFolderIndex());
+    }
 }

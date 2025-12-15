@@ -80,4 +80,7 @@ public class UpdateDamCompleteRequest {
 
     @Valid
     private List<ReservoirRequestDTO> reservoirs;
+
+    @Valid
+    private List<com.geosegbar.infra.psb.dtos.PSBFolderUpdateDTO> psbFolders;
 }

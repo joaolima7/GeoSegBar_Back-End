@@ -2,7 +2,10 @@ package com.geosegbar.infra.share_folder.web;
 
 import java.util.List;
 
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,7 +32,7 @@ public class ShareFolderController {
 
     private final ShareFolderService shareFolderService;
     private final PSBFileService psbFileService;
-    
+
     @GetMapping("/user/{userId}")
     public ResponseEntity<WebResponseEntity<List<ShareFolderEntity>>> getSharesByUser(@PathVariable Long userId) {
         List<ShareFolderEntity> shares = shareFolderService.findAllByUser(userId);
@@ -37,7 +40,7 @@ public class ShareFolderController {
                 shares, "Compartilhamentos obtidos com sucesso!");
         return ResponseEntity.ok(response);
     }
-    
+
     @GetMapping("/folder/{folderId}")
     public ResponseEntity<WebResponseEntity<List<ShareFolderEntity>>> getSharesByFolder(@PathVariable Long folderId) {
         List<ShareFolderEntity> shares = shareFolderService.findAllByFolder(folderId);
@@ -45,7 +48,7 @@ public class ShareFolderController {
                 shares, "Compartilhamentos da pasta obtidos com sucesso!");
         return ResponseEntity.ok(response);
     }
-    
+
     @PostMapping
     public ResponseEntity<WebResponseEntity<ShareFolderEntity>> createShare(
             @Valid @RequestBody CreateShareFolderRequest request) {
@@ -54,7 +57,7 @@ public class ShareFolderController {
                 share, "Compartilhamento criado com sucesso!");
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
-    
+
     @DeleteMapping("/{shareId}")
     public ResponseEntity<WebResponseEntity<Void>> deactivateShare(@PathVariable Long shareId) {
         shareFolderService.deleteShare(shareId);
@@ -62,7 +65,7 @@ public class ShareFolderController {
                 null, "Compartilhamento excluído com sucesso!");
         return ResponseEntity.ok(response);
     }
-    
+
     @GetMapping("/access/{token}")
     public ResponseEntity<WebResponseEntity<List<PSBFileEntity>>> accessSharedFolder(@PathVariable String token) {
         ShareFolderEntity share = shareFolderService.registerAccess(token);
@@ -78,5 +81,27 @@ public class ShareFolderController {
         WebResponseEntity<List<ShareFolderEntity>> response = WebResponseEntity.success(
                 shares, "Compartilhamentos da barragem obtidos com sucesso!");
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/download/{token}")
+    public ResponseEntity<Resource> downloadAllFiles(@PathVariable String token) {
+        java.io.ByteArrayOutputStream zipStream = shareFolderService.downloadAllFiles(token);
+
+        org.springframework.core.io.ByteArrayResource resource
+                = new org.springframework.core.io.ByteArrayResource(zipStream.toByteArray());
+
+        ShareFolderEntity share = shareFolderService.findByToken(token);
+        String filename = sanitizeFilename(share.getPsbFolder().getName()) + "_arquivos.zip";
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + filename + "\"")
+                .contentLength(resource.contentLength())
+                .body(resource);
+    }
+
+    private String sanitizeFilename(String filename) {
+        return filename.replaceAll("[^a-zA-Z0-9._-]", "_");
     }
 }

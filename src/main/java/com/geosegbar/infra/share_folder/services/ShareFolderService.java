@@ -30,6 +30,7 @@ public class ShareFolderService {
     private final UserRepository userRepository;
     private final DamRepository damRepository;
     private final EmailService emailService;
+    private final ZipService zipService;
 
     @Transactional(readOnly = true)
     public List<ShareFolderEntity> findAllByUser(Long userId) {
@@ -130,5 +131,42 @@ public class ShareFolderService {
         }
 
         return shareFolderRepository.findByPsbFolderDamIdOrderByCreatedAtDesc(damId);
+    }
+
+    @Transactional(readOnly = true)
+    public java.io.ByteArrayOutputStream downloadAllFiles(String token) {
+        ShareFolderEntity shareFolder = shareFolderRepository.findByToken(token)
+                .orElseThrow(() -> new NotFoundException("Link de compartilhamento não encontrado!"));
+
+        if (shareFolder.getExpiresAt() != null
+                && LocalDateTime.now().isAfter(shareFolder.getExpiresAt())) {
+            throw new ShareFolderException("Este link de compartilhamento expirou!");
+        }
+
+        shareFolder.incrementAccessCount();
+        shareFolderRepository.save(shareFolder);
+
+        PSBFolderEntity folder = psbFolderRepository.findById(shareFolder.getPsbFolder().getId())
+                .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada!"));
+
+        initializeFolderHierarchy(folder);
+
+        return zipService.createZipFromFolder(folder);
+    }
+
+    /**
+     * Inicializa recursivamente todas as subpastas e arquivos (força
+     * carregamento lazy)
+     */
+    private void initializeFolderHierarchy(PSBFolderEntity folder) {
+
+        folder.getFiles().size();
+
+        if (folder.getSubfolders() != null && !folder.getSubfolders().isEmpty()) {
+            folder.getSubfolders().forEach(subfolder -> {
+                subfolder.getFiles().size();
+                initializeFolderHierarchy(subfolder);
+            });
+        }
     }
 }

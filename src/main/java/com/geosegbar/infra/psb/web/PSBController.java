@@ -36,7 +36,6 @@ public class PSBController {
     private final PSBFolderService psbFolderService;
     private final PSBFileService psbFileService;
 
-    // --- Folder Endpoints ---
     @GetMapping("/folders/dam/{damId}")
     public ResponseEntity<WebResponseEntity<List<PSBFolderEntity>>> getFoldersByDamId(@PathVariable Long damId) {
         List<PSBFolderEntity> folders = psbFolderService.findAllByDamId(damId);
@@ -95,7 +94,6 @@ public class PSBController {
         return ResponseEntity.ok(response);
     }
 
-    // --- File Endpoints ---
     @GetMapping("/files/folder/{folderId}")
     public ResponseEntity<WebResponseEntity<List<PSBFileEntity>>> getFilesByFolderId(@PathVariable Long folderId) {
         List<PSBFileEntity> files = psbFileService.findByFolderId(folderId);

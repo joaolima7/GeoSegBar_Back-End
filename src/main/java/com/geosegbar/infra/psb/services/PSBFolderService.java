@@ -41,9 +41,6 @@ public class PSBFolderService {
     private final DamRepository damRepository;
     private final UserRepository userRepository;
 
-    /**
-     * Retorna pastas raiz (sem parent) de uma barragem
-     */
     public List<PSBFolderEntity> findAllByDamId(Long damId) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getViewPSB()) {
@@ -53,9 +50,6 @@ public class PSBFolderService {
         return psbFolderRepository.findByDamIdAndParentFolderIsNullOrderByFolderIndexAsc(damId);
     }
 
-    /**
-     * Retorna subpastas de uma pasta específica
-     */
     public List<PSBFolderEntity> findSubfolders(Long parentFolderId) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getViewPSB()) {
@@ -67,10 +61,6 @@ public class PSBFolderService {
         return psbFolderRepository.findByParentFolderIdOrderByFolderIndexAsc(parentFolderId);
     }
 
-    /**
-     * Retorna toda a estrutura hierárquica de pastas e arquivos de uma barragem
-     * em uma única consulta otimizada
-     */
     @Transactional(readOnly = true)
     public List<PSBFolderEntity> findCompleteHierarchyByDamId(Long damId) {
         if (!AuthenticatedUserUtil.isAdmin()) {
@@ -78,28 +68,21 @@ public class PSBFolderService {
                 throw new NotFoundException("Usuário não tem permissão para acessar as pastas PSB");
             }
         }
-        // Verifica se a barragem existe
+
         damRepository.findById(damId)
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada"));
 
-        // Carrega toda a estrutura em uma única query otimizada com JOIN FETCH
         List<PSBFolderEntity> rootFolders = psbFolderRepository.findCompleteHierarchyByDamId(damId);
 
-        // Força a inicialização das subpastas recursivamente para evitar N+1
         rootFolders.forEach(this::initializeSubfolders);
 
         return rootFolders;
     }
 
-    /**
-     * Inicializa recursivamente as subpastas e arquivos (força carregamento
-     * lazy)
-     */
     private void initializeSubfolders(PSBFolderEntity folder) {
-        // Força carregamento dos arquivos
+
         folder.getFiles().size();
 
-        // Força carregamento das subpastas e inicializa recursivamente
         folder.getSubfolders().forEach(subfolder -> {
             subfolder.getFiles().size();
             initializeSubfolders(subfolder);
@@ -131,7 +114,6 @@ public class PSBFolderService {
 
         PSBFolderEntity parentFolder = null;
 
-        // Se tem parent, buscar e validar
         if (request.getParentFolderId() != null) {
             parentFolder = psbFolderRepository.findById(request.getParentFolderId())
                     .orElseThrow(() -> new NotFoundException("Pasta pai não encontrada"));
@@ -141,7 +123,6 @@ public class PSBFolderService {
             }
         }
 
-        // Validar nome duplicado no mesmo nível
         if (parentFolder != null) {
             if (psbFolderRepository.existsByDamIdAndNameAndParentFolderId(
                     dam.getId(), request.getName(), parentFolder.getId())) {
@@ -154,7 +135,6 @@ public class PSBFolderService {
             }
         }
 
-        // Validar índice duplicado no mesmo nível
         if (parentFolder != null) {
             if (psbFolderRepository.existsByParentFolderIdAndFolderIndex(
                     parentFolder.getId(), request.getFolderIndex())) {
@@ -195,19 +175,16 @@ public class PSBFolderService {
         PSBFolderEntity existingFolder = psbFolderRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
 
-        // Validar se está tentando mudar o parent
         PSBFolderEntity newParent = null;
         if (request.getParentFolderId() != null) {
             newParent = psbFolderRepository.findById(request.getParentFolderId())
                     .orElseThrow(() -> new NotFoundException("Pasta pai não encontrada"));
 
-            // Validar ciclo
             if (isDescendant(existingFolder, newParent)) {
                 throw new BusinessRuleException(
                         "Não é possível mover uma pasta para dentro de si mesma ou de suas subpastas");
             }
 
-            // Validar mesma barragem
             if (!newParent.getDam().getId().equals(existingFolder.getDam().getId())) {
                 throw new BusinessRuleException("A pasta pai deve pertencer à mesma barragem");
             }
@@ -223,7 +200,6 @@ public class PSBFolderService {
                 || (currentParentId != null && !currentParentId.equals(newParentId))
                 || (currentParentId != null && newParentId == null);
 
-        // Validar nome duplicado no mesmo nível
         if (nameChanged || parentChanged) {
             if (newParentId != null) {
                 List<PSBFolderEntity> siblings = psbFolderRepository
@@ -244,7 +220,6 @@ public class PSBFolderService {
             }
         }
 
-        // Validar índice duplicado no mesmo nível
         if (indexChanged || parentChanged) {
             if (newParentId != null) {
                 List<PSBFolderEntity> siblings = psbFolderRepository
@@ -267,7 +242,6 @@ public class PSBFolderService {
             }
         }
 
-        // Se mudou algo que afeta o caminho físico
         if (nameChanged || indexChanged || parentChanged) {
             String newFolderPath = createHierarchicalFolderPath(
                     existingFolder.getDam().getId(), newParent,
@@ -287,7 +261,6 @@ public class PSBFolderService {
 
                 existingFolder.setServerPath(newFolderPath);
 
-                // Atualizar recursivamente subpastas
                 updateSubfoldersPath(existingFolder);
 
             } catch (IOException e) {
@@ -324,7 +297,6 @@ public class PSBFolderService {
         Integer deletedFolderIndex = folderToDelete.getFolderIndex();
         PSBFolderEntity parentFolder = folderToDelete.getParentFolder();
 
-        // Deletar pasta física recursivamente (incluindo subpastas e arquivos)
         try {
             Path folderPath = Paths.get(folderToDelete.getServerPath());
             if (Files.exists(folderPath)) {
@@ -343,10 +315,8 @@ public class PSBFolderService {
             log.error("Erro ao deletar diretório: {}", e.getMessage());
         }
 
-        // Deletar do banco (cascade deleta subpastas e arquivos automaticamente)
         psbFolderRepository.delete(folderToDelete);
 
-        // Reindexar apenas pastas do mesmo nível
         List<PSBFolderEntity> foldersToReindex;
         if (parentFolder != null) {
             foldersToReindex = psbFolderRepository
@@ -379,7 +349,6 @@ public class PSBFolderService {
                 folder.setServerPath(newFolderPath);
                 folder.setUpdatedAt(LocalDateTime.now());
 
-                // Atualizar subpastas recursivamente
                 updateSubfoldersPath(folder);
 
             } catch (IOException e) {
@@ -390,16 +359,10 @@ public class PSBFolderService {
         psbFolderRepository.saveAll(foldersToReindex);
     }
 
-    /**
-     * Cria caminho para pasta raiz (compatibilidade com código antigo)
-     */
     private String createFolderPath(Long damId, Integer folderIndex, String folderName) {
         return createHierarchicalFolderPath(damId, null, folderIndex, folderName);
     }
 
-    /**
-     * Cria caminho hierárquico da pasta
-     */
     private String createHierarchicalFolderPath(Long damId, PSBFolderEntity parentFolder,
             Integer folderIndex, String folderName) {
         String normalizedName = folderName.trim()
@@ -416,10 +379,10 @@ public class PSBFolderService {
         String folderDirName = String.format("%03d", folderIndex) + "-" + normalizedName;
 
         if (parentFolder != null) {
-            // Subpasta: usar caminho do parent
+
             return Paths.get(parentFolder.getServerPath(), folderDirName).toString();
         } else {
-            // Pasta raiz
+
             return Paths.get(psbBaseDir, "dam-" + damId, folderDirName).toString();
         }
     }
@@ -472,9 +435,6 @@ public class PSBFolderService {
         }
     }
 
-    /**
-     * Atualiza recursivamente o caminho de todas as subpastas
-     */
     private void updateSubfoldersPath(PSBFolderEntity folder) {
         List<PSBFolderEntity> subfolders = psbFolderRepository
                 .findByParentFolderIdOrderByFolderIndexAsc(folder.getId());
@@ -495,7 +455,6 @@ public class PSBFolderService {
                 subfolder.setServerPath(newSubfolderPath);
                 psbFolderRepository.save(subfolder);
 
-                // Recursão para subpastas da subpasta
                 updateSubfoldersPath(subfolder);
 
             } catch (IOException e) {
@@ -505,9 +464,6 @@ public class PSBFolderService {
         }
     }
 
-    /**
-     * Verifica se potentialDescendant é descendente de ancestor
-     */
     private boolean isDescendant(PSBFolderEntity ancestor, PSBFolderEntity potentialDescendant) {
         if (ancestor.getId().equals(potentialDescendant.getId())) {
             return true;

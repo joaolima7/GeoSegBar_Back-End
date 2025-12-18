@@ -96,18 +96,26 @@ public class ShareFolderService {
     }
 
     @Transactional
-    public ShareFolderEntity registerAccess(String token) {
+    public PSBFolderEntity registerAccessAndGetFolder(String token) {
         ShareFolderEntity shareFolder = shareFolderRepository.findByToken(token)
                 .orElseThrow(() -> new NotFoundException("Link de compartilhamento não encontrado!"));
 
         if (shareFolder.getExpiresAt() != null
                 && LocalDateTime.now().isAfter(shareFolder.getExpiresAt())) {
-            shareFolderRepository.save(shareFolder);
             throw new ShareFolderException("Este link de compartilhamento expirou!");
         }
 
         shareFolder.incrementAccessCount();
-        return shareFolderRepository.save(shareFolder);
+        shareFolderRepository.save(shareFolder);
+
+        // Busca a pasta completa com toda a hierarquia
+        PSBFolderEntity folder = psbFolderRepository.findById(shareFolder.getPsbFolder().getId())
+                .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada!"));
+
+        // Inicializa toda a hierarquia de subpastas e arquivos
+        initializeFolderHierarchy(folder);
+
+        return folder;
     }
 
     @Transactional

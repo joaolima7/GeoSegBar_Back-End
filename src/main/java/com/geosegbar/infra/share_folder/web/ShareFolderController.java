@@ -16,9 +16,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
-import com.geosegbar.entities.PSBFileEntity;
+import com.geosegbar.entities.PSBFolderEntity;
 import com.geosegbar.entities.ShareFolderEntity;
-import com.geosegbar.infra.psb.services.PSBFileService;
 import com.geosegbar.infra.share_folder.dtos.CreateShareFolderRequest;
 import com.geosegbar.infra.share_folder.services.ShareFolderService;
 
@@ -31,7 +30,6 @@ import lombok.RequiredArgsConstructor;
 public class ShareFolderController {
 
     private final ShareFolderService shareFolderService;
-    private final PSBFileService psbFileService;
 
     @GetMapping("/user/{userId}")
     public ResponseEntity<WebResponseEntity<List<ShareFolderEntity>>> getSharesByUser(@PathVariable Long userId) {
@@ -67,11 +65,10 @@ public class ShareFolderController {
     }
 
     @GetMapping("/access/{token}")
-    public ResponseEntity<WebResponseEntity<List<PSBFileEntity>>> accessSharedFolder(@PathVariable String token) {
-        ShareFolderEntity share = shareFolderService.registerAccess(token);
-        List<PSBFileEntity> files = psbFileService.findByFolderId(share.getPsbFolder().getId());
-        WebResponseEntity<List<PSBFileEntity>> response = WebResponseEntity.success(
-                files, "Arquivos obtidos com sucesso!");
+    public ResponseEntity<WebResponseEntity<PSBFolderEntity>> accessSharedFolder(@PathVariable String token) {
+        PSBFolderEntity folder = shareFolderService.registerAccessAndGetFolder(token);
+        WebResponseEntity<PSBFolderEntity> response = WebResponseEntity.success(
+                folder, "Pasta compartilhada obtida com sucesso!");
         return ResponseEntity.ok(response);
     }
 

@@ -89,14 +89,28 @@ public class PSBFolderService {
         });
     }
 
+    @Transactional(readOnly = true)
     public PSBFolderEntity findById(Long id) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getViewPSB()) {
                 throw new NotFoundException("Usuário não tem permissão para acessar as pastas PSB");
             }
         }
-        return psbFolderRepository.findById(id)
+        PSBFolderEntity folder = psbFolderRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
+
+        // Inicializa parent (se existir)
+        if (folder.getParentFolder() != null) {
+            folder.getParentFolder().getName(); // força inicialização
+        }
+
+        // Inicializa arquivos da pasta atual
+        folder.getFiles().size();
+
+        // Inicializa todas as subpastas recursivamente
+        initializeSubfolders(folder);
+
+        return folder;
     }
 
     @Transactional

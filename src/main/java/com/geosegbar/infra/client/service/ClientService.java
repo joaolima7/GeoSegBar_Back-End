@@ -137,6 +137,17 @@ public class ClientService {
             throw new NotFoundException("Usuários não encontrados com IDs: " + missingIds);
         }
 
+        if (client.getStatus() != null && client.getStatus().getStatus().name().equals("DISABLED")) {
+            for (UserEntity user : users) {
+                if (user.getStatus() != null && user.getStatus().getStatus().name().equals("ACTIVE")) {
+                    throw new BusinessRuleException(
+                            "Não é possível associar o usuário '" + user.getName()
+                            + "' ao cliente pois este cliente está desativado. Desative o usuário primeiro ou ative o cliente."
+                    );
+                }
+            }
+        }
+
         for (UserEntity user : users) {
 
             UserClientAssociationDTO associationDTO = new UserClientAssociationDTO();
@@ -199,6 +210,17 @@ public class ClientService {
                 Set<Long> missingIds = new HashSet<>(usersToAdd);
                 missingIds.removeAll(foundIds);
                 throw new NotFoundException("Usuários não encontrados com IDs: " + missingIds);
+            }
+
+            if (client.getStatus() != null && client.getStatus().getStatus().name().equals("DISABLED")) {
+                for (UserEntity user : usersToAddList) {
+                    if (user.getStatus() != null && user.getStatus().getStatus().name().equals("ACTIVE")) {
+                        throw new BusinessRuleException(
+                                "Não é possível associar o usuário '" + user.getName()
+                                + "' ao cliente pois este cliente está desativado. Desative o usuário primeiro ou ative o cliente."
+                        );
+                    }
+                }
             }
 
             for (UserEntity user : usersToAddList) {

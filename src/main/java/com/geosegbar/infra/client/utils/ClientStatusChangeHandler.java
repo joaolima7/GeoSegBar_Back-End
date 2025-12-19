@@ -6,6 +6,7 @@ import com.geosegbar.common.enums.StatusEnum;
 import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.StatusEntity;
 import com.geosegbar.infra.dam.services.DamService;
+import com.geosegbar.infra.user.service.UserService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 public class ClientStatusChangeHandler {
 
     private final DamService damService;
+    private final UserService userService;
 
     public boolean handleStatusChange(ClientEntity client, StatusEntity newStatus) {
 
@@ -33,10 +35,16 @@ public class ClientStatusChangeHandler {
                 client.getId(), oldStatusEnum, newStatusEnum);
 
         if (isStatusSyncRequired(oldStatusEnum, newStatusEnum)) {
+
             int updatedDams = damService.synchronizeClientDamsStatus(client.getId(), newStatus);
 
             log.info("Status do cliente {} alterado. {} barragem(ns) sincronizada(s).",
                     client.getId(), updatedDams);
+
+            if (newStatusEnum == StatusEnum.DISABLED) {
+                log.info("Cliente {} desativado. Iniciando desativação assíncrona de usuários...", client.getId());
+                userService.deactivateClientUsersAsync(client.getId(), newStatus.getId());
+            }
 
             return true;
         }

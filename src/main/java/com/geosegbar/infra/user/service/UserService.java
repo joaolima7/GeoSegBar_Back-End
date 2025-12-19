@@ -150,6 +150,21 @@ public class UserService {
         StatusEntity status = statusRepository.findById(statusUpdateDTO.getStatusId())
                 .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + statusUpdateDTO.getStatusId()));
 
+        if (status.getStatus() == StatusEnum.ACTIVE
+                && (user.getStatus() == null || user.getStatus().getStatus() == StatusEnum.DISABLED)) {
+
+            Hibernate.initialize(user.getClients());
+
+            for (ClientEntity client : user.getClients()) {
+                if (client.getStatus() != null && client.getStatus().getStatus() == StatusEnum.DISABLED) {
+                    throw new BusinessRuleException(
+                            "Não é possível ativar o usuário pois ele está associado ao cliente '"
+                            + client.getName() + "' que está desativado. Remova a associação com clientes desativados antes de ativar o usuário."
+                    );
+                }
+            }
+        }
+
         user.setStatus(status);
         return userRepository.save(user);
     }
@@ -170,13 +185,11 @@ public class UserService {
             throw new InvalidInputException("O usuário do sistema não pode ser excluído.");
         }
 
-        // Verificar usuários criados por este usuário
         if (!user.getCreatedUsers().isEmpty() || !user.getReadings().isEmpty() || !user.getPsbFoldersCreated().isEmpty() || !user.getPsbFilesUploaded().isEmpty() || !user.getSharedFolders().isEmpty()) {
             throw new BusinessRuleException(
                     "Não é possível excluir o usuário, pois existem registros associados a ele, desative o usuário se necessário.");
         }
 
-        // Se chegou até aqui, podemos remover as permissões e então o usuário
         documentationPermissionService.deleteByUserSafely(user.getId());
         attributionsPermissionService.deleteByUserSafely(user.getId());
         instrumentationPermissionService.deleteByUserSafely(user.getId());
@@ -203,11 +216,10 @@ public class UserService {
     @Transactional()
     public List<UserEntity> findByFilters(Long roleId, Long clientId, Long statusId, Boolean isManagement, Boolean withoutClient) {
         if (isManagement != null && isManagement) {
-            // Se clientId for fornecido, filtra por ele; caso contrário, retorna todos (incluindo colaboradores sem cliente)
+
             return userRepository.findByClientIncludingUnassignedCollaborators(clientId, statusId);
         }
 
-        // Se withoutClient for null, define como false por padrão
         Boolean includeWithoutClient = withoutClient != null ? withoutClient : false;
 
         List<UserEntity> result = userRepository.findByRoleAndClientWithDetails(
@@ -217,8 +229,6 @@ public class UserService {
                 includeWithoutClient
         );
 
-        // Filtrar usuário SISTEMA do resultado e garantir unicidade usando LinkedHashSet
-        // LinkedHashSet mantém a ordem de inserção
         return result.stream()
                 .filter(user -> !isSystemUser(user))
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new))
@@ -287,7 +297,19 @@ public class UserService {
         if (userEntity.getRole() != null && userEntity.getRole().getName() == RoleEnum.ADMIN) {
             userEntity.setClients(new HashSet<>());
         } else {
-            if (userDTO.getClients() != null) {
+            if (userDTO.getClients() != null && !userDTO.getClients().isEmpty()) {
+
+                for (ClientEntity client : userDTO.getClients()) {
+                    ClientEntity fullClient = clientRepository.findById(client.getId())
+                            .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + client.getId()));
+
+                    if (fullClient.getStatus() != null && fullClient.getStatus().getStatus() == StatusEnum.DISABLED) {
+                        throw new BusinessRuleException(
+                                "Não é possível associar o usuário ao cliente '" + fullClient.getName()
+                                + "' pois este cliente está desativado."
+                        );
+                    }
+                }
                 userEntity.setClients(userDTO.getClients());
             } else {
                 userEntity.setClients(new HashSet<>());
@@ -365,6 +387,22 @@ public class UserService {
         if (userDTO.getStatus() != null && userDTO.getStatus().getId() != null) {
             StatusEntity status = statusRepository.findById(userDTO.getStatus().getId())
                     .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + userDTO.getStatus().getId()));
+
+            if (status.getStatus() == StatusEnum.ACTIVE
+                    && (existingUser.getStatus() == null || existingUser.getStatus().getStatus() == StatusEnum.DISABLED)) {
+
+                Hibernate.initialize(existingUser.getClients());
+
+                for (ClientEntity client : existingUser.getClients()) {
+                    if (client.getStatus() != null && client.getStatus().getStatus() == StatusEnum.DISABLED) {
+                        throw new BusinessRuleException(
+                                "Não é possível ativar o usuário pois ele está associado ao cliente '"
+                                + client.getName() + "' que está desativado. Remova a associação com clientes desativados antes de ativar o usuário."
+                        );
+                    }
+                }
+            }
+
             existingUser.setStatus(status);
         }
 
@@ -435,9 +473,8 @@ public class UserService {
         AuthenticatedUserUtil.checkAdminPermission();
         UserEntity user = findEntityByIdWithAllDetails(userId);
 
-        // Se o usuário alvo for ADMIN, ignorar associação de clients
         if (user.getRole() != null && user.getRole().getName() == RoleEnum.ADMIN) {
-            // Não altera clients de admin — retorna sem modificações
+
             return user;
         }
 
@@ -448,6 +485,16 @@ public class UserService {
         for (Long clientId : clientAssociationDTO.getClientIds()) {
             ClientEntity client = clientRepository.findById(clientId)
                     .orElseThrow(() -> new NotFoundException("Cliente com ID " + clientId + " não encontrado!"));
+
+            if (client.getStatus() != null && client.getStatus().getStatus() == StatusEnum.DISABLED) {
+                if (user.getStatus() != null && user.getStatus().getStatus() == StatusEnum.ACTIVE) {
+                    throw new BusinessRuleException(
+                            "Não é possível associar o cliente '" + client.getName()
+                            + "' ao usuário pois este cliente está desativado. Desative o usuário primeiro ou escolha um cliente ativo."
+                    );
+                }
+            }
+
             newClients.add(client);
         }
 
@@ -832,7 +879,7 @@ public class UserService {
             instrPermissionDTO.setEditRead(sourceInstrPermission.getEditRead());
             instrPermissionDTO.setViewSections(sourceInstrPermission.getViewSections());
             instrPermissionDTO.setEditSections(sourceInstrPermission.getEditSections());
-            // ⭐ NOVOS CAMPOS
+
             instrPermissionDTO.setViewInstruments(sourceInstrPermission.getViewInstruments());
             instrPermissionDTO.setEditInstruments(sourceInstrPermission.getEditInstruments());
             instrumentationPermissionService.createOrUpdate(instrPermissionDTO);
@@ -898,14 +945,12 @@ public class UserService {
         ClientEntity client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + clientId));
 
-        // Buscar todos os colaboradores associados a este cliente
         List<UserEntity> collaborators = userRepository.findByClientIdAndRole(clientId, RoleEnum.COLLABORATOR);
 
         for (UserEntity collaborator : collaborators) {
-            // Remover permissões antigas deste cliente
+
             deleteDamPermissionsForSpecificClients(collaborator, Set.of(client));
 
-            // Recriar permissões baseadas nas barragens atuais
             createDamPermissionsForSpecificClients(collaborator, Set.of(client));
         }
 
@@ -921,11 +966,10 @@ public class UserService {
         ClientEntity client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + clientId));
 
-        // Buscar todos os colaboradores deste cliente
         List<UserEntity> collaborators = userRepository.findByClientIdAndRole(clientId, RoleEnum.COLLABORATOR);
 
         for (UserEntity collaborator : collaborators) {
-            // Remover permissão específica desta barragem
+
             damPermissionRepository.deleteByUserAndDamAndClient(collaborator, dam, client);
         }
 
@@ -941,16 +985,14 @@ public class UserService {
         ClientEntity client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + clientId));
 
-        // Buscar todos os colaboradores deste cliente
         List<UserEntity> collaborators = userRepository.findByClientIdAndRole(clientId, RoleEnum.COLLABORATOR);
 
         for (UserEntity collaborator : collaborators) {
-            // Verificar se já existe permissão
+
             if (damPermissionRepository.existsByUserAndDamAndClient(collaborator, dam, client)) {
                 continue;
             }
 
-            // Criar nova permissão
             DamPermissionEntity permission = new DamPermissionEntity();
             permission.setUser(collaborator);
             permission.setDam(dam);
@@ -963,5 +1005,37 @@ public class UserService {
 
         log.info("DamPermissions da barragem ID {} criadas para {} colaboradores do cliente ID: {}",
                 damId, collaborators.size(), clientId);
+    }
+
+    /**
+     * Desativa todos os usuários associados a um cliente de forma assíncrona.
+     * Executa em batch para melhor performance.
+     *
+     * @param clientId ID do cliente
+     * @param disabledStatusId ID do status "Desativado"
+     */
+    @org.springframework.scheduling.annotation.Async
+    @Transactional
+    public void deactivateClientUsersAsync(Long clientId, Long disabledStatusId) {
+        try {
+            log.info("Iniciando desativação assíncrona de usuários do cliente {}", clientId);
+
+            List<Long> userIds = userRepository.findUserIdsByClientId(clientId);
+
+            if (userIds.isEmpty()) {
+                log.info("Nenhum usuário encontrado para o cliente {}", clientId);
+                return;
+            }
+
+            int updatedCount = userRepository.bulkUpdateStatusByIds(userIds, disabledStatusId);
+
+            log.info("✅ Desativação assíncrona concluída: {} usuário(s) do cliente {} foram desativados",
+                    updatedCount, clientId);
+
+        } catch (Exception e) {
+            log.error("❌ Erro ao desativar usuários do cliente {} de forma assíncrona: {}",
+                    clientId, e.getMessage(), e);
+
+        }
     }
 }

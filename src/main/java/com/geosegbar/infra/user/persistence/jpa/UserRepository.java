@@ -171,4 +171,11 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
     boolean existsByEmailAndIdNot(String email, Long id);
 
     boolean existsByPhoneAndIdNot(String phone, Long id);
+
+    @Query("SELECT u.id FROM UserEntity u JOIN u.clients c WHERE c.id = :clientId")
+    List<Long> findUserIdsByClientId(@Param("clientId") Long clientId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE UserEntity u SET u.status.id = :statusId WHERE u.id IN :userIds")
+    int bulkUpdateStatusByIds(@Param("userIds") List<Long> userIds, @Param("statusId") Long statusId);
 }

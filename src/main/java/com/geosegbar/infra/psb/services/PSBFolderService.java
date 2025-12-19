@@ -446,6 +446,10 @@ public class PSBFolderService {
             if (!directory.mkdirs()) {
                 throw new RuntimeException("Não foi possível criar o diretório: " + dirPath);
             }
+            // Define permissões de leitura para todos (necessário para acesso web)
+            directory.setReadable(true, false);
+            directory.setExecutable(true, false);
+            log.info("Diretório criado com permissões: {}", dirPath);
         }
     }
 

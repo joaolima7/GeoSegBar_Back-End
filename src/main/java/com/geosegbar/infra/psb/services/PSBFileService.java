@@ -88,11 +88,22 @@ public class PSBFileService {
             // Salvar o arquivo
             Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
 
-            // Construir URL de download
-            String relativePathFromPsbBase = "dam-" + folder.getDam().getId() + "/"
-                    + folder.getServerPath().substring(folder.getServerPath().lastIndexOf(File.separator) + 1)
-                    + "/" + filename;
-            String downloadUrl = baseUrl + "psb/" + relativePathFromPsbBase;
+            // Construir URL de download - pegar caminho relativo completo a partir do diretório PSB
+            String serverPath = folder.getServerPath();
+            String relativePath;
+
+            // Extrair o caminho relativo a partir de "/psb/" ou "\psb\"
+            int psbIndex = serverPath.indexOf(File.separator + "psb" + File.separator);
+            if (psbIndex != -1) {
+                // Pega tudo depois de "/psb/"
+                relativePath = serverPath.substring(psbIndex + 5); // +5 para pular "/psb/"
+            } else {
+                // Fallback: usar apenas o último segmento (comportamento antigo)
+                relativePath = "dam-" + folder.getDam().getId() + "/"
+                        + serverPath.substring(serverPath.lastIndexOf(File.separator) + 1);
+            }
+
+            String downloadUrl = baseUrl + "psb/" + relativePath + "/" + filename;
 
             // Salvar entidade no banco
             PSBFileEntity psbFile = new PSBFileEntity();

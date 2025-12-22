@@ -21,6 +21,7 @@ import com.geosegbar.entities.OptionEntity;
 import com.geosegbar.entities.QuestionEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
 import com.geosegbar.entities.TemplateQuestionnaireQuestionEntity;
+import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
@@ -128,6 +129,16 @@ public class ChecklistService {
 
         DamEntity fullDam = damService.findById(damId);
         Long clientId = fullDam.getClient().getId();
+
+        // Validação: não permitir criar checklist se a barragem já tiver um
+        List<ChecklistEntity> existingChecklists = checklistRepository.findByDams_Id(damId);
+        if (!existingChecklists.isEmpty()) {
+            throw new BusinessRuleException(
+                    "Não é possível criar um novo checklist para esta barragem. "
+                    + "A barragem '" + fullDam.getName() + "' já possui um checklist cadastrado. "
+                    + "Edite o checklist existente ao invés de criar um novo."
+            );
+        }
 
         if (checklistRepository.existsByNameAndDams_Id(checklist.getName(), damId)) {
             throw new DuplicateResourceException("Já existe um checklist com esse nome para esta barragem.");

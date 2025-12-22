@@ -1,12 +1,13 @@
 package com.geosegbar.configs.metrics;
 
+import org.springframework.lang.NonNull;
+import org.springframework.web.servlet.HandlerInterceptor;
+
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.lang.NonNull;
-import org.springframework.web.servlet.HandlerInterceptor;
 
 @Slf4j
 public class PerformanceInterceptor implements HandlerInterceptor {
@@ -50,7 +51,6 @@ public class PerformanceInterceptor implements HandlerInterceptor {
                     .tag("success", isSuccessStatus(response.getStatus()) ? "true" : "false")
                     .register(meterRegistry));
 
-            // Log de requests lentos (> 2s)
             if (startTime != null) {
                 long duration = System.currentTimeMillis() - startTime;
                 if (duration > 2000) {
@@ -62,7 +62,7 @@ public class PerformanceInterceptor implements HandlerInterceptor {
     }
 
     private String normalizeEndpoint(String uri) {
-        // Remove IDs numéricos dos endpoints para agrupamento
+
         return uri.replaceAll("/\\d+", "/{id}")
                 .replaceAll("/[0-9a-f-]{36}", "/{uuid}");
     }

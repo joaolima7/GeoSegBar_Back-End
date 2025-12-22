@@ -22,21 +22,18 @@ public class InstrumentTabulatePatternMapper {
         dto.setId(pattern.getId());
         dto.setName(pattern.getName());
 
-        // Dam
         if (pattern.getDam() != null) {
             dto.setDam(new TabulatePatternResponseDTO.DamSummaryDTO(
                     pattern.getDam().getId(),
                     pattern.getDam().getName()));
         }
 
-        // Folder
         if (pattern.getFolder() != null) {
             dto.setFolder(new TabulatePatternResponseDTO.FolderSummaryDTO(
                     pattern.getFolder().getId(),
                     pattern.getFolder().getName()));
         }
 
-        // Associations
         List<TabulatePatternResponseDTO.InstrumentAssociationDTO> associationDTOs = new ArrayList<>();
 
         for (InstrumentTabulateAssociationEntity association : pattern.getAssociations()) {
@@ -52,7 +49,6 @@ public class InstrumentTabulatePatternMapper {
             assocDTO.setUserIndex(association.getUserIndex());
             assocDTO.setIsReadEnable(association.getIsReadEnable());
 
-            // Output associations
             List<TabulatePatternResponseDTO.OutputAssociationDTO> outputDTOs = new ArrayList<>();
 
             for (InstrumentTabulateOutputAssociationEntity outputAssoc : association.getOutputAssociations()) {
@@ -73,7 +69,6 @@ public class InstrumentTabulatePatternMapper {
                 outputDTOs.add(outputDTO);
             }
 
-            // Ordenar outputs por índice
             outputDTOs.sort(Comparator.comparing(TabulatePatternResponseDTO.OutputAssociationDTO::getOutputIndex));
             assocDTO.setOutputAssociations(outputDTOs);
 

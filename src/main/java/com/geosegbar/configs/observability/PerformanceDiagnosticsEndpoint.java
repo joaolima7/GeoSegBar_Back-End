@@ -37,19 +37,14 @@ public class PerformanceDiagnosticsEndpoint {
     public Map<String, Object> performance() {
         Map<String, Object> diagnostics = new HashMap<>();
 
-        // ⭐ Top 10 métodos mais lentos
         diagnostics.put("slowest_methods", getTop10SlowestMethods());
 
-        // ⭐ Estatísticas do HikariCP
         diagnostics.put("hikaricp_stats", getHikariStats());
 
-        // ⭐ Estatísticas de cache
         diagnostics.put("cache_stats", getCacheStats());
 
-        // ⭐ Redis info
         diagnostics.put("redis_stats", getRedisStats());
 
-        // ⭐ Queries mais executadas
         diagnostics.put("query_stats", getQueryStats());
 
         return diagnostics;
@@ -97,7 +92,7 @@ public class PerformanceDiagnosticsEndpoint {
         cacheManager.getCacheNames().forEach(cacheName -> {
             Map<String, Object> cacheInfo = new HashMap<>();
             cacheInfo.put("name", cacheName);
-            // Adicionar estatísticas básicas
+
             stats.put(cacheName, cacheInfo);
         });
         return stats;
@@ -106,7 +101,7 @@ public class PerformanceDiagnosticsEndpoint {
     private Map<String, Object> getRedisStats() {
         Map<String, Object> stats = new HashMap<>();
         try {
-            // ⭐ CORRIGIDO: Usar RedisCallback explícito
+
             Properties info = redisTemplate.execute((RedisCallback<Properties>) RedisConnection::info);
             stats.put("connected", true);
             stats.put("info", info != null ? info.toString() : "N/A");

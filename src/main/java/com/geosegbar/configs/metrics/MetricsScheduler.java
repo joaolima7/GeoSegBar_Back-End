@@ -29,11 +29,8 @@ public class MetricsScheduler {
      * Atualiza gauge de instrumentos ativos a cada 5 minutos (você pode
      * implementar a lógica de contagem real aqui)
      */
-    @Scheduled(fixedDelay = 300000) // 5 minutos
+    @Scheduled(fixedDelay = 300000)
     public void updateActiveInstrumentsGauge() {
-        // TODO: Implementar contagem real de instrumentos ativos
-        // Exemplo:
-        // long count = instrumentRepository.countByStatusActive();
-        // metricsService.setActiveInstruments(count);
+
     }
 }

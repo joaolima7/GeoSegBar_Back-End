@@ -16,7 +16,7 @@ public class ChecklistWithLastAnswersAndDamDTO {
     private String name;
     private LocalDateTime createdAt;
     private List<TemplateQuestionnaireWithAnswersDTO> templateQuestionnaires;
-    private DamInfoDTO dam; // Informações da barragem
+    private DamInfoDTO dam;
 
     @Data
     @NoArgsConstructor

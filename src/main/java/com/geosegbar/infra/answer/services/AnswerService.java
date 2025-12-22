@@ -24,8 +24,8 @@ import lombok.extern.slf4j.Slf4j;
 public class AnswerService {
 
     private final AnswerRepository answerRepository;
-    private final CacheManager checklistCacheManager; // ⭐ NOVO
-    private final RedisTemplate<String, Object> redisTemplate; // ⭐ NOVO
+    private final CacheManager checklistCacheManager;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     /**
      * ⭐ NOVO: Invalida TODOS os caches de checklistResponse
@@ -61,7 +61,6 @@ public class AnswerService {
         evictCachesByPattern("checklistResponsesByDatePaged", "*");
         evictCachesByPattern("allChecklistResponsesPaged", "*");
 
-        // ⭐ Também invalidar caches de checklist (afeta "última resposta")
         var checklistsWithAnswersByDamCache = checklistCacheManager.getCache("checklistsWithAnswersByDam");
         if (checklistsWithAnswersByDamCache != null) {
             checklistsWithAnswersByDamCache.clear();
@@ -91,7 +90,6 @@ public class AnswerService {
                 .orElseThrow(() -> new NotFoundException("Resposta não encontrada para exclusão!"));
         answerRepository.deleteById(id);
 
-        // ⭐ NOVO: Invalidar caches
         evictAllChecklistResponseCaches();
         log.info("Answer {} deletado. Caches de checklistResponse invalidados.", id);
     }
@@ -101,7 +99,6 @@ public class AnswerService {
         validateAnswerByType(answer);
         AnswerEntity saved = answerRepository.save(answer);
 
-        // ⭐ NOVO: Invalidar caches
         evictAllChecklistResponseCaches();
         log.info("Answer {} criado. Caches de checklistResponse invalidados.", saved.getId());
 
@@ -115,7 +112,6 @@ public class AnswerService {
         validateAnswerByType(answer);
         AnswerEntity saved = answerRepository.save(answer);
 
-        // ⭐ NOVO: Invalidar caches
         evictAllChecklistResponseCaches();
         log.info("Answer {} atualizado. Caches de checklistResponse invalidados.", answer.getId());
 

@@ -41,7 +41,7 @@ public class AnswerPhotoController {
         WebResponseEntity<AnswerPhotoEntity> response = WebResponseEntity.success(photo, "Foto de resposta obtida com sucesso!");
         return ResponseEntity.ok(response);
     }
-    
+
     @GetMapping("/answer/{answerId}")
     public ResponseEntity<WebResponseEntity<List<AnswerPhotoEntity>>> getAnswerPhotosByAnswerId(@PathVariable Long answerId) {
         List<AnswerPhotoEntity> photos = answerPhotoService.findByAnswerId(answerId);

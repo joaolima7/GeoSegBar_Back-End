@@ -60,7 +60,6 @@ public class DocumentationDamService {
             dam.setDocumentationDam(documentationDam);
         }
 
-        // Update all fields
         documentationDam.setLastUpdatePAE(documentationDamDTO.getLastUpdatePAE());
         documentationDam.setNextUpdatePAE(documentationDamDTO.getNextUpdatePAE());
         documentationDam.setLastUpdatePSB(documentationDamDTO.getLastUpdatePSB());

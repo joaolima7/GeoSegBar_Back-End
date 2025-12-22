@@ -44,7 +44,7 @@ public class AuthenticatedUserUtil {
 
         for (String role : roles) {
             if (userRole.equals(role)) {
-                return; // Tem a permissão
+                return;
             }
         }
 

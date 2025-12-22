@@ -23,10 +23,9 @@ public class QueryPerformanceInterceptor implements StatementInspector {
 
     @Override
     public String inspect(String sql) {
-        // Marca início da query
+
         queryStartTime.set(System.nanoTime());
 
-        // Registrar execução após retorno (usando aspect separado)
         registerQueryExecution(sql);
 
         return sql;
@@ -40,14 +39,12 @@ public class QueryPerformanceInterceptor implements StatementInspector {
 
             String queryType = detectQueryType(sql);
 
-            // ⭐ Registrar métrica no Micrometer
             Timer.builder("hibernate.query.execution")
                     .tag("query_type", queryType)
                     .publishPercentiles(0.5, 0.95, 0.99)
                     .register(meterRegistry)
                     .record(duration, TimeUnit.NANOSECONDS);
 
-            // ⭐ Log de queries lentas
             if (durationMs > 100) {
                 String queryPreview = sql.length() > 200 ? sql.substring(0, 197) + "..." : sql;
                 log.warn("🐌 SLOW QUERY ({}ms) [{}]: {}", durationMs, queryType, queryPreview);
@@ -82,7 +79,7 @@ public class QueryPerformanceInterceptor implements StatementInspector {
             return "DELETE";
         }
         if (upperSql.startsWith("WITH")) {
-            return "CTE"; // Common Table Expression
+            return "CTE";
         }
         return "OTHER";
     }

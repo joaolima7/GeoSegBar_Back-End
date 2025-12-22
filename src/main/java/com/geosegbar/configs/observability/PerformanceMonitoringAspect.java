@@ -26,8 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 public class PerformanceMonitoringAspect {
 
     private final MeterRegistry meterRegistry;
-    
-    // Cache de timers para evitar criação repetida
+
     private final Map<String, Timer> timerCache = new ConcurrentHashMap<>();
 
     /**
@@ -68,15 +67,15 @@ public class PerformanceMonitoringAspect {
         String methodName = signature.getName();
         String metricName = String.format("%s.%s.%s", layer, className, methodName);
 
-        Timer timer = timerCache.computeIfAbsent(metricName, name -> 
-            Timer.builder(name)
-                .description("Execution time for " + name)
-                .tag("layer", layer)
-                .tag("class", className)
-                .tag("method", methodName)
-                .publishPercentiles(0.5, 0.95, 0.99)
-                .publishPercentileHistogram()
-                .register(meterRegistry)
+        Timer timer = timerCache.computeIfAbsent(metricName, name
+                -> Timer.builder(name)
+                        .description("Execution time for " + name)
+                        .tag("layer", layer)
+                        .tag("class", className)
+                        .tag("method", methodName)
+                        .publishPercentiles(0.5, 0.95, 0.99)
+                        .publishPercentileHistogram()
+                        .register(meterRegistry)
         );
 
         long startTime = System.nanoTime();
@@ -93,43 +92,44 @@ public class PerformanceMonitoringAspect {
             long duration = System.nanoTime() - startTime;
             long durationMs = TimeUnit.NANOSECONDS.toMillis(duration);
 
-            // Registrar no Micrometer
             timer.record(duration, TimeUnit.NANOSECONDS);
 
-            // ⭐ LOG estruturado para análise
             String status = exception == null ? "SUCCESS" : "ERROR";
             String logLevel = determineLogLevel(durationMs);
 
             if ("ERROR".equals(logLevel) || "WARN".equals(logLevel)) {
-                log.warn("⚠️ SLOW {} | {}.{} | {}ms | status={} | args={}", 
-                    layer.toUpperCase(), 
-                    className, 
-                    methodName, 
-                    durationMs,
-                    status,
-                    formatArgs(joinPoint.getArgs()));
+                log.warn("⚠️ SLOW {} | {}.{} | {}ms | status={} | args={}",
+                        layer.toUpperCase(),
+                        className,
+                        methodName,
+                        durationMs,
+                        status,
+                        formatArgs(joinPoint.getArgs()));
             } else if (log.isDebugEnabled()) {
-                log.debug("✅ {} | {}.{} | {}ms | status={}", 
-                    layer.toUpperCase(), 
-                    className, 
-                    methodName, 
-                    durationMs,
-                    status);
+                log.debug("✅ {} | {}.{} | {}ms | status={}",
+                        layer.toUpperCase(),
+                        className,
+                        methodName,
+                        durationMs,
+                        status);
             }
 
-            // ⭐ Incrementar contador de chamadas lentas
             if (durationMs > 500) {
-                meterRegistry.counter("slow.methods", 
-                    "layer", layer,
-                    "class", className,
-                    "method", methodName).increment();
+                meterRegistry.counter("slow.methods",
+                        "layer", layer,
+                        "class", className,
+                        "method", methodName).increment();
             }
         }
     }
 
     private String determineLogLevel(long durationMs) {
-        if (durationMs > 2000) return "ERROR";
-        if (durationMs > 500) return "WARN";
+        if (durationMs > 2000) {
+            return "ERROR";
+        }
+        if (durationMs > 500) {
+            return "WARN";
+        }
         return "INFO";
     }
 
@@ -138,8 +138,10 @@ public class PerformanceMonitoringAspect {
             return "[]";
         }
         StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < args.length && i < 5; i++) { // Limitar a 5 args
-            if (i > 0) sb.append(", ");
+        for (int i = 0; i < args.length && i < 5; i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
             Object arg = args[i];
             if (arg == null) {
                 sb.append("null");
@@ -161,6 +163,7 @@ public class PerformanceMonitoringAspect {
     @Target(ElementType.METHOD)
     @Retention(RetentionPolicy.RUNTIME)
     public @interface Timed {
+
         String value() default "custom";
     }
 }

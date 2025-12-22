@@ -77,9 +77,9 @@ public class ChecklistResponseSubmissionService {
     private final PVAnswerValidator pvAnswerValidator;
     private final DamRepository damRepository;
     private final AnomalyPhotoRepository anomalyPhotoRepository;
-    private final CacheManager checklistCacheManager; // ⭐ NOVO
-    private final RedisTemplate<String, Object> redisTemplate; // ⭐ NOVO
-    private final CustomMetricsService metricsService; // ⭐ ADICIONAR
+    private final CacheManager checklistCacheManager;
+    private final RedisTemplate<String, Object> redisTemplate;
+    private final CustomMetricsService metricsService;
 
     /**
      * ⭐ NOVO: Invalida caches usando pattern matching do Redis
@@ -102,33 +102,27 @@ public class ChecklistResponseSubmissionService {
      */
     private void evictChecklistResponseCaches(Long damId, Long clientId, Long userId) {
 
-        // ✅ 1. Caches da barragem específica
         var responsesByDamCache = checklistCacheManager.getCache("checklistResponsesByDam");
         if (responsesByDamCache != null) {
             responsesByDamCache.evict(damId);
         }
 
-        // ✅ 2. Caches paginados da barragem (pattern matching)
         evictCachesByPattern("checklistResponsesByDamPaged", damId + "_*");
 
-        // ✅ 3. Caches do cliente específico (pattern matching)
         evictCachesByPattern("checklistResponsesByClient", clientId + "_*");
         evictCachesByPattern("clientLatestDetailedChecklistResponses", clientId + "_*");
 
-        // ✅ 4. Caches do usuário específico (pattern matching)
         var responsesByUserCache = checklistCacheManager.getCache("checklistResponsesByUser");
         if (responsesByUserCache != null) {
             responsesByUserCache.evict(userId);
         }
         evictCachesByPattern("checklistResponsesByUserPaged", userId + "_*");
 
-        // ✅ 5. Cache de última checklist da barragem
         var damLastChecklistCache = checklistCacheManager.getCache("damLastChecklist");
         if (damLastChecklistCache != null) {
             damLastChecklistCache.evict(clientId);
         }
 
-        // ✅ 6. Invalidar caches de CHECKLIST BASE (última resposta mudou!)
         var checklistsWithAnswersByDamCache = checklistCacheManager.getCache("checklistsWithAnswersByDam");
         if (checklistsWithAnswersByDamCache != null) {
             checklistsWithAnswersByDamCache.evict(damId);
@@ -139,16 +133,14 @@ public class ChecklistResponseSubmissionService {
             checklistsWithAnswersByClientCache.evict(clientId);
         }
 
-        // ✅ 7. Invalidar caches de data (pattern matching - afeta várias datas)
         evictCachesByPattern("checklistResponsesByDate", "*");
         evictCachesByPattern("checklistResponsesByDatePaged", "*");
 
-        // ✅ 8. Invalidar cache geral paginado (pattern matching)
         evictCachesByPattern("allChecklistResponsesPaged", "*");
     }
 
     @Transactional
-    // ⚠️ REMOVIDO: @CacheEvict com allEntries = true
+
     public ChecklistResponseEntity submitChecklistResponse(ChecklistResponseSubmissionDTO submissionDto) {
         validateUserAccessToDam(submissionDto.getUserId(), submissionDto.getDamId());
 
@@ -196,12 +188,10 @@ public class ChecklistResponseSubmissionService {
             metricsService.incrementChecklistsSubmitted();
             metricsService.incrementQuestionnairesAnswered(totalQuestionnaires);
 
-            // ⭐ NOVO: Obter clientId da barragem
             DamEntity dam = damRepository.findById(submissionDto.getDamId())
                     .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
             Long clientId = dam.getClient().getId();
 
-            // ⭐ NOVO: Invalidar caches granulares APÓS salvar (dentro da transação)
             evictChecklistResponseCaches(
                     submissionDto.getDamId(),
                     clientId,
@@ -220,12 +210,10 @@ public class ChecklistResponseSubmissionService {
         DamEntity dam = damRepository.findById(damId)
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
 
-        // Verificar se o usuário é admin (tem acesso a tudo)
         if (AuthenticatedUserUtil.isAdmin()) {
             return;
         }
 
-        // Verificar se o usuário pertence ao cliente da barragem
         boolean userBelongsToClient = user.getClients().stream()
                 .anyMatch(client -> client.getId().equals(dam.getClient().getId()));
 
@@ -236,7 +224,6 @@ public class ChecklistResponseSubmissionService {
             );
         }
 
-        // Verificar permissões específicas na tabela dam_permissions
         boolean hasSpecificPermission = user.getDamPermissions().stream()
                 .anyMatch(permission
                         -> permission.getDam().getId().equals(damId)

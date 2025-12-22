@@ -454,7 +454,6 @@ public class DamService {
         StatusEntity status = statusRepository.findById(request.getStatusId())
                 .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + request.getStatusId()));
 
-        // ⭐ DETECTAR MUDANÇA DE CLIENTE
         boolean clientChanged = !oldClientId.equals(client.getId());
 
         existingDam.setName(request.getName());
@@ -513,15 +512,12 @@ public class DamService {
 
         DamEntity updatedDam = damRepository.save(existingDam);
 
-        // ⭐ SINCRONIZAR DAM PERMISSIONS SE HOUVE MUDANÇA DE CLIENTE
         if (clientChanged) {
-            // Remover permissões do cliente antigo
+
             userService.removeDamPermissionsForDam(damId, oldClientId);
 
-            // Criar permissões para o novo cliente
             userService.createDamPermissionsForDam(damId, client.getId());
 
-            // Invalidar caches de ambos os clientes
             evictChecklistCachesForDam(damId, oldClientId);
             evictChecklistCachesForDam(damId, client.getId());
         } else {
@@ -626,7 +622,6 @@ public class DamService {
             }
         }
 
-        // ⭐ DETECTAR MUDANÇA DE CLIENTE
         boolean clientChanged = !oldClientId.equals(client.getId());
 
         existingDam.setName(request.getName());
@@ -821,21 +816,17 @@ public class DamService {
             }
         }
 
-        // ⭐ SINCRONIZAR PASTAS PSB RAIZ
         if (request.getPsbFolders() != null && !request.getPsbFolders().isEmpty()) {
             UserEntity currentUser = AuthenticatedUserUtil.getCurrentUser();
             psbFolderService.syncRootFolders(finalDam, request.getPsbFolders(), currentUser.getId());
         }
 
-        // ⭐ SINCRONIZAR DAM PERMISSIONS SE HOUVE MUDANÇA DE CLIENTE
         if (clientChanged) {
-            // Remover permissões do cliente antigo
+
             userService.removeDamPermissionsForDam(damId, oldClientId);
 
-            // Criar permissões para o novo cliente
             userService.createDamPermissionsForDam(damId, client.getId());
 
-            // Invalidar caches de ambos os clientes
             evictChecklistCachesForDam(damId, oldClientId);
             evictChecklistCachesForDam(damId, client.getId());
         } else {

@@ -21,9 +21,6 @@ import com.geosegbar.infra.reading.projections.InstrumentLimitStatusProjection;
 @Repository
 public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
 
-    // ==========================================
-    // VERIFICAÇÕES DE EXISTÊNCIA
-    // ==========================================
     boolean existsByInstrumentIdAndDate(Long instrumentId, LocalDate date);
 
     boolean existsByInstrumentIdAndDateAndHourAndActive(
@@ -44,9 +41,6 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             @Param("hour") LocalTime hour,
             @Param("excludeId") Long excludeId);
 
-    // ==========================================
-    // BUSCA POR ID COM RELAÇÕES
-    // ==========================================
     @Query("""
             SELECT r FROM ReadingEntity r
             LEFT JOIN FETCH r.instrument i
@@ -60,9 +54,6 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             """)
     Optional<ReadingEntity> findByIdWithAllRelations(@Param("id") Long id);
 
-    // ==========================================
-    // BUSCA POR INSTRUMENTO
-    // ==========================================
     @Query("""
             SELECT DISTINCT r FROM ReadingEntity r
             LEFT JOIN FETCH r.instrument i
@@ -98,9 +89,6 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             """)
     List<ReadingEntity> findTopNByInstrumentIdOptimized(@Param("instrumentId") Long instrumentId, Pageable pageable);
 
-    // ==========================================
-    // BUSCA POR OUTPUT
-    // ==========================================
     @Query("""
             SELECT DISTINCT r FROM ReadingEntity r
             LEFT JOIN FETCH r.instrument i
@@ -113,9 +101,6 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             """)
     List<ReadingEntity> findByOutputIdWithAllRelations(@Param("outputId") Long outputId);
 
-    // ==========================================
-    // BUSCA POR MÚLTIPLOS INSTRUMENTOS
-    // ==========================================
     @Query(value = """
             SELECT DISTINCT r FROM ReadingEntity r
             LEFT JOIN FETCH r.instrument i
@@ -159,9 +144,6 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
     List<ReadingEntity> findByInstrumentIdsAndActiveTrueWithAllRelations(
             @Param("instrumentIds") List<Long> instrumentIds);
 
-    // ==========================================
-    // BUSCA COM FILTROS
-    // ==========================================
     @Query(value = """
             SELECT DISTINCT r FROM ReadingEntity r
             LEFT JOIN FETCH r.instrument i
@@ -195,9 +177,6 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             @Param("active") Boolean active,
             Pageable pageable);
 
-    // ==========================================
-    // BUSCA AGRUPADA POR DATA/HORA
-    // ==========================================
     @Query(value = """
             SELECT r.date, r.hour
             FROM ReadingEntity r
@@ -267,9 +246,6 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             @Param("dates") List<LocalDate> dates,
             @Param("hours") List<LocalTime> hours);
 
-    // ==========================================
-    // BUSCA PARA LIMIT STATUS - QUERY OTIMIZADA COM WINDOW FUNCTION
-    // ==========================================
     @Query(value = """
             WITH ranked_readings AS (
                 SELECT
@@ -318,9 +294,6 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             @Param("clientId") Long clientId,
             @Param("limit") int limit);
 
-    // ==========================================
-    // BUSCA LATEST DATE/HOURS POR CLIENTE
-    // ==========================================
     @Query(value = """
             WITH instrument_date_hours AS (
                 SELECT
@@ -348,9 +321,6 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             @Param("clientId") Long clientId,
             @Param("limit") int limit);
 
-    // ==========================================
-    // BUSCA LATEST READINGS POR INSTRUMENTOS
-    // ==========================================
     @Query(value = """
             WITH ranked AS (
                 SELECT
@@ -394,9 +364,6 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
         return findByIdsWithAllRelations(ids);
     }
 
-    // ==========================================
-    // BUSCA PARA GRUPO DE READINGS
-    // ==========================================
     @Query("""
             SELECT r FROM ReadingEntity r
             LEFT JOIN FETCH r.output o
@@ -412,9 +379,6 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             @Param("date") LocalDate date,
             @Param("hour") LocalTime hour);
 
-    // ==========================================
-    // BUSCA MÍNIMA PARA BULK OPERATIONS
-    // ==========================================
     @Query("""
             SELECT r FROM ReadingEntity r
             JOIN FETCH r.instrument i
@@ -425,9 +389,6 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             """)
     List<ReadingEntity> findAllByIdWithMinimalData(@Param("ids") List<Long> ids);
 
-    // ==========================================
-    // BUSCA PARA EXPORT
-    // ==========================================
     @Query("""
             SELECT DISTINCT r FROM ReadingEntity r
             LEFT JOIN FETCH r.instrument i
@@ -445,9 +406,6 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate);
 
-    // ==========================================
-    // BUSCA DE IDS AUXILIARES
-    // ==========================================
     @Query("SELECT DISTINCT o.instrument.id FROM OutputEntity o WHERE o.id IN :outputIds")
     Set<Long> findInstrumentIdsByOutputIds(@Param("outputIds") List<Long> outputIds);
 
@@ -457,16 +415,10 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
     @Query("SELECT r.id FROM ReadingEntity r WHERE r.output.id = :outputId")
     List<Long> findIdsByOutputId(@Param("outputId") Long outputId);
 
-    // ==========================================
-    // BULK UPDATE
-    // ==========================================
     @Modifying
     @Query("UPDATE ReadingEntity r SET r.active = :active WHERE r.id IN :ids")
     int bulkUpdateActiveStatus(@Param("ids") List<Long> ids, @Param("active") Boolean active);
 
-    // ==========================================
-    // DELETE
-    // ==========================================
     @Modifying
     @Query("DELETE FROM ReadingEntity r WHERE r.instrument.id = :instrumentId")
     void deleteByInstrumentId(@Param("instrumentId") Long instrumentId);

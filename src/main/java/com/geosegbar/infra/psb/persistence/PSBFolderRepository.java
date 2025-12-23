@@ -14,7 +14,6 @@ import com.geosegbar.entities.PSBFolderEntity;
 @Repository
 public interface PSBFolderRepository extends JpaRepository<PSBFolderEntity, Long> {
 
-    // Queries originais mantidas para compatibilidade
     List<PSBFolderEntity> findByDamOrderByFolderIndexAsc(DamEntity dam);
 
     List<PSBFolderEntity> findByDamIdOrderByFolderIndexAsc(Long damId);
@@ -27,7 +26,6 @@ public interface PSBFolderRepository extends JpaRepository<PSBFolderEntity, Long
 
     List<PSBFolderEntity> findByDamIdAndFolderIndexGreaterThanOrderByFolderIndexAsc(Long damId, Integer folderIndex);
 
-    // Novas queries para hierarquia
     List<PSBFolderEntity> findByDamIdAndParentFolderIsNullOrderByFolderIndexAsc(Long damId);
 
     List<PSBFolderEntity> findByParentFolderIdOrderByFolderIndexAsc(Long parentFolderId);
@@ -44,7 +42,6 @@ public interface PSBFolderRepository extends JpaRepository<PSBFolderEntity, Long
 
     List<PSBFolderEntity> findByDamIdAndParentFolderIsNullAndFolderIndexGreaterThanOrderByFolderIndexAsc(Long damId, Integer folderIndex);
 
-    // Query otimizada para carregar toda a estrutura de uma vez
     @Query("SELECT DISTINCT f FROM PSBFolderEntity f "
             + "LEFT JOIN FETCH f.files "
             + "LEFT JOIN FETCH f.subfolders "

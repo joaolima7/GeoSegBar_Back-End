@@ -14,10 +14,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class PSBFolderUpdateDTO {
 
-    /**
-     * ID da pasta (opcional) - Se presente: atualiza pasta existente - Se null:
-     * cria nova pasta
-     */
     private Long id;
 
     @NotBlank(message = "O nome da pasta é obrigatório")

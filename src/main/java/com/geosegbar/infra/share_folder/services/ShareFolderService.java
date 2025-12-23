@@ -108,11 +108,9 @@ public class ShareFolderService {
         shareFolder.incrementAccessCount();
         shareFolderRepository.save(shareFolder);
 
-        // Busca a pasta completa com toda a hierarquia
         PSBFolderEntity folder = psbFolderRepository.findById(shareFolder.getPsbFolder().getId())
                 .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada!"));
 
-        // Inicializa toda a hierarquia de subpastas e arquivos
         initializeFolderHierarchy(folder);
 
         return folder;

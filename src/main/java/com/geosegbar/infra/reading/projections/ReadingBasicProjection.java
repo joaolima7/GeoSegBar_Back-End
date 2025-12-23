@@ -5,10 +5,6 @@ import java.time.LocalTime;
 
 import com.geosegbar.common.enums.LimitStatusEnum;
 
-/**
- * Projection para buscar dados básicos de reading sem carregar entidades
- * completas
- */
 public interface ReadingBasicProjection {
 
     Long getId();
@@ -25,19 +21,16 @@ public interface ReadingBasicProjection {
 
     String getComment();
 
-    // Instrument info
     Long getInstrumentId();
 
     String getInstrumentName();
 
-    // Output info
     Long getOutputId();
 
     String getOutputName();
 
     String getOutputAcronym();
 
-    // User info
     Long getUserId();
 
     String getUserName();

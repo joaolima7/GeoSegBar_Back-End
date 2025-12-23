@@ -99,15 +99,12 @@ public class PSBFolderService {
         PSBFolderEntity folder = psbFolderRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
 
-        // Inicializa parent (se existir)
         if (folder.getParentFolder() != null) {
-            folder.getParentFolder().getName(); // força inicialização
+            folder.getParentFolder().getName();
         }
 
-        // Inicializa arquivos da pasta atual
         folder.getFiles().size();
 
-        // Inicializa todas as subpastas recursivamente
         initializeSubfolders(folder);
 
         return folder;
@@ -446,7 +443,7 @@ public class PSBFolderService {
             if (!directory.mkdirs()) {
                 throw new RuntimeException("Não foi possível criar o diretório: " + dirPath);
             }
-            // Define permissões de leitura para todos (necessário para acesso web)
+
             directory.setReadable(true, false);
             directory.setExecutable(true, false);
             log.info("Diretório criado com permissões: {}", dirPath);
@@ -517,7 +514,6 @@ public class PSBFolderService {
                 .filter(id -> id != null)
                 .toList();
 
-        // Deleta pastas não enviadas SEM reindexação (será feita ao final)
         for (PSBFolderEntity existingFolder : existingRootFolders) {
             if (!sentFolderIds.contains(existingFolder.getId())) {
                 log.info("Deletando pasta raiz não enviada: {}", existingFolder.getName());
@@ -525,10 +521,8 @@ public class PSBFolderService {
             }
         }
 
-        // Força a execução dos DELETEs no banco antes de criar/atualizar
         psbFolderRepository.flush();
 
-        // Processa atualizações e criações
         for (com.geosegbar.infra.psb.dtos.PSBFolderUpdateDTO folderDTO : psbFolderDTOs) {
             if (folderDTO.getId() != null) {
 
@@ -540,10 +534,6 @@ public class PSBFolderService {
         }
     }
 
-    /**
-     * Deleta uma pasta raiz sem reindexar as demais. Usado internamente pelo
-     * syncRootFolders para evitar conflitos de índice.
-     */
     private void deleteWithoutReindex(PSBFolderEntity folderToDelete) {
         try {
             Path folderPath = Paths.get(folderToDelete.getServerPath());

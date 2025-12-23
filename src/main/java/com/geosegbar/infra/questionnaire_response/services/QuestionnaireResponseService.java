@@ -24,9 +24,6 @@ public class QuestionnaireResponseService {
     private final CacheManager checklistCacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
 
-    /**
-     * ⭐ NOVO: Invalida TODOS os caches de checklistResponse
-     */
     private void evictAllChecklistResponseCaches() {
         log.info("Invalidando TODOS os caches de checklistResponse devido a mudança em QuestionnaireResponse");
 

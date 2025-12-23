@@ -26,10 +26,6 @@ public class QuestionService {
     private final CacheManager checklistCacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
 
-    /**
-     * ⭐ NOVO: Invalida TODOS os caches de checklist (questão pode estar em
-     * múltiplos checklists)
-     */
     private void evictAllChecklistCaches() {
         log.info("Invalidando TODOS os caches de checklist devido a mudança em Question");
 

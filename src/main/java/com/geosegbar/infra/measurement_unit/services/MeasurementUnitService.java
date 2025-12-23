@@ -112,7 +112,6 @@ public class MeasurementUnitService {
             throw new BusinessRuleException("Não é possível excluir a unidade de medida pois existem registros associados a ela.");
         }
 
-        // Se chegou até aqui, é seguro excluir
         measurementUnitRepository.delete(measurementUnit);
     }
 

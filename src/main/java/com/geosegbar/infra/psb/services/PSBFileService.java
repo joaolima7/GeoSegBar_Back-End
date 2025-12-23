@@ -76,36 +76,30 @@ public class PSBFileService {
 
             String filename = UUID.randomUUID().toString() + fileExtension;
 
-            // Caminho completo onde o arquivo será salvo
             Path folderPath = Paths.get(folder.getServerPath());
             Path targetPath = folderPath.resolve(filename);
 
-            // Assegurar que o diretório existe
             if (!Files.exists(folderPath)) {
                 Files.createDirectories(folderPath);
             }
 
-            // Salvar o arquivo
             Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
 
-            // Construir URL de download - pegar caminho relativo completo a partir do diretório PSB
             String serverPath = folder.getServerPath();
             String relativePath;
 
-            // Extrair o caminho relativo a partir de "/psb/" ou "\psb\"
             int psbIndex = serverPath.indexOf(File.separator + "psb" + File.separator);
             if (psbIndex != -1) {
-                // Pega tudo depois de "/psb/"
-                relativePath = serverPath.substring(psbIndex + 5); // +5 para pular "/psb/"
+
+                relativePath = serverPath.substring(psbIndex + 5);
             } else {
-                // Fallback: usar apenas o último segmento (comportamento antigo)
+
                 relativePath = "dam-" + folder.getDam().getId() + "/"
                         + serverPath.substring(serverPath.lastIndexOf(File.separator) + 1);
             }
 
             String downloadUrl = baseUrl + "psb/" + relativePath + "/" + filename;
 
-            // Salvar entidade no banco
             PSBFileEntity psbFile = new PSBFileEntity();
             psbFile.setFilename(filename);
             psbFile.setOriginalFilename(originalFilename);

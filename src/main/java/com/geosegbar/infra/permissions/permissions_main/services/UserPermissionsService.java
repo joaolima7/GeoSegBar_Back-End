@@ -193,7 +193,6 @@ public class UserPermissionsService {
             permission.setEditSections(updateDTO.getEditSections());
         }
 
-        // ⭐ NOVOS CAMPOS
         if (updateDTO.getViewInstruments() != null) {
             permission.setViewInstruments(updateDTO.getViewInstruments());
         }
@@ -276,7 +275,7 @@ public class UserPermissionsService {
     }
 
     public String verifyChecklistPermission(Long userId, Long clientId, Long damId, Long checklistId, boolean isMobile) {
-        // 1. Get all required entities
+
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
 
@@ -286,7 +285,6 @@ public class UserPermissionsService {
         DamEntity dam = damRepository.findById(damId)
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + damId));
 
-        // 2. Check if user is associated with client
         boolean isUserAssociatedWithClient = user.getClients().stream()
                 .anyMatch(c -> c.getId().equals(clientId));
 
@@ -294,27 +292,22 @@ public class UserPermissionsService {
             return "O usuário não está associado ao cliente especificado";
         }
 
-        // 3. Check if user is ADMIN - if so, authorize immediately without further checks
         if (user.getRole() != null && user.getRole().getName() == RoleEnum.ADMIN) {
             return "authorized";
         }
 
-        // 4. For COLLABORATOR roles, continue with detailed permission checks
-        // Check if user has dam permission with hasAccess=true
         Optional<DamPermissionEntity> damPermission = damPermissionRepository.findByUserAndDamAndClient(user, dam, client);
 
         if (damPermission.isEmpty() || !damPermission.get().getHasAccess()) {
             return "O usuário não tem permissão de acesso para esta barragem";
         }
 
-        // Check if the checklist is associated with the dam
         try {
             checklistService.findChecklistForDam(damId, checklistId);
         } catch (NotFoundException e) {
-            return e.getMessage(); // "O checklist não pertence à barragem especificada!"
+            return e.getMessage();
         }
 
-        // Check if user has routine inspection permission for web/mobile
         Optional<RoutineInspectionPermissionEntity> routinePermission = routineInspectionPermissionRepository.findByUser(user);
 
         if (routinePermission.isEmpty()) {
@@ -331,7 +324,6 @@ public class UserPermissionsService {
             }
         }
 
-        // All validations passed
         return "authorized";
     }
 }

@@ -18,6 +18,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
@@ -32,7 +33,8 @@ import lombok.Setter;
 @AllArgsConstructor
 @Table(name = "checklists", indexes = {
     @Index(name = "idx_checklist_name", columnList = "name"),
-    @Index(name = "idx_checklist_created_at", columnList = "created_at")
+    @Index(name = "idx_checklist_created_at", columnList = "created_at"),
+    @Index(name = "idx_checklist_dam_id", columnList = "dam_id")
 })
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class ChecklistEntity {
@@ -55,9 +57,7 @@ public class ChecklistEntity {
             inverseJoinColumns = @JoinColumn(name = "template_questionnaire_id"))
     private Set<TemplateQuestionnaireEntity> templateQuestionnaires = new HashSet<>();
 
-    @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(name = "checklist_dam",
-            joinColumns = @JoinColumn(name = "checklist_id"),
-            inverseJoinColumns = @JoinColumn(name = "dam_id"))
-    private Set<DamEntity> dams = new HashSet<>();
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "dam_id", nullable = false)
+    private DamEntity dam;
 }

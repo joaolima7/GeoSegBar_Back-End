@@ -17,7 +17,7 @@ public class ChecklistCompleteDTO {
     private String name;
     private LocalDateTime createdAt;
     private Set<TemplateQuestionnaireDTO> templateQuestionnaires = new HashSet<>();
-    private Set<DamDTO> dams = new HashSet<>();
+    private DamDTO dam;
 
     @Data
     @NoArgsConstructor

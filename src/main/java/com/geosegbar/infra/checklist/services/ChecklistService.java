@@ -1,7 +1,6 @@
 package com.geosegbar.infra.checklist.services;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -117,22 +116,19 @@ public class ChecklistService {
     @Transactional
     public ChecklistEntity save(ChecklistEntity checklist) {
 
-        if (checklist.getDams() == null || checklist.getDams().isEmpty()) {
+        if (checklist.getDam() == null) {
             throw new InvalidInputException("Checklist deve estar vinculado a uma barragem.");
         }
-        if (checklist.getDams().size() > 1) {
-            throw new InvalidInputException("Checklist só pode estar vinculado a uma única barragem.");
-        }
 
-        DamEntity dam = checklist.getDams().iterator().next();
+        DamEntity dam = checklist.getDam();
         Long damId = dam.getId();
 
         DamEntity fullDam = damService.findById(damId);
         Long clientId = fullDam.getClient().getId();
 
         // Validação: não permitir criar checklist se a barragem já tiver um
-        List<ChecklistEntity> existingChecklists = checklistRepository.findByDams_Id(damId);
-        if (!existingChecklists.isEmpty()) {
+        ChecklistEntity existingChecklist = checklistRepository.findByDamId(damId);
+        if (existingChecklist != null) {
             throw new BusinessRuleException(
                     "Não é possível criar um novo checklist para esta barragem. "
                     + "A barragem '" + fullDam.getName() + "' já possui um checklist cadastrado. "
@@ -140,7 +136,7 @@ public class ChecklistService {
             );
         }
 
-        if (checklistRepository.existsByNameAndDams_Id(checklist.getName(), damId)) {
+        if (checklistRepository.existsByNameAndDamId(checklist.getName(), damId)) {
             throw new DuplicateResourceException("Já existe um checklist com esse nome para esta barragem.");
         }
 
@@ -157,15 +153,101 @@ public class ChecklistService {
 
         damService.findById(damId);
 
-        List<ChecklistEntity> checklists = checklistRepository.findByDamIdWithFullDetails(damId);
+        ChecklistEntity checklist = checklistRepository.findByDamIdWithFullDetails(damId);
 
         List<ChecklistWithLastAnswersDTO> result = new ArrayList<>();
 
-        for (ChecklistEntity checklist : checklists) {
-            ChecklistWithLastAnswersDTO checklistDTO = new ChecklistWithLastAnswersDTO();
+        if (checklist == null) {
+            return result; // Retorna lista vazia se n\u00e3o houver checklist
+        }
+
+        ChecklistWithLastAnswersDTO checklistDTO = new ChecklistWithLastAnswersDTO();
+        checklistDTO.setId(checklist.getId());
+        checklistDTO.setName(checklist.getName());
+        checklistDTO.setCreatedAt(checklist.getCreatedAt());
+
+        List<TemplateQuestionnaireWithAnswersDTO> templateDTOs = new ArrayList<>();
+
+        for (TemplateQuestionnaireEntity template : checklist.getTemplateQuestionnaires()) {
+            TemplateQuestionnaireWithAnswersDTO templateDTO = new TemplateQuestionnaireWithAnswersDTO();
+            templateDTO.setId(template.getId());
+            templateDTO.setName(template.getName());
+
+            List<QuestionWithLastAnswerDTO> questionDTOs = new ArrayList<>();
+
+            for (TemplateQuestionnaireQuestionEntity tqQuestion : template.getTemplateQuestions()) {
+                QuestionEntity question = tqQuestion.getQuestion();
+
+                QuestionWithLastAnswerDTO questionDTO = new QuestionWithLastAnswerDTO();
+                questionDTO.setId(question.getId());
+                questionDTO.setQuestionText(question.getQuestionText());
+                questionDTO.setType(question.getType());
+
+                List<OptionDTO> allOptionDTOs = question.getOptions().stream()
+                        .map(opt -> new OptionDTO(opt.getId(), opt.getLabel(), opt.getValue()))
+                        .collect(Collectors.toList());
+                questionDTO.setAllOptions(allOptionDTOs);
+
+                Optional<AnswerEntity> lastNonNIAnswer = answerRepository.findLatestNonNIAnswer(
+                        damId, question.getId(), template.getId());
+
+                lastNonNIAnswer.ifPresent(answer -> {
+
+                    Optional<OptionEntity> nonNIOption = answer.getSelectedOptions().stream()
+                            .filter(opt -> !"NI".equalsIgnoreCase(opt.getLabel()))
+                            .findFirst();
+
+                    nonNIOption.ifPresent(option -> {
+                        OptionDTO optionDTO = new OptionDTO(
+                                option.getId(), option.getLabel(), option.getValue());
+                        questionDTO.setLastSelectedOption(optionDTO);
+                        questionDTO.setAnswerResponseId(answer.getId());
+                    });
+                });
+
+                questionDTOs.add(questionDTO);
+            }
+
+            templateDTO.setQuestions(questionDTOs);
+            templateDTOs.add(templateDTO);
+        }
+
+        checklistDTO.setTemplateQuestionnaires(templateDTOs);
+        result.add(checklistDTO);
+
+        return result;
+    }
+
+    @Transactional()
+    @Cacheable(value = "checklistsWithAnswersByClient", key = "#clientId", cacheManager = "checklistCacheManager")
+    public List<ChecklistWithLastAnswersAndDamDTO> findAllChecklistsWithLastAnswersByClientId(Long clientId) {
+
+        List<DamEntity> clientDams = damService.findDamsByClientId(clientId);
+        List<ChecklistWithLastAnswersAndDamDTO> allChecklists = new ArrayList<>();
+
+        for (DamEntity dam : clientDams) {
+
+            ChecklistEntity checklist = checklistRepository.findByDamIdWithFullDetails(dam.getId());
+
+            if (checklist == null) {
+                continue; // Pula dams sem checklist
+            }
+
+            ChecklistWithLastAnswersAndDamDTO checklistDTO = new ChecklistWithLastAnswersAndDamDTO();
             checklistDTO.setId(checklist.getId());
             checklistDTO.setName(checklist.getName());
             checklistDTO.setCreatedAt(checklist.getCreatedAt());
+
+            ChecklistWithLastAnswersAndDamDTO.DamInfoDTO damInfo
+                    = new ChecklistWithLastAnswersAndDamDTO.DamInfoDTO(
+                            dam.getId(),
+                            dam.getName(),
+                            dam.getCity(),
+                            dam.getState(),
+                            dam.getLatitude(),
+                            dam.getLongitude()
+                    );
+            checklistDTO.setDam(damInfo);
 
             List<TemplateQuestionnaireWithAnswersDTO> templateDTOs = new ArrayList<>();
 
@@ -190,7 +272,7 @@ public class ChecklistService {
                     questionDTO.setAllOptions(allOptionDTOs);
 
                     Optional<AnswerEntity> lastNonNIAnswer = answerRepository.findLatestNonNIAnswer(
-                            damId, question.getId(), template.getId());
+                            dam.getId(), question.getId(), template.getId());
 
                     lastNonNIAnswer.ifPresent(answer -> {
 
@@ -214,90 +296,7 @@ public class ChecklistService {
             }
 
             checklistDTO.setTemplateQuestionnaires(templateDTOs);
-            result.add(checklistDTO);
-        }
-
-        return result;
-    }
-
-    @Transactional()
-    @Cacheable(value = "checklistsWithAnswersByClient", key = "#clientId", cacheManager = "checklistCacheManager")
-    public List<ChecklistWithLastAnswersAndDamDTO> findAllChecklistsWithLastAnswersByClientId(Long clientId) {
-
-        List<DamEntity> clientDams = damService.findDamsByClientId(clientId);
-        List<ChecklistWithLastAnswersAndDamDTO> allChecklists = new ArrayList<>();
-
-        for (DamEntity dam : clientDams) {
-
-            List<ChecklistEntity> damChecklists = checklistRepository.findByDamIdWithFullDetails(dam.getId());
-
-            for (ChecklistEntity checklist : damChecklists) {
-
-                ChecklistWithLastAnswersAndDamDTO checklistDTO = new ChecklistWithLastAnswersAndDamDTO();
-                checklistDTO.setId(checklist.getId());
-                checklistDTO.setName(checklist.getName());
-                checklistDTO.setCreatedAt(checklist.getCreatedAt());
-
-                ChecklistWithLastAnswersAndDamDTO.DamInfoDTO damInfo
-                        = new ChecklistWithLastAnswersAndDamDTO.DamInfoDTO(
-                                dam.getId(),
-                                dam.getName(),
-                                dam.getCity(),
-                                dam.getState(),
-                                dam.getLatitude(),
-                                dam.getLongitude()
-                        );
-                checklistDTO.setDam(damInfo);
-
-                List<TemplateQuestionnaireWithAnswersDTO> templateDTOs = new ArrayList<>();
-
-                for (TemplateQuestionnaireEntity template : checklist.getTemplateQuestionnaires()) {
-                    TemplateQuestionnaireWithAnswersDTO templateDTO = new TemplateQuestionnaireWithAnswersDTO();
-                    templateDTO.setId(template.getId());
-                    templateDTO.setName(template.getName());
-
-                    List<QuestionWithLastAnswerDTO> questionDTOs = new ArrayList<>();
-
-                    for (TemplateQuestionnaireQuestionEntity tqQuestion : template.getTemplateQuestions()) {
-                        QuestionEntity question = tqQuestion.getQuestion();
-
-                        QuestionWithLastAnswerDTO questionDTO = new QuestionWithLastAnswerDTO();
-                        questionDTO.setId(question.getId());
-                        questionDTO.setQuestionText(question.getQuestionText());
-                        questionDTO.setType(question.getType());
-
-                        List<OptionDTO> allOptionDTOs = question.getOptions().stream()
-                                .map(opt -> new OptionDTO(opt.getId(), opt.getLabel(), opt.getValue()))
-                                .collect(Collectors.toList());
-                        questionDTO.setAllOptions(allOptionDTOs);
-
-                        Optional<AnswerEntity> lastNonNIAnswer = answerRepository.findLatestNonNIAnswer(
-                                dam.getId(), question.getId(), template.getId());
-
-                        lastNonNIAnswer.ifPresent(answer -> {
-
-                            Optional<OptionEntity> nonNIOption = answer.getSelectedOptions().stream()
-                                    .filter(opt -> !"NI".equalsIgnoreCase(opt.getLabel()))
-                                    .findFirst();
-
-                            nonNIOption.ifPresent(option -> {
-                                OptionDTO optionDTO = new OptionDTO(
-                                        option.getId(), option.getLabel(), option.getValue());
-                                questionDTO.setLastSelectedOption(optionDTO);
-                                questionDTO.setAnswerResponseId(answer.getId());
-                            });
-                        });
-
-                        questionDTOs.add(questionDTO);
-                    }
-
-                    templateDTO.setQuestions(questionDTOs);
-                    templateDTOs.add(templateDTO);
-                }
-
-                checklistDTO.setTemplateQuestionnaires(templateDTOs);
-                allChecklists.add(checklistDTO);
-            }
+            allChecklists.add(checklistDTO);
         }
 
         allChecklists.sort((a, b) -> {
@@ -312,25 +311,22 @@ public class ChecklistService {
 
     public ChecklistEntity update(ChecklistEntity checklist) {
 
-        if (checklist.getDams() == null || checklist.getDams().isEmpty()) {
+        if (checklist.getDam() == null) {
             throw new InvalidInputException("Checklist deve estar vinculado a uma barragem.");
-        }
-        if (checklist.getDams().size() > 1) {
-            throw new InvalidInputException("Checklist só pode estar vinculado a uma única barragem.");
         }
 
         ChecklistEntity oldChecklist = findById(checklist.getId());
-        DamEntity oldDam = oldChecklist.getDams().iterator().next();
+        DamEntity oldDam = oldChecklist.getDam();
         Long oldDamId = oldDam.getId();
         DamEntity oldFullDam = damService.findById(oldDamId);
         Long oldClientId = oldFullDam.getClient().getId();
 
-        DamEntity newDam = checklist.getDams().iterator().next();
+        DamEntity newDam = checklist.getDam();
         Long newDamId = newDam.getId();
         DamEntity newFullDam = damService.findById(newDamId);
         Long newClientId = newFullDam.getClient().getId();
 
-        if (checklistRepository.existsByNameAndDams_IdAndIdNot(checklist.getName(), newDamId, checklist.getId())) {
+        if (checklistRepository.existsByNameAndDamIdAndIdNot(checklist.getName(), newDamId, checklist.getId())) {
             throw new DuplicateResourceException("Já existe um checklist com esse nome para esta barragem.");
         }
 
@@ -354,7 +350,7 @@ public class ChecklistService {
         ChecklistEntity checklist = checklistRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Checklist não encontrada para exclusão!"));
 
-        DamEntity dam = checklist.getDams().iterator().next();
+        DamEntity dam = checklist.getDam();
         Long damId = dam.getId();
         DamEntity fullDam = damService.findById(damId);
         Long clientId = fullDam.getClient().getId();
@@ -368,15 +364,18 @@ public class ChecklistService {
 
     @Cacheable(value = "checklistsByDam", key = "#damId", cacheManager = "checklistCacheManager")
     public List<ChecklistCompleteDTO> findByDamIdDTO(Long damId) {
-        List<ChecklistEntity> checklists = checklistRepository.findByDams_Id(damId);
-        return convertToCompleteDTOList(checklists);
+        ChecklistEntity checklist = checklistRepository.findByDamId(damId);
+        if (checklist == null) {
+            return List.of();
+        }
+        return List.of(convertToCompleteDTO(checklist));
     }
 
     @Cacheable(value = "checklistForDam", key = "#damId + '_' + #checklistId", cacheManager = "checklistCacheManager")
     public ChecklistCompleteDTO findChecklistForDamDTO(Long damId, Long checklistId) {
         ChecklistEntity checklist = findById(checklistId);
 
-        if (checklist.getDams().stream().anyMatch(dam -> dam.getId().equals(damId))) {
+        if (checklist.getDam() != null && checklist.getDam().getId().equals(damId)) {
             return convertToCompleteDTO(checklist);
         } else {
             throw new NotFoundException("O checklist não pertence à barragem especificada!");
@@ -386,7 +385,7 @@ public class ChecklistService {
     public ChecklistEntity findChecklistForDam(Long damId, Long checklistId) {
         ChecklistEntity checklist = findById(checklistId);
 
-        if (checklist.getDams().stream().anyMatch(dam -> dam.getId().equals(damId))) {
+        if (checklist.getDam() != null && checklist.getDam().getId().equals(damId)) {
             return checklist;
         } else {
             throw new NotFoundException("O checklist não pertence à barragem especificada!");
@@ -438,8 +437,8 @@ public class ChecklistService {
                 .collect(Collectors.toSet());
         dto.setTemplateQuestionnaires(templateDTOs);
 
-        Set<ChecklistCompleteDTO.DamDTO> damDTOs = new HashSet<>();
-        for (DamEntity dam : entity.getDams()) {
+        if (entity.getDam() != null) {
+            DamEntity dam = entity.getDam();
             ChecklistCompleteDTO.DamDTO damDTO = new ChecklistCompleteDTO.DamDTO();
             damDTO.setId(dam.getId());
             damDTO.setName(dam.getName());
@@ -455,17 +454,10 @@ public class ChecklistService {
                 damDTO.setClient(null);
             }
 
-            damDTOs.add(damDTO);
+            dto.setDam(damDTO);
         }
-        dto.setDams(damDTOs);
 
         return dto;
-    }
-
-    private List<ChecklistCompleteDTO> convertToCompleteDTOList(List<ChecklistEntity> entities) {
-        return entities.stream()
-                .map(this::convertToCompleteDTO)
-                .collect(Collectors.toList());
     }
 
 }

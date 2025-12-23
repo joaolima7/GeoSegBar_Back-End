@@ -393,13 +393,13 @@ public class DamService {
     })
     public void deleteById(Long id) {
         DamEntity dam = damRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Barragem não encontrada para exclusão!"));
+                .orElseThrow(() -> new NotFoundException("Barragem n\u00e3o encontrada para exclus\u00e3o!"));
 
-        if (!dam.getChecklists().isEmpty() || !dam.getChecklistResponses().isEmpty()
+        if (dam.getChecklist() != null || !dam.getChecklistResponses().isEmpty()
                 || !dam.getSections().isEmpty() || !dam.getDamPermissions().isEmpty()
                 || !dam.getInstruments().isEmpty()) {
             throw new BusinessRuleException(
-                    "Não é possível excluir a barragem devido as dependências existentes, recomenda-se inativar a barragem se necessário.");
+                    "N\u00e3o \u00e9 poss\u00edvel excluir a barragem devido as depend\u00eancias existentes, recomenda-se inativar a barragem se necess\u00e1rio.");
         }
 
         Long clientId = dam.getClient().getId();

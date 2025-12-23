@@ -15,7 +15,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
@@ -128,9 +127,9 @@ public class DamEntity {
     @JsonIgnoreProperties({"dam"})
     private DocumentationDamEntity documentationDam;
 
-    @ManyToMany(mappedBy = "dams", fetch = FetchType.LAZY)
+    @OneToOne(mappedBy = "dam", fetch = FetchType.LAZY)
     @JsonIgnore
-    private Set<ChecklistEntity> checklists = new HashSet<>();
+    private ChecklistEntity checklist;
 
     @OneToMany(mappedBy = "dam", fetch = FetchType.LAZY)
     @JsonIgnore

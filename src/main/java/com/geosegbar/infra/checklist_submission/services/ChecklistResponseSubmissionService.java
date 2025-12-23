@@ -1,5 +1,6 @@
 package com.geosegbar.infra.checklist_submission.services;
 
+import java.time.LocalDate;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
@@ -46,6 +47,7 @@ import com.geosegbar.infra.checklist_submission.dtos.QuestionnaireResponseSubmis
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.dam.services.DamService;
 import com.geosegbar.infra.danger_level.persistence.jpa.DangerLevelRepository;
+import com.geosegbar.infra.documentation_dam.persistence.DocumentationDamRepository;
 import com.geosegbar.infra.file_storage.FileStorageService;
 import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
 import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
@@ -80,10 +82,8 @@ public class ChecklistResponseSubmissionService {
     private final CacheManager checklistCacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
     private final CustomMetricsService metricsService;
+    private final DocumentationDamRepository documentationDamRepository;
 
-    /**
-     * ⭐ NOVO: Invalida caches usando pattern matching do Redis
-     */
     private void evictCachesByPattern(String cacheName, String pattern) {
         try {
             String fullPattern = cacheName + "::" + pattern;
@@ -97,9 +97,6 @@ public class ChecklistResponseSubmissionService {
         }
     }
 
-    /**
-     * ⭐ NOVO: Invalida caches de checklist response de forma granular
-     */
     private void evictChecklistResponseCaches(Long damId, Long clientId, Long userId) {
 
         var responsesByDamCache = checklistCacheManager.getCache("checklistResponsesByDam");
@@ -198,9 +195,18 @@ public class ChecklistResponseSubmissionService {
                     submissionDto.getUserId()
             );
 
+            updateLastAchievementChecklist(submissionDto.getDamId());
+
             return checklistResponse;
         });
 
+    }
+
+    private void updateLastAchievementChecklist(Long damId) {
+        documentationDamRepository.findByDamId(damId).ifPresent(documentationDam -> {
+            documentationDam.setLastAchievementChecklist(LocalDate.now());
+            documentationDamRepository.save(documentationDam);
+        });
     }
 
     private void validateUserAccessToDam(Long userId, Long damId) {

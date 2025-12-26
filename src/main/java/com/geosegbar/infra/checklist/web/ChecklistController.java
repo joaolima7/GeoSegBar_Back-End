@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.ChecklistEntity;
 import com.geosegbar.infra.checklist.dtos.ChecklistCompleteDTO;
+import com.geosegbar.infra.checklist.dtos.ChecklistReplicationDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersAndDamDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersDTO;
 import com.geosegbar.infra.checklist.services.ChecklistService;
@@ -125,5 +126,22 @@ public class ChecklistController {
         checklistService.deleteById(id);
         WebResponseEntity<Void> response = WebResponseEntity.success(null, "Checklist excluída com sucesso!");
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/replicate")
+    public ResponseEntity<WebResponseEntity<ChecklistEntity>> replicateChecklist(
+            @Valid @RequestBody ChecklistReplicationDTO replicationDto) {
+
+        ChecklistEntity replicatedChecklist = checklistService.replicateChecklist(
+                replicationDto.getSourceChecklistId(),
+                replicationDto.getTargetDamId()
+        );
+
+        WebResponseEntity<ChecklistEntity> response = WebResponseEntity.success(
+                replicatedChecklist,
+                "Checklist replicado com sucesso para a barragem de destino!"
+        );
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }

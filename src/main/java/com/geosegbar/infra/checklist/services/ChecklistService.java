@@ -1,6 +1,8 @@
 package com.geosegbar.infra.checklist.services;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -33,17 +35,25 @@ import com.geosegbar.infra.checklist.dtos.QuestionWithLastAnswerDTO;
 import com.geosegbar.infra.checklist.dtos.TemplateQuestionnaireWithAnswersDTO;
 import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
 import com.geosegbar.infra.dam.services.DamService;
+import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
+import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
+import com.geosegbar.infra.template_questionnaire.persistence.jpa.TemplateQuestionnaireRepository;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ChecklistService {
 
     private final ChecklistRepository checklistRepository;
     private final DamService damService;
     private final AnswerRepository answerRepository;
+    private final TemplateQuestionnaireRepository templateQuestionnaireRepository;
+    private final QuestionRepository questionRepository;
+    private final OptionRepository optionRepository;
     private final CacheManager checklistCacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
 
@@ -458,6 +468,139 @@ public class ChecklistService {
         }
 
         return dto;
+    }
+
+    /**
+     * Replica um checklist completo de uma barragem para outra. Cria cópias
+     * independentes de todos os templates, questões e opções.
+     *
+     * @param sourceChecklistId ID do checklist de origem
+     * @param targetDamId ID da barragem de destino
+     * @return Checklist replicado com todos os templates, questões e opções
+     */
+    @Transactional
+    public ChecklistEntity replicateChecklist(Long sourceChecklistId, Long targetDamId) {
+        log.info("Iniciando replicação do checklist {} para a barragem {}", sourceChecklistId, targetDamId);
+
+        // 1. Validar checklist de origem
+        ChecklistEntity sourceChecklist = checklistRepository
+                .findByIdWithFullDetails(sourceChecklistId)
+                .orElseThrow(() -> new NotFoundException(
+                "Checklist de origem não encontrado com ID: " + sourceChecklistId));
+
+        // 2. Validar barragem de destino
+        DamEntity targetDam = damService.findById(targetDamId);
+
+        // 3. Validar se já existe checklist para a barragem de destino
+        ChecklistEntity existingChecklist = checklistRepository.findByDamId(targetDamId);
+        if (existingChecklist != null) {
+            throw new BusinessRuleException(
+                    "A barragem de destino '" + targetDam.getName() + "' já possui um checklist cadastrado. "
+                    + "Não é possível criar outro checklist para a mesma barragem.");
+        }
+
+        // 4. Validar se já existe checklist com o mesmo nome nessa barragem
+        if (checklistRepository.existsByNameAndDamId(sourceChecklist.getName(), targetDamId)) {
+            throw new DuplicateResourceException(
+                    "Já existe um checklist com o nome '" + sourceChecklist.getName()
+                    + "' para a barragem de destino.");
+        }
+
+        log.info("Validações concluídas. Iniciando criação de cópias...");
+
+        // 5. Criar novo checklist
+        ChecklistEntity newChecklist = new ChecklistEntity();
+        newChecklist.setName(sourceChecklist.getName());
+        newChecklist.setDam(targetDam);
+        newChecklist.setTemplateQuestionnaires(new HashSet<>());
+
+        newChecklist = checklistRepository.save(newChecklist);
+        log.info("Checklist replicado criado com ID: {}", newChecklist.getId());
+
+        // 6. Replicar cada template do checklist original
+        List<TemplateQuestionnaireEntity> sortedTemplates = sourceChecklist.getTemplateQuestionnaires()
+                .stream()
+                .sorted(Comparator.comparing(TemplateQuestionnaireEntity::getId))
+                .collect(Collectors.toList());
+
+        int templateCount = 0;
+        for (TemplateQuestionnaireEntity sourceTemplate : sortedTemplates) {
+
+            // 6.1. Criar cópia do template
+            TemplateQuestionnaireEntity newTemplate = new TemplateQuestionnaireEntity();
+            newTemplate.setName(sourceTemplate.getName());
+            newTemplate.setTemplateQuestions(new HashSet<>());
+            newTemplate.setChecklists(new HashSet<>());
+            newTemplate.getChecklists().add(newChecklist);
+
+            newTemplate = templateQuestionnaireRepository.save(newTemplate);
+            log.debug("Template replicado: {} com ID {}", newTemplate.getName(), newTemplate.getId());
+
+            // 6.2. Replicar questões do template
+            List<TemplateQuestionnaireQuestionEntity> sortedQuestions = sourceTemplate.getTemplateQuestions()
+                    .stream()
+                    .sorted(Comparator.comparing(TemplateQuestionnaireQuestionEntity::getOrderIndex))
+                    .collect(Collectors.toList());
+
+            int questionCount = 0;
+            for (TemplateQuestionnaireQuestionEntity sourceTemplateQuestion : sortedQuestions) {
+                QuestionEntity sourceQuestion = sourceTemplateQuestion.getQuestion();
+
+                // 6.2.1. Criar cópia da questão
+                QuestionEntity newQuestion = new QuestionEntity();
+                newQuestion.setQuestionText(sourceQuestion.getQuestionText());
+                newQuestion.setType(sourceQuestion.getType());
+                newQuestion.setOptions(new HashSet<>());
+
+                // 6.2.2. Replicar opções da questão
+                List<OptionEntity> sortedOptions = sourceQuestion.getOptions()
+                        .stream()
+                        .sorted(Comparator.comparing(opt -> opt.getOrderIndex() != null ? opt.getOrderIndex() : Integer.valueOf(0)))
+                        .collect(Collectors.toList());
+
+                for (OptionEntity sourceOption : sortedOptions) {
+                    OptionEntity newOption = new OptionEntity();
+                    newOption.setLabel(sourceOption.getLabel());
+                    newOption.setValue(sourceOption.getValue());
+                    newOption.setOrderIndex(sourceOption.getOrderIndex());
+                    newOption.setAnswers(new HashSet<>());
+                    newOption.setQuestions(new HashSet<>());
+
+                    newOption = optionRepository.save(newOption);
+                    newQuestion.getOptions().add(newOption);
+                }
+
+                newQuestion = questionRepository.save(newQuestion);
+
+                // 6.2.3. Criar TemplateQuestionnaireQuestion
+                TemplateQuestionnaireQuestionEntity newTemplateQuestion = new TemplateQuestionnaireQuestionEntity();
+                newTemplateQuestion.setTemplateQuestionnaire(newTemplate);
+                newTemplateQuestion.setQuestion(newQuestion);
+                newTemplateQuestion.setOrderIndex(sourceTemplateQuestion.getOrderIndex());
+
+                newTemplate.getTemplateQuestions().add(newTemplateQuestion);
+                questionCount++;
+            }
+
+            newTemplate = templateQuestionnaireRepository.save(newTemplate);
+            newChecklist.getTemplateQuestionnaires().add(newTemplate);
+
+            log.debug("Template '{}' replicado com {} questões", newTemplate.getName(), questionCount);
+            templateCount++;
+        }
+
+        // 7. Salvar checklist com todos os templates
+        newChecklist = checklistRepository.save(newChecklist);
+
+        log.info("Replicação concluída: Checklist {} criado com {} template(s) para barragem {}",
+                newChecklist.getId(), templateCount, targetDamId);
+
+        // 8. Invalidar caches
+        Long clientId = targetDam.getClient().getId();
+        evictChecklistCachesForDamAndClient(targetDamId, clientId);
+        log.info("Caches de checklist invalidados após replicação");
+
+        return newChecklist;
     }
 
 }

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
 import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionnaireCreationDTO;
+import com.geosegbar.infra.template_questionnaire.dtos.TemplateReplicationDTO;
 import com.geosegbar.infra.template_questionnaire.services.TemplateQuestionnaireService;
 
 import jakarta.validation.Valid;
@@ -59,14 +60,14 @@ public class TemplateQuestionnaireController {
     @PostMapping("/with-questions")
     public ResponseEntity<WebResponseEntity<TemplateQuestionnaireEntity>> createTemplateWithQuestions(
             @Valid @RequestBody TemplateQuestionnaireCreationDTO creationDto) {
-        
+
         TemplateQuestionnaireEntity created = templateQuestionnaireService.createWithQuestions(creationDto);
-        
+
         WebResponseEntity<TemplateQuestionnaireEntity> response = WebResponseEntity.success(
-                created, 
+                created,
                 "Template de questionário e suas questões criadas com sucesso!"
         );
-        
+
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
@@ -83,5 +84,22 @@ public class TemplateQuestionnaireController {
         templateQuestionnaireService.deleteById(id);
         WebResponseEntity<Void> response = WebResponseEntity.success(null, "Template excluído com sucesso!");
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/replicate")
+    public ResponseEntity<WebResponseEntity<TemplateQuestionnaireEntity>> replicateTemplate(
+            @Valid @RequestBody TemplateReplicationDTO replicationDto) {
+
+        TemplateQuestionnaireEntity replicatedTemplate = templateQuestionnaireService.replicateTemplate(
+                replicationDto.getSourceTemplateId(),
+                replicationDto.getTargetDamId()
+        );
+
+        WebResponseEntity<TemplateQuestionnaireEntity> response = WebResponseEntity.success(
+                replicatedTemplate,
+                "Template replicado com sucesso para a barragem de destino!"
+        );
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }

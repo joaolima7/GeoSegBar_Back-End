@@ -35,8 +35,6 @@ import com.geosegbar.infra.checklist.dtos.QuestionWithLastAnswerDTO;
 import com.geosegbar.infra.checklist.dtos.TemplateQuestionnaireWithAnswersDTO;
 import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
 import com.geosegbar.infra.dam.services.DamService;
-import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
-import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
 import com.geosegbar.infra.template_questionnaire.persistence.jpa.TemplateQuestionnaireRepository;
 
 import jakarta.transaction.Transactional;
@@ -52,8 +50,6 @@ public class ChecklistService {
     private final DamService damService;
     private final AnswerRepository answerRepository;
     private final TemplateQuestionnaireRepository templateQuestionnaireRepository;
-    private final QuestionRepository questionRepository;
-    private final OptionRepository optionRepository;
     private final CacheManager checklistCacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
 
@@ -136,7 +132,6 @@ public class ChecklistService {
         DamEntity fullDam = damService.findById(damId);
         Long clientId = fullDam.getClient().getId();
 
-        // Validação: não permitir criar checklist se a barragem já tiver um
         ChecklistEntity existingChecklist = checklistRepository.findByDamId(damId);
         if (existingChecklist != null) {
             throw new BusinessRuleException(
@@ -168,7 +163,7 @@ public class ChecklistService {
         List<ChecklistWithLastAnswersDTO> result = new ArrayList<>();
 
         if (checklist == null) {
-            return result; // Retorna lista vazia se n\u00e3o houver checklist
+            return result;
         }
 
         ChecklistWithLastAnswersDTO checklistDTO = new ChecklistWithLastAnswersDTO();
@@ -240,7 +235,7 @@ public class ChecklistService {
             ChecklistEntity checklist = checklistRepository.findByDamIdWithFullDetails(dam.getId());
 
             if (checklist == null) {
-                continue; // Pula dams sem checklist
+                continue;
             }
 
             ChecklistWithLastAnswersAndDamDTO checklistDTO = new ChecklistWithLastAnswersAndDamDTO();
@@ -482,16 +477,21 @@ public class ChecklistService {
     public ChecklistEntity replicateChecklist(Long sourceChecklistId, Long targetDamId) {
         log.info("Iniciando replicação do checklist {} para a barragem {}", sourceChecklistId, targetDamId);
 
-        // 1. Validar checklist de origem
         ChecklistEntity sourceChecklist = checklistRepository
                 .findByIdWithFullDetails(sourceChecklistId)
                 .orElseThrow(() -> new NotFoundException(
                 "Checklist de origem não encontrado com ID: " + sourceChecklistId));
 
-        // 2. Validar barragem de destino
         DamEntity targetDam = damService.findById(targetDamId);
 
-        // 3. Validar se já existe checklist para a barragem de destino
+        DamEntity sourceDam = sourceChecklist.getDam();
+        if (!sourceDam.getClient().getId().equals(targetDam.getClient().getId())) {
+            throw new BusinessRuleException(
+                    "Não é possível replicar checklist entre barragens de clientes diferentes. "
+                    + "Barragem de origem pertence ao cliente '" + sourceDam.getClient().getName()
+                    + "' e barragem de destino pertence ao cliente '" + targetDam.getClient().getName() + "'.");
+        }
+
         ChecklistEntity existingChecklist = checklistRepository.findByDamId(targetDamId);
         if (existingChecklist != null) {
             throw new BusinessRuleException(
@@ -499,7 +499,6 @@ public class ChecklistService {
                     + "Não é possível criar outro checklist para a mesma barragem.");
         }
 
-        // 4. Validar se já existe checklist com o mesmo nome nessa barragem
         if (checklistRepository.existsByNameAndDamId(sourceChecklist.getName(), targetDamId)) {
             throw new DuplicateResourceException(
                     "Já existe um checklist com o nome '" + sourceChecklist.getName()
@@ -508,7 +507,6 @@ public class ChecklistService {
 
         log.info("Validações concluídas. Iniciando criação de cópias...");
 
-        // 5. Criar novo checklist
         ChecklistEntity newChecklist = new ChecklistEntity();
         newChecklist.setName(sourceChecklist.getName());
         newChecklist.setDam(targetDam);
@@ -517,7 +515,6 @@ public class ChecklistService {
         newChecklist = checklistRepository.save(newChecklist);
         log.info("Checklist replicado criado com ID: {}", newChecklist.getId());
 
-        // 6. Replicar cada template do checklist original
         List<TemplateQuestionnaireEntity> sortedTemplates = sourceChecklist.getTemplateQuestionnaires()
                 .stream()
                 .sorted(Comparator.comparing(TemplateQuestionnaireEntity::getId))
@@ -526,9 +523,9 @@ public class ChecklistService {
         int templateCount = 0;
         for (TemplateQuestionnaireEntity sourceTemplate : sortedTemplates) {
 
-            // 6.1. Criar cópia do template
             TemplateQuestionnaireEntity newTemplate = new TemplateQuestionnaireEntity();
             newTemplate.setName(sourceTemplate.getName());
+            newTemplate.setDam(targetDam);
             newTemplate.setTemplateQuestions(new HashSet<>());
             newTemplate.setChecklists(new HashSet<>());
             newTemplate.getChecklists().add(newChecklist);
@@ -536,7 +533,6 @@ public class ChecklistService {
             newTemplate = templateQuestionnaireRepository.save(newTemplate);
             log.debug("Template replicado: {} com ID {}", newTemplate.getName(), newTemplate.getId());
 
-            // 6.2. Replicar questões do template
             List<TemplateQuestionnaireQuestionEntity> sortedQuestions = sourceTemplate.getTemplateQuestions()
                     .stream()
                     .sorted(Comparator.comparing(TemplateQuestionnaireQuestionEntity::getOrderIndex))
@@ -544,38 +540,11 @@ public class ChecklistService {
 
             int questionCount = 0;
             for (TemplateQuestionnaireQuestionEntity sourceTemplateQuestion : sortedQuestions) {
-                QuestionEntity sourceQuestion = sourceTemplateQuestion.getQuestion();
+                QuestionEntity existingQuestion = sourceTemplateQuestion.getQuestion();
 
-                // 6.2.1. Criar cópia da questão
-                QuestionEntity newQuestion = new QuestionEntity();
-                newQuestion.setQuestionText(sourceQuestion.getQuestionText());
-                newQuestion.setType(sourceQuestion.getType());
-                newQuestion.setOptions(new HashSet<>());
-
-                // 6.2.2. Replicar opções da questão
-                List<OptionEntity> sortedOptions = sourceQuestion.getOptions()
-                        .stream()
-                        .sorted(Comparator.comparing(opt -> opt.getOrderIndex() != null ? opt.getOrderIndex() : Integer.valueOf(0)))
-                        .collect(Collectors.toList());
-
-                for (OptionEntity sourceOption : sortedOptions) {
-                    OptionEntity newOption = new OptionEntity();
-                    newOption.setLabel(sourceOption.getLabel());
-                    newOption.setValue(sourceOption.getValue());
-                    newOption.setOrderIndex(sourceOption.getOrderIndex());
-                    newOption.setAnswers(new HashSet<>());
-                    newOption.setQuestions(new HashSet<>());
-
-                    newOption = optionRepository.save(newOption);
-                    newQuestion.getOptions().add(newOption);
-                }
-
-                newQuestion = questionRepository.save(newQuestion);
-
-                // 6.2.3. Criar TemplateQuestionnaireQuestion
                 TemplateQuestionnaireQuestionEntity newTemplateQuestion = new TemplateQuestionnaireQuestionEntity();
                 newTemplateQuestion.setTemplateQuestionnaire(newTemplate);
-                newTemplateQuestion.setQuestion(newQuestion);
+                newTemplateQuestion.setQuestion(existingQuestion);
                 newTemplateQuestion.setOrderIndex(sourceTemplateQuestion.getOrderIndex());
 
                 newTemplate.getTemplateQuestions().add(newTemplateQuestion);
@@ -585,17 +554,15 @@ public class ChecklistService {
             newTemplate = templateQuestionnaireRepository.save(newTemplate);
             newChecklist.getTemplateQuestionnaires().add(newTemplate);
 
-            log.debug("Template '{}' replicado com {} questões", newTemplate.getName(), questionCount);
+            log.debug("Template '{}' replicado reutilizando {} questões", newTemplate.getName(), questionCount);
             templateCount++;
         }
 
-        // 7. Salvar checklist com todos os templates
         newChecklist = checklistRepository.save(newChecklist);
 
         log.info("Replicação concluída: Checklist {} criado com {} template(s) para barragem {}",
                 newChecklist.getId(), templateCount, targetDamId);
 
-        // 8. Invalidar caches
         Long clientId = targetDam.getClient().getId();
         evictChecklistCachesForDamAndClient(targetDamId, clientId);
         log.info("Caches de checklist invalidados após replicação");

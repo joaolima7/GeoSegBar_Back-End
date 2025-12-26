@@ -18,6 +18,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
@@ -32,7 +33,8 @@ import lombok.Setter;
 @AllArgsConstructor
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 @Table(name = "questions", indexes = {
-    @Index(name = "idx_question_type", columnList = "type")
+    @Index(name = "idx_question_type", columnList = "type"),
+    @Index(name = "idx_question_client_id", columnList = "client_id")
 })
 public class QuestionEntity {
 
@@ -47,6 +49,10 @@ public class QuestionEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "type", nullable = false)
     private TypeQuestionEnum type;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "client_id", nullable = false)
+    private ClientEntity client;
 
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(name = "question_option",

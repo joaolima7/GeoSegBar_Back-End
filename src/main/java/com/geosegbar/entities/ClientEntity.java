@@ -130,4 +130,8 @@ public class ClientEntity {
     @JsonIgnore
     @OneToMany(mappedBy = "client", fetch = FetchType.LAZY)
     private Set<DamPermissionEntity> damPermissions = new HashSet<>();
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "client", fetch = FetchType.LAZY)
+    private Set<QuestionEntity> questions = new HashSet<>();
 }

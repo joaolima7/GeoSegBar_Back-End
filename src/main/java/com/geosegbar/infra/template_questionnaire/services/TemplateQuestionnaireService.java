@@ -10,17 +10,16 @@ import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import com.geosegbar.entities.ChecklistEntity;
-import com.geosegbar.entities.OptionEntity;
+import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.QuestionEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
 import com.geosegbar.entities.TemplateQuestionnaireQuestionEntity;
+import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DuplicateResourceException;
+import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
-import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
 import com.geosegbar.infra.checklist.services.ChecklistService;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
-import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
 import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
 import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionDTO;
 import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionnaireCreationDTO;
@@ -38,9 +37,7 @@ public class TemplateQuestionnaireService {
     private final TemplateQuestionnaireRepository templateQuestionnaireRepository;
     private final ChecklistService checklistService;
     private final QuestionRepository questionRepository;
-    private final OptionRepository optionRepository;
     private final DamRepository damRepository;
-    private final ChecklistRepository checklistRepository;
     private final CacheManager checklistCacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
 
@@ -97,18 +94,42 @@ public class TemplateQuestionnaireService {
 
     @Transactional
     public TemplateQuestionnaireEntity save(TemplateQuestionnaireEntity template) {
+
+        if (template.getDam() == null || template.getDam().getId() == null) {
+            throw new InvalidInputException("Template deve estar vinculado a uma barragem.");
+        }
+
+        if (templateQuestionnaireRepository.existsByNameAndDamId(template.getName(), template.getDam().getId())) {
+            throw new DuplicateResourceException(
+                    "Já existe um template com o nome '" + template.getName() + "' para esta barragem.");
+        }
+
         TemplateQuestionnaireEntity saved = templateQuestionnaireRepository.save(template);
 
         evictAllChecklistCaches();
-        log.info("Template {} criado. Caches de checklist invalidados.", saved.getId());
+        log.info("Template {} criado para barragem {}. Caches de checklist invalidados.",
+                saved.getId(), saved.getDam().getId());
 
         return saved;
     }
 
     @Transactional
     public TemplateQuestionnaireEntity update(TemplateQuestionnaireEntity template) {
-        templateQuestionnaireRepository.findById(template.getId())
+        TemplateQuestionnaireEntity existing = templateQuestionnaireRepository.findById(template.getId())
                 .orElseThrow(() -> new NotFoundException("Template não encontrado para atualização!"));
+
+        if (template.getDam() == null || template.getDam().getId() == null) {
+            throw new InvalidInputException("Template deve estar vinculado a uma barragem.");
+        }
+
+        if (!existing.getName().equals(template.getName())) {
+            if (templateQuestionnaireRepository.existsByNameAndDamIdAndIdNot(
+                    template.getName(), template.getDam().getId(), template.getId())) {
+                throw new DuplicateResourceException(
+                        "Já existe outro template com o nome '" + template.getName() + "' para esta barragem.");
+            }
+        }
+
         TemplateQuestionnaireEntity saved = templateQuestionnaireRepository.save(template);
 
         evictAllChecklistCaches();
@@ -119,8 +140,19 @@ public class TemplateQuestionnaireService {
 
     @Transactional
     public TemplateQuestionnaireEntity createWithQuestions(TemplateQuestionnaireCreationDTO dto) {
+
+        DamEntity dam = damRepository.findById(dto.getDamId())
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + dto.getDamId()));
+
+        if (templateQuestionnaireRepository.existsByNameAndDamId(dto.getName(), dto.getDamId())) {
+            throw new DuplicateResourceException(
+                    "Já existe um template com o nome '" + dto.getName()
+                    + "' para a barragem '" + dam.getName() + "'");
+        }
+
         TemplateQuestionnaireEntity template = new TemplateQuestionnaireEntity();
         template.setName(dto.getName());
+        template.setDam(dam);
         template.setTemplateQuestions(new HashSet<>());
 
         template = templateQuestionnaireRepository.save(template);
@@ -162,60 +194,64 @@ public class TemplateQuestionnaireService {
         return templates;
     }
 
+    public List<TemplateQuestionnaireEntity> findByDamIdOrderedByName(Long damId) {
+        if (!damRepository.existsById(damId)) {
+            throw new NotFoundException("Barragem não encontrada com ID: " + damId);
+        }
+        return templateQuestionnaireRepository.findByDamIdOrderByNameAsc(damId);
+    }
+
     /**
-     * Replica um template de questionário completo de uma barragem para outra.
-     * Cria cópias independentes de todas as questões e opções.
+     * Replica um template de questionário de uma barragem para outra. Cria um
+     * novo template para a barragem de destino, mas reutiliza as questões
+     * existentes, já que questões pertencem ao cliente e são compartilhadas
+     * entre templates.
+     *
+     * IMPORTANTE: Esta operação NÃO associa o template a nenhum checklist. Para
+     * replicar templates E associá-los a um checklist, use replicateChecklist.
      *
      * @param sourceTemplateId ID do template de origem
      * @param targetDamId ID da barragem de destino
-     * @return Template replicado com todas as questões e opções
+     * @return Template replicado reutilizando as mesmas questões
      */
     @Transactional
     public TemplateQuestionnaireEntity replicateTemplate(Long sourceTemplateId, Long targetDamId) {
         log.info("Iniciando replicação do template {} para a barragem {}", sourceTemplateId, targetDamId);
 
-        // 1. Validar template de origem
         TemplateQuestionnaireEntity sourceTemplate = templateQuestionnaireRepository
                 .findByIdWithFullDetails(sourceTemplateId)
                 .orElseThrow(() -> new NotFoundException(
                 "Template de origem não encontrado com ID: " + sourceTemplateId));
 
-        // 2. Validar barragem de destino
-        damRepository.findById(targetDamId)
+        DamEntity targetDam = damRepository.findById(targetDamId)
                 .orElseThrow(() -> new NotFoundException(
                 "Barragem de destino não encontrada com ID: " + targetDamId));
 
-        // 3. Buscar checklist da barragem de destino
-        ChecklistEntity targetChecklist = checklistRepository.findByDamId(targetDamId);
-        if (targetChecklist == null) {
-            throw new NotFoundException(
-                    "Não existe checklist para a barragem de destino. Crie um checklist primeiro.");
+        DamEntity sourceDam = sourceTemplate.getDam();
+        if (!sourceDam.getClient().getId().equals(targetDam.getClient().getId())) {
+            throw new BusinessRuleException(
+                    "Não é possível replicar template entre barragens de clientes diferentes. "
+                    + "Barragem de origem pertence ao cliente '" + sourceDam.getClient().getName()
+                    + "' e barragem de destino pertence ao cliente '" + targetDam.getClient().getName() + "'.");
         }
 
-        // 4. Validar se já existe template com o mesmo nome nessa barragem
         String templateName = sourceTemplate.getName();
-        boolean templateExists = targetChecklist.getTemplateQuestionnaires().stream()
-                .anyMatch(t -> t.getName().equalsIgnoreCase(templateName));
-
-        if (templateExists) {
+        if (templateQuestionnaireRepository.existsByNameAndDamId(templateName, targetDamId)) {
             throw new DuplicateResourceException(
                     "Já existe um template com o nome '" + templateName
                     + "' na barragem de destino. Escolha outro template ou renomeie o existente.");
         }
 
-        log.info("Validações concluídas. Iniciando criação de cópias...");
+        log.info("Validações concluídas. Iniciando criação do template replicado...");
 
-        // 5. Criar novo template
         TemplateQuestionnaireEntity newTemplate = new TemplateQuestionnaireEntity();
         newTemplate.setName(sourceTemplate.getName());
+        newTemplate.setDam(targetDam);
         newTemplate.setTemplateQuestions(new HashSet<>());
-        newTemplate.setChecklists(new HashSet<>());
-        newTemplate.getChecklists().add(targetChecklist);
 
         newTemplate = templateQuestionnaireRepository.save(newTemplate);
         log.info("Template replicado criado com ID: {}", newTemplate.getId());
 
-        // 6. Processar cada questão do template original
         List<TemplateQuestionnaireQuestionEntity> sortedQuestions = sourceTemplate.getTemplateQuestions()
                 .stream()
                 .sorted(Comparator.comparing(TemplateQuestionnaireQuestionEntity::getOrderIndex))
@@ -223,48 +259,22 @@ public class TemplateQuestionnaireService {
 
         int questionCount = 0;
         for (TemplateQuestionnaireQuestionEntity sourceTemplateQuestion : sortedQuestions) {
-            QuestionEntity sourceQuestion = sourceTemplateQuestion.getQuestion();
+            QuestionEntity existingQuestion = sourceTemplateQuestion.getQuestion();
 
-            // 6.1. Criar cópia da questão
-            QuestionEntity newQuestion = new QuestionEntity();
-            newQuestion.setQuestionText(sourceQuestion.getQuestionText());
-            newQuestion.setType(sourceQuestion.getType());
-            newQuestion.setOptions(new HashSet<>());
-
-            // 6.2. Replicar opções da questão (criar cópias independentes)
-            for (OptionEntity sourceOption : sourceQuestion.getOptions()) {
-                OptionEntity newOption = new OptionEntity();
-                newOption.setLabel(sourceOption.getLabel());
-                newOption.setValue(sourceOption.getValue());
-                newOption.setOrderIndex(sourceOption.getOrderIndex());
-                newOption.setAnswers(new HashSet<>());
-                newOption.setQuestions(new HashSet<>());
-
-                newOption = optionRepository.save(newOption);
-                newQuestion.getOptions().add(newOption);
-            }
-
-            newQuestion = questionRepository.save(newQuestion);
-            log.debug("Questão replicada: {} com {} opções",
-                    newQuestion.getQuestionText(), newQuestion.getOptions().size());
-
-            // 6.3. Criar TemplateQuestionnaireQuestion
             TemplateQuestionnaireQuestionEntity newTemplateQuestion = new TemplateQuestionnaireQuestionEntity();
             newTemplateQuestion.setTemplateQuestionnaire(newTemplate);
-            newTemplateQuestion.setQuestion(newQuestion);
+            newTemplateQuestion.setQuestion(existingQuestion);
             newTemplateQuestion.setOrderIndex(sourceTemplateQuestion.getOrderIndex());
 
             newTemplate.getTemplateQuestions().add(newTemplateQuestion);
             questionCount++;
         }
 
-        // 7. Salvar template com todas as questões
         newTemplate = templateQuestionnaireRepository.save(newTemplate);
 
-        log.info("Replicação concluída: Template {} criado com {} questões para barragem {}",
+        log.info("Replicação concluída: Template {} criado reutilizando {} questão(ões) para barragem {} (SEM associação a checklist)",
                 newTemplate.getId(), questionCount, targetDamId);
 
-        // 8. Invalidar caches
         evictAllChecklistCaches();
         log.info("Caches de checklist invalidados após replicação");
 

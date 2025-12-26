@@ -50,6 +50,16 @@ public class TemplateQuestionnaireController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/dam/{damId}")
+    public ResponseEntity<WebResponseEntity<List<TemplateQuestionnaireEntity>>> getTemplatesByDam(@PathVariable Long damId) {
+        List<TemplateQuestionnaireEntity> templates = templateQuestionnaireService.findByDamIdOrderedByName(damId);
+        WebResponseEntity<List<TemplateQuestionnaireEntity>> response = WebResponseEntity.success(
+                templates,
+                "Templates da barragem obtidos com sucesso!"
+        );
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping
     public ResponseEntity<WebResponseEntity<TemplateQuestionnaireEntity>> createTemplate(@Valid @RequestBody TemplateQuestionnaireEntity template) {
         TemplateQuestionnaireEntity created = templateQuestionnaireService.save(template);

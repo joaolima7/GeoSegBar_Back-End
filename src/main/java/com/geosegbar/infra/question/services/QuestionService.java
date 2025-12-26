@@ -11,6 +11,7 @@ import com.geosegbar.common.enums.TypeQuestionEnum;
 import com.geosegbar.entities.QuestionEntity;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
 
 import jakarta.transaction.Transactional;
@@ -23,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 public class QuestionService {
 
     private final QuestionRepository questionRepository;
+    private final ClientRepository clientRepository;
     private final CacheManager checklistCacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
 
@@ -80,6 +82,15 @@ public class QuestionService {
 
     @Transactional
     public QuestionEntity save(QuestionEntity question) {
+
+        if (question.getClient() == null || question.getClient().getId() == null) {
+            throw new InvalidInputException("Questão deve estar associada a um cliente!");
+        }
+
+        if (!clientRepository.existsById(question.getClient().getId())) {
+            throw new NotFoundException("Cliente não encontrado com ID: " + question.getClient().getId());
+        }
+
         validateQuestionByType(question);
         QuestionEntity saved = questionRepository.save(question);
 
@@ -93,6 +104,15 @@ public class QuestionService {
     public QuestionEntity update(QuestionEntity question) {
         questionRepository.findById(question.getId())
                 .orElseThrow(() -> new NotFoundException("Questão não encontrada para atualização!"));
+
+        if (question.getClient() == null || question.getClient().getId() == null) {
+            throw new InvalidInputException("Questão deve estar associada a um cliente!");
+        }
+
+        if (!clientRepository.existsById(question.getClient().getId())) {
+            throw new NotFoundException("Cliente não encontrado com ID: " + question.getClient().getId());
+        }
+
         validateQuestionByType(question);
         QuestionEntity saved = questionRepository.save(question);
 
@@ -109,6 +129,13 @@ public class QuestionService {
 
     public List<QuestionEntity> findAll() {
         return questionRepository.findAll();
+    }
+
+    public List<QuestionEntity> findByClientIdOrderedByText(Long clientId) {
+        if (!clientRepository.existsById(clientId)) {
+            throw new NotFoundException("Cliente não encontrado com ID: " + clientId);
+        }
+        return questionRepository.findByClientIdOrderByQuestionTextAsc(clientId);
     }
 
     private void validateQuestionByType(QuestionEntity question) {

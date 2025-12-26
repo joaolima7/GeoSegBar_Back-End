@@ -34,6 +34,16 @@ public class QuestionController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/client/{clientId}")
+    public ResponseEntity<WebResponseEntity<List<QuestionEntity>>> getQuestionsByClient(@PathVariable Long clientId) {
+        List<QuestionEntity> questions = questionService.findByClientIdOrderedByText(clientId);
+        WebResponseEntity<List<QuestionEntity>> response = WebResponseEntity.success(
+                questions,
+                "Questões do cliente obtidas com sucesso!"
+        );
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<WebResponseEntity<QuestionEntity>> getQuestionById(@PathVariable Long id) {
         QuestionEntity question = questionService.findById(id);

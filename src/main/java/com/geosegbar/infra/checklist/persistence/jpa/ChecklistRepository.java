@@ -15,7 +15,7 @@ import com.geosegbar.entities.ChecklistEntity;
 @Repository
 public interface ChecklistRepository extends JpaRepository<ChecklistEntity, Long> {
 
-    @EntityGraph(attributePaths = {"templateQuestionnaires", "dam"})
+    @EntityGraph(attributePaths = {"templateQuestionnaires"})
     ChecklistEntity findByDamId(Long damId);
 
     @EntityGraph(attributePaths = {"templateQuestionnaires", "templateQuestionnaires.templateQuestions",

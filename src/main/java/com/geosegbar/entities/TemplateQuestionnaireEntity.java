@@ -15,7 +15,9 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToMany;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
@@ -31,7 +33,8 @@ import lombok.Setter;
 @AllArgsConstructor
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 @Table(name = "template_questionnaires", indexes = {
-    @Index(name = "idx_template_questionnaire_name", columnList = "name")
+    @Index(name = "idx_template_questionnaire_name", columnList = "name"),
+    @Index(name = "idx_template_questionnaire_dam_id", columnList = "dam_id")
 })
 public class TemplateQuestionnaireEntity {
 
@@ -42,6 +45,10 @@ public class TemplateQuestionnaireEntity {
     @NotBlank(message = "Nome do Modelo de Questionário é obrigatório!")
     @Column(name = "name", nullable = false)
     private String name;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "dam_id", nullable = false)
+    private DamEntity dam;
 
     @OneToMany(mappedBy = "templateQuestionnaire", fetch = FetchType.EAGER,
             cascade = CascadeType.ALL, orphanRemoval = true)

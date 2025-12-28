@@ -228,22 +228,59 @@
   - ✅ ClientEntityTest: 29 testes (validações email/phone/CEP, unicidade, relacionamentos, limits)
   - 🎯 Total: 95 testes unitários ✅ TODOS PASSANDO
 
-**🎯 Progresso Fase 2 Sprint 2.1**: 10 entidades testadas, 166 testes criados e passando (71 + 95)
+**Lote 3 (5 entidades) ✅ CONCLUÍDO**: ConstantEntity, DamEntity, DamPermissionEntity, DangerLevelEntity, DeterministicLimitEntity
 
-- [ ] **Tarefa 2.1.2**: Testes para `UserEntity`
-  - Validações de campos
-  - Relacionamentos
-  - Métodos de negócio
+- [x] **Tarefa 2.1.2**: Testes para Lote 3 - Constantes, Barragens e Permissões
+  - ✅ ConstantEntityTest: 17 testes (ManyToOne MeasurementUnit/Instrument, precision, values, acronyms)
+  - ✅ DamEntityTest: 34 testes (coordenadas geográficas, validações CEP, city/state sem números, 8 OneToMany collections, 3 OneToOne relationships)
+  - ✅ DamPermissionEntityTest: 21 testes (unique constraint user+dam+client, hasAccess flag, audit fields createdBy/updatedBy, timestamps)
+  - ✅ DangerLevelEntityTest: 15 testes (name unique, description, danger levels, nomenclaturas)
+  - ✅ DeterministicLimitEntityTest: 18 testes (OneToOne Output, optional thresholds attention/alert/emergency)
+  - 🎯 Total: 105 testes unitários ✅ TODOS PASSANDO
 
-- [ ] **Tarefa 2.1.3**: Testes para `DamEntity` 
-  - Coordenadas geográficas
-  - Relacionamentos com Client, Status
-  - Validações de endereço
+**Lote 4 (5 entidades) ✅ CONCLUÍDO**: DocumentationDamEntity, DocumentationPermissionEntity, InputEntity, InstrumentationPermissionEntity, InstrumentEntity
 
-- [ ] **Tarefa 2.1.4**: Testes para próximas entidades (Lote 3)
-  - Definir próximas 5 entidades
+- [x] **Tarefa 2.1.3**: Testes para Lote 4 - Documentação, Inputs e Instrumentação
+  - ✅ DocumentationDamEntityTest: 18 testes (OneToOne Dam unique, 16 LocalDate fields para 8 tipos de documentos PAE/PSB/RPSB/ISR/Checklist/FSB/InternalSimulation/ExternalSimulation com tracking last/next, nullable dates, intervalos diferentes, leap year)
+  - ✅ DocumentationPermissionEntityTest: 18 testes (OneToOne User unique, 3 Boolean flags viewPSB/editPSB/sharePSB default false, permission patterns read-only/full/no-access, escalation/downgrade)
+  - ✅ InputEntityTest: 18 testes (ManyToOne MeasurementUnit/Instrument, acronym/name/precision, Greek letters, multiple inputs per instrument, diferenciação de constants)
+  - ✅ InstrumentationPermissionEntityTest: 22 testes (OneToOne User unique, 9 Boolean permission flags para graphs/read/sections/instruments, permission categories, local vs default graph editing, partial permissions)
+  - ✅ InstrumentEntityTest: 32 testes (ManyToOne Dam/InstrumentType/Section, coordinates latitude/longitude, Boolean flags noLimit/active/activeForSection/isLinimetricRuler, 4 OneToMany collections inputs/constants/outputs/readings, linimetric ruler code, location/distanceOffset optional, Portuguese chars, coordinate updates)
+  - 🎯 Total: 108 testes unitários ✅ TODOS PASSANDO
 
-- [ ] **Tarefa 2.1.5**: Continuar testing de entidades restantes (~46 entidades)
+**🎯 Progresso Fase 2 Sprint 2.1**: 35 entidades testadas, 700 testes criados e passando (71 + 95 + 105 + 108 + 127 + 90 + 104)
+
+**Lote 5 (5 entidades) ✅ CONCLUÍDO**: InstrumentGraphAxesEntity, InstrumentGraphCustomizationPropertiesEntity, InstrumentGraphPatternEntity, InstrumentGraphPatternFolder, InstrumentTabulateAssociationEntity
+
+- [x] **Tarefa 2.1.4**: Testes para Lote 5 - Gráficos e Tabulação
+  - ✅ InstrumentGraphAxesEntityTest: 27 testes (OneToOne InstrumentGraphPatternEntity, Integer font sizes abscissaPx/primaryOrdinatePx/secondaryOrdinatePx 8-24 pixels, Boolean grid lines abscissaGridLinesEnable/primaryOrdinateGridLinesEnable independent toggle, optional String titles primaryOrdinateTitle/secondaryOrdinateTitle com Portuguese chars, optional Double spacing primaryOrdinateSpacing/secondaryOrdinateSpacing, optional Double initial values primaryOrdinateInitialValue/secondaryOrdinateInitialValue positive/negative, optional Double maximum values primaryOrdinateMaximumValue/secondaryOrdinateMaximumValue range configuration, complete axes configuration dual ordinate)
+  - ✅ InstrumentGraphCustomizationPropertiesEntityTest: 34 testes (ManyToOne InstrumentGraphPatternEntity required, CustomizationTypeEnum 6 values OUTPUT/INSTRUMENT/STATISTICAL_LIMIT/DETERMINISTIC_LIMIT/CONSTANT/LINIMETRIC_RULER, String fillColor hex validation #FF5733 6-char #F57 3-char lowercase/uppercase, LineTypeEnum 5 values SOLID/DASHED/DOTTED/DASH_DOT/DASH_DOT_DOT, Boolean labelEnable default false isPrimaryOrdinate default true, ManyToOne StatisticalLimitEntity/DeterministicLimitEntity/OutputEntity/ConstantEntity/InstrumentEntity optional conditional, LimitValueTypeEnum 5 values STATISTICAL_LOWER/UPPER DETERMINISTIC_ATTENTION/ALERT/EMERGENCY, optional String name, complete customization configuration)
+  - ✅ InstrumentGraphPatternEntityTest: 22 testes (String name required, ManyToOne InstrumentEntity required ManyToOne InstrumentGraphPatternFolder optional, OneToMany InstrumentGraphCustomizationPropertiesEntity properties cascade ALL orphanRemoval empty initialization add/remove multiple, OneToOne InstrumentGraphAxesEntity axes cascade ALL orphanRemoval allow null replacing, multiple patterns per instrument/folder, descriptive/short names Portuguese chars, identity maintenance, cascade operations, complete pattern configuration)
+  - ✅ InstrumentGraphPatternFolderTest: 17 testes (String name required, ManyToOne DamEntity required not null, OneToMany InstrumentGraphPatternEntity patterns lazy fetch empty initialization add/remove multiple, multiple folders per dam, descriptive/short/hierarchical naming Portuguese chars special chars "/" separator, empty folders support, lazy fetch behavior)
+  - ✅ InstrumentTabulateAssociationEntityTest: 27 testes (ManyToOne InstrumentTabulatePatternEntity/InstrumentEntity required, Boolean isDateEnable/isHourEnable/isUserEnable/isReadEnable nullable enable/disable, Integer dateIndex/hourIndex/userIndex nullable zero-based sequential/non-sequential, OneToMany InstrumentTabulateOutputAssociationEntity outputAssociations cascade ALL orphanRemoval empty initialization add/remove multiple, multiple associations per pattern, selective/all/no columns enablement, identity maintenance, cascade operations orphan removal)
+  - 🎯 Total: 127 testes unitários ✅ TODOS PASSANDO
+
+**Lote 6 (5 entidades) ✅ CONCLUÍDO**: InstrumentTabulateOutputAssociationEntity, InstrumentTabulatePatternEntity, InstrumentTabulatePatternFolder, InstrumentTypeEntity, LevelEntity
+
+- [x] **Tarefa 2.1.5**: Testes para Lote 6 - Tabulação e Tipos
+  - ✅ InstrumentTabulateOutputAssociationEntityTest: 16 testes (ManyToOne InstrumentTabulateAssociationEntity/OutputEntity required not null, Integer outputIndex required not null zero-based, sequential/non-sequential indexes, large index values 99, multiple output associations per instrument association, identity maintenance, index reordering, parent association reference, different outputs per association, bidirectional relationship, orphan removal, index-based column ordering concept)
+  - ✅ InstrumentTabulatePatternEntityTest: 21 testes (String name required not blank, ManyToOne DamEntity required not null, ManyToOne InstrumentTabulatePatternFolder optional nullable, OneToMany InstrumentTabulateAssociationEntity associations cascade ALL orphanRemoval empty initialization add/remove multiple, multiple patterns per dam/folder, descriptive/short names Portuguese chars special chars, identity maintenance, pattern organization by dam, cascade operations, orphan removal, patterns without folder organization, complete pattern configuration)
+  - ✅ InstrumentTabulatePatternFolderTest: 17 testes (String name required not blank, ManyToOne DamEntity required not null, OneToMany InstrumentTabulatePatternEntity patterns lazy fetch empty initialization add/remove multiple, multiple folders per dam, descriptive/short names Portuguese chars special chars, identity maintenance, folder organization by dam, empty folders support, hierarchical naming "/" separator, lazy fetch behavior)
+  - ✅ InstrumentTypeEntityTest: 16 testes (String name required not blank unique constraint, OneToMany InstrumentEntity instruments empty initialization add/remove multiple, common instrument type names Piezômetro/Inclinômetro/Extensômetro, Portuguese chars ã, accented chars ô é, descriptive/short type names, identity maintenance, name search index, different instrument types, bidirectional relationship with instruments)
+  - ✅ LevelEntityTest: 20 testes (String name required not blank unique index, Double value required not null, String unitLevel required not null, LocalDateTime createdAt tracking, OneToMany ReservoirEntity reservoirs lazy fetch empty initialization add/remove multiple, common level names Normal/Atenção/Alerta/Emergência, positive/zero/decimal values, different unit levels m/cm/ft, identity maintenance, value index for queries, Portuguese chars ã á, level hierarchies ascending values by severity, bidirectional relationship with reservoirs)
+  - 🎯 Total: 90 testes unitários ✅ TODOS PASSANDO
+
+**Lote 7 (5 entidades) ✅ CONCLUÍDO**: MeasurementUnitEntity, OptionEntity, OutputEntity, PotentialDamageEntity, PSBFileEntity
+
+- [x] **Tarefa 2.1.6**: Testes para Lote 7 - Unidades de Medida, Opções, Outputs e Arquivos PSB
+  - ✅ MeasurementUnitEntityTest: 20 testes (String name required not blank unique constraint, String acronym required not blank unique constraint, OneToMany InputEntity inputs JsonIgnore empty initialization add/remove multiple, OneToMany ConstantEntity constants JsonIgnore empty initialization multiple, OneToMany OutputEntity outputs JsonIgnore empty initialization multiple, common measurement units Metro m/Centímetro cm/Milímetro mm, Portuguese characters in name Centímetro with í, short acronyms m single char, multi-character acronyms m³/s with superscript, special characters in acronyms m² with superscript, identity maintenance through property changes, bidirectional relationships with inputs/constants/outputs)
+  - ✅ OptionEntityTest: 20 testes (String label required not blank unique constraint indexed, String value required not blank @Pattern validation ^[A-Za-zÀ-ÿ\\s]+$ only letters spaces no numbers, Integer orderIndex optional nullable sequential ordering zero-based, ManyToMany AnswerEntity answers lazy fetch FetchType.LAZY mappedBy selectedOptions empty initialization add/remove multiple, ManyToMany QuestionEntity questions lazy fetch FetchType.LAZY mappedBy options empty initialization multiple, value pattern validation only letters and spaces, Portuguese characters in value Não with ã, sequential order indexes 1/2/3, null order index allowed, common option labels Sim/Não/Talvez, identity maintenance, index-based ordering concept, label as unique identifier indexed)
+  - ✅ OutputEntityTest: 27 testes (String acronym required not blank, String name required not blank, String equation required not blank columnDefinition TEXT long equations, Integer precision required not null, Boolean active default true, OneToOne StatisticalLimitEntity statisticalLimit optional mappedBy output cascade ALL orphanRemoval true, OneToOne DeterministicLimitEntity deterministicLimit optional mappedBy output cascade ALL orphanRemoval true, ManyToOne MeasurementUnitEntity required not null, ManyToOne InstrumentEntity required not null, null limits allowed, simple equations x + y, complex equations operators (x * 2) + (y / 3) - z, equations with functions Math.sqrt(x) + Math.pow(y, 2), zero precision, positive precision values, different precision values 2 vs 4, short acronyms O1 2 chars, descriptive acronyms DESLOCAMENTO 12 chars, Portuguese characters in name Deslocamento Médio with é, identity maintenance, multiple outputs per instrument/measurement unit, cascade operations on statistical/deterministic limits, orphan removal for both limits)
+  - ✅ PotentialDamageEntityTest: 15 testes (String name required not blank unique constraint indexed, OneToMany RegulatoryDamEntity regulatoryDams JsonIgnore lazy fetch FetchType.LAZY mappedBy potentialDamage empty initialization add/remove operations multiple, common potential damage levels Alto/Médio/Baixo, Portuguese characters in name Médio with é, descriptive damage names, identity maintenance through property changes, unique name index validation, lazy fetch for regulatory dams, name as unique identifier, bidirectional relationship with regulatory dams, different damage classification levels Baixo/Médio/Alto/Muito Alto)
+  - ✅ PSBFileEntityTest: 22 testes (String filename required not blank, String filePath required not blank, String originalFilename optional nullable, String contentType optional nullable, Long size optional nullable, String downloadUrl optional nullable, ManyToOne PSBFolderEntity psbFolder required not null, ManyToOne UserEntity uploadedBy optional nullable, LocalDateTime uploadedAt timestamp tracking, null uploadedBy allowed, PDF file type application/pdf, different content types PDF/DOCX/image, null contentType allowed, file size in bytes Long, null size allowed, download URL support, null downloadUrl allowed, preserve original filename, null originalFilename allowed, Portuguese characters in filename relatório-técnico with ó é, multiple files per folder, multiple files uploaded by same user, identity maintenance through property changes, file path with directories /psb/folder1/subfolder2/, different file extensions .pdf .docx .xlsx)
+  - 🎯 Total: 104 testes unitários ✅ TODOS PASSANDO
+
+- [ ] **Tarefa 2.1.7**: Continuar testing de entidades restantes (~21 entidades)
 
 **Meta**: 50% das entidades testadas
 

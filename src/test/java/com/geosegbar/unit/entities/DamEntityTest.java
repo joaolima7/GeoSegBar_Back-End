@@ -40,7 +40,7 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create dam with all required fields")
     void shouldCreateDamWithAllRequiredFields() {
-        // Given
+
         DamEntity dam = new DamEntity();
         dam.setId(1L);
         dam.setName("Barragem Principal");
@@ -55,7 +55,6 @@ class DamEntityTest extends BaseUnitTest {
         dam.setClient(client);
         dam.setStatus(activeStatus);
 
-        // Then
         assertThat(dam).satisfies(d -> {
             assertThat(d.getId()).isEqualTo(1L);
             assertThat(d.getName()).isEqualTo("Barragem Principal");
@@ -75,10 +74,9 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should initialize all collections as empty HashSet")
     void shouldInitializeAllCollectionsAsEmptyHashSet() {
-        // Given & When
+
         DamEntity dam = new DamEntity();
 
-        // Then
         assertThat(dam.getChecklistResponses()).isNotNull().isInstanceOf(HashSet.class).isEmpty();
         assertThat(dam.getSections()).isNotNull().isInstanceOf(HashSet.class).isEmpty();
         assertThat(dam.getDamPermissions()).isNotNull().isInstanceOf(HashSet.class).isEmpty();
@@ -92,12 +90,11 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should validate geographic coordinates - positive latitude")
     void shouldValidateGeographicCoordinatesPositiveLatitude() {
-        // Given
+
         DamEntity dam = new DamEntity();
-        dam.setLatitude(40.7128); // New York
+        dam.setLatitude(40.7128);
         dam.setLongitude(-74.0060);
 
-        // Then
         assertThat(dam.getLatitude()).isPositive().isBetween(-90.0, 90.0);
         assertThat(dam.getLongitude()).isNegative().isBetween(-180.0, 180.0);
     }
@@ -105,12 +102,11 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should validate geographic coordinates - negative latitude")
     void shouldValidateGeographicCoordinatesNegativeLatitude() {
-        // Given
+
         DamEntity dam = new DamEntity();
-        dam.setLatitude(-23.5505); // São Paulo
+        dam.setLatitude(-23.5505);
         dam.setLongitude(-46.6333);
 
-        // Then
         assertThat(dam.getLatitude()).isNegative().isBetween(-90.0, 90.0);
         assertThat(dam.getLongitude()).isNegative().isBetween(-180.0, 180.0);
     }
@@ -118,11 +114,10 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should validate CEP format with dash")
     void shouldValidateCepFormatWithDash() {
-        // Given
+
         DamEntity dam = new DamEntity();
         dam.setZipCode("12345-678");
 
-        // Then
         assertThat(dam.getZipCode())
                 .matches("\\d{5}-\\d{3}")
                 .contains("-");
@@ -131,69 +126,63 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should validate CEP format without dash")
     void shouldValidateCepFormatWithoutDash() {
-        // Given
+
         DamEntity dam = new DamEntity();
         dam.setZipCode("12345678");
 
-        // Then
         assertThat(dam.getZipCode()).matches("\\d{8}");
     }
 
     @Test
     @DisplayName("Should not allow numbers in dam name")
     void shouldNotAllowNumbersInDamName() {
-        // Given - Valid names (no numbers)
+
         DamEntity dam = new DamEntity();
         dam.setName("Barragem Principal");
 
-        // Then - Name should only contain letters and spaces
         assertThat(dam.getName()).matches("^[A-Za-zÀ-ÿ\\s]+$");
     }
 
     @Test
     @DisplayName("Should not allow numbers in city name")
     void shouldNotAllowNumbersInCityName() {
-        // Given
+
         DamEntity dam = new DamEntity();
         dam.setCity("São Paulo");
 
-        // Then
         assertThat(dam.getCity()).matches("^[A-Za-zÀ-ÿ\\s]+$");
     }
 
     @Test
     @DisplayName("Should not allow numbers in state name")
     void shouldNotAllowNumbersInStateName() {
-        // Given
+
         DamEntity dam = new DamEntity();
         dam.setState("Minas Gerais");
 
-        // Then
         assertThat(dam.getState()).matches("^[A-Za-zÀ-ÿ\\s]+$");
     }
 
     @Test
     @DisplayName("Should handle city names with accents")
     void shouldHandleCityNamesWithAccents() {
-        // Given
+
         DamEntity dam = new DamEntity();
         dam.setCity("São José dos Campos");
 
-        // Then
         assertThat(dam.getCity()).contains("ã").contains("é");
     }
 
     @Test
     @DisplayName("Should handle optional fields as null")
     void shouldHandleOptionalFieldsAsNull() {
-        // Given
+
         DamEntity dam = new DamEntity();
         dam.setLogoPath(null);
         dam.setDamImagePath(null);
         dam.setLinkPSB(null);
         dam.setLinkLegislation(null);
 
-        // Then
         assertThat(dam.getLogoPath()).isNull();
         assertThat(dam.getDamImagePath()).isNull();
         assertThat(dam.getLinkPSB()).isNull();
@@ -203,23 +192,21 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should handle address without number")
     void shouldHandleAddressWithoutNumber() {
-        // Given
+
         DamEntity dam = new DamEntity();
         dam.setStreet("Rua Principal");
         dam.setNumberAddress("S/N");
 
-        // Then
         assertThat(dam.getNumberAddress()).isEqualTo("S/N");
     }
 
     @Test
     @DisplayName("Should maintain ManyToOne relationship with Client")
     void shouldMaintainManyToOneRelationshipWithClient() {
-        // Given
+
         DamEntity dam = new DamEntity();
         dam.setClient(client);
 
-        // Then
         assertThat(dam.getClient())
                 .isNotNull()
                 .isEqualTo(client);
@@ -228,11 +215,10 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain ManyToOne relationship with Status")
     void shouldMaintainManyToOneRelationshipWithStatus() {
-        // Given
+
         DamEntity dam = new DamEntity();
         dam.setStatus(activeStatus);
 
-        // Then
         assertThat(dam.getStatus())
                 .isNotNull()
                 .isEqualTo(activeStatus);
@@ -241,13 +227,12 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain OneToOne relationship with RegulatoryDam")
     void shouldMaintainOneToOneRelationshipWithRegulatoryDam() {
-        // Given
+
         DamEntity dam = new DamEntity();
         RegulatoryDamEntity regulatoryDam = new RegulatoryDamEntity();
         regulatoryDam.setDam(dam);
         dam.setRegulatoryDam(regulatoryDam);
 
-        // Then
         assertThat(dam.getRegulatoryDam()).isNotNull();
         assertThat(dam.getRegulatoryDam().getDam()).isEqualTo(dam);
     }
@@ -255,13 +240,12 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain OneToOne relationship with DocumentationDam")
     void shouldMaintainOneToOneRelationshipWithDocumentationDam() {
-        // Given
+
         DamEntity dam = new DamEntity();
         DocumentationDamEntity documentationDam = new DocumentationDamEntity();
         documentationDam.setDam(dam);
         dam.setDocumentationDam(documentationDam);
 
-        // Then
         assertThat(dam.getDocumentationDam()).isNotNull();
         assertThat(dam.getDocumentationDam().getDam()).isEqualTo(dam);
     }
@@ -269,13 +253,12 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain OneToOne relationship with Checklist")
     void shouldMaintainOneToOneRelationshipWithChecklist() {
-        // Given
+
         DamEntity dam = new DamEntity();
         ChecklistEntity checklist = new ChecklistEntity();
         checklist.setDam(dam);
         dam.setChecklist(checklist);
 
-        // Then
         assertThat(dam.getChecklist()).isNotNull();
         assertThat(dam.getChecklist().getDam()).isEqualTo(dam);
     }
@@ -283,15 +266,13 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should add ChecklistResponse to dam")
     void shouldAddChecklistResponseToDam() {
-        // Given
+
         DamEntity dam = new DamEntity();
         ChecklistResponseEntity response = new ChecklistResponseEntity();
         response.setDam(dam);
 
-        // When
         dam.getChecklistResponses().add(response);
 
-        // Then
         assertThat(dam.getChecklistResponses())
                 .hasSize(1)
                 .contains(response);
@@ -300,15 +281,13 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should add Section to dam")
     void shouldAddSectionToDam() {
-        // Given
+
         DamEntity dam = new DamEntity();
         SectionEntity section = new SectionEntity();
         section.setDam(dam);
 
-        // When
         dam.getSections().add(section);
 
-        // Then
         assertThat(dam.getSections())
                 .hasSize(1)
                 .contains(section);
@@ -317,15 +296,13 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should add DamPermission to dam")
     void shouldAddDamPermissionToDam() {
-        // Given
+
         DamEntity dam = new DamEntity();
         DamPermissionEntity permission = new DamPermissionEntity();
         permission.setDam(dam);
 
-        // When
         dam.getDamPermissions().add(permission);
 
-        // Then
         assertThat(dam.getDamPermissions())
                 .hasSize(1)
                 .contains(permission);
@@ -334,15 +311,13 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should add Reservoir to dam")
     void shouldAddReservoirToDam() {
-        // Given
+
         DamEntity dam = new DamEntity();
         ReservoirEntity reservoir = new ReservoirEntity();
         reservoir.setDam(dam);
 
-        // When
         dam.getReservoirs().add(reservoir);
 
-        // Then
         assertThat(dam.getReservoirs())
                 .hasSize(1)
                 .contains(reservoir);
@@ -351,15 +326,13 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should add PSBFolder to dam")
     void shouldAddPsbFolderToDam() {
-        // Given
+
         DamEntity dam = new DamEntity();
         PSBFolderEntity psbFolder = new PSBFolderEntity();
         psbFolder.setDam(dam);
 
-        // When
         dam.getPsbFolders().add(psbFolder);
 
-        // Then
         assertThat(dam.getPsbFolders())
                 .hasSize(1)
                 .contains(psbFolder);
@@ -368,15 +341,13 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should add Instrument to dam")
     void shouldAddInstrumentToDam() {
-        // Given
+
         DamEntity dam = new DamEntity();
         InstrumentEntity instrument = new InstrumentEntity();
         instrument.setDam(dam);
 
-        // When
         dam.getInstruments().add(instrument);
 
-        // Then
         assertThat(dam.getInstruments())
                 .hasSize(1)
                 .contains(instrument);
@@ -385,15 +356,13 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should add PatternFolder to dam")
     void shouldAddPatternFolderToDam() {
-        // Given
+
         DamEntity dam = new DamEntity();
         InstrumentGraphPatternFolder patternFolder = new InstrumentGraphPatternFolder();
         patternFolder.setDam(dam);
 
-        // When
         dam.getPatternFolders().add(patternFolder);
 
-        // Then
         assertThat(dam.getPatternFolders())
                 .hasSize(1)
                 .contains(patternFolder);
@@ -402,15 +371,13 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should add TemplateQuestionnaire to dam")
     void shouldAddTemplateQuestionnaireToDam() {
-        // Given
+
         DamEntity dam = new DamEntity();
         TemplateQuestionnaireEntity template = new TemplateQuestionnaireEntity();
         template.setDam(dam);
 
-        // When
         dam.getTemplateQuestionnaires().add(template);
 
-        // Then
         assertThat(dam.getTemplateQuestionnaires())
                 .hasSize(1)
                 .contains(template);
@@ -419,7 +386,7 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should handle multiple instruments per dam")
     void shouldHandleMultipleInstrumentsPerDam() {
-        // Given
+
         DamEntity dam = new DamEntity();
 
         InstrumentEntity instrument1 = new InstrumentEntity();
@@ -428,70 +395,63 @@ class DamEntityTest extends BaseUnitTest {
         InstrumentEntity instrument2 = new InstrumentEntity();
         instrument2.setDam(dam);
 
-        // When
         dam.getInstruments().add(instrument1);
         dam.getInstruments().add(instrument2);
 
-        // Then
         assertThat(dam.getInstruments()).hasSize(2);
     }
 
     @Test
     @DisplayName("Should handle neighborhood size limit")
     void shouldHandleNeighborhoodSizeLimit() {
-        // Given
+
         DamEntity dam = new DamEntity();
         String neighborhood = "Bairro com Nome Muito Longo que Pode Ter Até Cem Caracteres";
         dam.setNeighborhood(neighborhood);
 
-        // Then
         assertThat(dam.getNeighborhood().length()).isLessThanOrEqualTo(100);
     }
 
     @Test
     @DisplayName("Should handle city size limit")
     void shouldHandleCitySizeLimit() {
-        // Given
+
         DamEntity dam = new DamEntity();
         dam.setCity("São Paulo");
 
-        // Then
         assertThat(dam.getCity().length()).isLessThanOrEqualTo(100);
     }
 
     @Test
     @DisplayName("Should handle state size limit")
     void shouldHandleStateSizeLimit() {
-        // Given
+
         DamEntity dam = new DamEntity();
         dam.setState("Rio Grande do Sul");
 
-        // Then
         assertThat(dam.getState().length()).isLessThanOrEqualTo(100);
     }
 
     @Test
     @DisplayName("Should handle number address size limit")
     void shouldHandleNumberAddressSizeLimit() {
-        // Given
+
         DamEntity dam = new DamEntity();
         dam.setNumberAddress("1000-A");
 
-        // Then
         assertThat(dam.getNumberAddress().length()).isLessThanOrEqualTo(10);
     }
 
     @Test
     @DisplayName("Should handle different logo path formats")
     void shouldHandleDifferentLogoPathFormats() {
-        // Given
+
         DamEntity dam1 = new DamEntity();
         dam1.setLogoPath("/uploads/logos/dam-1.png");
 
         DamEntity dam2 = new DamEntity();
         dam2.setLogoPath("https://cdn.example.com/dams/logo-2.jpg");
 
-        // Then
         assertThat(dam1.getLogoPath()).startsWith("/uploads");
         assertThat(dam2.getLogoPath()).startsWith("https://");
     }
@@ -499,12 +459,11 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should handle different link formats")
     void shouldHandleDifferentLinkFormats() {
-        // Given
+
         DamEntity dam = new DamEntity();
         dam.setLinkPSB("https://example.com/psb/dam-123.pdf");
         dam.setLinkLegislation("https://legislation.gov.br/dam-rules.html");
 
-        // Then
         assertThat(dam.getLinkPSB()).startsWith("https://");
         assertThat(dam.getLinkLegislation()).startsWith("https://");
     }
@@ -512,19 +471,17 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain identity through property changes")
     void shouldMaintainIdentityThroughPropertyChanges() {
-        // Given
+
         DamEntity dam = new DamEntity();
         dam.setId(1L);
         dam.setName("Barragem Original");
 
         Long originalId = dam.getId();
 
-        // When
         dam.setName("Barragem Atualizada");
         dam.setLatitude(-20.0);
         dam.setLongitude(-40.0);
 
-        // Then
         assertThat(dam.getId()).isEqualTo(originalId);
         assertThat(dam.getName()).isEqualTo("Barragem Atualizada");
     }
@@ -532,16 +489,15 @@ class DamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should handle extreme coordinate values")
     void shouldHandleExtremeCoordinateValues() {
-        // Given
+
         DamEntity dam1 = new DamEntity();
-        dam1.setLatitude(90.0); // North pole
+        dam1.setLatitude(90.0);
         dam1.setLongitude(180.0);
 
         DamEntity dam2 = new DamEntity();
-        dam2.setLatitude(-90.0); // South pole
+        dam2.setLatitude(-90.0);
         dam2.setLongitude(-180.0);
 
-        // Then
         assertThat(dam1.getLatitude()).isEqualTo(90.0);
         assertThat(dam2.getLatitude()).isEqualTo(-90.0);
     }

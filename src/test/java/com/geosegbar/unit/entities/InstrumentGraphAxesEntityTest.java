@@ -26,7 +26,7 @@ class InstrumentGraphAxesEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create graph axes with all required fields")
     void shouldCreateGraphAxesWithAllRequiredFields() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setId(1L);
         axes.setPattern(pattern);
@@ -36,7 +36,6 @@ class InstrumentGraphAxesEntityTest extends BaseUnitTest {
         axes.setSecondaryOrdinatePx(10);
         axes.setPrimaryOrdinateGridLinesEnable(true);
 
-        // Then
         assertThat(axes).satisfies(a -> {
             assertThat(a.getId()).isEqualTo(1L);
             assertThat(a.getPattern()).isEqualTo(pattern);
@@ -51,7 +50,7 @@ class InstrumentGraphAxesEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create using all args constructor")
     void shouldCreateUsingAllArgsConstructor() {
-        // Given & When
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity(
                 1L,
                 pattern,
@@ -70,7 +69,6 @@ class InstrumentGraphAxesEntityTest extends BaseUnitTest {
                 50.0
         );
 
-        // Then
         assertThat(axes.getId()).isEqualTo(1L);
         assertThat(axes.getPattern()).isEqualTo(pattern);
         assertThat(axes.getAbscissaPx()).isEqualTo(12);
@@ -91,11 +89,10 @@ class InstrumentGraphAxesEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain OneToOne relationship with InstrumentGraphPattern")
     void shouldMaintainOneToOneRelationshipWithInstrumentGraphPattern() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setPattern(pattern);
 
-        // Then
         assertThat(axes.getPattern())
                 .isNotNull()
                 .isEqualTo(pattern);
@@ -104,13 +101,12 @@ class InstrumentGraphAxesEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support small font sizes")
     void shouldSupportSmallFontSizes() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setAbscissaPx(8);
         axes.setPrimaryOrdinatePx(8);
         axes.setSecondaryOrdinatePx(8);
 
-        // Then
         assertThat(axes.getAbscissaPx()).isEqualTo(8);
         assertThat(axes.getPrimaryOrdinatePx()).isEqualTo(8);
         assertThat(axes.getSecondaryOrdinatePx()).isEqualTo(8);
@@ -119,13 +115,12 @@ class InstrumentGraphAxesEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support large font sizes")
     void shouldSupportLargeFontSizes() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setAbscissaPx(24);
         axes.setPrimaryOrdinatePx(20);
         axes.setSecondaryOrdinatePx(18);
 
-        // Then
         assertThat(axes.getAbscissaPx()).isEqualTo(24);
         assertThat(axes.getPrimaryOrdinatePx()).isEqualTo(20);
         assertThat(axes.getSecondaryOrdinatePx()).isEqualTo(18);
@@ -134,13 +129,12 @@ class InstrumentGraphAxesEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support different font sizes for each axis")
     void shouldSupportDifferentFontSizesForEachAxis() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setAbscissaPx(12);
         axes.setPrimaryOrdinatePx(14);
         axes.setSecondaryOrdinatePx(10);
 
-        // Then
         assertThat(axes.getAbscissaPx()).isNotEqualTo(axes.getPrimaryOrdinatePx());
         assertThat(axes.getPrimaryOrdinatePx()).isNotEqualTo(axes.getSecondaryOrdinatePx());
     }
@@ -148,45 +142,41 @@ class InstrumentGraphAxesEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should enable abscissa grid lines")
     void shouldEnableAbscissaGridLines() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setAbscissaGridLinesEnable(true);
 
-        // Then
         assertThat(axes.getAbscissaGridLinesEnable()).isTrue();
     }
 
     @Test
     @DisplayName("Should disable abscissa grid lines")
     void shouldDisableAbscissaGridLines() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setAbscissaGridLinesEnable(false);
 
-        // Then
         assertThat(axes.getAbscissaGridLinesEnable()).isFalse();
     }
 
     @Test
     @DisplayName("Should enable primary ordinate grid lines")
     void shouldEnablePrimaryOrdinateGridLines() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setPrimaryOrdinateGridLinesEnable(true);
 
-        // Then
         assertThat(axes.getPrimaryOrdinateGridLinesEnable()).isTrue();
     }
 
     @Test
     @DisplayName("Should support independent grid line configuration")
     void shouldSupportIndependentGridLineConfiguration() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setAbscissaGridLinesEnable(true);
         axes.setPrimaryOrdinateGridLinesEnable(false);
 
-        // Then
         assertThat(axes.getAbscissaGridLinesEnable()).isTrue();
         assertThat(axes.getPrimaryOrdinateGridLinesEnable()).isFalse();
     }
@@ -194,34 +184,31 @@ class InstrumentGraphAxesEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support optional primary ordinate title")
     void shouldSupportOptionalPrimaryOrdinateTitle() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setPrimaryOrdinateTitle("Pressão (kPa)");
 
-        // Then
         assertThat(axes.getPrimaryOrdinateTitle()).isEqualTo("Pressão (kPa)");
     }
 
     @Test
     @DisplayName("Should support optional secondary ordinate title")
     void shouldSupportOptionalSecondaryOrdinateTitle() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setSecondaryOrdinateTitle("Volume (m³)");
 
-        // Then
         assertThat(axes.getSecondaryOrdinateTitle()).isEqualTo("Volume (m³)");
     }
 
     @Test
     @DisplayName("Should allow null ordinate titles")
     void shouldAllowNullOrdinateTitles() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setPrimaryOrdinateTitle(null);
         axes.setSecondaryOrdinateTitle(null);
 
-        // Then
         assertThat(axes.getPrimaryOrdinateTitle()).isNull();
         assertThat(axes.getSecondaryOrdinateTitle()).isNull();
     }
@@ -229,57 +216,52 @@ class InstrumentGraphAxesEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support primary ordinate spacing")
     void shouldSupportPrimaryOrdinateSpacing() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setPrimaryOrdinateSpacing(10.0);
 
-        // Then
         assertThat(axes.getPrimaryOrdinateSpacing()).isEqualTo(10.0);
     }
 
     @Test
     @DisplayName("Should support secondary ordinate spacing")
     void shouldSupportSecondaryOrdinateSpacing() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setSecondaryOrdinateSpacing(5.0);
 
-        // Then
         assertThat(axes.getSecondaryOrdinateSpacing()).isEqualTo(5.0);
     }
 
     @Test
     @DisplayName("Should support different spacing for primary and secondary ordinates")
     void shouldSupportDifferentSpacingForPrimaryAndSecondaryOrdinates() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setPrimaryOrdinateSpacing(10.0);
         axes.setSecondaryOrdinateSpacing(2.5);
 
-        // Then
         assertThat(axes.getPrimaryOrdinateSpacing()).isNotEqualTo(axes.getSecondaryOrdinateSpacing());
     }
 
     @Test
     @DisplayName("Should support primary ordinate initial value")
     void shouldSupportPrimaryOrdinateInitialValue() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setPrimaryOrdinateInitialValue(0.0);
 
-        // Then
         assertThat(axes.getPrimaryOrdinateInitialValue()).isEqualTo(0.0);
     }
 
     @Test
     @DisplayName("Should support negative initial values")
     void shouldSupportNegativeInitialValues() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setPrimaryOrdinateInitialValue(-10.0);
         axes.setSecondaryOrdinateInitialValue(-5.0);
 
-        // Then
         assertThat(axes.getPrimaryOrdinateInitialValue()).isNegative();
         assertThat(axes.getSecondaryOrdinateInitialValue()).isNegative();
     }
@@ -287,46 +269,42 @@ class InstrumentGraphAxesEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support primary ordinate maximum value")
     void shouldSupportPrimaryOrdinateMaximumValue() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setPrimaryOrdinateMaximumValue(100.0);
 
-        // Then
         assertThat(axes.getPrimaryOrdinateMaximumValue()).isEqualTo(100.0);
     }
 
     @Test
     @DisplayName("Should support secondary ordinate maximum value")
     void shouldSupportSecondaryOrdinateMaximumValue() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setSecondaryOrdinateMaximumValue(50.0);
 
-        // Then
         assertThat(axes.getSecondaryOrdinateMaximumValue()).isEqualTo(50.0);
     }
 
     @Test
     @DisplayName("Should support range configuration with initial and maximum values")
     void shouldSupportRangeConfigurationWithInitialAndMaximumValues() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setPrimaryOrdinateInitialValue(0.0);
         axes.setPrimaryOrdinateMaximumValue(100.0);
 
-        // Then
         assertThat(axes.getPrimaryOrdinateInitialValue()).isLessThan(axes.getPrimaryOrdinateMaximumValue());
     }
 
     @Test
     @DisplayName("Should allow null spacing values")
     void shouldAllowNullSpacingValues() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setPrimaryOrdinateSpacing(null);
         axes.setSecondaryOrdinateSpacing(null);
 
-        // Then
         assertThat(axes.getPrimaryOrdinateSpacing()).isNull();
         assertThat(axes.getSecondaryOrdinateSpacing()).isNull();
     }
@@ -334,12 +312,11 @@ class InstrumentGraphAxesEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should allow null initial values")
     void shouldAllowNullInitialValues() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setPrimaryOrdinateInitialValue(null);
         axes.setSecondaryOrdinateInitialValue(null);
 
-        // Then
         assertThat(axes.getPrimaryOrdinateInitialValue()).isNull();
         assertThat(axes.getSecondaryOrdinateInitialValue()).isNull();
     }
@@ -347,12 +324,11 @@ class InstrumentGraphAxesEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should allow null maximum values")
     void shouldAllowNullMaximumValues() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setPrimaryOrdinateMaximumValue(null);
         axes.setSecondaryOrdinateMaximumValue(null);
 
-        // Then
         assertThat(axes.getPrimaryOrdinateMaximumValue()).isNull();
         assertThat(axes.getSecondaryOrdinateMaximumValue()).isNull();
     }
@@ -360,12 +336,11 @@ class InstrumentGraphAxesEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support Portuguese characters in titles")
     void shouldSupportPortugueseCharactersInTitles() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setPrimaryOrdinateTitle("Nível d'Água (m)");
         axes.setSecondaryOrdinateTitle("Vazão (m³/s)");
 
-        // Then
         assertThat(axes.getPrimaryOrdinateTitle()).contains("'", "Á");
         assertThat(axes.getSecondaryOrdinateTitle()).contains("ã", "³");
     }
@@ -373,25 +348,23 @@ class InstrumentGraphAxesEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain identity through property changes")
     void shouldMaintainIdentityThroughPropertyChanges() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setId(1L);
         axes.setAbscissaPx(12);
 
         Long originalId = axes.getId();
 
-        // When
         axes.setAbscissaPx(14);
         axes.setPrimaryOrdinatePx(16);
 
-        // Then
         assertThat(axes.getId()).isEqualTo(originalId);
     }
 
     @Test
     @DisplayName("Should support complete axes configuration")
     void shouldSupportCompleteAxesConfiguration() {
-        // Given
+
         InstrumentGraphAxesEntity axes = new InstrumentGraphAxesEntity();
         axes.setPattern(pattern);
         axes.setAbscissaPx(12);
@@ -408,7 +381,6 @@ class InstrumentGraphAxesEntityTest extends BaseUnitTest {
         axes.setPrimaryOrdinateMaximumValue(100.0);
         axes.setSecondaryOrdinateMaximumValue(50.0);
 
-        // Then
         assertThat(axes.getPattern()).isNotNull();
         assertThat(axes.getAbscissaPx()).isPositive();
         assertThat(axes.getPrimaryOrdinatePx()).isPositive();

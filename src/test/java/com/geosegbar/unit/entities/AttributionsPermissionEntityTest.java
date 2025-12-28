@@ -24,12 +24,11 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create attributions permission with default values")
     void shouldCreateAttributionsPermissionWithDefaultValues() {
-        // Given
+
         AttributionsPermissionEntity permission = new AttributionsPermissionEntity();
         permission.setId(1L);
         permission.setUser(user);
 
-        // Then
         assertThat(permission).satisfies(p -> {
             assertThat(p.getId()).isEqualTo(1L);
             assertThat(p.getUser()).isEqualTo(user);
@@ -42,7 +41,7 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create attributions permission using all args constructor")
     void shouldCreateAttributionsPermissionUsingAllArgsConstructor() {
-        // Given & When
+
         AttributionsPermissionEntity permission = new AttributionsPermissionEntity(
                 1L,
                 user,
@@ -51,7 +50,6 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
                 false
         );
 
-        // Then
         assertThat(permission).satisfies(p -> {
             assertThat(p.getId()).isEqualTo(1L);
             assertThat(p.getUser()).isEqualTo(user);
@@ -64,10 +62,9 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create attributions permission with no args constructor")
     void shouldCreateAttributionsPermissionWithNoArgsConstructor() {
-        // Given & When
+
         AttributionsPermissionEntity permission = new AttributionsPermissionEntity();
 
-        // Then
         assertThat(permission).isNotNull();
         assertThat(permission.getId()).isNull();
         assertThat(permission.getUser()).isNull();
@@ -79,11 +76,10 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain OneToOne relationship with user")
     void shouldMaintainOneToOneRelationshipWithUser() {
-        // Given
+
         AttributionsPermissionEntity permission = new AttributionsPermissionEntity();
         permission.setUser(user);
 
-        // Then
         assertThat(permission.getUser())
                 .isNotNull()
                 .isEqualTo(user);
@@ -93,16 +89,14 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should grant all permissions")
     void shouldGrantAllPermissions() {
-        // Given
+
         AttributionsPermissionEntity permission = new AttributionsPermissionEntity();
         permission.setUser(user);
 
-        // When
         permission.setEditUser(true);
         permission.setEditDam(true);
         permission.setEditGeralData(true);
 
-        // Then
         assertThat(permission.getEditUser()).isTrue();
         assertThat(permission.getEditDam()).isTrue();
         assertThat(permission.getEditGeralData()).isTrue();
@@ -111,12 +105,11 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should grant only edit user permission")
     void shouldGrantOnlyEditUserPermission() {
-        // Given
+
         AttributionsPermissionEntity permission = new AttributionsPermissionEntity();
         permission.setUser(user);
         permission.setEditUser(true);
 
-        // Then
         assertThat(permission.getEditUser()).isTrue();
         assertThat(permission.getEditDam()).isFalse();
         assertThat(permission.getEditGeralData()).isFalse();
@@ -125,12 +118,11 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should grant only edit dam permission")
     void shouldGrantOnlyEditDamPermission() {
-        // Given
+
         AttributionsPermissionEntity permission = new AttributionsPermissionEntity();
         permission.setUser(user);
         permission.setEditDam(true);
 
-        // Then
         assertThat(permission.getEditUser()).isFalse();
         assertThat(permission.getEditDam()).isTrue();
         assertThat(permission.getEditGeralData()).isFalse();
@@ -139,12 +131,11 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should grant only edit geral data permission")
     void shouldGrantOnlyEditGeralDataPermission() {
-        // Given
+
         AttributionsPermissionEntity permission = new AttributionsPermissionEntity();
         permission.setUser(user);
         permission.setEditGeralData(true);
 
-        // Then
         assertThat(permission.getEditUser()).isFalse();
         assertThat(permission.getEditDam()).isFalse();
         assertThat(permission.getEditGeralData()).isTrue();
@@ -153,17 +144,15 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should revoke all permissions")
     void shouldRevokeAllPermissions() {
-        // Given
+
         AttributionsPermissionEntity permission = new AttributionsPermissionEntity(
                 1L, user, true, true, true
         );
 
-        // When
         permission.setEditUser(false);
         permission.setEditDam(false);
         permission.setEditGeralData(false);
 
-        // Then
         assertThat(permission.getEditUser()).isFalse();
         assertThat(permission.getEditDam()).isFalse();
         assertThat(permission.getEditGeralData()).isFalse();
@@ -172,23 +161,20 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should toggle permissions independently")
     void shouldTogglePermissionsIndependently() {
-        // Given
+
         AttributionsPermissionEntity permission = new AttributionsPermissionEntity();
         permission.setUser(user);
 
-        // When - Grant edit user
         permission.setEditUser(true);
         assertThat(permission.getEditUser()).isTrue();
         assertThat(permission.getEditDam()).isFalse();
         assertThat(permission.getEditGeralData()).isFalse();
 
-        // When - Grant edit dam
         permission.setEditDam(true);
         assertThat(permission.getEditUser()).isTrue();
         assertThat(permission.getEditDam()).isTrue();
         assertThat(permission.getEditGeralData()).isFalse();
 
-        // When - Revoke edit user
         permission.setEditUser(false);
         assertThat(permission.getEditUser()).isFalse();
         assertThat(permission.getEditDam()).isTrue();
@@ -198,14 +184,13 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should handle permission combinations")
     void shouldHandlePermissionCombinations() {
-        // Combination 1: No permissions
+
         AttributionsPermissionEntity noPerms = new AttributionsPermissionEntity();
         noPerms.setUser(user);
         assertThat(noPerms.getEditUser()).isFalse();
         assertThat(noPerms.getEditDam()).isFalse();
         assertThat(noPerms.getEditGeralData()).isFalse();
 
-        // Combination 2: User + Dam
         AttributionsPermissionEntity userDamPerms = new AttributionsPermissionEntity();
         userDamPerms.setUser(user);
         userDamPerms.setEditUser(true);
@@ -214,7 +199,6 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
         assertThat(userDamPerms.getEditDam()).isTrue();
         assertThat(userDamPerms.getEditGeralData()).isFalse();
 
-        // Combination 3: All permissions
         AttributionsPermissionEntity allPerms = new AttributionsPermissionEntity();
         allPerms.setUser(user);
         allPerms.setEditUser(true);
@@ -228,7 +212,7 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain identity through permission changes")
     void shouldMaintainIdentityThroughPermissionChanges() {
-        // Given
+
         AttributionsPermissionEntity permission = new AttributionsPermissionEntity();
         permission.setId(1L);
         permission.setUser(user);
@@ -236,12 +220,10 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
         Long originalId = permission.getId();
         UserEntity originalUser = permission.getUser();
 
-        // When
         permission.setEditUser(true);
         permission.setEditDam(true);
         permission.setEditGeralData(true);
 
-        // Then
         assertThat(permission.getId()).isEqualTo(originalId);
         assertThat(permission.getUser()).isEqualTo(originalUser);
     }
@@ -249,16 +231,14 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should handle null Boolean values as false")
     void shouldHandleNullBooleanValuesAsFalse() {
-        // Given
+
         AttributionsPermissionEntity permission = new AttributionsPermissionEntity();
         permission.setUser(user);
 
-        // When explicitly setting to null (shouldn't happen but testing robustness)
         permission.setEditUser(null);
         permission.setEditDam(null);
         permission.setEditGeralData(null);
 
-        // Then - Verify nulls are handled
         assertThat(permission.getEditUser()).isNull();
         assertThat(permission.getEditDam()).isNull();
         assertThat(permission.getEditGeralData()).isNull();
@@ -267,7 +247,7 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support different users with different permissions")
     void shouldSupportDifferentUsersWithDifferentPermissions() {
-        // Given
+
         UserEntity user1 = TestDataBuilder.user().withName("User 1").build();
         UserEntity user2 = TestDataBuilder.user().withName("User 2").build();
 
@@ -279,7 +259,6 @@ class AttributionsPermissionEntityTest extends BaseUnitTest {
         perm2.setUser(user2);
         perm2.setEditDam(true);
 
-        // Then
         assertThat(perm1.getUser()).isEqualTo(user1);
         assertThat(perm1.getEditUser()).isTrue();
         assertThat(perm1.getEditDam()).isFalse();

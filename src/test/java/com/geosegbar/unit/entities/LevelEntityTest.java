@@ -26,14 +26,13 @@ class LevelEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create level with all required fields")
     void shouldCreateLevelWithAllRequiredFields() {
-        // Given
+
         LevelEntity level = new LevelEntity();
         level.setId(1L);
         level.setName("Normal");
         level.setValue(100.0);
         level.setUnitLevel("m");
 
-        // Then
         assertThat(level).satisfies(l -> {
             assertThat(l.getId()).isEqualTo(1L);
             assertThat(l.getName()).isEqualTo("Normal");
@@ -45,10 +44,9 @@ class LevelEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create using all args constructor")
     void shouldCreateUsingAllArgsConstructor() {
-        // Given
+
         LocalDateTime now = LocalDateTime.now();
 
-        // When
         LevelEntity level = new LevelEntity(
                 1L,
                 "Normal",
@@ -58,7 +56,6 @@ class LevelEntityTest extends BaseUnitTest {
                 new HashSet<>()
         );
 
-        // Then
         assertThat(level.getId()).isEqualTo(1L);
         assertThat(level.getName()).isEqualTo("Normal");
         assertThat(level.getValue()).isEqualTo(100.0);
@@ -70,7 +67,7 @@ class LevelEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support createdAt timestamp")
     void shouldSupportCreatedAtTimestamp() {
-        // Given
+
         LevelEntity level = new LevelEntity();
         level.setName("Normal");
         level.setValue(100.0);
@@ -78,10 +75,8 @@ class LevelEntityTest extends BaseUnitTest {
 
         LocalDateTime timestamp = LocalDateTime.now();
 
-        // When
         level.setCreatedAt(timestamp);
 
-        // Then
         assertThat(level.getCreatedAt())
                 .isNotNull()
                 .isCloseTo(timestamp, within(1, ChronoUnit.SECONDS));
@@ -90,7 +85,7 @@ class LevelEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain OneToMany collection of reservoirs")
     void shouldMaintainOneToManyCollectionOfReservoirs() {
-        // Given
+
         LevelEntity level = new LevelEntity();
         level.setName("Normal");
         level.setReservoirs(new HashSet<>());
@@ -99,7 +94,6 @@ class LevelEntityTest extends BaseUnitTest {
         reservoir.setId(1L);
         level.getReservoirs().add(reservoir);
 
-        // Then
         assertThat(level.getReservoirs())
                 .isNotNull()
                 .hasSize(1)
@@ -109,7 +103,7 @@ class LevelEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support multiple reservoirs per level")
     void shouldSupportMultipleReservoirsPerLevel() {
-        // Given
+
         LevelEntity level = new LevelEntity();
         level.setName("Normal");
         level.setReservoirs(new HashSet<>());
@@ -125,42 +119,38 @@ class LevelEntityTest extends BaseUnitTest {
         level.getReservoirs().add(res2);
         level.getReservoirs().add(res3);
 
-        // Then
         assertThat(level.getReservoirs()).hasSize(3);
     }
 
     @Test
     @DisplayName("Should initialize empty reservoirs collection by default")
     void shouldInitializeEmptyReservoirsCollectionByDefault() {
-        // Given & When
+
         LevelEntity level = new LevelEntity();
 
-        // Then
         assertThat(level.getReservoirs()).isNotNull().isEmpty();
     }
 
     @Test
     @DisplayName("Should support adding and removing reservoirs")
     void shouldSupportAddingAndRemovingReservoirs() {
-        // Given
+
         LevelEntity level = new LevelEntity();
         ReservoirEntity reservoir = new ReservoirEntity();
         reservoir.setId(1L);
 
-        // When
         level.getReservoirs().add(reservoir);
         assertThat(level.getReservoirs()).hasSize(1);
 
         level.getReservoirs().remove(reservoir);
 
-        // Then
         assertThat(level.getReservoirs()).isEmpty();
     }
 
     @Test
     @DisplayName("Should support common level names")
     void shouldSupportCommonLevelNames() {
-        // Given
+
         LevelEntity normal = new LevelEntity();
         normal.setName("Normal");
 
@@ -173,7 +163,6 @@ class LevelEntityTest extends BaseUnitTest {
         LevelEntity emergency = new LevelEntity();
         emergency.setName("Emergência");
 
-        // Then
         assertThat(normal.getName()).isEqualTo("Normal");
         assertThat(attention.getName()).contains("ã");
         assertThat(alert.getName()).isEqualTo("Alerta");
@@ -183,40 +172,37 @@ class LevelEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support positive level values")
     void shouldSupportPositiveLevelValues() {
-        // Given
+
         LevelEntity level = new LevelEntity();
         level.setValue(150.75);
 
-        // Then
         assertThat(level.getValue()).isPositive();
     }
 
     @Test
     @DisplayName("Should support zero level value")
     void shouldSupportZeroLevelValue() {
-        // Given
+
         LevelEntity level = new LevelEntity();
         level.setValue(0.0);
 
-        // Then
         assertThat(level.getValue()).isZero();
     }
 
     @Test
     @DisplayName("Should support decimal level values")
     void shouldSupportDecimalLevelValues() {
-        // Given
+
         LevelEntity level = new LevelEntity();
         level.setValue(123.456);
 
-        // Then
         assertThat(level.getValue()).isEqualTo(123.456);
     }
 
     @Test
     @DisplayName("Should support different unit levels")
     void shouldSupportDifferentUnitLevels() {
-        // Given
+
         LevelEntity meters = new LevelEntity();
         meters.setUnitLevel("m");
 
@@ -226,7 +212,6 @@ class LevelEntityTest extends BaseUnitTest {
         LevelEntity feet = new LevelEntity();
         feet.setUnitLevel("ft");
 
-        // Then
         assertThat(meters.getUnitLevel()).isEqualTo("m");
         assertThat(centimeters.getUnitLevel()).isEqualTo("cm");
         assertThat(feet.getUnitLevel()).isEqualTo("ft");
@@ -235,24 +220,22 @@ class LevelEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain identity through property changes")
     void shouldMaintainIdentityThroughPropertyChanges() {
-        // Given
+
         LevelEntity level = new LevelEntity();
         level.setId(1L);
         level.setValue(100.0);
 
         Long originalId = level.getId();
 
-        // When
         level.setValue(150.0);
 
-        // Then
         assertThat(level.getId()).isEqualTo(originalId);
     }
 
     @Test
     @DisplayName("Should support unique name index")
     void shouldSupportUniqueNameIndex() {
-        // Given
+
         LevelEntity level1 = new LevelEntity();
         level1.setId(1L);
         level1.setName("Normal");
@@ -261,59 +244,54 @@ class LevelEntityTest extends BaseUnitTest {
         level2.setId(2L);
         level2.setName("Atenção");
 
-        // Then - Different names for different levels
         assertThat(level1.getName()).isNotEqualTo(level2.getName());
     }
 
     @Test
     @DisplayName("Should support value index for queries")
     void shouldSupportValueIndexForQueries() {
-        // Given
+
         LevelEntity level = new LevelEntity();
         level.setValue(100.0);
 
-        // Then - Value indexed
         assertThat(level.getValue()).isNotNull();
     }
 
     @Test
     @DisplayName("Should support createdAt tracking")
     void shouldSupportCreatedAtTracking() {
-        // Given
+
         LevelEntity level = new LevelEntity();
         LocalDateTime timestamp = LocalDateTime.of(2024, 1, 15, 10, 30);
         level.setCreatedAt(timestamp);
 
-        // Then
         assertThat(level.getCreatedAt()).isEqualTo(timestamp);
     }
 
     @Test
     @DisplayName("Should support lazy fetch for reservoirs")
     void shouldSupportLazyFetchForReservoirs() {
-        // Given
+
         LevelEntity level = new LevelEntity();
         level.setName("Normal");
 
-        // Then - Reservoirs collection initialized but lazy
         assertThat(level.getReservoirs()).isNotNull();
     }
 
     @Test
     @DisplayName("Should support Portuguese characters in name")
     void shouldSupportPortugueseCharactersInName() {
-        // Given
+
         LevelEntity level = new LevelEntity();
         level.setName("Atenção Máxima");
 
-        // Then
         assertThat(level.getName()).contains("ã", "á");
     }
 
     @Test
     @DisplayName("Should support different level hierarchies")
     void shouldSupportDifferentLevelHierarchies() {
-        // Given - Ascending levels
+
         LevelEntity normal = new LevelEntity();
         normal.setId(1L);
         normal.setName("Normal");
@@ -334,7 +312,6 @@ class LevelEntityTest extends BaseUnitTest {
         emergency.setName("Emergência");
         emergency.setValue(130.0);
 
-        // Then - Values increase with severity
         assertThat(normal.getValue()).isLessThan(attention.getValue());
         assertThat(attention.getValue()).isLessThan(alert.getValue());
         assertThat(alert.getValue()).isLessThan(emergency.getValue());
@@ -343,7 +320,7 @@ class LevelEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support bidirectional relationship with reservoirs")
     void shouldSupportBidirectionalRelationshipWithReservoirs() {
-        // Given
+
         LevelEntity level = new LevelEntity();
         level.setId(1L);
         level.setName("Normal");
@@ -352,10 +329,8 @@ class LevelEntityTest extends BaseUnitTest {
         reservoir.setId(1L);
         reservoir.setLevel(level);
 
-        // When
         level.getReservoirs().add(reservoir);
 
-        // Then - Bidirectional relationship
         assertThat(reservoir.getLevel()).isEqualTo(level);
         assertThat(level.getReservoirs()).contains(reservoir);
     }

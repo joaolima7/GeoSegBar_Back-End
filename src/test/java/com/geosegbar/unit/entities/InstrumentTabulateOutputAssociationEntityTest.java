@@ -31,14 +31,13 @@ class InstrumentTabulateOutputAssociationEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create output association with all required fields")
     void shouldCreateOutputAssociationWithAllRequiredFields() {
-        // Given
+
         InstrumentTabulateOutputAssociationEntity outputAssociation = new InstrumentTabulateOutputAssociationEntity();
         outputAssociation.setId(1L);
         outputAssociation.setAssociation(association);
         outputAssociation.setOutput(output);
         outputAssociation.setOutputIndex(0);
 
-        // Then
         assertThat(outputAssociation).satisfies(oa -> {
             assertThat(oa.getId()).isEqualTo(1L);
             assertThat(oa.getAssociation()).isEqualTo(association);
@@ -50,7 +49,7 @@ class InstrumentTabulateOutputAssociationEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create using all args constructor")
     void shouldCreateUsingAllArgsConstructor() {
-        // Given & When
+
         InstrumentTabulateOutputAssociationEntity outputAssociation = new InstrumentTabulateOutputAssociationEntity(
                 1L,
                 association,
@@ -58,7 +57,6 @@ class InstrumentTabulateOutputAssociationEntityTest extends BaseUnitTest {
                 0
         );
 
-        // Then
         assertThat(outputAssociation.getId()).isEqualTo(1L);
         assertThat(outputAssociation.getAssociation()).isEqualTo(association);
         assertThat(outputAssociation.getOutput()).isEqualTo(output);
@@ -68,11 +66,10 @@ class InstrumentTabulateOutputAssociationEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain ManyToOne relationship with InstrumentTabulateAssociation")
     void shouldMaintainManyToOneRelationshipWithInstrumentTabulateAssociation() {
-        // Given
+
         InstrumentTabulateOutputAssociationEntity outputAssociation = new InstrumentTabulateOutputAssociationEntity();
         outputAssociation.setAssociation(association);
 
-        // Then
         assertThat(outputAssociation.getAssociation())
                 .isNotNull()
                 .isEqualTo(association);
@@ -81,11 +78,10 @@ class InstrumentTabulateOutputAssociationEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain ManyToOne relationship with Output")
     void shouldMaintainManyToOneRelationshipWithOutput() {
-        // Given
+
         InstrumentTabulateOutputAssociationEntity outputAssociation = new InstrumentTabulateOutputAssociationEntity();
         outputAssociation.setOutput(output);
 
-        // Then
         assertThat(outputAssociation.getOutput())
                 .isNotNull()
                 .isEqualTo(output);
@@ -94,18 +90,17 @@ class InstrumentTabulateOutputAssociationEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support zero-based index for first output")
     void shouldSupportZeroBasedIndexForFirstOutput() {
-        // Given
+
         InstrumentTabulateOutputAssociationEntity outputAssociation = new InstrumentTabulateOutputAssociationEntity();
         outputAssociation.setOutputIndex(0);
 
-        // Then
         assertThat(outputAssociation.getOutputIndex()).isZero();
     }
 
     @Test
     @DisplayName("Should support sequential output indexes")
     void shouldSupportSequentialOutputIndexes() {
-        // Given
+
         InstrumentTabulateOutputAssociationEntity output1 = new InstrumentTabulateOutputAssociationEntity();
         output1.setId(1L);
         output1.setOutputIndex(0);
@@ -118,7 +113,6 @@ class InstrumentTabulateOutputAssociationEntityTest extends BaseUnitTest {
         output3.setId(3L);
         output3.setOutputIndex(2);
 
-        // Then
         assertThat(output1.getOutputIndex()).isEqualTo(0);
         assertThat(output2.getOutputIndex()).isEqualTo(1);
         assertThat(output3.getOutputIndex()).isEqualTo(2);
@@ -127,7 +121,7 @@ class InstrumentTabulateOutputAssociationEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support non-sequential output indexes")
     void shouldSupportNonSequentialOutputIndexes() {
-        // Given
+
         InstrumentTabulateOutputAssociationEntity output1 = new InstrumentTabulateOutputAssociationEntity();
         output1.setOutputIndex(0);
 
@@ -137,7 +131,6 @@ class InstrumentTabulateOutputAssociationEntityTest extends BaseUnitTest {
         InstrumentTabulateOutputAssociationEntity output3 = new InstrumentTabulateOutputAssociationEntity();
         output3.setOutputIndex(7);
 
-        // Then
         assertThat(output1.getOutputIndex()).isLessThan(output2.getOutputIndex());
         assertThat(output2.getOutputIndex()).isLessThan(output3.getOutputIndex());
     }
@@ -145,18 +138,17 @@ class InstrumentTabulateOutputAssociationEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support large index values")
     void shouldSupportLargeIndexValues() {
-        // Given
+
         InstrumentTabulateOutputAssociationEntity outputAssociation = new InstrumentTabulateOutputAssociationEntity();
         outputAssociation.setOutputIndex(99);
 
-        // Then
         assertThat(outputAssociation.getOutputIndex()).isEqualTo(99);
     }
 
     @Test
     @DisplayName("Should allow multiple output associations per instrument association")
     void shouldAllowMultipleOutputAssociationsPerInstrumentAssociation() {
-        // Given
+
         OutputEntity output2 = new OutputEntity();
         output2.setId(2L);
         output2.setName("Output 2");
@@ -173,7 +165,6 @@ class InstrumentTabulateOutputAssociationEntityTest extends BaseUnitTest {
         outputAssoc2.setOutput(output2);
         outputAssoc2.setOutputIndex(1);
 
-        // Then
         assertThat(outputAssoc1.getAssociation()).isEqualTo(outputAssoc2.getAssociation());
         assertThat(outputAssoc1.getId()).isNotEqualTo(outputAssoc2.getId());
         assertThat(outputAssoc1.getOutput()).isNotEqualTo(outputAssoc2.getOutput());
@@ -183,45 +174,39 @@ class InstrumentTabulateOutputAssociationEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain identity through property changes")
     void shouldMaintainIdentityThroughPropertyChanges() {
-        // Given
+
         InstrumentTabulateOutputAssociationEntity outputAssociation = new InstrumentTabulateOutputAssociationEntity();
         outputAssociation.setId(1L);
         outputAssociation.setOutputIndex(0);
 
         Long originalId = outputAssociation.getId();
 
-        // When
         outputAssociation.setOutputIndex(5);
 
-        // Then
         assertThat(outputAssociation.getId()).isEqualTo(originalId);
     }
 
     @Test
     @DisplayName("Should support output index reordering")
     void shouldSupportOutputIndexReordering() {
-        // Given
+
         InstrumentTabulateOutputAssociationEntity outputAssociation = new InstrumentTabulateOutputAssociationEntity();
         outputAssociation.setOutputIndex(0);
 
-        // When
         outputAssociation.setOutputIndex(3);
 
-        // Then
         assertThat(outputAssociation.getOutputIndex()).isEqualTo(3);
     }
 
     @Test
     @DisplayName("Should reference parent association correctly")
     void shouldReferenceParentAssociationCorrectly() {
-        // Given
+
         InstrumentTabulateOutputAssociationEntity outputAssociation = new InstrumentTabulateOutputAssociationEntity();
         outputAssociation.setAssociation(association);
 
-        // When - Add to parent collection
         association.getOutputAssociations().add(outputAssociation);
 
-        // Then
         assertThat(outputAssociation.getAssociation()).isEqualTo(association);
         assertThat(association.getOutputAssociations()).contains(outputAssociation);
     }
@@ -229,7 +214,7 @@ class InstrumentTabulateOutputAssociationEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support different outputs for same association")
     void shouldSupportDifferentOutputsForSameAssociation() {
-        // Given
+
         OutputEntity output2 = new OutputEntity();
         output2.setId(2L);
         output2.setName("Output 2");
@@ -253,7 +238,6 @@ class InstrumentTabulateOutputAssociationEntityTest extends BaseUnitTest {
         outputAssoc3.setOutput(output3);
         outputAssoc3.setOutputIndex(2);
 
-        // Then
         assertThat(outputAssoc1.getAssociation()).isEqualTo(association);
         assertThat(outputAssoc2.getAssociation()).isEqualTo(association);
         assertThat(outputAssoc3.getAssociation()).isEqualTo(association);
@@ -264,17 +248,15 @@ class InstrumentTabulateOutputAssociationEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain bidirectional relationship with association")
     void shouldMaintainBidirectionalRelationshipWithAssociation() {
-        // Given
+
         InstrumentTabulateOutputAssociationEntity outputAssociation = new InstrumentTabulateOutputAssociationEntity();
         outputAssociation.setId(1L);
         outputAssociation.setAssociation(association);
         outputAssociation.setOutput(output);
         outputAssociation.setOutputIndex(0);
 
-        // When
         association.getOutputAssociations().add(outputAssociation);
 
-        // Then - Bidirectional relationship established
         assertThat(outputAssociation.getAssociation()).isEqualTo(association);
         assertThat(association.getOutputAssociations())
                 .isNotNull()
@@ -285,33 +267,30 @@ class InstrumentTabulateOutputAssociationEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support orphan removal when removed from parent collection")
     void shouldSupportOrphanRemovalWhenRemovedFromParentCollection() {
-        // Given
+
         InstrumentTabulateOutputAssociationEntity outputAssociation = new InstrumentTabulateOutputAssociationEntity();
         outputAssociation.setId(1L);
         outputAssociation.setAssociation(association);
         association.getOutputAssociations().add(outputAssociation);
 
-        // When - Remove from parent collection
         association.getOutputAssociations().remove(outputAssociation);
 
-        // Then - No longer in parent collection
         assertThat(association.getOutputAssociations()).doesNotContain(outputAssociation);
     }
 
     @Test
     @DisplayName("Should support index-based column ordering concept")
     void shouldSupportIndexBasedColumnOrderingConcept() {
-        // Given - Outputs with specific column positions
+
         InstrumentTabulateOutputAssociationEntity pressure = new InstrumentTabulateOutputAssociationEntity();
-        pressure.setOutputIndex(0); // First column after fixed columns
+        pressure.setOutputIndex(0);
 
         InstrumentTabulateOutputAssociationEntity temperature = new InstrumentTabulateOutputAssociationEntity();
-        temperature.setOutputIndex(1); // Second column
+        temperature.setOutputIndex(1);
 
         InstrumentTabulateOutputAssociationEntity flow = new InstrumentTabulateOutputAssociationEntity();
-        flow.setOutputIndex(2); // Third column
+        flow.setOutputIndex(2);
 
-        // Then - Indexes define display order
         assertThat(pressure.getOutputIndex()).isLessThan(temperature.getOutputIndex());
         assertThat(temperature.getOutputIndex()).isLessThan(flow.getOutputIndex());
     }

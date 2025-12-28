@@ -16,12 +16,11 @@ class ClassificationDamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create classification dam with all fields")
     void shouldCreateClassificationDamWithAllFields() {
-        // Given
+
         ClassificationDamEntity classification = new ClassificationDamEntity();
         classification.setId(1L);
         classification.setClassification("Pequeno Porte");
 
-        // Then
         assertThat(classification).satisfies(c -> {
             assertThat(c.getId()).isEqualTo(1L);
             assertThat(c.getClassification()).isEqualTo("Pequeno Porte");
@@ -32,7 +31,7 @@ class ClassificationDamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create classification dam using all args constructor")
     void shouldCreateClassificationDamUsingAllArgsConstructor() {
-        // Given & When
+
         HashSet<RegulatoryDamEntity> regulatoryDams = new HashSet<>();
 
         ClassificationDamEntity classification = new ClassificationDamEntity(
@@ -41,7 +40,6 @@ class ClassificationDamEntityTest extends BaseUnitTest {
                 regulatoryDams
         );
 
-        // Then
         assertThat(classification).satisfies(c -> {
             assertThat(c.getId()).isEqualTo(1L);
             assertThat(c.getClassification()).isEqualTo("Médio Porte");
@@ -52,10 +50,9 @@ class ClassificationDamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create classification dam with no args constructor")
     void shouldCreateClassificationDamWithNoArgsConstructor() {
-        // Given & When
+
         ClassificationDamEntity classification = new ClassificationDamEntity();
 
-        // Then
         assertThat(classification).isNotNull();
         assertThat(classification.getId()).isNull();
         assertThat(classification.getClassification()).isNull();
@@ -65,10 +62,9 @@ class ClassificationDamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should initialize regulatory dams as empty HashSet")
     void shouldInitializeRegulatoryDamsAsEmptyHashSet() {
-        // Given & When
+
         ClassificationDamEntity classification = new ClassificationDamEntity();
 
-        // Then
         assertThat(classification.getRegulatoryDams())
                 .isNotNull()
                 .isInstanceOf(HashSet.class)
@@ -78,7 +74,7 @@ class ClassificationDamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should handle different classification types")
     void shouldHandleDifferentClassificationTypes() {
-        // Given
+
         ClassificationDamEntity pequeno = new ClassificationDamEntity();
         pequeno.setClassification("Pequeno Porte");
 
@@ -91,7 +87,6 @@ class ClassificationDamEntityTest extends BaseUnitTest {
         ClassificationDamEntity especial = new ClassificationDamEntity();
         especial.setClassification("Porte Especial");
 
-        // Then
         assertThat(pequeno.getClassification()).isEqualTo("Pequeno Porte");
         assertThat(medio.getClassification()).isEqualTo("Médio Porte");
         assertThat(grande.getClassification()).isEqualTo("Grande Porte");
@@ -101,7 +96,7 @@ class ClassificationDamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should enforce unique classification value concept")
     void shouldEnforceUniqueClassificationValueConcept() {
-        // Given
+
         ClassificationDamEntity classification1 = new ClassificationDamEntity();
         classification1.setId(1L);
         classification1.setClassification("Pequeno Porte");
@@ -110,8 +105,6 @@ class ClassificationDamEntityTest extends BaseUnitTest {
         classification2.setId(2L);
         classification2.setClassification("Pequeno Porte");
 
-        // Then - In database, this would violate unique constraint
-        // But in entity level, we can validate the names are same
         assertThat(classification1.getClassification()).isEqualTo(classification2.getClassification());
         assertThat(classification1.getId()).isNotEqualTo(classification2.getId());
     }
@@ -119,7 +112,7 @@ class ClassificationDamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should add regulatory dam to classification")
     void shouldAddRegulatoryDamToClassification() {
-        // Given
+
         ClassificationDamEntity classification = new ClassificationDamEntity();
         classification.setClassification("Grande Porte");
 
@@ -127,10 +120,8 @@ class ClassificationDamEntityTest extends BaseUnitTest {
         regulatoryDam.setId(1L);
         regulatoryDam.setClassificationDam(classification);
 
-        // When
         classification.getRegulatoryDams().add(regulatoryDam);
 
-        // Then
         assertThat(classification.getRegulatoryDams())
                 .hasSize(1)
                 .contains(regulatoryDam);
@@ -139,7 +130,7 @@ class ClassificationDamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should add multiple regulatory dams")
     void shouldAddMultipleRegulatoryDams() {
-        // Given
+
         ClassificationDamEntity classification = new ClassificationDamEntity();
         classification.setClassification("Médio Porte");
 
@@ -155,12 +146,10 @@ class ClassificationDamEntityTest extends BaseUnitTest {
         dam3.setId(3L);
         dam3.setClassificationDam(classification);
 
-        // When
         classification.getRegulatoryDams().add(dam1);
         classification.getRegulatoryDams().add(dam2);
         classification.getRegulatoryDams().add(dam3);
 
-        // Then
         assertThat(classification.getRegulatoryDams())
                 .hasSize(3)
                 .containsExactlyInAnyOrder(dam1, dam2, dam3);
@@ -169,22 +158,20 @@ class ClassificationDamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should handle classification name with special characters")
     void shouldHandleClassificationNameWithSpecialCharacters() {
-        // Given
+
         ClassificationDamEntity classification = new ClassificationDamEntity();
         classification.setClassification("Porte Especial - Classe A");
 
-        // Then
         assertThat(classification.getClassification()).contains("-");
     }
 
     @Test
     @DisplayName("Should handle classification name with accents")
     void shouldHandleClassificationNameWithAccents() {
-        // Given
+
         ClassificationDamEntity classification = new ClassificationDamEntity();
         classification.setClassification("Médio Porte - Hidráulico");
 
-        // Then
         assertThat(classification.getClassification())
                 .contains("Médio")
                 .contains("Hidráulico");
@@ -193,12 +180,11 @@ class ClassificationDamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should handle long classification names")
     void shouldHandleLongClassificationNames() {
-        // Given
+
         ClassificationDamEntity classification = new ClassificationDamEntity();
         String longName = "Grande Porte - Barragem de Contenção com Finalidade Múltipla";
         classification.setClassification(longName);
 
-        // Then
         assertThat(classification.getClassification()).isEqualTo(longName);
         assertThat(classification.getClassification().length()).isGreaterThan(30);
     }
@@ -206,17 +192,15 @@ class ClassificationDamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain identity through property changes")
     void shouldMaintainIdentityThroughPropertyChanges() {
-        // Given
+
         ClassificationDamEntity classification = new ClassificationDamEntity();
         classification.setId(1L);
         classification.setClassification("Original Classification");
 
         Long originalId = classification.getId();
 
-        // When
         classification.setClassification("Updated Classification");
 
-        // Then
         assertThat(classification.getId()).isEqualTo(originalId);
         assertThat(classification.getClassification()).isEqualTo("Updated Classification");
     }
@@ -224,7 +208,7 @@ class ClassificationDamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should clear all regulatory dams")
     void shouldClearAllRegulatoryDams() {
-        // Given
+
         ClassificationDamEntity classification = new ClassificationDamEntity();
         RegulatoryDamEntity dam1 = new RegulatoryDamEntity();
         dam1.setId(1L);
@@ -234,21 +218,18 @@ class ClassificationDamEntityTest extends BaseUnitTest {
         classification.getRegulatoryDams().add(dam1);
         classification.getRegulatoryDams().add(dam2);
 
-        // When
         classification.getRegulatoryDams().clear();
 
-        // Then
         assertThat(classification.getRegulatoryDams()).isEmpty();
     }
 
     @Test
     @DisplayName("Should support classification without regulatory dams")
     void shouldSupportClassificationWithoutRegulatoryDams() {
-        // Given
+
         ClassificationDamEntity classification = new ClassificationDamEntity();
         classification.setClassification("Pequeno Porte");
 
-        // Then
         assertThat(classification.getRegulatoryDams()).isEmpty();
         assertThat(classification.getClassification()).isNotBlank();
     }
@@ -256,7 +237,7 @@ class ClassificationDamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should handle different classification nomenclatures")
     void shouldHandleDifferentClassificationNomenclatures() {
-        // Given - Different naming conventions
+
         ClassificationDamEntity classA = new ClassificationDamEntity();
         classA.setClassification("Classe A");
 
@@ -266,7 +247,6 @@ class ClassificationDamEntityTest extends BaseUnitTest {
         ClassificationDamEntity category1 = new ClassificationDamEntity();
         category1.setClassification("Categoria 1");
 
-        // Then
         assertThat(classA.getClassification()).contains("Classe");
         assertThat(type1.getClassification()).contains("Tipo");
         assertThat(category1.getClassification()).contains("Categoria");
@@ -275,11 +255,10 @@ class ClassificationDamEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support alphanumeric classifications")
     void shouldSupportAlphanumericClassifications() {
-        // Given
+
         ClassificationDamEntity classification = new ClassificationDamEntity();
         classification.setClassification("Classe A1 - Porte Grande");
 
-        // Then
         assertThat(classification.getClassification())
                 .contains("A1")
                 .contains("Grande");

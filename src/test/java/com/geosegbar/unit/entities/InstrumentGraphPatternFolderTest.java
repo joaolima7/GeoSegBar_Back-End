@@ -27,13 +27,12 @@ class InstrumentGraphPatternFolderTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create pattern folder with all required fields")
     void shouldCreatePatternFolderWithAllRequiredFields() {
-        // Given
+
         InstrumentGraphPatternFolder folder = new InstrumentGraphPatternFolder();
         folder.setId(1L);
         folder.setName("Folder 1");
         folder.setDam(dam);
 
-        // Then
         assertThat(folder).satisfies(f -> {
             assertThat(f.getId()).isEqualTo(1L);
             assertThat(f.getName()).isEqualTo("Folder 1");
@@ -44,7 +43,7 @@ class InstrumentGraphPatternFolderTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create using all args constructor")
     void shouldCreateUsingAllArgsConstructor() {
-        // Given & When
+
         InstrumentGraphPatternFolder folder = new InstrumentGraphPatternFolder(
                 1L,
                 "Folder 1",
@@ -52,7 +51,6 @@ class InstrumentGraphPatternFolderTest extends BaseUnitTest {
                 new HashSet<>()
         );
 
-        // Then
         assertThat(folder.getId()).isEqualTo(1L);
         assertThat(folder.getName()).isEqualTo("Folder 1");
         assertThat(folder.getDam()).isEqualTo(dam);
@@ -62,11 +60,10 @@ class InstrumentGraphPatternFolderTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain ManyToOne relationship with Dam")
     void shouldMaintainManyToOneRelationshipWithDam() {
-        // Given
+
         InstrumentGraphPatternFolder folder = new InstrumentGraphPatternFolder();
         folder.setDam(dam);
 
-        // Then
         assertThat(folder.getDam())
                 .isNotNull()
                 .isEqualTo(dam);
@@ -75,7 +72,7 @@ class InstrumentGraphPatternFolderTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain OneToMany collection of patterns")
     void shouldMaintainOneToManyCollectionOfPatterns() {
-        // Given
+
         InstrumentGraphPatternFolder folder = new InstrumentGraphPatternFolder();
         folder.setPatterns(new HashSet<>());
 
@@ -84,7 +81,6 @@ class InstrumentGraphPatternFolderTest extends BaseUnitTest {
         pattern.setName("Pattern 1");
         folder.getPatterns().add(pattern);
 
-        // Then
         assertThat(folder.getPatterns())
                 .isNotNull()
                 .hasSize(1)
@@ -94,7 +90,7 @@ class InstrumentGraphPatternFolderTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support multiple patterns per folder")
     void shouldSupportMultiplePatternsPerFolder() {
-        // Given
+
         InstrumentGraphPatternFolder folder = new InstrumentGraphPatternFolder();
         folder.setPatterns(new HashSet<>());
 
@@ -109,43 +105,39 @@ class InstrumentGraphPatternFolderTest extends BaseUnitTest {
         folder.getPatterns().add(pattern1);
         folder.getPatterns().add(pattern2);
 
-        // Then
         assertThat(folder.getPatterns()).hasSize(2);
     }
 
     @Test
     @DisplayName("Should initialize empty patterns collection by default")
     void shouldInitializeEmptyPatternsCollectionByDefault() {
-        // Given & When
+
         InstrumentGraphPatternFolder folder = new InstrumentGraphPatternFolder();
 
-        // Then
         assertThat(folder.getPatterns()).isNotNull().isEmpty();
     }
 
     @Test
     @DisplayName("Should support adding and removing patterns")
     void shouldSupportAddingAndRemovingPatterns() {
-        // Given
+
         InstrumentGraphPatternFolder folder = new InstrumentGraphPatternFolder();
         InstrumentGraphPatternEntity pattern = new InstrumentGraphPatternEntity();
         pattern.setId(1L);
         pattern.setName("Pattern 1");
 
-        // When
         folder.getPatterns().add(pattern);
         assertThat(folder.getPatterns()).hasSize(1);
 
         folder.getPatterns().remove(pattern);
 
-        // Then
         assertThat(folder.getPatterns()).isEmpty();
     }
 
     @Test
     @DisplayName("Should allow multiple folders per dam")
     void shouldAllowMultipleFoldersPerDam() {
-        // Given
+
         InstrumentGraphPatternFolder folder1 = new InstrumentGraphPatternFolder();
         folder1.setId(1L);
         folder1.setName("Folder 1");
@@ -156,7 +148,6 @@ class InstrumentGraphPatternFolderTest extends BaseUnitTest {
         folder2.setName("Folder 2");
         folder2.setDam(dam);
 
-        // Then
         assertThat(folder1.getDam()).isEqualTo(folder2.getDam());
         assertThat(folder1.getId()).isNotEqualTo(folder2.getId());
         assertThat(folder1.getName()).isNotEqualTo(folder2.getName());
@@ -165,68 +156,62 @@ class InstrumentGraphPatternFolderTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support descriptive folder names")
     void shouldSupportDescriptiveFolderNames() {
-        // Given
+
         InstrumentGraphPatternFolder folder = new InstrumentGraphPatternFolder();
         folder.setName("Padrões de Visualização - Piezômetros");
 
-        // Then
         assertThat(folder.getName()).isEqualTo("Padrões de Visualização - Piezômetros");
     }
 
     @Test
     @DisplayName("Should support short folder names")
     void shouldSupportShortFolderNames() {
-        // Given
+
         InstrumentGraphPatternFolder folder = new InstrumentGraphPatternFolder();
         folder.setName("Graficos");
 
-        // Then
         assertThat(folder.getName()).hasSize(8);
     }
 
     @Test
     @DisplayName("Should support Portuguese characters in name")
     void shouldSupportPortugueseCharactersInName() {
-        // Given
+
         InstrumentGraphPatternFolder folder = new InstrumentGraphPatternFolder();
         folder.setName("Visualizações Padrão");
 
-        // Then
         assertThat(folder.getName()).contains("õ", "ã");
     }
 
     @Test
     @DisplayName("Should support special characters in name")
     void shouldSupportSpecialCharactersInName() {
-        // Given
+
         InstrumentGraphPatternFolder folder = new InstrumentGraphPatternFolder();
         folder.setName("Gráficos (Seção 1) - 2024");
 
-        // Then
         assertThat(folder.getName()).contains("(", ")", "-");
     }
 
     @Test
     @DisplayName("Should maintain identity through property changes")
     void shouldMaintainIdentityThroughPropertyChanges() {
-        // Given
+
         InstrumentGraphPatternFolder folder = new InstrumentGraphPatternFolder();
         folder.setId(1L);
         folder.setName("Folder 1");
 
         Long originalId = folder.getId();
 
-        // When
         folder.setName("Folder 1 Modified");
 
-        // Then
         assertThat(folder.getId()).isEqualTo(originalId);
     }
 
     @Test
     @DisplayName("Should support folder organization by dam")
     void shouldSupportFolderOrganizationByDam() {
-        // Given
+
         DamEntity dam2 = TestDataBuilder.dam().withName("Dam 2").build();
 
         InstrumentGraphPatternFolder folder1 = new InstrumentGraphPatternFolder();
@@ -237,19 +222,17 @@ class InstrumentGraphPatternFolderTest extends BaseUnitTest {
         folder2.setDam(dam2);
         folder2.setName("Folder Dam 2");
 
-        // Then
         assertThat(folder1.getDam()).isNotEqualTo(folder2.getDam());
     }
 
     @Test
     @DisplayName("Should support empty folders")
     void shouldSupportEmptyFolders() {
-        // Given
+
         InstrumentGraphPatternFolder folder = new InstrumentGraphPatternFolder();
         folder.setName("Empty Folder");
         folder.setDam(dam);
 
-        // Then
         assertThat(folder.getPatterns()).isEmpty();
         assertThat(folder.getName()).isNotBlank();
         assertThat(folder.getDam()).isNotNull();
@@ -258,26 +241,24 @@ class InstrumentGraphPatternFolderTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support hierarchical naming")
     void shouldSupportHierarchicalNaming() {
-        // Given
+
         InstrumentGraphPatternFolder parentFolder = new InstrumentGraphPatternFolder();
         parentFolder.setName("Visualizações");
 
         InstrumentGraphPatternFolder childFolder = new InstrumentGraphPatternFolder();
         childFolder.setName("Visualizações / Piezômetros");
 
-        // Then
         assertThat(childFolder.getName()).contains("/");
     }
 
     @Test
     @DisplayName("Should support lazy fetch for patterns")
     void shouldSupportLazyFetchForPatterns() {
-        // Given
+
         InstrumentGraphPatternFolder folder = new InstrumentGraphPatternFolder();
         folder.setDam(dam);
         folder.setName("Folder 1");
 
-        // Then - Patterns collection initialized but empty (lazy)
         assertThat(folder.getPatterns()).isNotNull();
     }
 }

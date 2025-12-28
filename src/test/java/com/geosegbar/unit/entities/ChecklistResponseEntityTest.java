@@ -31,7 +31,7 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create checklist response with required fields")
     void shouldCreateChecklistResponseWithRequiredFields() {
-        // Given
+
         ChecklistResponseEntity response = new ChecklistResponseEntity();
         response.setId(1L);
         response.setChecklistName("Checklist de Segurança");
@@ -39,7 +39,6 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
         response.setDam(dam);
         response.setUser(user);
 
-        // Then
         assertThat(response).satisfies(r -> {
             assertThat(r.getId()).isEqualTo(1L);
             assertThat(r.getChecklistName()).isEqualTo("Checklist de Segurança");
@@ -53,7 +52,7 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create checklist response using all args constructor")
     void shouldCreateChecklistResponseUsingAllArgsConstructor() {
-        // Given & When
+
         LocalDateTime now = LocalDateTime.now();
         HashSet<QuestionnaireResponseEntity> responses = new HashSet<>();
 
@@ -67,7 +66,6 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
                 responses
         );
 
-        // Then
         assertThat(checklistResponse).satisfies(r -> {
             assertThat(r.getId()).isEqualTo(1L);
             assertThat(r.getChecklistName()).isEqualTo("Checklist Mensal");
@@ -82,10 +80,9 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should create checklist response with no args constructor")
     void shouldCreateChecklistResponseWithNoArgsConstructor() {
-        // Given & When
+
         ChecklistResponseEntity response = new ChecklistResponseEntity();
 
-        // Then
         assertThat(response).isNotNull();
         assertThat(response.getId()).isNull();
         assertThat(response.getChecklistName()).isNull();
@@ -99,10 +96,9 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should initialize questionnaire responses as empty HashSet")
     void shouldInitializeQuestionnaireResponsesAsEmptyHashSet() {
-        // Given & When
+
         ChecklistResponseEntity response = new ChecklistResponseEntity();
 
-        // Then
         assertThat(response.getQuestionnaireResponses())
                 .isNotNull()
                 .isInstanceOf(HashSet.class)
@@ -112,7 +108,7 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should add questionnaire response")
     void shouldAddQuestionnaireResponse() {
-        // Given
+
         ChecklistResponseEntity checklistResponse = new ChecklistResponseEntity();
         checklistResponse.setId(1L);
 
@@ -120,10 +116,8 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
         questionnaireResponse.setId(1L);
         questionnaireResponse.setChecklistResponse(checklistResponse);
 
-        // When
         checklistResponse.getQuestionnaireResponses().add(questionnaireResponse);
 
-        // Then
         assertThat(checklistResponse.getQuestionnaireResponses())
                 .hasSize(1)
                 .contains(questionnaireResponse);
@@ -132,7 +126,7 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should add multiple questionnaire responses")
     void shouldAddMultipleQuestionnaireResponses() {
-        // Given
+
         ChecklistResponseEntity checklistResponse = new ChecklistResponseEntity();
         checklistResponse.setId(1L);
 
@@ -148,12 +142,10 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
         response3.setId(3L);
         response3.setChecklistResponse(checklistResponse);
 
-        // When
         checklistResponse.getQuestionnaireResponses().add(response1);
         checklistResponse.getQuestionnaireResponses().add(response2);
         checklistResponse.getQuestionnaireResponses().add(response3);
 
-        // Then
         assertThat(checklistResponse.getQuestionnaireResponses())
                 .hasSize(3)
                 .containsExactlyInAnyOrder(response1, response2, response3);
@@ -162,11 +154,10 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain ManyToOne relationship with dam")
     void shouldMaintainManyToOneRelationshipWithDam() {
-        // Given
+
         ChecklistResponseEntity response = new ChecklistResponseEntity();
         response.setDam(dam);
 
-        // Then
         assertThat(response.getDam())
                 .isNotNull()
                 .isEqualTo(dam);
@@ -176,11 +167,10 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain ManyToOne relationship with user")
     void shouldMaintainManyToOneRelationshipWithUser() {
-        // Given
+
         ChecklistResponseEntity response = new ChecklistResponseEntity();
         response.setUser(user);
 
-        // Then
         assertThat(response.getUser())
                 .isNotNull()
                 .isEqualTo(user);
@@ -190,12 +180,11 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should handle createdAt timestamp")
     void shouldHandleCreatedAtTimestamp() {
-        // Given
+
         ChecklistResponseEntity response = new ChecklistResponseEntity();
         LocalDateTime now = LocalDateTime.now();
         response.setCreatedAt(now);
 
-        // Then
         assertThat(response.getCreatedAt())
                 .isNotNull()
                 .isEqualTo(now);
@@ -204,29 +193,27 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should store checklist ID for reference")
     void shouldStoreChecklistIdForReference() {
-        // Given
+
         ChecklistResponseEntity response = new ChecklistResponseEntity();
         response.setChecklistId(100L);
 
-        // Then
         assertThat(response.getChecklistId()).isEqualTo(100L);
     }
 
     @Test
     @DisplayName("Should store checklist name for historical record")
     void shouldStoreChecklistNameForHistoricalRecord() {
-        // Given
+
         ChecklistResponseEntity response = new ChecklistResponseEntity();
         response.setChecklistName("Checklist de Segurança - Janeiro 2024");
 
-        // Then
         assertThat(response.getChecklistName()).isEqualTo("Checklist de Segurança - Janeiro 2024");
     }
 
     @Test
     @DisplayName("Should support different checklist names")
     void shouldSupportDifferentChecklistNames() {
-        // Given
+
         ChecklistResponseEntity daily = new ChecklistResponseEntity();
         daily.setChecklistName("Checklist Diário");
 
@@ -236,7 +223,6 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
         ChecklistResponseEntity monthly = new ChecklistResponseEntity();
         monthly.setChecklistName("Checklist Mensal");
 
-        // Then
         assertThat(daily.getChecklistName()).isEqualTo("Checklist Diário");
         assertThat(weekly.getChecklistName()).isEqualTo("Checklist Semanal");
         assertThat(monthly.getChecklistName()).isEqualTo("Checklist Mensal");
@@ -245,7 +231,7 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should associate multiple responses with same dam")
     void shouldAssociateMultipleResponsesWithSameDam() {
-        // Given
+
         ChecklistResponseEntity response1 = new ChecklistResponseEntity();
         response1.setChecklistName("Response 1");
         response1.setDam(dam);
@@ -254,7 +240,6 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
         response2.setChecklistName("Response 2");
         response2.setDam(dam);
 
-        // Then
         assertThat(response1.getDam()).isEqualTo(dam);
         assertThat(response2.getDam()).isEqualTo(dam);
         assertThat(response1.getDam()).isEqualTo(response2.getDam());
@@ -263,14 +248,13 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should associate multiple responses with same user")
     void shouldAssociateMultipleResponsesWithSameUser() {
-        // Given
+
         ChecklistResponseEntity response1 = new ChecklistResponseEntity();
         response1.setUser(user);
 
         ChecklistResponseEntity response2 = new ChecklistResponseEntity();
         response2.setUser(user);
 
-        // Then
         assertThat(response1.getUser()).isEqualTo(user);
         assertThat(response2.getUser()).isEqualTo(user);
         assertThat(response1.getUser()).isEqualTo(response2.getUser());
@@ -279,12 +263,11 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should support long checklist names")
     void shouldSupportLongChecklistNames() {
-        // Given
+
         ChecklistResponseEntity response = new ChecklistResponseEntity();
         String longName = "Checklist Completo de Inspeção Técnica e Segurança Estrutural da Barragem - Janeiro 2024";
         response.setChecklistName(longName);
 
-        // Then
         assertThat(response.getChecklistName()).isEqualTo(longName);
         assertThat(response.getChecklistName().length()).isGreaterThan(50);
     }
@@ -292,11 +275,10 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should handle checklist name with special characters")
     void shouldHandleChecklistNameWithSpecialCharacters() {
-        // Given
+
         ChecklistResponseEntity response = new ChecklistResponseEntity();
         response.setChecklistName("Checklist - Inspeção (2024) #001");
 
-        // Then
         assertThat(response.getChecklistName())
                 .contains("-")
                 .contains("(")
@@ -307,7 +289,7 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should maintain identity through property changes")
     void shouldMaintainIdentityThroughPropertyChanges() {
-        // Given
+
         ChecklistResponseEntity response = new ChecklistResponseEntity();
         response.setId(1L);
         response.setChecklistName("Original Name");
@@ -315,11 +297,9 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
 
         Long originalId = response.getId();
 
-        // When
         response.setChecklistName("Updated Name");
         response.setChecklistId(200L);
 
-        // Then
         assertThat(response.getId()).isEqualTo(originalId);
         assertThat(response.getChecklistName()).isEqualTo("Updated Name");
         assertThat(response.getChecklistId()).isEqualTo(200L);
@@ -328,14 +308,13 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should handle response without questionnaire responses")
     void shouldHandleResponseWithoutQuestionnaireResponses() {
-        // Given
+
         ChecklistResponseEntity response = new ChecklistResponseEntity();
         response.setChecklistName("Empty Response");
         response.setChecklistId(100L);
         response.setDam(dam);
         response.setUser(user);
 
-        // Then
         assertThat(response.getQuestionnaireResponses()).isEmpty();
         assertThat(response.getChecklistName()).isNotBlank();
         assertThat(response.getDam()).isNotNull();
@@ -345,7 +324,7 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should track different users responding to checklists")
     void shouldTrackDifferentUsersRespondingToChecklists() {
-        // Given
+
         UserEntity user1 = TestDataBuilder.user().withName("User 1").build();
         UserEntity user2 = TestDataBuilder.user().withName("User 2").build();
 
@@ -355,7 +334,6 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
         ChecklistResponseEntity response2 = new ChecklistResponseEntity();
         response2.setUser(user2);
 
-        // Then
         assertThat(response1.getUser()).isEqualTo(user1);
         assertThat(response2.getUser()).isEqualTo(user2);
         assertThat(response1.getUser()).isNotEqualTo(response2.getUser());
@@ -364,7 +342,7 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
     @Test
     @DisplayName("Should handle multiple responses for same checklist ID")
     void shouldHandleMultipleResponsesForSameChecklistId() {
-        // Given
+
         ChecklistResponseEntity response1 = new ChecklistResponseEntity();
         response1.setChecklistId(100L);
         response1.setCreatedAt(LocalDateTime.now().minusDays(1));
@@ -373,7 +351,6 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
         response2.setChecklistId(100L);
         response2.setCreatedAt(LocalDateTime.now());
 
-        // Then
         assertThat(response1.getChecklistId()).isEqualTo(response2.getChecklistId());
         assertThat(response1.getCreatedAt()).isBefore(response2.getCreatedAt());
     }

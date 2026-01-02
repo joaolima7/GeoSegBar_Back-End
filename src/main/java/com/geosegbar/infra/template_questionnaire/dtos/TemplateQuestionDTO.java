@@ -1,5 +1,9 @@
 package com.geosegbar.infra.template_questionnaire.dtos;
 
+import java.util.Set;
+
+import com.geosegbar.common.enums.TypeQuestionEnum;
+
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.AllArgsConstructor;
@@ -10,11 +14,26 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TemplateQuestionDTO {
-    
-    @NotNull(message = "ID da questão é obrigatório!")
+
     private Long questionId;
-    
+
+    private String questionText;
+    private TypeQuestionEnum type;
+    private Long clientId;
+    private Set<Long> optionIds;
+
     @NotNull(message = "Índice de ordem é obrigatório!")
     @PositiveOrZero(message = "Índice de ordem deve ser um número positivo ou zero!")
     private Integer orderIndex;
+
+    /**
+     * Verifica se é para criar uma nova questão
+     */
+    public boolean isNewQuestion() {
+        return questionId == null && questionText != null;
+    }
+
+    public boolean isExistingQuestion() {
+        return questionId != null;
+    }
 }

@@ -20,7 +20,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.ChecklistEntity;
+import com.geosegbar.infra.checklist.dtos.ChecklistCompleteCreationDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistCompleteDTO;
+import com.geosegbar.infra.checklist.dtos.ChecklistCompleteUpdateDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistReplicationDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersAndDamDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersDTO;
@@ -113,11 +115,34 @@ public class ChecklistController {
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
+    @PostMapping("/complete")
+    public ResponseEntity<WebResponseEntity<ChecklistEntity>> createChecklistComplete(
+            @Valid @RequestBody ChecklistCompleteCreationDTO dto) {
+        ChecklistEntity created = checklistService.createComplete(dto);
+        WebResponseEntity<ChecklistEntity> response = WebResponseEntity.success(
+                created,
+                "Checklist completo criado com sucesso com todos os templates e questões!"
+        );
+        return new ResponseEntity<>(response, HttpStatus.CREATED);
+    }
+
     @PutMapping("/{id}")
     public ResponseEntity<WebResponseEntity<ChecklistEntity>> updateChecklist(@PathVariable Long id, @Valid @RequestBody ChecklistEntity checklist) {
         checklist.setId(id);
         ChecklistEntity updated = checklistService.update(checklist);
         WebResponseEntity<ChecklistEntity> response = WebResponseEntity.success(updated, "Checklist atualizada com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}/complete")
+    public ResponseEntity<WebResponseEntity<ChecklistEntity>> updateChecklistComplete(
+            @PathVariable Long id,
+            @Valid @RequestBody ChecklistCompleteUpdateDTO dto) {
+        ChecklistEntity updated = checklistService.updateComplete(id, dto);
+        WebResponseEntity<ChecklistEntity> response = WebResponseEntity.success(
+                updated,
+                "Checklist completo atualizado com sucesso com todos os templates e questões!"
+        );
         return ResponseEntity.ok(response);
     }
 

@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.AnswerEntity;
 import com.geosegbar.entities.ChecklistEntity;
+import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.OptionEntity;
 import com.geosegbar.entities.QuestionEntity;
@@ -27,14 +28,21 @@ import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.answer.persistence.jpa.AnswerRepository;
+import com.geosegbar.infra.checklist.dtos.ChecklistCompleteCreationDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistCompleteDTO;
+import com.geosegbar.infra.checklist.dtos.ChecklistCompleteUpdateDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersAndDamDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersDTO;
 import com.geosegbar.infra.checklist.dtos.OptionDTO;
 import com.geosegbar.infra.checklist.dtos.QuestionWithLastAnswerDTO;
+import com.geosegbar.infra.checklist.dtos.TemplateInChecklistDTO;
 import com.geosegbar.infra.checklist.dtos.TemplateQuestionnaireWithAnswersDTO;
 import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
 import com.geosegbar.infra.dam.services.DamService;
+import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
+import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
+import com.geosegbar.infra.question.services.QuestionService;
+import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionDTO;
 import com.geosegbar.infra.template_questionnaire.persistence.jpa.TemplateQuestionnaireRepository;
 
 import jakarta.transaction.Transactional;
@@ -50,6 +58,9 @@ public class ChecklistService {
     private final DamService damService;
     private final AnswerRepository answerRepository;
     private final TemplateQuestionnaireRepository templateQuestionnaireRepository;
+    private final QuestionRepository questionRepository;
+    private final QuestionService questionService;
+    private final OptionRepository optionRepository;
     private final CacheManager checklistCacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
 
@@ -144,6 +155,9 @@ public class ChecklistService {
         if (checklistRepository.existsByNameAndDamId(checklist.getName(), damId)) {
             throw new DuplicateResourceException("Já existe um checklist com esse nome para esta barragem.");
         }
+
+        // Valida que todos os templates pertencem à mesma dam do checklist
+        validateTemplatesBelongToDam(checklist.getTemplateQuestionnaires(), damId, fullDam.getName());
 
         ChecklistEntity saved = checklistRepository.save(checklist);
 
@@ -313,7 +327,6 @@ public class ChecklistService {
     }
 
     @Transactional
-
     public ChecklistEntity update(ChecklistEntity checklist) {
 
         if (checklist.getDam() == null) {
@@ -328,22 +341,27 @@ public class ChecklistService {
 
         DamEntity newDam = checklist.getDam();
         Long newDamId = newDam.getId();
-        DamEntity newFullDam = damService.findById(newDamId);
-        Long newClientId = newFullDam.getClient().getId();
+
+        // Não permite mudança da barragem após criação
+        if (!oldDamId.equals(newDamId)) {
+            throw new BusinessRuleException(
+                    "Não é possível alterar a barragem de um checklist após sua criação. "
+                    + "O checklist '" + oldChecklist.getName() + "' está vinculado à barragem '"
+                    + oldFullDam.getName() + "' e não pode ser transferido para outra barragem."
+            );
+        }
 
         if (checklistRepository.existsByNameAndDamIdAndIdNot(checklist.getName(), newDamId, checklist.getId())) {
             throw new DuplicateResourceException("Já existe um checklist com esse nome para esta barragem.");
         }
 
+        // Valida que todos os templates pertencem à mesma dam do checklist
+        validateTemplatesBelongToDam(checklist.getTemplateQuestionnaires(), newDamId, oldFullDam.getName());
+
         ChecklistEntity saved = checklistRepository.save(checklist);
 
         evictChecklistByIdCache(checklist.getId());
-
-        if (!oldDamId.equals(newDamId)) {
-            evictChecklistCachesForDamAndClient(oldDamId, oldClientId);
-        }
-
-        evictChecklistCachesForDamAndClient(newDamId, newClientId);
+        evictChecklistCachesForDamAndClient(newDamId, oldClientId);
 
         return saved;
     }
@@ -365,6 +383,343 @@ public class ChecklistService {
         evictChecklistByIdCache(id);
 
         evictChecklistCachesForDamAndClient(damId, clientId);
+    }
+
+    /**
+     * Cria um checklist completo com templates e questões (novas ou
+     * existentes). Reaproveita a lógica de criação de templates e questões.
+     *
+     * @param dto Dados do checklist completo
+     * @return Checklist criado com todos os templates e questões
+     */
+    @Transactional
+    public ChecklistEntity createComplete(ChecklistCompleteCreationDTO dto) {
+        log.info("Iniciando criação de checklist completo: {}", dto.getName());
+
+        // Valida a barragem
+        DamEntity dam = damService.findById(dto.getDamId());
+        Long clientId = dam.getClient().getId();
+
+        // Verifica se já existe checklist para esta dam
+        ChecklistEntity existingChecklist = checklistRepository.findByDamId(dto.getDamId());
+        if (existingChecklist != null) {
+            throw new BusinessRuleException(
+                    "Não é possível criar um novo checklist para esta barragem. "
+                    + "A barragem '" + dam.getName() + "' já possui um checklist cadastrado. "
+                    + "Edite o checklist existente ao invés de criar um novo."
+            );
+        }
+
+        // Verifica duplicação de nome
+        if (checklistRepository.existsByNameAndDamId(dto.getName(), dto.getDamId())) {
+            throw new DuplicateResourceException("Já existe um checklist com esse nome para esta barragem.");
+        }
+
+        // Cria o checklist
+        ChecklistEntity checklist = new ChecklistEntity();
+        checklist.setName(dto.getName());
+        checklist.setDam(dam);
+        checklist.setTemplateQuestionnaires(new HashSet<>());
+
+        checklist = checklistRepository.save(checklist);
+        log.info("Checklist base criado com ID: {}", checklist.getId());
+
+        // Processa cada template
+        int templateCount = 0;
+        for (TemplateInChecklistDTO templateDto : dto.getTemplates()) {
+            // Validações adicionais
+            if (templateDto.isNewTemplate()) {
+                if (templateDto.getName() == null || templateDto.getName().trim().isEmpty()) {
+                    throw new InvalidInputException("Nome do template é obrigatório ao criar um novo template!");
+                }
+                if (templateDto.getQuestions() == null || templateDto.getQuestions().isEmpty()) {
+                    throw new InvalidInputException("Template deve ter pelo menos uma questão ao criar um novo template!");
+                }
+            } else if (templateDto.isExistingTemplate()) {
+                if (templateDto.getTemplateId() == null) {
+                    throw new InvalidInputException("ID do template é obrigatório ao usar um template existente!");
+                }
+            } else {
+                throw new InvalidInputException("É necessário informar templateId (para template existente) ou name + questions (para criar novo)!");
+            }
+
+            TemplateQuestionnaireEntity template;
+
+            if (templateDto.isExistingTemplate()) {
+                // Usa template existente
+                template = templateQuestionnaireRepository.findById(templateDto.getTemplateId())
+                        .orElseThrow(() -> new NotFoundException(
+                        "Template não encontrado com ID: " + templateDto.getTemplateId()));
+
+                // Valida que o template pertence à mesma dam
+                if (!template.getDam().getId().equals(dto.getDamId())) {
+                    String templateDamName = damService.findById(template.getDam().getId()).getName();
+                    throw new BusinessRuleException(
+                            "O template '" + template.getName() + "' pertence à barragem '"
+                            + templateDamName + "', mas o checklist está vinculado à barragem '"
+                            + dam.getName() + "'. Todos os templates devem pertencer à mesma barragem."
+                    );
+                }
+
+                log.info("Reutilizando template existente: {} (ID: {})", template.getName(), template.getId());
+            } else {
+                // Cria novo template
+                template = createNewTemplate(templateDto, dam, clientId);
+                log.info("Novo template criado: {} (ID: {})", template.getName(), template.getId());
+            }
+
+            checklist.getTemplateQuestionnaires().add(template);
+            templateCount++;
+        }
+
+        ChecklistEntity saved = checklistRepository.save(checklist);
+
+        evictChecklistCachesForDamAndClient(dto.getDamId(), clientId);
+        log.info("Checklist completo criado com sucesso: {} com {} template(s)",
+                saved.getName(), templateCount);
+
+        return saved;
+    }
+
+    /**
+     * Atualiza um checklist completo, incluindo templates e questões. Não
+     * permite mudança da dam do checklist.
+     *
+     * @param checklistId ID do checklist a ser atualizado
+     * @param dto Dados atualizados do checklist
+     * @return Checklist atualizado
+     */
+    @Transactional
+    public ChecklistEntity updateComplete(Long checklistId, ChecklistCompleteUpdateDTO dto) {
+        log.info("Iniciando atualização completa do checklist {}", checklistId);
+
+        // Busca o checklist existente
+        ChecklistEntity existingChecklist = findById(checklistId);
+        DamEntity dam = existingChecklist.getDam();
+        Long damId = dam.getId();
+        Long clientId = dam.getClient().getId();
+
+        // Verifica duplicação de nome
+        if (checklistRepository.existsByNameAndDamIdAndIdNot(dto.getName(), damId, checklistId)) {
+            throw new DuplicateResourceException("Já existe um checklist com esse nome para esta barragem.");
+        }
+
+        // Atualiza o nome
+        existingChecklist.setName(dto.getName());
+
+        // Limpa os templates atuais (sem deletar os templates, apenas remove do checklist)
+        existingChecklist.getTemplateQuestionnaires().clear();
+
+        // Processa os novos templates
+        int templateCount = 0;
+        for (TemplateInChecklistDTO templateDto : dto.getTemplates()) {
+            // Validações adicionais
+            if (templateDto.isNewTemplate()) {
+                if (templateDto.getName() == null || templateDto.getName().trim().isEmpty()) {
+                    throw new InvalidInputException("Nome do template é obrigatório ao criar um novo template!");
+                }
+                if (templateDto.getQuestions() == null || templateDto.getQuestions().isEmpty()) {
+                    throw new InvalidInputException("Template deve ter pelo menos uma questão ao criar um novo template!");
+                }
+            } else if (templateDto.isExistingTemplate()) {
+                if (templateDto.getTemplateId() == null) {
+                    throw new InvalidInputException("ID do template é obrigatório ao usar um template existente!");
+                }
+            } else {
+                throw new InvalidInputException("É necessário informar templateId (para template existente) ou name + questions (para criar novo)!");
+            }
+
+            TemplateQuestionnaireEntity template;
+
+            if (templateDto.isExistingTemplate()) {
+                // Usa template existente
+                template = templateQuestionnaireRepository.findById(templateDto.getTemplateId())
+                        .orElseThrow(() -> new NotFoundException(
+                        "Template não encontrado com ID: " + templateDto.getTemplateId()));
+
+                // Valida que o template pertence à mesma dam
+                if (!template.getDam().getId().equals(damId)) {
+                    String templateDamName = damService.findById(template.getDam().getId()).getName();
+                    throw new BusinessRuleException(
+                            "O template '" + template.getName() + "' pertence à barragem '"
+                            + templateDamName + "', mas o checklist está vinculado à barragem '"
+                            + dam.getName() + "'. Todos os templates devem pertencer à mesma barragem."
+                    );
+                }
+
+                log.info("Reutilizando template existente: {} (ID: {})", template.getName(), template.getId());
+            } else {
+                // Cria novo template
+                template = createNewTemplate(templateDto, dam, clientId);
+                log.info("Novo template criado: {} (ID: {})", template.getName(), template.getId());
+            }
+
+            existingChecklist.getTemplateQuestionnaires().add(template);
+            templateCount++;
+        }
+
+        ChecklistEntity saved = checklistRepository.save(existingChecklist);
+
+        evictChecklistByIdCache(checklistId);
+        evictChecklistCachesForDamAndClient(damId, clientId);
+        log.info("Checklist {} atualizado com sucesso com {} template(s)",
+                saved.getName(), templateCount);
+
+        return saved;
+    }
+
+    /**
+     * Cria um novo template com questões (reaproveitando lógica do
+     * TemplateQuestionnaireService).
+     *
+     * @param templateDto DTO com dados do template
+     * @param dam Barragem do template
+     * @param clientId ID do cliente
+     * @return Template criado
+     */
+    private TemplateQuestionnaireEntity createNewTemplate(
+            TemplateInChecklistDTO templateDto, DamEntity dam, Long clientId) {
+
+        // Valida nome duplicado
+        if (templateQuestionnaireRepository.existsByNameAndDamId(templateDto.getName(), dam.getId())) {
+            throw new DuplicateResourceException(
+                    "Já existe um template com o nome '" + templateDto.getName()
+                    + "' para a barragem '" + dam.getName() + "'");
+        }
+
+        // Cria o template
+        TemplateQuestionnaireEntity template = new TemplateQuestionnaireEntity();
+        template.setName(templateDto.getName());
+        template.setDam(dam);
+        template.setTemplateQuestions(new HashSet<>());
+
+        template = templateQuestionnaireRepository.save(template);
+
+        // Adiciona as questões
+        for (TemplateQuestionDTO questionDto : templateDto.getQuestions()) {
+            QuestionEntity question;
+
+            // Verifica se é para criar nova questão ou usar existente
+            if (questionDto.isNewQuestion()) {
+                question = createNewQuestion(questionDto, clientId);
+                log.info("Nova questão criada com ID: {} para o template: {}",
+                        question.getId(), template.getId());
+            } else if (questionDto.isExistingQuestion()) {
+                question = questionRepository.findById(questionDto.getQuestionId())
+                        .orElseThrow(() -> new NotFoundException(
+                        "Questão não encontrada com ID: " + questionDto.getQuestionId()));
+            } else {
+                throw new InvalidInputException(
+                        "É necessário informar questionId (para usar questão existente) "
+                        + "ou questionText + type (para criar nova questão)!");
+            }
+
+            // Cria a associação template-questão
+            TemplateQuestionnaireQuestionEntity templateQuestion = new TemplateQuestionnaireQuestionEntity();
+            templateQuestion.setTemplateQuestionnaire(template);
+            templateQuestion.setQuestion(question);
+            templateQuestion.setOrderIndex(questionDto.getOrderIndex());
+
+            template.getTemplateQuestions().add(templateQuestion);
+        }
+
+        return templateQuestionnaireRepository.save(template);
+    }
+
+    /**
+     * Cria uma nova questão (reaproveitando lógica do
+     * TemplateQuestionnaireService).
+     *
+     * @param questionDto DTO com dados da questão
+     * @param clientId ID do cliente
+     * @return Questão criada
+     */
+    private QuestionEntity createNewQuestion(TemplateQuestionDTO questionDto, Long clientId) {
+        // Validações
+        if (questionDto.getQuestionText() == null || questionDto.getQuestionText().trim().isEmpty()) {
+            throw new InvalidInputException("Texto da questão é obrigatório!");
+        }
+
+        if (questionDto.getType() == null) {
+            throw new InvalidInputException("Tipo da questão é obrigatório!");
+        }
+
+        // Valida options para tipo CHECKBOX
+        if (com.geosegbar.common.enums.TypeQuestionEnum.CHECKBOX.equals(questionDto.getType())) {
+            if (questionDto.getOptionIds() == null || questionDto.getOptionIds().isEmpty()) {
+                throw new InvalidInputException(
+                        "Questões do tipo CHECKBOX devem ter pelo menos uma opção associada!");
+            }
+        }
+
+        // Cria a questão
+        QuestionEntity newQuestion = new QuestionEntity();
+        newQuestion.setQuestionText(questionDto.getQuestionText());
+        newQuestion.setType(questionDto.getType());
+
+        // Define o cliente
+        ClientEntity client = new ClientEntity();
+        client.setId(clientId);
+        newQuestion.setClient(client);
+
+        // Associa as opções se fornecidas
+        if (questionDto.getOptionIds() != null && !questionDto.getOptionIds().isEmpty()) {
+            Set<OptionEntity> options = new HashSet<>();
+            for (Long optionId : questionDto.getOptionIds()) {
+                OptionEntity option = optionRepository.findById(optionId)
+                        .orElseThrow(() -> new NotFoundException(
+                        "Opção não encontrada com ID: " + optionId));
+                options.add(option);
+            }
+            newQuestion.setOptions(options);
+        } else {
+            newQuestion.setOptions(new HashSet<>());
+        }
+
+        // Salva usando o serviço para manter todas as validações e cache
+        return questionService.save(newQuestion);
+    }
+
+    /**
+     * Valida se todos os templates pertencem à mesma barragem do checklist.
+     *
+     * @param templates Set de templates a serem validados
+     * @param damId ID da barragem do checklist
+     * @param damName Nome da barragem (para mensagens de erro)
+     * @throws BusinessRuleException se algum template não pertencer à barragem
+     */
+    private void validateTemplatesBelongToDam(Set<TemplateQuestionnaireEntity> templates, Long damId, String damName) {
+        if (templates == null || templates.isEmpty()) {
+            return; // Sem templates para validar
+        }
+
+        for (TemplateQuestionnaireEntity template : templates) {
+            if (template.getDam() == null || template.getDam().getId() == null) {
+                throw new BusinessRuleException(
+                        "O template '" + template.getName() + "' não possui uma barragem associada."
+                );
+            }
+
+            Long templateDamId = template.getDam().getId();
+            if (!templateDamId.equals(damId)) {
+                // Busca o nome da barragem do template para mensagem mais clara
+                TemplateQuestionnaireEntity fullTemplate = templateQuestionnaireRepository.findById(template.getId())
+                        .orElse(template);
+
+                String templateDamName = fullTemplate.getDam() != null
+                        ? damService.findById(fullTemplate.getDam().getId()).getName() : "desconhecida";
+
+                throw new BusinessRuleException(
+                        "Não é possível adicionar o template '" + template.getName()
+                        + "' ao checklist. O template pertence à barragem '" + templateDamName
+                        + "', mas o checklist está vinculado à barragem '" + damName + "'. "
+                        + "Todos os templates de um checklist devem pertencer à mesma barragem."
+                );
+            }
+        }
+
+        log.info("Validação concluída: todos os {} templates pertencem à barragem {} (ID: {})",
+                templates.size(), damName, damId);
     }
 
     @Cacheable(value = "checklistsByDam", key = "#damId", cacheManager = "checklistCacheManager")

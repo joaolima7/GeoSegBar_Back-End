@@ -10,7 +10,10 @@ import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import com.geosegbar.entities.AnswerEntity;
+import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.DamEntity;
+import com.geosegbar.entities.OptionEntity;
 import com.geosegbar.entities.QuestionEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
 import com.geosegbar.entities.TemplateQuestionnaireQuestionEntity;
@@ -18,11 +21,17 @@ import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.answer.persistence.jpa.AnswerRepository;
 import com.geosegbar.infra.checklist.services.ChecklistService;
+import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
+import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
 import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
+import com.geosegbar.infra.question.services.QuestionService;
+import com.geosegbar.infra.questionnaire_response.persistence.jpa.QuestionnaireResponseRepository;
 import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionDTO;
 import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionnaireCreationDTO;
+import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionnaireUpdateDTO;
 import com.geosegbar.infra.template_questionnaire.persistence.jpa.TemplateQuestionnaireRepository;
 
 import jakarta.transaction.Transactional;
@@ -37,7 +46,12 @@ public class TemplateQuestionnaireService {
     private final TemplateQuestionnaireRepository templateQuestionnaireRepository;
     private final ChecklistService checklistService;
     private final QuestionRepository questionRepository;
+    private final QuestionService questionService;
     private final DamRepository damRepository;
+    private final ClientRepository clientRepository;
+    private final OptionRepository optionRepository;
+    private final QuestionnaireResponseRepository questionnaireResponseRepository;
+    private final AnswerRepository answerRepository;
     private final CacheManager checklistCacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
 
@@ -84,12 +98,90 @@ public class TemplateQuestionnaireService {
 
     @Transactional
     public void deleteById(Long id) {
-        templateQuestionnaireRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Template não encontrado para exclusão!"));
+        log.info("Iniciando exclusão do template {}", id);
+
+        // 1. Busca o template com todos os detalhes
+        TemplateQuestionnaireEntity template = templateQuestionnaireRepository.findByIdWithFullDetails(id)
+                .orElseThrow(() -> new NotFoundException("Template não encontrado para exclusão com ID: " + id));
+
+        // 2. Verifica se existe QuestionnaireResponse associado ao template
+        boolean hasQuestionnaireResponses = questionnaireResponseRepository.existsByTemplateQuestionnaireId(id);
+        if (hasQuestionnaireResponses) {
+            throw new BusinessRuleException(
+                    "Não é possível excluir o template '" + template.getName()
+                    + "' pois existem questionários respondidos associados a ele. "
+                    + "A exclusão impactaria na consistência dos dados históricos.");
+        }
+
+        log.info("Template {} não possui questionários respondidos. Prosseguindo com exclusão.", id);
+
+        // 3. Coleta todas as questões do template para análise posterior
+        Set<Long> questionIds = template.getTemplateQuestions().stream()
+                .map(tq -> tq.getQuestion().getId())
+                .collect(Collectors.toSet());
+
+        log.info("Template {} possui {} questões associadas para análise: {}",
+                id, questionIds.size(), questionIds);
+
+        // 4. Deleta o template (cascade irá deletar automaticamente os TemplateQuestionnaireQuestion)
         templateQuestionnaireRepository.deleteById(id);
+        log.info("Template {} e seus relacionamentos TemplateQuestionnaireQuestion deletados.", id);
+
+        // 5. Para cada questão, verifica se ela não tem nenhuma Answer registrada
+        // Se não tiver nenhuma Answer, a questão pode ser deletada
+        int deletedQuestionsCount = 0;
+        int keptQuestionsCount = 0;
+
+        for (Long questionId : questionIds) {
+            // Verifica se a questão tem answers
+            List<AnswerEntity> answers = answerRepository.findByQuestionIdWithDetails(questionId);
+
+            if (answers.isEmpty()) {
+                // Verifica se a questão não está sendo usada em outros templates
+                boolean isUsedInOtherTemplates = isQuestionUsedInOtherTemplates(questionId);
+
+                if (!isUsedInOtherTemplates) {
+                    try {
+                        questionService.deleteById(questionId);
+                        deletedQuestionsCount++;
+                        log.info("Questão {} deletada: sem answers e não usada em outros templates.", questionId);
+                    } catch (Exception e) {
+                        log.warn("Não foi possível deletar a questão {}: {}", questionId, e.getMessage());
+                        keptQuestionsCount++;
+                    }
+                } else {
+                    keptQuestionsCount++;
+                    log.info("Questão {} mantida: usada em outros templates.", questionId);
+                }
+            } else {
+                keptQuestionsCount++;
+                log.info("Questão {} mantida: possui {} answer(s) registrada(s).", questionId, answers.size());
+            }
+        }
+
+        log.info("Exclusão do template {} concluída. Questões deletadas: {}, Questões mantidas: {}",
+                id, deletedQuestionsCount, keptQuestionsCount);
 
         evictAllChecklistCaches();
-        log.info("Template {} deletado. Caches de checklist invalidados.", id);
+        log.info("Caches de checklist invalidados após exclusão do template {}.", id);
+    }
+
+    /**
+     * Verifica se uma questão está sendo usada em outros templates.
+     *
+     * @param questionId ID da questão a verificar
+     * @return true se a questão está em uso em outros templates, false caso
+     * contrário
+     */
+    private boolean isQuestionUsedInOtherTemplates(Long questionId) {
+        // Busca todos os templates que contêm esta questão
+        List<TemplateQuestionnaireEntity> templatesWithQuestion
+                = templateQuestionnaireRepository.findAllWithFullDetails().stream()
+                        .filter(t -> t.getTemplateQuestions().stream()
+                        .anyMatch(tq -> tq.getQuestion().getId().equals(questionId)))
+                        .collect(Collectors.toList());
+
+        return !templatesWithQuestion.isEmpty();
     }
 
     @Transactional
@@ -158,9 +250,21 @@ public class TemplateQuestionnaireService {
         template = templateQuestionnaireRepository.save(template);
 
         for (TemplateQuestionDTO questionDto : dto.getQuestions()) {
-            QuestionEntity question = questionRepository.findById(questionDto.getQuestionId())
-                    .orElseThrow(() -> new NotFoundException(
-                    "Questão não encontrada com ID: " + questionDto.getQuestionId()));
+            QuestionEntity question;
+
+            // Verifica se é para criar nova questão ou usar existente
+            if (questionDto.isNewQuestion()) {
+                question = createNewQuestion(questionDto, dam.getClient());
+                log.info("Nova questão criada com ID: {} para o template: {}", question.getId(), template.getId());
+            } else if (questionDto.isExistingQuestion()) {
+                question = questionRepository.findById(questionDto.getQuestionId())
+                        .orElseThrow(() -> new NotFoundException(
+                        "Questão não encontrada com ID: " + questionDto.getQuestionId()));
+            } else {
+                throw new InvalidInputException(
+                        "É necessário informar questionId (para usar questão existente) "
+                        + "ou questionText + type (para criar nova questão)!");
+            }
 
             TemplateQuestionnaireQuestionEntity templateQuestion = new TemplateQuestionnaireQuestionEntity();
             templateQuestion.setTemplateQuestionnaire(template);
@@ -174,6 +278,66 @@ public class TemplateQuestionnaireService {
 
         evictAllChecklistCaches();
         log.info("Template {} criado com questões. Caches de checklist invalidados.", saved.getId());
+
+        return saved;
+    }
+
+    @Transactional
+    public TemplateQuestionnaireEntity updateWithQuestions(Long templateId, TemplateQuestionnaireUpdateDTO dto) {
+        log.info("Iniciando atualização do template {} com questões", templateId);
+
+        // Busca o template existente
+        TemplateQuestionnaireEntity existingTemplate = templateQuestionnaireRepository.findByIdWithFullDetails(templateId)
+                .orElseThrow(() -> new NotFoundException("Template não encontrado com ID: " + templateId));
+
+        DamEntity dam = existingTemplate.getDam();
+
+        // Valida se o nome foi alterado e se já existe outro template com o mesmo nome
+        if (!existingTemplate.getName().equals(dto.getName())) {
+            if (templateQuestionnaireRepository.existsByNameAndDamIdAndIdNot(dto.getName(), dam.getId(), templateId)) {
+                throw new DuplicateResourceException(
+                        "Já existe outro template com o nome '" + dto.getName()
+                        + "' para a barragem '" + dam.getName() + "'");
+            }
+        }
+
+        // Atualiza o nome do template
+        existingTemplate.setName(dto.getName());
+
+        // Remove todas as questões antigas
+        existingTemplate.getTemplateQuestions().clear();
+
+        // Processa as novas questões
+        for (TemplateQuestionDTO questionDto : dto.getQuestions()) {
+            QuestionEntity question;
+
+            // Verifica se é para criar nova questão ou usar existente
+            if (questionDto.isNewQuestion()) {
+                question = createNewQuestion(questionDto, dam.getClient());
+                log.info("Nova questão criada com ID: {} durante atualização do template: {}",
+                        question.getId(), templateId);
+            } else if (questionDto.isExistingQuestion()) {
+                question = questionRepository.findById(questionDto.getQuestionId())
+                        .orElseThrow(() -> new NotFoundException(
+                        "Questão não encontrada com ID: " + questionDto.getQuestionId()));
+            } else {
+                throw new InvalidInputException(
+                        "É necessário informar questionId (para usar questão existente) "
+                        + "ou questionText + type (para criar nova questão)!");
+            }
+
+            TemplateQuestionnaireQuestionEntity templateQuestion = new TemplateQuestionnaireQuestionEntity();
+            templateQuestion.setTemplateQuestionnaire(existingTemplate);
+            templateQuestion.setQuestion(question);
+            templateQuestion.setOrderIndex(questionDto.getOrderIndex());
+
+            existingTemplate.getTemplateQuestions().add(templateQuestion);
+        }
+
+        TemplateQuestionnaireEntity saved = templateQuestionnaireRepository.save(existingTemplate);
+
+        evictAllChecklistCaches();
+        log.info("Template {} atualizado com questões. Caches de checklist invalidados.", saved.getId());
 
         return saved;
     }
@@ -199,6 +363,69 @@ public class TemplateQuestionnaireService {
             throw new NotFoundException("Barragem não encontrada com ID: " + damId);
         }
         return templateQuestionnaireRepository.findByDamIdOrderByNameAsc(damId);
+    }
+
+    /**
+     * Cria uma nova questão com base nos dados do DTO. Usado no método
+     * createWithQuestions para criar questões que ainda não existem.
+     *
+     * @param questionDto DTO com dados da questão a ser criada
+     * @param client Cliente associado à questão
+     * @return QuestionEntity criada e salva
+     */
+    private QuestionEntity createNewQuestion(TemplateQuestionDTO questionDto, ClientEntity client) {
+        // Validações
+        if (questionDto.getQuestionText() == null || questionDto.getQuestionText().isBlank()) {
+            throw new InvalidInputException("Texto da questão é obrigatório para criar nova questão!");
+        }
+
+        if (questionDto.getType() == null) {
+            throw new InvalidInputException("Tipo da questão é obrigatório para criar nova questão!");
+        }
+
+        // Validação específica por tipo
+        if (questionDto.getType().name().equals("CHECKBOX")) {
+            if (questionDto.getOptionIds() == null || questionDto.getOptionIds().isEmpty()) {
+                throw new InvalidInputException(
+                        "Questões do tipo CHECKBOX devem ter pelo menos uma opção associada!");
+            }
+        } else if (questionDto.getType().name().equals("TEXT")) {
+            if (questionDto.getOptionIds() != null && !questionDto.getOptionIds().isEmpty()) {
+                throw new InvalidInputException(
+                        "Questões do tipo TEXT não devem ter opções associadas!");
+            }
+        }
+
+        // Se clientId foi fornecido, usa ele; caso contrário, usa o cliente da barragem
+        ClientEntity questionClient = client;
+        if (questionDto.getClientId() != null) {
+            questionClient = clientRepository.findById(questionDto.getClientId())
+                    .orElseThrow(() -> new NotFoundException(
+                    "Cliente não encontrado com ID: " + questionDto.getClientId()));
+        }
+
+        // Cria a questão
+        QuestionEntity newQuestion = new QuestionEntity();
+        newQuestion.setQuestionText(questionDto.getQuestionText());
+        newQuestion.setType(questionDto.getType());
+        newQuestion.setClient(questionClient);
+
+        // Associa as opções se fornecidas
+        if (questionDto.getOptionIds() != null && !questionDto.getOptionIds().isEmpty()) {
+            Set<OptionEntity> options = new HashSet<>();
+            for (Long optionId : questionDto.getOptionIds()) {
+                OptionEntity option = optionRepository.findById(optionId)
+                        .orElseThrow(() -> new NotFoundException(
+                        "Opção não encontrada com ID: " + optionId));
+                options.add(option);
+            }
+            newQuestion.setOptions(options);
+        } else {
+            newQuestion.setOptions(new HashSet<>());
+        }
+
+        // Salva usando o serviço para manter todas as validações e cache
+        return questionService.save(newQuestion);
     }
 
     /**

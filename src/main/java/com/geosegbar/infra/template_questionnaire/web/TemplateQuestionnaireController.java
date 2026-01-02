@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
 import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionnaireCreationDTO;
+import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionnaireUpdateDTO;
 import com.geosegbar.infra.template_questionnaire.dtos.TemplateReplicationDTO;
 import com.geosegbar.infra.template_questionnaire.services.TemplateQuestionnaireService;
 
@@ -86,6 +87,21 @@ public class TemplateQuestionnaireController {
         template.setId(id);
         TemplateQuestionnaireEntity updated = templateQuestionnaireService.update(template);
         WebResponseEntity<TemplateQuestionnaireEntity> response = WebResponseEntity.success(updated, "Template atualizado com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}/with-questions")
+    public ResponseEntity<WebResponseEntity<TemplateQuestionnaireEntity>> updateTemplateWithQuestions(
+            @PathVariable Long id,
+            @Valid @RequestBody TemplateQuestionnaireUpdateDTO updateDto) {
+
+        TemplateQuestionnaireEntity updated = templateQuestionnaireService.updateWithQuestions(id, updateDto);
+
+        WebResponseEntity<TemplateQuestionnaireEntity> response = WebResponseEntity.success(
+                updated,
+                "Template de questionário e suas questões atualizadas com sucesso!"
+        );
+
         return ResponseEntity.ok(response);
     }
 

@@ -10,9 +10,14 @@ import org.springframework.stereotype.Repository;
 import com.geosegbar.entities.TemplateQuestionnaireQuestionEntity;
 
 @Repository
-public interface TemplateQuestionnaireQuestionRepository extends JpaRepository<TemplateQuestionnaireQuestionEntity, Long>{
+public interface TemplateQuestionnaireQuestionRepository extends JpaRepository<TemplateQuestionnaireQuestionEntity, Long> {
+
     List<TemplateQuestionnaireQuestionEntity> findByTemplateQuestionnaireIdOrderByOrderIndex(Long templateQuestionnaireId);
-    
+
+    List<TemplateQuestionnaireQuestionEntity> findByQuestionId(Long questionId);
+
+    boolean existsByQuestionId(Long questionId);
+
     @Query("SELECT COUNT(tq) FROM TemplateQuestionnaireQuestionEntity tq WHERE tq.templateQuestionnaire.id = :templateId")
     int countQuestionsByTemplateId(@Param("templateId") Long templateId);
 }

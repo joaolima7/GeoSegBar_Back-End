@@ -66,6 +66,17 @@ public class QuestionController {
         return ResponseEntity.ok(response);
     }
 
+    @PutMapping("/{id}/confirm-update")
+    public ResponseEntity<WebResponseEntity<QuestionEntity>> confirmUpdateQuestion(@PathVariable Long id, @Valid @RequestBody QuestionEntity question) {
+        question.setId(id);
+        QuestionEntity updated = questionService.confirmUpdate(question);
+        WebResponseEntity<QuestionEntity> response = WebResponseEntity.success(
+                updated,
+                "Questão atualizada com sucesso!"
+        );
+        return ResponseEntity.ok(response);
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<WebResponseEntity<Void>> deleteQuestion(@PathVariable Long id) {
         questionService.deleteById(id);

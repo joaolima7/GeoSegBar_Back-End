@@ -13,7 +13,7 @@
 - **Total de Controllers**: ~40+ controllers
 - **Total de Repositories**: ~50+ repositories
 
-### 🎯 Status de Testes (Atualizado: 04/01/2026)
+### 🎯 Status de Testes (Atualizado: 04/01/2026 - 12:33)
 
 ✅ **Completo:**
 - **Phase 1**: Infrastructure & Setup (6 testes)
@@ -22,11 +22,30 @@
 - **Phase 2 Sprint 2.2 Lote 1**: Services Testing (3 services, 58 testes ✅)
 - **Phase 2 Sprint 2.2 Lote 2**: Services Testing (3 services, 57 testes ✅)
 - **Phase 2 Sprint 2.2 Lote 3**: Services Testing (3 services, 63 testes ✅)
+- **Phase 2 Sprint 2.2 Lote 4**: Services Testing (1 service, 8 testes ✅) - Partial
+- **Phase 2 Sprint 2.2 Lote 5**: Services Testing (3 services, 26 testes ✅)
+- **Phase 2 Sprint 2.2 Lote 6**: Services Testing (4 services, 18 testes ✅)
+- **Phase 2 Sprint 2.2 Lote 7**: Services Testing (2 services, 13 testes ✅)
 
 🔄 **Em Progresso:**
-- **Phase 2 Sprint 2.2**: Service Layer Testing (9/50+ services, 178 testes ✅)
+- **Phase 2 Sprint 2.2**: Service Layer Testing (19/50+ services, 235 testes ✅)
 
-📈 **Total Atual**: **1356 testes ✅** em 75 componentes
+📈 **Total Atual**: **1413 testes ✅** em 85 componentes
+
+**Progresso Sprint 2.2 Detalhado:**
+- Lote 1: AnomalyService, AnomalyStatusService, AnswerService (58 testes) ✅
+- Lote 2: AnswerPhotoService, ChecklistService, ChecklistResponseService (57 testes) ✅
+- Lote 3: ClassificationDamService, ClientService, PVAnswerValidatorService (63 testes) ✅
+- Lote 4: ConstantService (8 testes) ✅ - Partial (2 services deferred due to complexity)
+- Lote 5: DangerLevelService, DeterministicLimitService, DocumentationDamService (26 testes) ✅
+- Lote 6: ChecklistResponseSubmissionService (2), DamService (6), InputService (6), InstrumentService (4) = 18 testes ✅
+- Lote 7: InstrumentGraphAxesService (6), InstrumentGraphPatternService (7) = 13 testes ✅
+
+**Serviços com Autenticação/Complexidade (Deferred):**
+- ChecklistResponseSubmissionService: Métodos complexos com AuthenticatedUserUtil deferred
+- DamService: Métodos com updateStatus/delete deferred (autenticação + cache complexo)
+- InstrumentService: Apenas métodos de leitura testados (create/update/delete deferred)
+- InstrumentGraphCustomizationPropertiesService: 57 dependências, 950+ linhas - defer to integration tests
 
 ### Stack Atual
 ✅ **Já Configurado:**
@@ -1342,13 +1361,6 @@ mvn clean package -DskipTests
 - [RestAssured Tutorial](https://rest-assured.io/)
 - [k6 Documentation](https://k6.io/docs/)
 
-### Cursos Recomendados
-- "Testing Spring Boot Applications" (Udemy/Pluralsight)
-- "Mutation Testing with PIT"
-- "Performance Testing with k6"
-
----
-
 ## ✅ Checklist de Implementação
 
 Marque à medida que completar cada fase:
@@ -1401,9 +1413,3 @@ Este plano é **incremental e pragmático**. Não precisa fazer tudo de uma vez.
 **Lembre-se:**
 > "Testing is not about finding bugs, it's about preventing them."
 
----
-
-**Criado em**: 27/12/2025  
-**Versão**: 1.0  
-**Autor**: GitHub Copilot  
-**Revisão**: Pendente

@@ -156,6 +156,25 @@ public class ChecklistService {
             throw new DuplicateResourceException("Já existe um checklist com esse nome para esta barragem.");
         }
 
+        // ✅ CORREÇÃO: Carregar templates completos do banco antes de validar
+        Set<TemplateQuestionnaireEntity> fullTemplates = new HashSet<>();
+        if (checklist.getTemplateQuestionnaires() != null && !checklist.getTemplateQuestionnaires().isEmpty()) {
+            for (TemplateQuestionnaireEntity template : checklist.getTemplateQuestionnaires()) {
+                if (template.getId() == null) {
+                    throw new InvalidInputException("ID do template é obrigatório!");
+                }
+
+                TemplateQuestionnaireEntity fullTemplate = templateQuestionnaireRepository.findById(template.getId())
+                        .orElseThrow(() -> new NotFoundException(
+                        "Template não encontrado com ID: " + template.getId()));
+
+                fullTemplates.add(fullTemplate);
+            }
+
+            // Substitui os templates parciais pelos completos
+            checklist.setTemplateQuestionnaires(fullTemplates);
+        }
+
         // Valida que todos os templates pertencem à mesma dam do checklist
         validateTemplatesBelongToDam(checklist.getTemplateQuestionnaires(), damId, fullDam.getName());
 
@@ -353,6 +372,25 @@ public class ChecklistService {
 
         if (checklistRepository.existsByNameAndDamIdAndIdNot(checklist.getName(), newDamId, checklist.getId())) {
             throw new DuplicateResourceException("Já existe um checklist com esse nome para esta barragem.");
+        }
+
+        // ✅ CORREÇÃO: Carregar templates completos do banco antes de validar
+        Set<TemplateQuestionnaireEntity> fullTemplates = new HashSet<>();
+        if (checklist.getTemplateQuestionnaires() != null && !checklist.getTemplateQuestionnaires().isEmpty()) {
+            for (TemplateQuestionnaireEntity template : checklist.getTemplateQuestionnaires()) {
+                if (template.getId() == null) {
+                    throw new InvalidInputException("ID do template é obrigatório!");
+                }
+
+                TemplateQuestionnaireEntity fullTemplate = templateQuestionnaireRepository.findById(template.getId())
+                        .orElseThrow(() -> new NotFoundException(
+                        "Template não encontrado com ID: " + template.getId()));
+
+                fullTemplates.add(fullTemplate);
+            }
+
+            // Substitui os templates parciais pelos completos
+            checklist.setTemplateQuestionnaires(fullTemplates);
         }
 
         // Valida que todos os templates pertencem à mesma dam do checklist

@@ -14,7 +14,6 @@ import org.springframework.stereotype.Service;
 import com.geosegbar.common.enums.AnomalyOriginEnum;
 import com.geosegbar.common.enums.TypeQuestionEnum;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
-import com.geosegbar.configs.metrics.CustomMetricsService;
 import com.geosegbar.entities.AnomalyEntity;
 import com.geosegbar.entities.AnomalyPhotoEntity;
 import com.geosegbar.entities.AnomalyStatusEntity;
@@ -81,7 +80,6 @@ public class ChecklistResponseSubmissionService {
     private final AnomalyPhotoRepository anomalyPhotoRepository;
     private final CacheManager checklistCacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
-    private final CustomMetricsService metricsService;
     private final DocumentationDamRepository documentationDamRepository;
 
     private void evictCachesByPattern(String cacheName, String pattern) {
@@ -153,53 +151,43 @@ public class ChecklistResponseSubmissionService {
             }
         }
 
-        return metricsService.recordDatabaseQuery(() -> {
+        ChecklistResponseEntity checklistResponse = createChecklistResponse(submissionDto);
 
-            ChecklistResponseEntity checklistResponse = createChecklistResponse(submissionDto);
+        validateAllRequiredQuestionnaires(submissionDto);
+        validatePVAnswersHaveRequiredFields(submissionDto);
 
-            validateAllRequiredQuestionnaires(submissionDto);
-            validatePVAnswersHaveRequiredFields(submissionDto);
+        for (QuestionnaireResponseSubmissionDTO questionnaireDto : submissionDto.getQuestionnaireResponses()) {
+            validateAllQuestionsAnswered(questionnaireDto);
 
-            int totalQuestionnaires = 0;
+            QuestionnaireResponseEntity questionnaireResponse = createQuestionnaireResponse(questionnaireDto, checklistResponse);
 
-            for (QuestionnaireResponseSubmissionDTO questionnaireDto : submissionDto.getQuestionnaireResponses()) {
-                validateAllQuestionsAnswered(questionnaireDto);
+            for (AnswerSubmissionDTO answerDto : questionnaireDto.getAnswers()) {
+                createAnswer(answerDto, questionnaireResponse);
 
-                QuestionnaireResponseEntity questionnaireResponse = createQuestionnaireResponse(questionnaireDto, checklistResponse);
-                totalQuestionnaires++;
-
-                for (AnswerSubmissionDTO answerDto : questionnaireDto.getAnswers()) {
-                    createAnswer(answerDto, questionnaireResponse);
-
-                    if (pvAnswerValidator.isPVAnswer(answerDto)) {
-                        createAnomalyFromPVAnswer(
-                                answerDto,
-                                submissionDto.getUserId(),
-                                submissionDto.getDamId(),
-                                questionnaireDto.getTemplateQuestionnaireId()
-                        );
-                    }
+                if (pvAnswerValidator.isPVAnswer(answerDto)) {
+                    createAnomalyFromPVAnswer(
+                            answerDto,
+                            submissionDto.getUserId(),
+                            submissionDto.getDamId(),
+                            questionnaireDto.getTemplateQuestionnaireId()
+                    );
                 }
             }
+        }
 
-            metricsService.incrementChecklistsSubmitted();
-            metricsService.incrementQuestionnairesAnswered(totalQuestionnaires);
+        DamEntity dam = damRepository.findById(submissionDto.getDamId())
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
+        Long clientId = dam.getClient().getId();
 
-            DamEntity dam = damRepository.findById(submissionDto.getDamId())
-                    .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
-            Long clientId = dam.getClient().getId();
+        evictChecklistResponseCaches(
+                submissionDto.getDamId(),
+                clientId,
+                submissionDto.getUserId()
+        );
 
-            evictChecklistResponseCaches(
-                    submissionDto.getDamId(),
-                    clientId,
-                    submissionDto.getUserId()
-            );
+        updateLastAchievementChecklist(submissionDto.getDamId());
 
-            updateLastAchievementChecklist(submissionDto.getDamId());
-
-            return checklistResponse;
-        });
-
+        return checklistResponse;
     }
 
     private void updateLastAchievementChecklist(Long damId) {

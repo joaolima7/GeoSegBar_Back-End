@@ -34,7 +34,6 @@ import org.springframework.transaction.annotation.Transactional;
 import com.geosegbar.common.enums.LimitStatusEnum;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.common.utils.DateFormatter;
-import com.geosegbar.configs.metrics.CustomMetricsService;
 import com.geosegbar.entities.DeterministicLimitEntity;
 import com.geosegbar.entities.InputEntity;
 import com.geosegbar.entities.InstrumentEntity;
@@ -79,11 +78,9 @@ public class ReadingService {
     private final UserRepository userRepository;
     private final CacheManager readingCacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
-    private final CustomMetricsService metricsService;
 
     // ⭐ OTIMIZAÇÃO: Prioridade de status crítico pré-computada (O(1) lookup)
     private static final Map<LimitStatusEnum, Integer> STATUS_PRIORITY;
-    private static final List<LimitStatusEnum> CRITICAL_STATUS_ORDER;
 
     static {
         STATUS_PRIORITY = new EnumMap<>(LimitStatusEnum.class);
@@ -93,14 +90,6 @@ public class ReadingService {
         STATUS_PRIORITY.put(LimitStatusEnum.INFERIOR, 2);
         STATUS_PRIORITY.put(LimitStatusEnum.SUPERIOR, 1);
         STATUS_PRIORITY.put(LimitStatusEnum.NORMAL, 0);
-
-        CRITICAL_STATUS_ORDER = List.of(
-                LimitStatusEnum.EMERGENCIA,
-                LimitStatusEnum.ALERTA,
-                LimitStatusEnum.ATENCAO,
-                LimitStatusEnum.INFERIOR,
-                LimitStatusEnum.SUPERIOR
-        );
     }
 
     // ⭐ OTIMIZAÇÃO: Paginação e ordenação padrão reutilizáveis
@@ -498,68 +487,63 @@ public class ReadingService {
 
         validateInputValues(instrument, request.getInputValues());
 
-        return metricsService.recordReadingCreation(() -> {
-            // ⭐ OTIMIZADO: Pré-processar inputs uma vez
-            Map<String, Double> formattedInputValues = new HashMap<>();
-            Map<String, String> inputNames = new HashMap<>();
+        // ⭐ OTIMIZADO: Pré-processar inputs uma vez
+        Map<String, Double> formattedInputValues = new HashMap<>();
+        Map<String, String> inputNames = new HashMap<>();
 
-            for (InputEntity input : instrument.getInputs()) {
-                Double inputValue = request.getInputValues().get(input.getAcronym());
-                if (inputValue != null) {
-                    formattedInputValues.put(input.getAcronym(),
-                            formatToSpecificPrecision(inputValue, input.getPrecision()));
-                    inputNames.put(input.getAcronym(), input.getName());
-                }
+        for (InputEntity input : instrument.getInputs()) {
+            Double inputValue = request.getInputValues().get(input.getAcronym());
+            if (inputValue != null) {
+                formattedInputValues.put(input.getAcronym(),
+                        formatToSpecificPrecision(inputValue, input.getPrecision()));
+                inputNames.put(input.getAcronym(), input.getName());
             }
+        }
 
-            // ⭐ OTIMIZADO: Criar todas as readings antes de salvar
-            List<ReadingEntity> readingsToSave = new ArrayList<>(activeOutputs.size());
-            Set<Long> affectedOutputIds = new HashSet<>(activeOutputs.size());
+        // ⭐ OTIMIZADO: Criar todas as readings antes de salvar
+        List<ReadingEntity> readingsToSave = new ArrayList<>(activeOutputs.size());
+        Set<Long> affectedOutputIds = new HashSet<>(activeOutputs.size());
 
-            for (OutputEntity output : activeOutputs) {
-                Double calculatedValue = outputCalculationService.calculateOutput(output, request, formattedInputValues);
+        for (OutputEntity output : activeOutputs) {
+            Double calculatedValue = outputCalculationService.calculateOutput(output, request, formattedInputValues);
 
-                ReadingEntity reading = new ReadingEntity();
-                reading.setDate(request.getDate());
-                reading.setHour(request.getHour());
-                reading.setCalculatedValue(calculatedValue);
-                reading.setInstrument(instrument);
-                reading.setOutput(output);
-                reading.setUser(currentUser);
-                reading.setActive(true);
-                reading.setComment(request.getComment());
-                reading.setLimitStatus(determineLimitStatus(instrument, calculatedValue, output));
+            ReadingEntity reading = new ReadingEntity();
+            reading.setDate(request.getDate());
+            reading.setHour(request.getHour());
+            reading.setCalculatedValue(calculatedValue);
+            reading.setInstrument(instrument);
+            reading.setOutput(output);
+            reading.setUser(currentUser);
+            reading.setActive(true);
+            reading.setComment(request.getComment());
+            reading.setLimitStatus(determineLimitStatus(instrument, calculatedValue, output));
 
-                // ⭐ OTIMIZADO: InputValues vinculados diretamente (cascade automático)
-                Set<ReadingInputValueEntity> inputValuesSet = new HashSet<>(formattedInputValues.size());
-                for (Map.Entry<String, Double> entry : formattedInputValues.entrySet()) {
-                    ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
-                    inputValue.setInputAcronym(entry.getKey());
-                    inputValue.setInputName(inputNames.get(entry.getKey()));
-                    inputValue.setValue(entry.getValue());
-                    inputValue.setReading(reading);
-                    inputValuesSet.add(inputValue);
-                }
-                reading.setInputValues(inputValuesSet);
-
-                readingsToSave.add(reading);
-                affectedOutputIds.add(output.getId());
+            // ⭐ OTIMIZADO: InputValues vinculados diretamente (cascade automático)
+            Set<ReadingInputValueEntity> inputValuesSet = new HashSet<>(formattedInputValues.size());
+            for (Map.Entry<String, Double> entry : formattedInputValues.entrySet()) {
+                ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
+                inputValue.setInputAcronym(entry.getKey());
+                inputValue.setInputName(inputNames.get(entry.getKey()));
+                inputValue.setValue(entry.getValue());
+                inputValue.setReading(reading);
+                inputValuesSet.add(inputValue);
             }
+            reading.setInputValues(inputValuesSet);
 
-            // ⭐ OTIMIZADO: Salvar todas de uma vez
-            List<ReadingEntity> createdReadings = readingRepository.saveAll(readingsToSave);
+            readingsToSave.add(reading);
+            affectedOutputIds.add(output.getId());
+        }
 
-            metricsService.incrementReadingsCreated(createdReadings.size());
-            metricsService.incrementReadingsForInstrument(instrumentId, createdReadings.size());
+        // ⭐ OTIMIZADO: Salvar todas de uma vez
+        List<ReadingEntity> createdReadings = readingRepository.saveAll(readingsToSave);
 
-            // ⭐ OTIMIZADO: Cache eviction em batch
-            evictCachesAfterCreate(instrumentId, affectedOutputIds,
-                    instrument.getDam().getClient().getId(), request.getDate());
+        // ⭐ OTIMIZADO: Cache eviction em batch
+        evictCachesAfterCreate(instrumentId, affectedOutputIds,
+                instrument.getDam().getClient().getId(), request.getDate());
 
-            return createdReadings.stream()
-                    .map(this::mapToResponseDTO)
-                    .collect(Collectors.toList());
-        });
+        return createdReadings.stream()
+                .map(this::mapToResponseDTO)
+                .collect(Collectors.toList());
     }
 
     @Transactional

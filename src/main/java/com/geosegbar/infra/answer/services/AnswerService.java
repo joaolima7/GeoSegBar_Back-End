@@ -1,10 +1,7 @@
 package com.geosegbar.infra.answer.services;
 
 import java.util.List;
-import java.util.Set;
 
-import org.springframework.cache.CacheManager;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.common.enums.TypeQuestionEnum;
@@ -24,84 +21,20 @@ import lombok.extern.slf4j.Slf4j;
 public class AnswerService {
 
     private final AnswerRepository answerRepository;
-    private final CacheManager checklistCacheManager;
-    private final RedisTemplate<String, Object> redisTemplate;
-
-    /**
-     * ⭐ NOVO: Invalida TODOS os caches de checklistResponse
-     */
-    private void evictAllChecklistResponseCaches() {
-        log.info("Invalidando TODOS os caches de checklistResponse devido a mudança em Answer");
-
-        var checklistResponseByIdCache = checklistCacheManager.getCache("checklistResponseById");
-        if (checklistResponseByIdCache != null) {
-            checklistResponseByIdCache.clear();
-        }
-
-        var checklistResponseDetailCache = checklistCacheManager.getCache("checklistResponseDetail");
-        if (checklistResponseDetailCache != null) {
-            checklistResponseDetailCache.clear();
-        }
-
-        var checklistResponsesByDamCache = checklistCacheManager.getCache("checklistResponsesByDam");
-        if (checklistResponsesByDamCache != null) {
-            checklistResponsesByDamCache.clear();
-        }
-
-        var checklistResponsesByUserCache = checklistCacheManager.getCache("checklistResponsesByUser");
-        if (checklistResponsesByUserCache != null) {
-            checklistResponsesByUserCache.clear();
-        }
-
-        evictCachesByPattern("checklistResponsesByDamPaged", "*");
-        evictCachesByPattern("checklistResponsesByUserPaged", "*");
-        evictCachesByPattern("checklistResponsesByClient", "*");
-        evictCachesByPattern("clientLatestDetailedChecklistResponses", "*");
-        evictCachesByPattern("checklistResponsesByDate", "*");
-        evictCachesByPattern("checklistResponsesByDatePaged", "*");
-        evictCachesByPattern("allChecklistResponsesPaged", "*");
-
-        var checklistsWithAnswersByDamCache = checklistCacheManager.getCache("checklistsWithAnswersByDam");
-        if (checklistsWithAnswersByDamCache != null) {
-            checklistsWithAnswersByDamCache.clear();
-        }
-
-        var checklistsWithAnswersByClientCache = checklistCacheManager.getCache("checklistsWithAnswersByClient");
-        if (checklistsWithAnswersByClientCache != null) {
-            checklistsWithAnswersByClientCache.clear();
-        }
-    }
-
-    private void evictCachesByPattern(String cacheName, String pattern) {
-        try {
-            String fullPattern = cacheName + "::" + pattern;
-            Set<String> keys = redisTemplate.keys(fullPattern);
-
-            if (keys != null && !keys.isEmpty()) {
-                redisTemplate.delete(keys);
-            }
-        } catch (Exception e) {
-        }
-    }
 
     @Transactional
     public void deleteById(Long id) {
         answerRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Resposta não encontrada para exclusão!"));
         answerRepository.deleteById(id);
-
-        evictAllChecklistResponseCaches();
-        log.info("Answer {} deletado. Caches de checklistResponse invalidados.", id);
+        log.info("Answer {} deletado.", id);
     }
 
     @Transactional
     public AnswerEntity save(AnswerEntity answer) {
         validateAnswerByType(answer);
         AnswerEntity saved = answerRepository.save(answer);
-
-        evictAllChecklistResponseCaches();
-        log.info("Answer {} criado. Caches de checklistResponse invalidados.", saved.getId());
-
+        log.info("Answer {} criado.", saved.getId());
         return saved;
     }
 
@@ -111,10 +44,7 @@ public class AnswerService {
                 .orElseThrow(() -> new NotFoundException("Resposta não encontrada para atualização!"));
         validateAnswerByType(answer);
         AnswerEntity saved = answerRepository.save(answer);
-
-        evictAllChecklistResponseCaches();
-        log.info("Answer {} atualizado. Caches de checklistResponse invalidados.", answer.getId());
-
+        log.info("Answer {} atualizado.", saved.getId());
         return saved;
     }
 

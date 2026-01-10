@@ -6,14 +6,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.AnswerEntity;
@@ -49,95 +45,16 @@ public class ChecklistResponseService {
     private final QuestionnaireResponseRepository questionnaireResponseRepository;
     private final DamService damService;
     private final ClientRepository clientRepository;
-    private final CacheManager checklistCacheManager;
-    private final RedisTemplate<String, Object> redisTemplate;
 
-    /**
-     * ⭐ NOVO: Invalida caches usando pattern matching do Redis
-     */
-    private void evictCachesByPattern(String cacheName, String pattern) {
-        try {
-            String fullPattern = cacheName + "::" + pattern;
-            Set<String> keys = redisTemplate.keys(fullPattern);
-
-            if (keys != null && !keys.isEmpty()) {
-                redisTemplate.delete(keys);
-            }
-        } catch (Exception e) {
-        }
-    }
-
-    /**
-     * ⭐ NOVO: Invalida cache específico de um checklist response
-     */
-    private void evictChecklistResponseByIdCaches(Long responseId) {
-        var byIdCache = checklistCacheManager.getCache("checklistResponseById");
-        if (byIdCache != null) {
-            byIdCache.evict(responseId);
-        }
-
-        var detailCache = checklistCacheManager.getCache("checklistResponseDetail");
-        if (detailCache != null) {
-            detailCache.evict(responseId);
-        }
-    }
-
-    /**
-     * ⭐ NOVO: Invalida caches de checklist response de forma granular
-     */
-    private void evictChecklistResponseCaches(Long damId, Long clientId, Long userId) {
-
-        var responsesByDamCache = checklistCacheManager.getCache("checklistResponsesByDam");
-        if (responsesByDamCache != null) {
-            responsesByDamCache.evict(damId);
-        }
-
-        evictCachesByPattern("checklistResponsesByDamPaged", damId + "_*");
-
-        evictCachesByPattern("checklistResponsesByClient", clientId + "_*");
-        evictCachesByPattern("clientLatestDetailedChecklistResponses", clientId + "_*");
-
-        if (userId != null) {
-            var responsesByUserCache = checklistCacheManager.getCache("checklistResponsesByUser");
-            if (responsesByUserCache != null) {
-                responsesByUserCache.evict(userId);
-            }
-            evictCachesByPattern("checklistResponsesByUserPaged", userId + "_*");
-        }
-
-        var damLastChecklistCache = checklistCacheManager.getCache("damLastChecklist");
-        if (damLastChecklistCache != null) {
-            damLastChecklistCache.evict(clientId);
-        }
-
-        var checklistsWithAnswersByDamCache = checklistCacheManager.getCache("checklistsWithAnswersByDam");
-        if (checklistsWithAnswersByDamCache != null) {
-            checklistsWithAnswersByDamCache.evict(damId);
-        }
-
-        var checklistsWithAnswersByClientCache = checklistCacheManager.getCache("checklistsWithAnswersByClient");
-        if (checklistsWithAnswersByClientCache != null) {
-            checklistsWithAnswersByClientCache.evict(clientId);
-        }
-
-        evictCachesByPattern("checklistResponsesByDate", "*");
-        evictCachesByPattern("checklistResponsesByDatePaged", "*");
-
-        evictCachesByPattern("allChecklistResponsesPaged", "*");
-    }
-
-    @Cacheable(value = "allChecklistResponses", key = "'all'", cacheManager = "checklistCacheManager")
     public List<ChecklistResponseEntity> findAll() {
         return checklistResponseRepository.findAll();
     }
 
-    @Cacheable(value = "checklistResponseById", key = "#id", cacheManager = "checklistCacheManager")
     public ChecklistResponseEntity findById(Long id) {
         return checklistResponseRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para id: " + id));
     }
 
-    @Cacheable(value = "checklistResponsesByDam", key = "#damId", cacheManager = "checklistCacheManager")
     public List<ChecklistResponseEntity> findByDamId(Long damId) {
         damService.findById(damId);
         List<ChecklistResponseEntity> responses = checklistResponseRepository.findByDamId(damId);
@@ -152,11 +69,6 @@ public class ChecklistResponseService {
         checklistResponse.setDam(dam);
 
         ChecklistResponseEntity saved = checklistResponseRepository.save(checklistResponse);
-
-        Long clientId = dam.getClient().getId();
-        Long userId = checklistResponse.getUser().getId();
-
-        evictChecklistResponseCaches(damId, clientId, userId);
 
         return saved;
     }
@@ -180,14 +92,6 @@ public class ChecklistResponseService {
 
         ChecklistResponseEntity saved = checklistResponseRepository.save(checklistResponse);
 
-        evictChecklistResponseByIdCaches(checklistResponse.getId());
-
-        if (!oldDamId.equals(newDamId) || !oldClientId.equals(newClientId) || !oldUserId.equals(newUserId)) {
-            evictChecklistResponseCaches(oldDamId, oldClientId, oldUserId);
-        }
-
-        evictChecklistResponseCaches(newDamId, newClientId, newUserId);
-
         return saved;
     }
 
@@ -203,13 +107,8 @@ public class ChecklistResponseService {
         Long userId = existing.getUser().getId();
 
         checklistResponseRepository.deleteById(id);
-
-        evictChecklistResponseByIdCaches(id);
-
-        evictChecklistResponseCaches(damId, clientId, userId);
     }
 
-    @Cacheable(value = "checklistResponsesByDam", key = "#damId", cacheManager = "checklistCacheManager")
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByDamId(Long damId) {
         damService.findById(damId);
 
@@ -220,8 +119,6 @@ public class ChecklistResponseService {
                 .collect(Collectors.toList());
     }
 
-    @Cacheable(value = "checklistResponsesByClient", key = "#clientId + '_' + #pageable.pageNumber + '_' + #pageable.pageSize",
-            cacheManager = "checklistCacheManager")
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByClientIdPaged(
             Long clientId, Pageable pageable) {
 
@@ -242,7 +139,6 @@ public class ChecklistResponseService {
         );
     }
 
-    @Cacheable(value = "checklistResponseDetail", key = "#checklistResponseId", cacheManager = "checklistCacheManager")
     public ChecklistResponseDetailDTO findChecklistResponseById(Long checklistResponseId) {
         ChecklistResponseEntity checklistResponse = findById(checklistResponseId);
         return convertToDetailDto(checklistResponse);
@@ -323,7 +219,6 @@ public class ChecklistResponseService {
         return dto;
     }
 
-    @Cacheable(value = "checklistResponsesByUser", key = "#userId", cacheManager = "checklistCacheManager")
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByUserId(Long userId) {
         List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByUserId(userId);
 
@@ -332,9 +227,6 @@ public class ChecklistResponseService {
                 .collect(Collectors.toList());
     }
 
-    @Cacheable(value = "checklistResponsesByDate",
-            key = "#startDate.toString() + '_' + #endDate.toString()",
-            cacheManager = "checklistCacheManager")
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByDateRange(LocalDateTime startDate, LocalDateTime endDate) {
         List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByCreatedAtBetween(startDate, endDate);
 
@@ -343,9 +235,6 @@ public class ChecklistResponseService {
                 .collect(Collectors.toList());
     }
 
-    @Cacheable(value = "checklistResponsesByDamPaged",
-            key = "#damId + '_' + #pageable.pageNumber + '_' + #pageable.pageSize",
-            cacheManager = "checklistCacheManager")
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByDamIdPaged(Long damId, Pageable pageable) {
         damService.findById(damId);
 
@@ -366,9 +255,6 @@ public class ChecklistResponseService {
         );
     }
 
-    @Cacheable(value = "checklistResponsesByUserPaged",
-            key = "#userId + '_' + #pageable.pageNumber + '_' + #pageable.pageSize",
-            cacheManager = "checklistCacheManager")
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByUserIdPaged(Long userId, Pageable pageable) {
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByUserId(userId, pageable);
 
@@ -387,9 +273,6 @@ public class ChecklistResponseService {
         );
     }
 
-    @Cacheable(value = "checklistResponsesByDatePaged",
-            key = "#startDate.toString() + '_' + #endDate.toString() + '_' + #pageable.pageNumber + '_' + #pageable.pageSize",
-            cacheManager = "checklistCacheManager")
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByDateRangePaged(
             LocalDateTime startDate, LocalDateTime endDate, Pageable pageable) {
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByCreatedAtBetween(startDate, endDate, pageable);
@@ -409,9 +292,6 @@ public class ChecklistResponseService {
         );
     }
 
-    @Cacheable(value = "allChecklistResponsesPaged",
-            key = "#pageable.pageNumber + '_' + #pageable.pageSize",
-            cacheManager = "checklistCacheManager")
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findAllChecklistResponsesPaged(Pageable pageable) {
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findAll(pageable);
 
@@ -430,7 +310,6 @@ public class ChecklistResponseService {
         );
     }
 
-    @Cacheable(value = "damLastChecklist", key = "#clientId", cacheManager = "checklistCacheManager")
     public List<DamLastChecklistDTO> getLastChecklistDateByClient(Long clientId) {
         List<DamEntity> dams = damService.findDamsByClientId(clientId);
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -452,11 +331,6 @@ public class ChecklistResponseService {
         return result;
     }
 
-    @Cacheable(
-            value = "clientLatestDetailedChecklistResponses",
-            key = "#clientId + '_' + #limit",
-            cacheManager = "checklistCacheManager"
-    )
     public ClientDetailedChecklistResponsesDTO findLatestDetailedChecklistResponsesByClientId(Long clientId, int limit) {
 
         ClientEntity client = clientRepository.findById(clientId)

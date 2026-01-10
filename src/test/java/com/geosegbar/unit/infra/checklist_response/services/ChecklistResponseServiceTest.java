@@ -25,7 +25,6 @@ import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
-import org.springframework.data.redis.core.RedisTemplate;
 
 import com.geosegbar.config.BaseUnitTest;
 import com.geosegbar.entities.ChecklistResponseEntity;
@@ -58,9 +57,6 @@ class ChecklistResponseServiceTest extends BaseUnitTest {
 
     @Mock
     private CacheManager checklistCacheManager;
-
-    @Mock
-    private RedisTemplate<String, Object> redisTemplate;
 
     @Mock
     private Cache mockCache;

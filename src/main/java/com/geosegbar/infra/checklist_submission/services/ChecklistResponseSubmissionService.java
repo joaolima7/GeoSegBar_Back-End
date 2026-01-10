@@ -7,8 +7,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.springframework.cache.CacheManager;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.common.enums.AnomalyOriginEnum;
@@ -78,61 +76,7 @@ public class ChecklistResponseSubmissionService {
     private final PVAnswerValidator pvAnswerValidator;
     private final DamRepository damRepository;
     private final AnomalyPhotoRepository anomalyPhotoRepository;
-    private final CacheManager checklistCacheManager;
-    private final RedisTemplate<String, Object> redisTemplate;
     private final DocumentationDamRepository documentationDamRepository;
-
-    private void evictCachesByPattern(String cacheName, String pattern) {
-        try {
-            String fullPattern = cacheName + "::" + pattern;
-            Set<String> keys = redisTemplate.keys(fullPattern);
-
-            if (keys != null && !keys.isEmpty()) {
-                redisTemplate.delete(keys);
-            }
-        } catch (Exception e) {
-
-        }
-    }
-
-    private void evictChecklistResponseCaches(Long damId, Long clientId, Long userId) {
-
-        var responsesByDamCache = checklistCacheManager.getCache("checklistResponsesByDam");
-        if (responsesByDamCache != null) {
-            responsesByDamCache.evict(damId);
-        }
-
-        evictCachesByPattern("checklistResponsesByDamPaged", damId + "_*");
-
-        evictCachesByPattern("checklistResponsesByClient", clientId + "_*");
-        evictCachesByPattern("clientLatestDetailedChecklistResponses", clientId + "_*");
-
-        var responsesByUserCache = checklistCacheManager.getCache("checklistResponsesByUser");
-        if (responsesByUserCache != null) {
-            responsesByUserCache.evict(userId);
-        }
-        evictCachesByPattern("checklistResponsesByUserPaged", userId + "_*");
-
-        var damLastChecklistCache = checklistCacheManager.getCache("damLastChecklist");
-        if (damLastChecklistCache != null) {
-            damLastChecklistCache.evict(clientId);
-        }
-
-        var checklistsWithAnswersByDamCache = checklistCacheManager.getCache("checklistsWithAnswersByDam");
-        if (checklistsWithAnswersByDamCache != null) {
-            checklistsWithAnswersByDamCache.evict(damId);
-        }
-
-        var checklistsWithAnswersByClientCache = checklistCacheManager.getCache("checklistsWithAnswersByClient");
-        if (checklistsWithAnswersByClientCache != null) {
-            checklistsWithAnswersByClientCache.evict(clientId);
-        }
-
-        evictCachesByPattern("checklistResponsesByDate", "*");
-        evictCachesByPattern("checklistResponsesByDatePaged", "*");
-
-        evictCachesByPattern("allChecklistResponsesPaged", "*");
-    }
 
     @Transactional
 
@@ -174,16 +118,6 @@ public class ChecklistResponseSubmissionService {
                 }
             }
         }
-
-        DamEntity dam = damRepository.findById(submissionDto.getDamId())
-                .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
-        Long clientId = dam.getClient().getId();
-
-        evictChecklistResponseCaches(
-                submissionDto.getDamId(),
-                clientId,
-                submissionDto.getUserId()
-        );
 
         updateLastAchievementChecklist(submissionDto.getDamId());
 

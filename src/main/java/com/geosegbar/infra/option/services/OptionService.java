@@ -2,10 +2,7 @@ package com.geosegbar.infra.option.services;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
-import org.springframework.cache.CacheManager;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.OptionEntity;
@@ -23,8 +20,6 @@ import lombok.extern.slf4j.Slf4j;
 public class OptionService {
 
     private final OptionRepository optionRepository;
-    private final CacheManager checklistCacheManager;
-    private final RedisTemplate<String, Object> redisTemplate;
 
     @PostConstruct
     @Transactional
@@ -50,82 +45,20 @@ public class OptionService {
         }
     }
 
-    /**
-     * ⭐ NOVO: Invalida TODOS os caches de checklist e checklistResponse
-     */
-    private void evictAllChecklistCaches() {
-        log.info("Invalidando TODOS os caches de checklist devido a mudança em Option");
-
-        var checklistByIdCache = checklistCacheManager.getCache("checklistById");
-        if (checklistByIdCache != null) {
-            checklistByIdCache.clear();
-        }
-
-        var checklistsByDamCache = checklistCacheManager.getCache("checklistsByDam");
-        if (checklistsByDamCache != null) {
-            checklistsByDamCache.clear();
-        }
-
-        var checklistsWithAnswersByDamCache = checklistCacheManager.getCache("checklistsWithAnswersByDam");
-        if (checklistsWithAnswersByDamCache != null) {
-            checklistsWithAnswersByDamCache.clear();
-        }
-
-        var checklistsWithAnswersByClientCache = checklistCacheManager.getCache("checklistsWithAnswersByClient");
-        if (checklistsWithAnswersByClientCache != null) {
-            checklistsWithAnswersByClientCache.clear();
-        }
-
-        evictCachesByPattern("checklistForDam", "*");
-
-        var checklistResponseByIdCache = checklistCacheManager.getCache("checklistResponseById");
-        if (checklistResponseByIdCache != null) {
-            checklistResponseByIdCache.clear();
-        }
-
-        var checklistResponseDetailCache = checklistCacheManager.getCache("checklistResponseDetail");
-        if (checklistResponseDetailCache != null) {
-            checklistResponseDetailCache.clear();
-        }
-
-        var checklistResponsesByDamCache = checklistCacheManager.getCache("checklistResponsesByDam");
-        if (checklistResponsesByDamCache != null) {
-            checklistResponsesByDamCache.clear();
-        }
-
-        evictCachesByPattern("checklistResponsesByDamPaged", "*");
-        evictCachesByPattern("checklistResponsesByClient", "*");
-        evictCachesByPattern("clientLatestDetailedChecklistResponses", "*");
-    }
-
-    private void evictCachesByPattern(String cacheName, String pattern) {
-        try {
-            String fullPattern = cacheName + "::" + pattern;
-            Set<String> keys = redisTemplate.keys(fullPattern);
-
-            if (keys != null && !keys.isEmpty()) {
-                redisTemplate.delete(keys);
-            }
-        } catch (Exception e) {
-        }
-    }
-
     @Transactional
     public void deleteById(Long id) {
         optionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Opção não encontrada para exclusão!"));
         optionRepository.deleteById(id);
 
-        evictAllChecklistCaches();
-        log.info("Opção {} deletada. Caches invalidados.", id);
+        log.info("Opção {} deletada.", id);
     }
 
     @Transactional
     public OptionEntity save(OptionEntity option) {
         OptionEntity saved = optionRepository.save(option);
 
-        evictAllChecklistCaches();
-        log.info("Opção {} criada. Caches invalidados.", saved.getId());
+        log.info("Opção {} criada.", saved.getId());
 
         return saved;
     }
@@ -136,8 +69,7 @@ public class OptionService {
                 .orElseThrow(() -> new NotFoundException("Opção não encontrada para atualização!"));
         OptionEntity saved = optionRepository.save(option);
 
-        evictAllChecklistCaches();
-        log.info("Opção {} atualizada. Caches invalidados.", option.getId());
+        log.info("Opção {} atualizada.", option.getId());
 
         return saved;
     }

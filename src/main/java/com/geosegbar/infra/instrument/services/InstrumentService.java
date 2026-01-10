@@ -11,11 +11,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -76,50 +72,7 @@ public class InstrumentService {
     private final OutputRepository outputRepository;
     private final InstrumentTypeRepository instrumentTypeRepository;
     private final ApplicationEventPublisher eventPublisher;
-    private final RedisTemplate<String, Object> redisTemplate;
 
-    /**
-     * ⭐ NOVO: Invalida caches usando pattern matching do Redis
-     */
-    private void evictCachesByPattern(String cacheName, String pattern) {
-        try {
-            String fullPattern = cacheName + "::" + pattern;
-            Set<String> keys = redisTemplate.keys(fullPattern);
-
-            if (keys != null && !keys.isEmpty()) {
-                log.debug("Invalidando {} keys do cache {} com pattern {}",
-                        keys.size(), cacheName, pattern);
-                redisTemplate.delete(keys);
-            }
-        } catch (Exception e) {
-            log.warn("Erro ao invalidar cache por pattern: cacheName={}, pattern={}",
-                    cacheName, pattern, e);
-        }
-    }
-
-    /**
-     * ⭐ NOVO: Invalida caches de reading de forma granular para um instrumento
-     */
-    private void evictReadingCachesForInstrument(Long instrumentId, Long clientId) {
-        log.info("Invalidando caches de reading para instrumento {} (granular)", instrumentId);
-
-        evictCachesByPattern("readingsByInstrument", instrumentId.toString());
-
-        evictCachesByPattern("instrumentLimitStatus", instrumentId + "_*");
-
-        evictCachesByPattern("groupedReadings", instrumentId + "_*");
-
-        evictCachesByPattern("clientInstrumentLimitStatuses", clientId + "_*");
-        evictCachesByPattern("clientInstrumentLatestGroupedReadings", clientId + "_*");
-
-        evictCachesByPattern("readingsByFilters", instrumentId + "_*");
-
-        evictCachesByPattern("multiInstrumentReadings", "*_" + instrumentId + "_*");
-        evictCachesByPattern("multiInstrumentReadings", instrumentId + "_*");
-        evictCachesByPattern("multiInstrumentReadings", "*_" + instrumentId);
-    }
-
-    @Cacheable(value = "allInstruments", cacheManager = "instrumentCacheManager")
     public List<InstrumentResponseDTO> findAll() {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -130,7 +83,6 @@ public class InstrumentService {
         return mapToResponseDTOList(instrumentRepository.findAllByOrderByNameAsc());
     }
 
-    @Cacheable(value = "instrumentsByDam", key = "#damId", cacheManager = "instrumentCacheManager")
     public List<InstrumentResponseDTO> findByDamId(Long damId) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -141,7 +93,6 @@ public class InstrumentService {
         return mapToResponseDTOList(instrumentRepository.findByDamId(damId));
     }
 
-    @Cacheable(value = "instrumentById", key = "#id", cacheManager = "instrumentCacheManager")
     public InstrumentResponseDTO findByIdDTO(Long id) {
 
         InstrumentEntity entity = instrumentRepository.findByIdWithBasicRelations(id)
@@ -154,7 +105,6 @@ public class InstrumentService {
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
     }
 
-    @Cacheable(value = "instrumentWithDetails", key = "#id", cacheManager = "instrumentCacheManager")
     public InstrumentResponseDTO findWithAllDetails(Long id) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -166,11 +116,6 @@ public class InstrumentService {
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id)));
     }
 
-    @Cacheable(
-            value = "instrumentsByClient",
-            key = "#clientId + '_' + #active",
-            cacheManager = "instrumentCacheManager"
-    )
     public List<InstrumentResponseDTO> findByClientId(Long clientId, Boolean active) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -182,16 +127,6 @@ public class InstrumentService {
     }
 
     @Transactional
-    @CacheEvict(
-            value = {
-                "instrumentsByClient",
-                "instrumentsByFilters",
-                "instrumentsByDam",
-                "allInstruments"
-            },
-            allEntries = true,
-            cacheManager = "instrumentCacheManager"
-    )
     public InstrumentEntity createComplete(CreateInstrumentRequest request) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -498,46 +433,6 @@ public class InstrumentService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(
-                value = {"instrumentById", "instrumentWithDetails", "instrumentResponseDTO"},
-                key = "#id",
-                cacheManager = "instrumentCacheManager"
-        ),
-        @CacheEvict(
-                value = {"instrumentsByClient", "instrumentsByFilters", "instrumentsByDam", "allInstruments"},
-                allEntries = true,
-                cacheManager = "instrumentCacheManager"
-        ),
-
-        @CacheEvict(
-                value = "graphPatternsByInstrument",
-                key = "#id",
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-        @CacheEvict(
-                value = "graphPatternsByInstrument",
-                key = "'details-' + #id",
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-        @CacheEvict(
-                value = {"graphPatternsByDam", "folderWithPatterns", "damFoldersWithPatterns", "graphPatternById"},
-                allEntries = true,
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-
-        @CacheEvict(
-                value = {
-                    "tabulatePatterns",
-                    "tabulatePatternsByDam",
-                    "tabulatePatternsByFolder",
-                    "tabulateFolderWithPatterns",
-                    "damTabulateFoldersWithPatterns"
-                },
-                allEntries = true,
-                cacheManager = "instrumentTabulateCacheManager"
-        )
-    })
     public InstrumentEntity update(Long id, UpdateInstrumentRequest request) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -547,7 +442,6 @@ public class InstrumentService {
         }
 
         InstrumentEntity oldInstrument = findById(id);
-        Long clientId = oldInstrument.getDam().getClient().getId();
 
         Long oldLinimetricCode = oldInstrument.getLinimetricRulerCode();
 
@@ -643,17 +537,11 @@ public class InstrumentService {
             deleteUnusedComponents(existingInputsByAcronym, existingConstantsByAcronym);
 
             instrumentRepository.save(oldInstrument);
-
-            evictReadingCachesForInstrument(id, clientId);
-
             return instrumentRepository.findWithActiveOutputsById(id)
                     .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após atualização"));
         } else {
             updateInstrumentBasicFields(oldInstrument, request);
             instrumentRepository.save(oldInstrument);
-
-            evictReadingCachesForInstrument(id, clientId);
-
             InstrumentEntity updatedInstrument = instrumentRepository.findWithActiveOutputsById(id)
                     .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após atualização"));
 
@@ -773,59 +661,6 @@ public class InstrumentService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(
-                value = {"instrumentById", "instrumentWithDetails", "instrumentResponseDTO"},
-                key = "#id",
-                cacheManager = "instrumentCacheManager"
-        ),
-        @CacheEvict(
-                value = {"instrumentsByClient", "instrumentsByFilters", "instrumentsByDam", "allInstruments"},
-                allEntries = true,
-                cacheManager = "instrumentCacheManager"
-        ),
-
-        @CacheEvict(
-                value = {"readingsByInstrument", "instrumentLimitStatus", "groupedReadings", "readingExists"},
-                key = "#id",
-                cacheManager = "readingCacheManager"
-        ),
-        @CacheEvict(
-                value = {"clientInstrumentLimitStatuses", "clientInstrumentLatestGroupedReadings",
-                    "multiInstrumentReadings", "readingsByFilters"},
-                allEntries = true,
-                cacheManager = "readingCacheManager"
-        ),
-
-        @CacheEvict(
-                value = "graphPatternsByInstrument",
-                key = "#id",
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-        @CacheEvict(
-                value = "graphPatternsByInstrument",
-                key = "'details-' + #id",
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-        @CacheEvict(
-                value = {"graphPatternById", "graphProperties", "graphAxes", "graphPatternsByDam",
-                    "folderWithPatterns", "damFoldersWithPatterns"},
-                allEntries = true,
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-
-        @CacheEvict(
-                value = {
-                    "tabulatePatterns",
-                    "tabulatePatternsByDam",
-                    "tabulatePatternsByFolder",
-                    "tabulateFolderWithPatterns",
-                    "damTabulateFoldersWithPatterns"
-                },
-                allEntries = true,
-                cacheManager = "instrumentTabulateCacheManager"
-        )
-    })
     public void delete(Long id) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -835,7 +670,6 @@ public class InstrumentService {
         }
 
         InstrumentEntity instrument = findById(id);
-        Long clientId = instrument.getDam().getClient().getId();
 
         for (OutputEntity output : instrument.getOutputs()) {
             if (output.getStatisticalLimit() != null) {
@@ -851,65 +685,10 @@ public class InstrumentService {
         outputRepository.deleteByInstrumentId(id);
 
         instrumentRepository.delete(instrument);
-
-        evictCachesByPattern("clientInstrumentLimitStatuses", clientId + "_*");
-        evictCachesByPattern("clientInstrumentLatestGroupedReadings", clientId + "_*");
-        evictCachesByPattern("readingsByFilters", id + "_*");
-        evictCachesByPattern("multiInstrumentReadings", "*_" + id + "_*");
-        evictCachesByPattern("multiInstrumentReadings", id + "_*");
-        evictCachesByPattern("multiInstrumentReadings", "*_" + id);
-
         log.info("Instrumento {} deletado. Caches de reading invalidados granularmente.", id);
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(
-                value = {"instrumentById", "instrumentWithDetails", "instrumentResponseDTO"},
-                key = "#id",
-                cacheManager = "instrumentCacheManager"
-        ),
-        @CacheEvict(
-                value = {"instrumentsByClient", "instrumentsByFilters", "allInstruments"},
-                allEntries = true,
-                cacheManager = "instrumentCacheManager"
-        ),
-
-        @CacheEvict(
-                value = "graphPatternsByInstrument",
-                key = "#id",
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-        @CacheEvict(
-                value = "graphPatternsByInstrument",
-                key = "'details-' + #id",
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-        @CacheEvict(
-                value = {"graphPatternsByDam", "folderWithPatterns", "damFoldersWithPatterns", "graphPatternById"},
-                allEntries = true,
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-
-        @CacheEvict(
-                value = {
-                    "tabulatePatterns",
-                    "tabulatePatternsByDam",
-                    "tabulatePatternsByFolder",
-                    "tabulateFolderWithPatterns",
-                    "damTabulateFoldersWithPatterns"
-                },
-                allEntries = true,
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-
-        @CacheEvict(
-                value = {"readingsByInstrument", "instrumentLimitStatus", "groupedReadings", "readingExists"},
-                key = "#id",
-                cacheManager = "readingCacheManager"
-        )
-
-    })
     public InstrumentEntity toggleActiveInstrument(Long id, Boolean active) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -919,29 +698,15 @@ public class InstrumentService {
         }
 
         InstrumentEntity instrument = findById(id);
-        Long clientId = instrument.getDam().getClient().getId();
 
         instrument.setActive(active);
         InstrumentEntity saved = instrumentRepository.save(instrument);
-
-        evictCachesByPattern("clientInstrumentLimitStatuses", clientId + "_*");
-        evictCachesByPattern("clientInstrumentLatestGroupedReadings", clientId + "_*");
-        evictCachesByPattern("readingsByFilters", id + "_*");
-        evictCachesByPattern("multiInstrumentReadings", "*_" + id + "_*");
-        evictCachesByPattern("multiInstrumentReadings", id + "_*");
-        evictCachesByPattern("multiInstrumentReadings", "*_" + id);
-
         log.info("Status do instrumento {} alterado para {}. Caches de reading invalidados granularmente.",
                 id, active);
 
         return saved;
     }
 
-    @Cacheable(
-            value = "instrumentsByFilters",
-            key = "#damId + '_' + #instrumentTypeId + '_' + #sectionId + '_' + #active + '_' + #clientId",
-            cacheManager = "instrumentCacheManager"
-    )
     public List<InstrumentResponseDTO> findByFilters(Long damId, Long instrumentTypeId, Long sectionId, Boolean active, Long clientId) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -1367,19 +1132,6 @@ public class InstrumentService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(
-                value = {"instrumentById", "instrumentWithDetails", "instrumentResponseDTO"},
-                key = "#id",
-                cacheManager = "instrumentCacheManager"
-        ),
-
-        @CacheEvict(
-                value = {"instrumentsByFilters"},
-                allEntries = true,
-                cacheManager = "instrumentCacheManager"
-        )
-    })
     public InstrumentEntity toggleSectionVisibility(Long id, Boolean active) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -1395,11 +1147,6 @@ public class InstrumentService {
         return saved;
     }
 
-    @Cacheable(
-            value = "instrumentResponseDTO",
-            key = "#instrument.id",
-            cacheManager = "instrumentCacheManager"
-    )
     public InstrumentResponseDTO mapToResponseDTO(InstrumentEntity instrument) {
         InstrumentResponseDTO dto = new InstrumentResponseDTO();
         dto.setId(instrument.getId());

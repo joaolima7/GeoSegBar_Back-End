@@ -29,7 +29,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.redis.core.RedisTemplate;
 
 import com.geosegbar.config.BaseUnitTest;
 import com.geosegbar.entities.ChecklistEntity;
@@ -65,9 +64,6 @@ class ChecklistServiceTest extends BaseUnitTest {
 
     @Mock
     private CacheManager checklistCacheManager;
-
-    @Mock
-    private RedisTemplate<String, Object> redisTemplate;
 
     @Mock
     private Cache mockCache;

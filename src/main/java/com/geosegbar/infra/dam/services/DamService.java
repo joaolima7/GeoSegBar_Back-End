@@ -6,10 +6,6 @@ import java.util.List;
 import java.util.Set;
 
 import org.hibernate.Hibernate;
-import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Caching;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
@@ -71,55 +67,7 @@ public class DamService {
     private final LevelRepository levelRepository;
     private final ReservoirRepository reservoirRepository;
     private final PSBFolderService psbFolderService;
-    private final CacheManager checklistCacheManager;
-    private final RedisTemplate<String, Object> redisTemplate;
     private final UserService userService;
-
-    private void evictChecklistCachesForDam(Long damId, Long clientId) {
-
-        var checklistsByDamCache = checklistCacheManager.getCache("checklistsByDam");
-        if (checklistsByDamCache != null) {
-            checklistsByDamCache.evict(damId);
-        }
-
-        var checklistsWithAnswersByDamCache = checklistCacheManager.getCache("checklistsWithAnswersByDam");
-        if (checklistsWithAnswersByDamCache != null) {
-            checklistsWithAnswersByDamCache.evict(damId);
-        }
-
-        var checklistsWithAnswersByClientCache = checklistCacheManager.getCache("checklistsWithAnswersByClient");
-        if (checklistsWithAnswersByClientCache != null) {
-            checklistsWithAnswersByClientCache.evict(clientId);
-        }
-
-        evictCachesByPattern("checklistForDam", damId + "_*");
-
-        var checklistResponsesByDamCache = checklistCacheManager.getCache("checklistResponsesByDam");
-        if (checklistResponsesByDamCache != null) {
-            checklistResponsesByDamCache.evict(damId);
-        }
-
-        evictCachesByPattern("checklistResponsesByDamPaged", damId + "_*");
-        evictCachesByPattern("checklistResponsesByClient", clientId + "_*");
-        evictCachesByPattern("clientLatestDetailedChecklistResponses", clientId + "_*");
-
-        var damLastChecklistCache = checklistCacheManager.getCache("damLastChecklist");
-        if (damLastChecklistCache != null) {
-            damLastChecklistCache.evict(clientId);
-        }
-    }
-
-    private void evictCachesByPattern(String cacheName, String pattern) {
-        try {
-            String fullPattern = cacheName + "::" + pattern;
-            Set<String> keys = redisTemplate.keys(fullPattern);
-
-            if (keys != null && !keys.isEmpty()) {
-                redisTemplate.delete(keys);
-            }
-        } catch (Exception e) {
-        }
-    }
 
     public DamEntity findByIdWithSections(Long id) {
         DamEntity dam = findById(id);
@@ -135,13 +83,6 @@ public class DamService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(
-                value = {"instrumentsByDam", "instrumentsByClient", "instrumentsByFilters"},
-                allEntries = true,
-                cacheManager = "instrumentCacheManager"
-        )
-    })
     public DamEntity updateStatus(Long damId, DamStatusUpdateDTO statusUpdateDTO) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -356,41 +297,6 @@ public class DamService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(
-                value = {"instrumentsByDam", "instrumentsByClient", "instrumentsByFilters", "allInstruments"},
-                allEntries = true,
-                cacheManager = "instrumentCacheManager"
-        ),
-
-        @CacheEvict(
-                value = {
-                    "damFoldersWithPatterns",
-                    "folderWithPatterns",
-                    "graphPatternsByDam",
-                    "graphPatternsByInstrument",
-                    "graphPatternById",
-                    "graphProperties",
-                    "graphAxes"
-                },
-                allEntries = true,
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-
-        @CacheEvict(
-                value = {
-                    "damTabulateFoldersWithPatterns",
-                    "tabulateFoldersByDam",
-                    "tabulateFolderWithPatterns",
-                    "tabulatePatternsByDam",
-                    "tabulatePatternsByFolder",
-                    "tabulatePatterns"
-                },
-                allEntries = true,
-                cacheManager = "instrumentTabulateCacheManager"
-        )
-
-    })
     public void deleteById(Long id) {
         DamEntity dam = damRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Barragem n\u00e3o encontrada para exclus\u00e3o!"));
@@ -402,33 +308,10 @@ public class DamService {
                     "N\u00e3o \u00e9 poss\u00edvel excluir a barragem devido as depend\u00eancias existentes, recomenda-se inativar a barragem se necess\u00e1rio.");
         }
 
-        Long clientId = dam.getClient().getId();
-
         damRepository.deleteById(id);
-
-        evictChecklistCachesForDam(id, clientId);
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(
-                value = {"instrumentsByDam", "instrumentsByClient", "instrumentsByFilters", "allInstruments"},
-                allEntries = true,
-                cacheManager = "instrumentCacheManager"
-        ),
-
-        @CacheEvict(
-                value = {"damFoldersWithPatterns"},
-                allEntries = true,
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-
-        @CacheEvict(
-                value = {"damTabulateFoldersWithPatterns", "tabulateFoldersByDam"},
-                allEntries = true,
-                cacheManager = "instrumentTabulateCacheManager"
-        )
-    })
     public DamEntity updateBasicInfo(Long damId, UpdateDamRequest request) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -517,11 +400,6 @@ public class DamService {
             userService.removeDamPermissionsForDam(damId, oldClientId);
 
             userService.createDamPermissionsForDam(damId, client.getId());
-
-            evictChecklistCachesForDam(damId, oldClientId);
-            evictChecklistCachesForDam(damId, client.getId());
-        } else {
-            evictChecklistCachesForDam(damId, client.getId());
         }
 
         return findById(updatedDam.getId());
@@ -576,26 +454,6 @@ public class DamService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(
-                value = {"instrumentsByDam", "instrumentsByClient", "instrumentsByFilters", "allInstruments"},
-                allEntries = true,
-                cacheManager = "instrumentCacheManager"
-        ),
-
-        @CacheEvict(
-                value = {"damFoldersWithPatterns"},
-                allEntries = true,
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-
-        @CacheEvict(
-                value = {"damTabulateFoldersWithPatterns", "tabulateFoldersByDam"},
-                allEntries = true,
-                cacheManager = "instrumentTabulateCacheManager"
-        )
-
-    })
     public DamEntity updateCompleteWithRelationships(Long damId, UpdateDamCompleteRequest request) {
 
         if (!AuthenticatedUserUtil.isAdmin()) {
@@ -826,11 +684,6 @@ public class DamService {
             userService.removeDamPermissionsForDam(damId, oldClientId);
 
             userService.createDamPermissionsForDam(damId, client.getId());
-
-            evictChecklistCachesForDam(damId, oldClientId);
-            evictChecklistCachesForDam(damId, client.getId());
-        } else {
-            evictChecklistCachesForDam(damId, client.getId());
         }
 
         return findById(damId);

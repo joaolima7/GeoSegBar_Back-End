@@ -22,7 +22,6 @@ import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
-import org.springframework.data.redis.core.RedisTemplate;
 
 import com.geosegbar.common.enums.TypeQuestionEnum;
 import com.geosegbar.entities.AnswerEntity;
@@ -42,9 +41,6 @@ class AnswerServiceTest {
 
     @Mock
     private CacheManager checklistCacheManager;
-
-    @Mock
-    private RedisTemplate<String, Object> redisTemplate;
 
     @InjectMocks
     private AnswerService answerService;
@@ -278,16 +274,7 @@ class AnswerServiceTest {
         Cache mockCache = mock(Cache.class);
         when(checklistCacheManager.getCache(anyString())).thenReturn(mockCache);
 
-        Set<String> mockKeys = Set.of(
-                "checklistResponsesByDamPaged::key1",
-                "checklistResponsesByDamPaged::key2"
-        );
-        when(redisTemplate.keys(anyString())).thenReturn(mockKeys);
-
         answerService.deleteById(1L);
-
-        verify(redisTemplate, times(7)).keys(anyString());
-        verify(redisTemplate, times(7)).delete(any(Set.class));
     }
 
     @Test

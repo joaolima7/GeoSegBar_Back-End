@@ -6,8 +6,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.springframework.cache.CacheManager;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.TemplateQuestionnaireQuestionEntity;
@@ -31,47 +29,6 @@ public class TemplateQuestionnaireQuestionService {
     private final TemplateQuestionnaireRepository templateQuestionnaireRepository;
     private final QuestionRepository questionRepository;
     private final QuestionnaireResponseRepository questionnaireResponseRepository;
-    private final CacheManager checklistCacheManager;
-    private final RedisTemplate<String, Object> redisTemplate;
-
-    /**
-     * ⭐ NOVO: Invalida TODOS os caches de checklist
-     */
-    private void evictAllChecklistCaches() {
-        var checklistByIdCache = checklistCacheManager.getCache("checklistById");
-        if (checklistByIdCache != null) {
-            checklistByIdCache.clear();
-        }
-
-        var checklistsByDamCache = checklistCacheManager.getCache("checklistsByDam");
-        if (checklistsByDamCache != null) {
-            checklistsByDamCache.clear();
-        }
-
-        var checklistsWithAnswersByDamCache = checklistCacheManager.getCache("checklistsWithAnswersByDam");
-        if (checklistsWithAnswersByDamCache != null) {
-            checklistsWithAnswersByDamCache.clear();
-        }
-
-        var checklistsWithAnswersByClientCache = checklistCacheManager.getCache("checklistsWithAnswersByClient");
-        if (checklistsWithAnswersByClientCache != null) {
-            checklistsWithAnswersByClientCache.clear();
-        }
-
-        evictCachesByPattern("checklistForDam", "*");
-    }
-
-    private void evictCachesByPattern(String cacheName, String pattern) {
-        try {
-            String fullPattern = cacheName + "::" + pattern;
-            Set<String> keys = redisTemplate.keys(fullPattern);
-
-            if (keys != null && !keys.isEmpty()) {
-                redisTemplate.delete(keys);
-            }
-        } catch (Exception e) {
-        }
-    }
 
     @Transactional
     public void deleteById(Long id) {
@@ -100,8 +57,6 @@ public class TemplateQuestionnaireQuestionService {
                 tqQuestionRepository.save(question);
             }
         }
-
-        evictAllChecklistCaches();
     }
 
     @Transactional
@@ -135,8 +90,6 @@ public class TemplateQuestionnaireQuestionService {
         }
 
         TemplateQuestionnaireQuestionEntity saved = tqQuestionRepository.save(tqQuestion);
-
-        evictAllChecklistCaches();
 
         return saved;
     }
@@ -193,8 +146,6 @@ public class TemplateQuestionnaireQuestionService {
 
             existingQuestion.setOrderIndex(tqQuestion.getOrderIndex());
             TemplateQuestionnaireQuestionEntity saved = tqQuestionRepository.save(existingQuestion);
-
-            evictAllChecklistCaches();
 
             return saved;
         } else {
@@ -282,8 +233,6 @@ public class TemplateQuestionnaireQuestionService {
         }
 
         List<TemplateQuestionnaireQuestionEntity> saved = tqQuestionRepository.saveAll(existingQuestions);
-
-        evictAllChecklistCaches();
 
         return saved;
     }

@@ -18,16 +18,10 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.redis.core.Cursor;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -76,8 +70,6 @@ public class ReadingService {
     private final OutputCalculationService outputCalculationService;
     private final ClientRepository clientRepository;
     private final UserRepository userRepository;
-    private final CacheManager readingCacheManager;
-    private final RedisTemplate<String, Object> redisTemplate;
 
     // ⭐ OTIMIZAÇÃO: Prioridade de status crítico pré-computada (O(1) lookup)
     private static final Map<LimitStatusEnum, Integer> STATUS_PRIORITY;
@@ -96,92 +88,8 @@ public class ReadingService {
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "date", "hour");
 
     // ==========================================
-    // ⭐ CACHE UTILITIES - MÁXIMA PERFORMANCE
-    // ==========================================
-    /**
-     * ⭐ OTIMIZADO: SCAN em batch com pipeline implícito
-     */
-    private void evictCachesByPattern(String cacheName, String pattern) {
-        try {
-            String fullPattern = cacheName + "::" + pattern;
-            ScanOptions options = ScanOptions.scanOptions()
-                    .match(fullPattern)
-                    .count(500) // ⭐ Aumentado para menos roundtrips
-                    .build();
-
-            Set<String> keysToDelete = new HashSet<>(64);
-            try (Cursor<String> cursor = redisTemplate.scan(options)) {
-                cursor.forEachRemaining(keysToDelete::add);
-            }
-
-            if (!keysToDelete.isEmpty()) {
-                redisTemplate.delete(keysToDelete);
-                log.debug("Cache evicted: {} keys from {}", keysToDelete.size(), cacheName);
-            }
-        } catch (Exception e) {
-            log.warn("Cache eviction failed: {}::{}", cacheName, pattern, e);
-        }
-    }
-
-    /**
-     * ⭐ OTIMIZADO: Eviction em batch para múltiplos instrumentos
-     */
-    private void evictReadingCachesForInstruments(Set<Long> instrumentIds) {
-        if (instrumentIds.isEmpty()) {
-            return;
-        }
-
-        Cache instrumentCache = readingCacheManager.getCache("readingsByInstrument");
-
-        for (Long instrumentId : instrumentIds) {
-            if (instrumentCache != null) {
-                instrumentCache.evict(instrumentId);
-            }
-            evictCachesByPattern("instrumentLimitStatus", instrumentId + "_*");
-            evictCachesByPattern("groupedReadings", instrumentId + "_*");
-            evictCachesByPattern("readingsByFilters", instrumentId + "_*");
-        }
-    }
-
-    private void evictReadingCachesForOutputs(Set<Long> outputIds) {
-        if (outputIds.isEmpty()) {
-            return;
-        }
-
-        Cache outputCache = readingCacheManager.getCache("readingsByOutput");
-        if (outputCache != null) {
-            outputIds.forEach(outputCache::evict);
-        }
-    }
-
-    private void evictClientReadingCaches(Long clientId) {
-        evictCachesByPattern("clientInstrumentLimitStatuses", clientId + "_*");
-        evictCachesByPattern("clientInstrumentLatestGroupedReadings", clientId + "_*");
-    }
-
-    private void evictReadingExistsCache(Long instrumentId, LocalDate date) {
-        Cache cache = readingCacheManager.getCache("readingExists");
-        if (cache != null) {
-            cache.evict(instrumentId + "_" + date);
-        }
-    }
-
-    private void evictSingleReadingCaches(Long readingId) {
-        Cache readingCache = readingCacheManager.getCache("readingById");
-        Cache responseDTOCache = readingCacheManager.getCache("readingResponseDTO");
-
-        if (readingCache != null) {
-            readingCache.evict(readingId);
-        }
-        if (responseDTOCache != null) {
-            responseDTOCache.evict(readingId);
-        }
-    }
-
-    // ==========================================
     // ⭐ CONSULTAS - MÁXIMA PERFORMANCE
     // ==========================================
-    @Cacheable(value = "readingsByInstrument", key = "#instrumentId", cacheManager = "readingCacheManager")
     @Transactional(readOnly = true)
     public List<ReadingResponseDTO> findByInstrumentId(Long instrumentId) {
         validateViewPermission();
@@ -192,13 +100,11 @@ public class ReadingService {
                 .collect(Collectors.toList());
     }
 
-    @Cacheable(value = "readingExists", key = "#instrumentId + '_' + #date", cacheManager = "readingCacheManager")
     @Transactional(readOnly = true)
     public boolean existsByInstrumentAndDate(Long instrumentId, LocalDate date) {
         return readingRepository.existsByInstrumentIdAndDate(instrumentId, date);
     }
 
-    @Cacheable(value = "instrumentLimitStatus", key = "#instrumentId + '_' + #limit", cacheManager = "readingCacheManager")
     @Transactional(readOnly = true)
     public InstrumentLimitStatusDTO getInstrumentLimitStatus(Long instrumentId, int limit) {
         InstrumentEntity instrument = instrumentRepository.findById(instrumentId)
@@ -233,7 +139,6 @@ public class ReadingService {
     /**
      * ⭐ SUPER OTIMIZADO: Query única com Window Function
      */
-    @Cacheable(value = "clientInstrumentLimitStatuses", key = "#clientId + '_' + #limit", cacheManager = "readingCacheManager")
     @Transactional(readOnly = true)
     public List<InstrumentLimitStatusDTO> getAllInstrumentLimitStatusesByClientId(Long clientId, int limit) {
         clientRepository.findById(clientId)
@@ -297,7 +202,6 @@ public class ReadingService {
         }
     }
 
-    @Cacheable(value = "readingsByOutput", key = "#outputId", cacheManager = "readingCacheManager")
     @Transactional(readOnly = true)
     public List<ReadingResponseDTO> findByOutputId(Long outputId) {
         validateViewPermission();
@@ -308,7 +212,6 @@ public class ReadingService {
                 .collect(Collectors.toList());
     }
 
-    @Cacheable(value = "readingById", key = "#id", cacheManager = "readingCacheManager")
     @Transactional(readOnly = true)
     public ReadingEntity findById(Long id) {
         validateViewPermission();
@@ -317,10 +220,6 @@ public class ReadingService {
                 .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
     }
 
-    @Cacheable(
-            value = "groupedReadings",
-            key = "#instrumentId + '_' + #active + '_' + #pageable.pageNumber + '_' + #pageable.pageSize",
-            cacheManager = "readingCacheManager")
     @Transactional(readOnly = true)
     public PagedReadingResponseDTO<ReadingResponseDTO> findGroupedReadingsFlatByInstrument(
             Long instrumentId, Boolean active, Pageable pageable) {
@@ -356,10 +255,6 @@ public class ReadingService {
     /**
      * ⭐ SUPER OTIMIZADO: Mínimas queries possíveis
      */
-    @Cacheable(
-            value = "clientInstrumentLatestGroupedReadings",
-            key = "#clientId + '_' + #limit",
-            cacheManager = "readingCacheManager")
     @Transactional(readOnly = true)
     public List<InstrumentGroupedReadingsDTO> findLatestGroupedReadingsByClientId(Long clientId, int limit) {
         List<Object[]> latestDateHours = readingRepository.findLatestDistinctDateHoursByClientId(clientId, limit);
@@ -502,7 +397,6 @@ public class ReadingService {
 
         // ⭐ OTIMIZADO: Criar todas as readings antes de salvar
         List<ReadingEntity> readingsToSave = new ArrayList<>(activeOutputs.size());
-        Set<Long> affectedOutputIds = new HashSet<>(activeOutputs.size());
 
         for (OutputEntity output : activeOutputs) {
             Double calculatedValue = outputCalculationService.calculateOutput(output, request, formattedInputValues);
@@ -531,15 +425,10 @@ public class ReadingService {
             reading.setInputValues(inputValuesSet);
 
             readingsToSave.add(reading);
-            affectedOutputIds.add(output.getId());
         }
 
         // ⭐ OTIMIZADO: Salvar todas de uma vez
         List<ReadingEntity> createdReadings = readingRepository.saveAll(readingsToSave);
-
-        // ⭐ OTIMIZADO: Cache eviction em batch
-        evictCachesAfterCreate(instrumentId, affectedOutputIds,
-                instrument.getDam().getClient().getId(), request.getDate());
 
         return createdReadings.stream()
                 .map(this::mapToResponseDTO)
@@ -559,7 +448,6 @@ public class ReadingService {
 
         InstrumentEntity instrument = reading.getInstrument();
         Long instrumentId = instrument.getId();
-        Long outputId = reading.getOutput().getId();
         LocalDate originalDate = reading.getDate();
         LocalTime originalHour = reading.getHour();
 
@@ -602,10 +490,6 @@ public class ReadingService {
             readingRepository.saveAll(groupReadings);
         }
 
-        // ⭐ Cache eviction
-        evictCachesAfterUpdate(id, instrumentId, outputId, instrument.getDam().getClient().getId(),
-                originalDate, newDate, isDateTimeChanged);
-
         return mapToResponseDTO(readingRepository.findByIdWithAllRelations(id)
                 .orElseThrow(() -> new NotFoundException("Leitura não encontrada após atualização")));
     }
@@ -616,10 +500,6 @@ public class ReadingService {
 
         List<Long> successfulIds = new ArrayList<>(readingIds.size());
         List<BulkToggleActiveResponseDTO.FailedOperation> failedOperations = new ArrayList<>();
-
-        Set<Long> affectedInstrumentIds = new HashSet<>();
-        Set<Long> affectedOutputIds = new HashSet<>();
-        Set<Long> affectedClientIds = new HashSet<>();
 
         // ⭐ OTIMIZADO: Buscar todas de uma vez
         List<ReadingEntity> readings = readingRepository.findAllByIdWithMinimalData(readingIds);
@@ -636,9 +516,6 @@ public class ReadingService {
         // ⭐ OTIMIZADO: Processar em batch
         for (ReadingEntity reading : readings) {
             reading.setActive(active);
-            affectedInstrumentIds.add(reading.getInstrument().getId());
-            affectedOutputIds.add(reading.getOutput().getId());
-            affectedClientIds.add(reading.getInstrument().getDam().getClient().getId());
             successfulIds.add(reading.getId());
         }
 
@@ -646,12 +523,6 @@ public class ReadingService {
             readingRepository.saveAll(readings);
             log.info("Bulk toggle: {} readings atualizadas", successfulIds.size());
         }
-
-        // ⭐ Cache eviction em batch
-        successfulIds.forEach(this::evictSingleReadingCaches);
-        evictReadingCachesForInstruments(affectedInstrumentIds);
-        evictReadingCachesForOutputs(affectedOutputIds);
-        affectedClientIds.forEach(this::evictClientReadingCaches);
 
         return buildBulkToggleResponse(readingIds.size(), successfulIds, failedOperations);
     }
@@ -663,21 +534,9 @@ public class ReadingService {
         ReadingEntity reading = readingRepository.findByIdWithAllRelations(id)
                 .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
 
-        Long instrumentId = reading.getInstrument().getId();
-        Long outputId = reading.getOutput().getId();
-        Long clientId = reading.getInstrument().getDam().getClient().getId();
-        LocalDate date = reading.getDate();
-
         // ⭐ Com @OneToMany orphanRemoval=true, cascade deleta inputValues automaticamente
         readingRepository.delete(reading);
         log.info("Leitura excluída: ID {}", id);
-
-        // Cache eviction
-        evictSingleReadingCaches(id);
-        evictReadingCachesForInstruments(Set.of(instrumentId));
-        evictReadingCachesForOutputs(Set.of(outputId));
-        evictReadingExistsCache(instrumentId, date);
-        evictClientReadingCaches(clientId);
     }
 
     // ==========================================
@@ -744,11 +603,6 @@ public class ReadingService {
         return createPagedResponse(dtos, dateHourPage);
     }
 
-    @Cacheable(
-            value = "readingsByFilters",
-            key = "#instrumentId + '_' + #outputId + '_' + #startDate + '_' + #endDate + '_' + "
-            + "#limitStatus + '_' + #active + '_' + #pageable.pageNumber + '_' + #pageable.pageSize",
-            cacheManager = "readingCacheManager")
     @Transactional(readOnly = true)
     public PagedReadingResponseDTO<ReadingResponseDTO> findByFilters(
             Long instrumentId, Long outputId, LocalDate startDate, LocalDate endDate,
@@ -764,12 +618,6 @@ public class ReadingService {
         return createPagedResponse(readings.map(this::mapToResponseDTO));
     }
 
-    @Cacheable(
-            value = "multiInstrumentReadings",
-            key = "T(org.springframework.util.StringUtils).collectionToDelimitedString(#instrumentIds, '_') + '_' + "
-            + "T(org.springframework.util.StringUtils).collectionToDelimitedString(#outputIds, '_') + '_' + "
-            + "#startDate + '_' + #endDate + '_' + #pageSize",
-            cacheManager = "readingCacheManager")
     @Transactional(readOnly = true)
     public MultiInstrumentReadingsResponseDTO findLatestReadingsForMultipleInstruments(
             List<Long> instrumentIds, List<Long> outputIds,
@@ -1136,28 +984,6 @@ public class ReadingService {
         response.setSuccessCount(successfulIds.size());
         response.setFailureCount(failedOperations.size());
         return response;
-    }
-
-    private void evictCachesAfterCreate(Long instrumentId, Set<Long> outputIds, Long clientId, LocalDate date) {
-        evictReadingCachesForInstruments(Set.of(instrumentId));
-        evictReadingCachesForOutputs(outputIds);
-        evictReadingExistsCache(instrumentId, date);
-        evictClientReadingCaches(clientId);
-    }
-
-    private void evictCachesAfterUpdate(Long readingId, Long instrumentId, Long outputId,
-            Long clientId, LocalDate originalDate, LocalDate newDate, boolean isDateTimeChanged) {
-
-        evictSingleReadingCaches(readingId);
-        evictReadingCachesForInstruments(Set.of(instrumentId));
-        evictReadingCachesForOutputs(Set.of(outputId));
-        evictReadingExistsCache(instrumentId, originalDate);
-
-        if (isDateTimeChanged && !originalDate.equals(newDate)) {
-            evictReadingExistsCache(instrumentId, newDate);
-        }
-
-        evictClientReadingCaches(clientId);
     }
 
     private Double formatToSpecificPrecision(Double value, Integer precision) {

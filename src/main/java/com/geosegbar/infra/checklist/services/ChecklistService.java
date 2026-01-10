@@ -8,11 +8,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.AnswerEntity;
@@ -61,64 +58,11 @@ public class ChecklistService {
     private final QuestionRepository questionRepository;
     private final QuestionService questionService;
     private final OptionRepository optionRepository;
-    private final CacheManager checklistCacheManager;
-    private final RedisTemplate<String, Object> redisTemplate;
-
-    /**
-     * ⭐ NOVO: Invalida caches usando pattern matching do Redis
-     */
-    private void evictCachesByPattern(String cacheName, String pattern) {
-        try {
-            String fullPattern = cacheName + "::" + pattern;
-            Set<String> keys = redisTemplate.keys(fullPattern);
-
-            if (keys != null && !keys.isEmpty()) {
-                redisTemplate.delete(keys);
-            }
-        } catch (Exception e) {
-        }
-    }
-
-    /**
-     * ⭐ NOVO: Invalida caches granulares de checklist para uma barragem e
-     * cliente
-     */
-    private void evictChecklistCachesForDamAndClient(Long damId, Long clientId) {
-
-        var checklistsByDamCache = checklistCacheManager.getCache("checklistsByDam");
-        if (checklistsByDamCache != null) {
-            checklistsByDamCache.evict(damId);
-        }
-
-        var checklistsWithAnswersCache = checklistCacheManager.getCache("checklistsWithAnswersByDam");
-        if (checklistsWithAnswersCache != null) {
-            checklistsWithAnswersCache.evict(damId);
-        }
-
-        var checklistsWithAnswersClientCache = checklistCacheManager.getCache("checklistsWithAnswersByClient");
-        if (checklistsWithAnswersClientCache != null) {
-            checklistsWithAnswersClientCache.evict(clientId);
-        }
-
-        evictCachesByPattern("checklistForDam", damId + "_*");
-    }
-
-    /**
-     * ⭐ NOVO: Invalida cache específico de um checklist
-     */
-    private void evictChecklistByIdCache(Long checklistId) {
-
-        var cache = checklistCacheManager.getCache("checklistById");
-        if (cache != null) {
-            cache.evict(checklistId);
-        }
-    }
 
     public Page<ChecklistEntity> findAllPaged(Pageable pageable) {
         return checklistRepository.findAllWithDams(pageable);
     }
 
-    @Cacheable(value = "checklistById", key = "#id", cacheManager = "checklistCacheManager")
     public ChecklistCompleteDTO findByIdDTO(Long id) {
         ChecklistEntity entity = checklistRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Checklist não encontrado para id: " + id));
@@ -180,13 +124,10 @@ public class ChecklistService {
 
         ChecklistEntity saved = checklistRepository.save(checklist);
 
-        evictChecklistCachesForDamAndClient(damId, clientId);
-
         return saved;
     }
 
     @Transactional()
-    @Cacheable(value = "checklistsWithAnswersByDam", key = "#damId", cacheManager = "checklistCacheManager")
     public List<ChecklistWithLastAnswersDTO> findChecklistsWithLastAnswersForDam(Long damId) {
 
         damService.findById(damId);
@@ -257,7 +198,6 @@ public class ChecklistService {
     }
 
     @Transactional()
-    @Cacheable(value = "checklistsWithAnswersByClient", key = "#clientId", cacheManager = "checklistCacheManager")
     public List<ChecklistWithLastAnswersAndDamDTO> findAllChecklistsWithLastAnswersByClientId(Long clientId) {
 
         List<DamEntity> clientDams = damService.findDamsByClientId(clientId);
@@ -398,9 +338,6 @@ public class ChecklistService {
 
         ChecklistEntity saved = checklistRepository.save(checklist);
 
-        evictChecklistByIdCache(checklist.getId());
-        evictChecklistCachesForDamAndClient(newDamId, oldClientId);
-
         return saved;
     }
 
@@ -418,9 +355,6 @@ public class ChecklistService {
 
         checklistRepository.deleteById(id);
 
-        evictChecklistByIdCache(id);
-
-        evictChecklistCachesForDamAndClient(damId, clientId);
     }
 
     /**
@@ -512,7 +446,6 @@ public class ChecklistService {
 
         ChecklistEntity saved = checklistRepository.save(checklist);
 
-        evictChecklistCachesForDamAndClient(dto.getDamId(), clientId);
         log.info("Checklist completo criado com sucesso: {} com {} template(s)",
                 saved.getName(), templateCount);
 
@@ -598,8 +531,6 @@ public class ChecklistService {
 
         ChecklistEntity saved = checklistRepository.save(existingChecklist);
 
-        evictChecklistByIdCache(checklistId);
-        evictChecklistCachesForDamAndClient(damId, clientId);
         log.info("Checklist {} atualizado com sucesso com {} template(s)",
                 saved.getName(), templateCount);
 
@@ -760,7 +691,6 @@ public class ChecklistService {
                 templates.size(), damName, damId);
     }
 
-    @Cacheable(value = "checklistsByDam", key = "#damId", cacheManager = "checklistCacheManager")
     public List<ChecklistCompleteDTO> findByDamIdDTO(Long damId) {
         ChecklistEntity checklist = checklistRepository.findByDamId(damId);
         if (checklist == null) {
@@ -769,7 +699,6 @@ public class ChecklistService {
         return List.of(convertToCompleteDTO(checklist));
     }
 
-    @Cacheable(value = "checklistForDam", key = "#damId + '_' + #checklistId", cacheManager = "checklistCacheManager")
     public ChecklistCompleteDTO findChecklistForDamDTO(Long damId, Long checklistId) {
         ChecklistEntity checklist = findById(checklistId);
 
@@ -957,7 +886,6 @@ public class ChecklistService {
                 newChecklist.getId(), templateCount, targetDamId);
 
         Long clientId = targetDam.getClient().getId();
-        evictChecklistCachesForDamAndClient(targetDamId, clientId);
         log.info("Caches de checklist invalidados após replicação");
 
         return newChecklist;

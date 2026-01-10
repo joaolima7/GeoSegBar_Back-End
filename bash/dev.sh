@@ -73,14 +73,6 @@ scrape_configs:
         target_label: instance
         replacement: 'geosegbar-api-dev'
 
-  - job_name: 'redis'
-    static_configs:
-      - targets: ['redis-exporter:9121']
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: 'redis-dev'
-
   - job_name: 'postgres'
     static_configs:
       - targets: ['postgres-exporter:9187']
@@ -197,7 +189,7 @@ echo "🌐 API:           http://localhost:${SERVER_PORT}"
 echo "📊 Prometheus:    http://localhost:9091"
 echo "📈 Grafana:       http://localhost:3001 (admin / ${GRAFANA_PASSWORD})"
 echo "🗄️  PostgreSQL:    localhost:${DB_PORT}"
-echo "🔴 Redis:         localhost:${REDIS_PORT}"
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "📋 COMANDOS ÚTEIS:"

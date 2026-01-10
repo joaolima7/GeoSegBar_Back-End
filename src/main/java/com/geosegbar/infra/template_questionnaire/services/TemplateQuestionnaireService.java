@@ -6,8 +6,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.springframework.cache.CacheManager;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.AnswerEntity;
@@ -52,49 +50,6 @@ public class TemplateQuestionnaireService {
     private final OptionRepository optionRepository;
     private final QuestionnaireResponseRepository questionnaireResponseRepository;
     private final AnswerRepository answerRepository;
-    private final CacheManager checklistCacheManager;
-    private final RedisTemplate<String, Object> redisTemplate;
-
-    /**
-     * ⭐ NOVO: Invalida TODOS os caches de checklist
-     */
-    private void evictAllChecklistCaches() {
-        log.info("Invalidando TODOS os caches de checklist devido a mudança em TemplateQuestionnaire");
-
-        var checklistByIdCache = checklistCacheManager.getCache("checklistById");
-        if (checklistByIdCache != null) {
-            checklistByIdCache.clear();
-        }
-
-        var checklistsByDamCache = checklistCacheManager.getCache("checklistsByDam");
-        if (checklistsByDamCache != null) {
-            checklistsByDamCache.clear();
-        }
-
-        var checklistsWithAnswersByDamCache = checklistCacheManager.getCache("checklistsWithAnswersByDam");
-        if (checklistsWithAnswersByDamCache != null) {
-            checklistsWithAnswersByDamCache.clear();
-        }
-
-        var checklistsWithAnswersByClientCache = checklistCacheManager.getCache("checklistsWithAnswersByClient");
-        if (checklistsWithAnswersByClientCache != null) {
-            checklistsWithAnswersByClientCache.clear();
-        }
-
-        evictCachesByPattern("checklistForDam", "*");
-    }
-
-    private void evictCachesByPattern(String cacheName, String pattern) {
-        try {
-            String fullPattern = cacheName + "::" + pattern;
-            Set<String> keys = redisTemplate.keys(fullPattern);
-
-            if (keys != null && !keys.isEmpty()) {
-                redisTemplate.delete(keys);
-            }
-        } catch (Exception e) {
-        }
-    }
 
     @Transactional
     public void deleteById(Long id) {
@@ -161,9 +116,6 @@ public class TemplateQuestionnaireService {
 
         log.info("Exclusão do template {} concluída. Questões deletadas: {}, Questões mantidas: {}",
                 id, deletedQuestionsCount, keptQuestionsCount);
-
-        evictAllChecklistCaches();
-        log.info("Caches de checklist invalidados após exclusão do template {}.", id);
     }
 
     /**
@@ -197,9 +149,7 @@ public class TemplateQuestionnaireService {
         }
 
         TemplateQuestionnaireEntity saved = templateQuestionnaireRepository.save(template);
-
-        evictAllChecklistCaches();
-        log.info("Template {} criado para barragem {}. Caches de checklist invalidados.",
+        log.info("Template {} criado para barragem {}.",
                 saved.getId(), saved.getDam().getId());
 
         return saved;
@@ -223,9 +173,7 @@ public class TemplateQuestionnaireService {
         }
 
         TemplateQuestionnaireEntity saved = templateQuestionnaireRepository.save(template);
-
-        evictAllChecklistCaches();
-        log.info("Template {} atualizado. Caches de checklist invalidados.", template.getId());
+        log.info("Template {} atualizado.", template.getId());
 
         return saved;
     }
@@ -275,9 +223,7 @@ public class TemplateQuestionnaireService {
         }
 
         TemplateQuestionnaireEntity saved = templateQuestionnaireRepository.save(template);
-
-        evictAllChecklistCaches();
-        log.info("Template {} criado com questões. Caches de checklist invalidados.", saved.getId());
+        log.info("Template {} criado com questões.", saved.getId());
 
         return saved;
     }
@@ -335,9 +281,7 @@ public class TemplateQuestionnaireService {
         }
 
         TemplateQuestionnaireEntity saved = templateQuestionnaireRepository.save(existingTemplate);
-
-        evictAllChecklistCaches();
-        log.info("Template {} atualizado com questões. Caches de checklist invalidados.", saved.getId());
+        log.info("Template {} atualizado com questões.", saved.getId());
 
         return saved;
     }
@@ -501,9 +445,6 @@ public class TemplateQuestionnaireService {
 
         log.info("Replicação concluída: Template {} criado reutilizando {} questão(ões) para barragem {} (SEM associação a checklist)",
                 newTemplate.getId(), questionCount, targetDamId);
-
-        evictAllChecklistCaches();
-        log.info("Caches de checklist invalidados após replicação");
 
         return newTemplate;
     }

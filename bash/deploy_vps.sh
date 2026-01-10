@@ -79,14 +79,6 @@ scrape_configs:
         target_label: instance
         replacement: 'geosegbar-api-prod'
 
-  - job_name: 'redis'
-    static_configs:
-      - targets: ['redis-exporter-prod:9121']
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: 'redis-prod'
-
   - job_name: 'postgres'
     static_configs:
       - targets: ['postgres-exporter-prod:9187']
@@ -140,15 +132,6 @@ groups:
         annotations:
           summary: "PostgreSQL está DOWN"
           description: "Banco de dados PostgreSQL não está respondendo"
-
-      - alert: RedisDown
-        expr: up{job="redis"} == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Redis está DOWN"
-          description: "Redis Cache não está respondendo"
 EOF
     echo "✅ alerts.yml criado para produção"
 fi
@@ -195,89 +178,6 @@ if [ -d ./grafana/dashboards ]; then
     mkdir -p ./grafana-prod/dashboards
     cp -r ./grafana/dashboards/*.json ./grafana-prod/dashboards/ 2>/dev/null || true
     echo "✅ Dashboards JSON copiados"
-fi
-
-# ============================================
-# REDIS
-# ============================================
-if docker ps -q -f name=redis-prod | grep -q .; then
-    echo "✅ Redis já está rodando"
-    
-    echo "🔍 Verificando role do Redis..."
-    REDIS_ROLE=$(docker exec redis-prod redis-cli INFO replication | grep "role:" | cut -d: -f2 | tr -d '\r')
-    
-    if [ "$REDIS_ROLE" != "master" ]; then
-        echo "⚠️  Redis está em modo: $REDIS_ROLE (esperado: master)"
-        echo "🔧 Forçando Redis para modo master..."
-        docker exec redis-prod redis-cli REPLICAOF NO ONE
-        echo "✅ Redis convertido para master"
-    else
-        echo "✅ Redis confirmado como master"
-    fi
-    
-elif docker ps -a -q -f name=redis-prod | grep -q .; then
-    echo "🔄 Container do Redis existe mas está parado. Reiniciando..."
-    docker start redis-prod
-    echo "⏳ Aguardando Redis inicializar..."
-    sleep 5
-    
-    echo "🔍 Verificando role do Redis..."
-    REDIS_ROLE=$(docker exec redis-prod redis-cli INFO replication | grep "role:" | cut -d: -f2 | tr -d '\r')
-    
-    if [ "$REDIS_ROLE" != "master" ]; then
-        echo "⚠️  Redis está em modo: $REDIS_ROLE (esperado: master)"
-        echo "🔧 Forçando Redis para modo master..."
-        docker exec redis-prod redis-cli REPLICAOF NO ONE
-        echo "✅ Redis convertido para master"
-    fi
-    
-    echo "✅ Redis reiniciado como master"
-else
-    echo "🔄 Container do Redis não encontrado. Criando..."
-    
-    if ! docker volume ls -q -f name=redis-prod-data | grep -q .; then
-        echo "📦 Criando volume para Redis..."
-        docker volume create redis-prod-data
-    fi
-    
-    echo "🚀 Iniciando Redis..."
-    docker run -d \
-      --name redis-prod \
-      --restart unless-stopped \
-      --network geosegbar-network \
-      -p ${REDIS_PORT}:6379 \
-      -v redis-prod-data:/data \
-      redis:7-alpine redis-server \
-      --save 60 1 \
-      --loglevel warning \
-      --maxmemory ${REDIS_MAXMEMORY:-512mb} \
-      --maxmemory-policy volatile-lru \
-      --appendonly yes \
-      --appendfsync everysec
-      
-    echo "⏳ Aguardando Redis inicializar..."
-    sleep 5
-    
-    echo "🔧 Garantindo que Redis está em modo master..."
-    docker exec redis-prod redis-cli REPLICAOF NO ONE
-    echo "✅ Redis criado e configurado como master"
-fi
-
-# ============================================
-# REDIS EXPORTER
-# ============================================
-if docker ps -q -f name=redis-exporter-prod | grep -q .; then
-    echo "✅ Redis Exporter já está rodando"
-else
-    echo "🔄 Iniciando Redis Exporter..."
-    docker run -d \
-      --name redis-exporter-prod \
-      --restart unless-stopped \
-      --network geosegbar-network \
-      -p 9121:9121 \
-      oliver006/redis_exporter:v1.55.0-alpine \
-      --redis.addr=redis-prod:6379
-    echo "✅ Redis Exporter iniciado"
 fi
 
 # ============================================
@@ -359,8 +259,6 @@ docker run -d \
   -e DB_NAME="${DB_NAME}" \
   -e DB_USERNAME="${DB_USERNAME}" \
   -e DB_PASSWORD="${DB_PASSWORD}" \
-  -e REDIS_HOST="${REDIS_HOST}" \
-  -e REDIS_PORT="${REDIS_PORT}" \
   -e JWT_SECRET="${JWT_SECRET}" \
   -e MAIL_HOST="${MAIL_HOST}" \
   -e MAIL_PORT="${MAIL_PORT}" \
@@ -457,11 +355,11 @@ if curl -f http://localhost:${SERVER_PORT}/actuator/health > /dev/null 2>&1; the
     echo "📊 Prometheus:    http://localhost:9091"
     echo "📈 Grafana:       http://localhost:3001 (admin / ${GRAFANA_PASSWORD})"
     echo "🗄️  PostgreSQL:    localhost:${DB_PORT}"
-    echo "🔴 Redis:         localhost:${REDIS_PORT}"
+
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "📊 Status dos containers:"
-    docker ps --filter "name=geosegbar" --filter "name=postgres-prod" --filter "name=redis-prod" --filter "name=prometheus-prod" --filter "name=grafana-prod"
+    docker ps --filter "name=geosegbar" --filter "name=postgres-prod" --filter "name=prometheus-prod" --filter "name=grafana-prod"
     
     echo ""
     echo "🧹 Limpando imagens não utilizadas..."

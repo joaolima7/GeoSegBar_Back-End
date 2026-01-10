@@ -20,35 +20,15 @@ services:
       timeout: 5s
       retries: 5
 
-  redis-dev:
-    image: redis:7-alpine
-    container_name: geosegbar-redis-dev
-    restart: unless-stopped
-    command: redis-server --save 60 1 --loglevel warning --maxmemory ${REDIS_MAXMEMORY} --maxmemory-policy volatile-lru --appendonly yes --appendfsync everysec
-    ports:
-      - "${REDIS_PORT}:6379"
-    volumes:
-      - redis-dev-data:/data
-    networks:
-      - geosegbar-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-
   geosegbar-api:
     build: .
     container_name: geosegbar-api-dev
     depends_on:
       postgres-dev:
         condition: service_healthy
-      redis-dev:
-        condition: service_healthy
     environment:
       - SPRING_PROFILES_ACTIVE=dev
       - DB_HOST=postgres-dev
-      - REDIS_HOST=redis-dev
     env_file:
       - .env
     ports:
@@ -118,20 +98,6 @@ services:
     depends_on:
       - prometheus
 
-  redis-exporter:
-    image: oliver006/redis_exporter:v1.55.0-alpine
-    container_name: redis-exporter-dev
-    restart: unless-stopped
-    command:
-      - "--redis.addr=redis-dev:6379"
-    ports:
-      - "9121:9121"
-    networks:
-      - geosegbar-network
-    depends_on:
-      - redis-dev
-    platform: linux/amd64
-
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.15.0
     container_name: postgres-exporter-dev
@@ -151,6 +117,5 @@ networks:
 
 volumes:
   postgres-dev-data:
-  redis-dev-data:
   prometheus-data:
   grafana-data:

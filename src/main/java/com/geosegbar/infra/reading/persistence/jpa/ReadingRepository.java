@@ -186,7 +186,7 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             ORDER BY r.date DESC, r.hour DESC
             """,
             countQuery = """
-                SELECT COUNT(DISTINCT CONCAT(r.date, r.hour))
+                SELECT COUNT(DISTINCT CONCAT(CAST(r.date AS String), ' ', CAST(r.hour AS String)))
                 FROM ReadingEntity r
                 WHERE r.instrument.id = :instrumentId
                   AND (:active IS NULL OR r.active = :active)
@@ -203,7 +203,7 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             ORDER BY r.date DESC, r.hour DESC
             """,
             countQuery = """
-                SELECT COUNT(DISTINCT CONCAT(r.date, '_', r.hour))
+                SELECT COUNT(DISTINCT CONCAT(CAST(r.date AS String), '_', CAST(r.hour AS String)))
                 FROM ReadingEntity r
                 WHERE r.instrument.id IN :instrumentIds AND r.active = true
                 """)

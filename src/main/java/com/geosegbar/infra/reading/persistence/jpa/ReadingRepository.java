@@ -72,7 +72,6 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             LEFT JOIN FETCH i.instrumentType
             LEFT JOIN FETCH r.output o
             LEFT JOIN FETCH r.user u
-            LEFT JOIN FETCH r.inputValues
             WHERE r.instrument.id = :instrumentId AND r.active = true
             ORDER BY r.date DESC, r.hour DESC
             """,
@@ -107,7 +106,6 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             LEFT JOIN FETCH i.instrumentType
             LEFT JOIN FETCH r.output o
             LEFT JOIN FETCH r.user u
-            LEFT JOIN FETCH r.inputValues
             WHERE r.instrument.id IN :instrumentIds
               AND (CAST(:startDate AS date) IS NULL OR r.date >= :startDate)
               AND (CAST(:endDate AS date) IS NULL OR r.date <= :endDate)
@@ -150,7 +148,6 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             LEFT JOIN FETCH i.instrumentType
             LEFT JOIN FETCH r.output o
             LEFT JOIN FETCH r.user u
-            LEFT JOIN FETCH r.inputValues
             WHERE r.instrument.id = :instrumentId
               AND (:outputId IS NULL OR r.output.id = :outputId)
               AND (CAST(:startDate AS date) IS NULL OR r.date >= :startDate)

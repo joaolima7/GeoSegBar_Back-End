@@ -1,5 +1,8 @@
 package com.geosegbar.common.email;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -24,8 +27,39 @@ public class EmailService {
     @Value("${spring.mail.username}")
     private String fromEmail;
 
+    @Value("${application.admin-email:joaocaetanodev@gmail.com}")
+    private String adminEmail;
+
     @Value("${application.frontend-url:https://geometrisa-prod.com.br}")
     private String frontendUrl;
+
+    @Async
+    public void sendInternalErrorException(String errorMessage, String stackTrace, String userContext, String requestEndpoint, String requestMethod) {
+        try {
+            Context context = new Context();
+            context.setVariable("errorMessage", errorMessage);
+            context.setVariable("stackTrace", stackTrace);
+            context.setVariable("userContext", userContext);
+            context.setVariable("requestEndpoint", requestEndpoint);
+            context.setVariable("requestMethod", requestMethod);
+            context.setVariable("timestamp", LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")));
+
+            String htmlContent = templateEngine.process("emails/error-report", context);
+
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(adminEmail);
+            helper.setSubject("🚨 [GeoSegBar] Erro Interno - " + errorMessage);
+            helper.setText(htmlContent, true);
+
+            mailSender.send(message);
+            log.info("Relatório de erro enviado para o administrador: {}", adminEmail);
+        } catch (MessagingException e) {
+            log.error("FALHA CRÍTICA: Não foi possível enviar o email de relatório de erro: {}", e.getMessage());
+        }
+    }
 
     @Async
     public void sendVerificationCode(String toEmail, String code) {

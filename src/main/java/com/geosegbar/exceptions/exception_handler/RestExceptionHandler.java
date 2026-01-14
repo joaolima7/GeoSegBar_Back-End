@@ -1,19 +1,26 @@
 package com.geosegbar.exceptions.exception_handler;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.HashMap;
 import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.TransactionSystemException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import com.geosegbar.common.email.EmailService;
 import com.geosegbar.common.response.WebResponseEntity;
+import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DatabaseException;
 import com.geosegbar.exceptions.DuplicateResourceException;
@@ -27,6 +34,7 @@ import com.geosegbar.exceptions.TokenExpiredException;
 import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.exceptions.UnsupportedFileTypeException;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 
@@ -34,6 +42,9 @@ import jakarta.validation.ConstraintViolationException;
 public class RestExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(RestExceptionHandler.class);
+
+    @Autowired
+    private EmailService emailService;
 
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<WebResponseEntity<String>> handleNotFoundException(NotFoundException ex) {
@@ -161,8 +172,40 @@ public class RestExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<WebResponseEntity<String>> handleGeneralException(Exception ex) {
+    public ResponseEntity<WebResponseEntity<String>> handleGeneralException(Exception ex, HttpServletRequest request) {
         logger.error("Erro não tratado na aplicação: {}", ex.getMessage(), ex);
+
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        ex.printStackTrace(pw);
+        String stackTrace = sw.toString();
+
+        String userContext = "Anônimo/Não Autenticado";
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getPrincipal() instanceof UserEntity user) {
+                userContext = String.format("%s (ID: %d, Email: %s)", user.getName(), user.getId(), user.getEmail());
+            } else if (auth != null) {
+                userContext = "Principal: " + auth.getPrincipal().toString();
+            }
+        } catch (Exception e) {
+            userContext = "Erro ao recuperar contexto de usuário";
+        }
+
+        String endpoint = request.getRequestURI();
+        String method = request.getMethod();
+        String queryString = request.getQueryString();
+        if (queryString != null) {
+            endpoint += "?" + queryString;
+        }
+
+        emailService.sendInternalErrorException(
+                ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName(),
+                stackTrace,
+                userContext,
+                endpoint,
+                method
+        );
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(WebResponseEntity.error("Erro inesperado. Tente novamente mais tarde."));

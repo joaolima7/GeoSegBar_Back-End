@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org"
+    th:replace="~{emails/email-base :: layout(emailTitle='Erro no Sistema', statusText='Erro Interno')}">
+
+<body>
+    <div th:fragment="emailContent">
+        <h2 style="color: #ef4444;">🚨 Erro Inesperado Detectado</h2>
+        <p>Um erro não tratado ocorreu na aplicação Back-End.</p>
+
+        <div class="info-grid">
+            <div class="info-card">
+                <div class="info-card-label">Usuário</div>
+                <div class="info-card-value" th:text="${userContext}">Desconhecido</div>
+            </div>
+            <div class="info-card">
+                <div class="info-card-label">Endpoint</div>
+                <div class="info-card-value" th:text="${requestEndpoint}">/api/path</div>
+            </div>
+            <div class="info-card">
+                <div class="info-card-label">Método</div>
+                <div class="info-card-value" th:text="${requestMethod}">GET</div>
+            </div>
+            <div class="info-card">
+                <div class="info-card-label">Data/Hora</div>
+                <div class="info-card-value" th:text="${timestamp}">01/01/2026 10:00</div>
+            </div>
+        </div>
+
+        <div class="highlight-box" style="background: #fef2f2; border-color: #fecaca; margin-top: 20px;">
+            <strong style="color: #991b1b;">Mensagem de Erro:</strong>
+            <div class="highlight-value" style="color: #b91c1c; font-family: monospace;" th:text="${errorMessage}">
+                NullPointerException: ...
+            </div>
+        </div>
+
+        <div style="margin-top: 20px;">
+            <strong style="font-size: 14px; color: #475569;">Stack Trace Principal:</strong>
+            <pre style="
+                background: #1e293b; 
+                color: #e2e8f0; 
+                padding: 15px; 
+                border-radius: 8px; 
+                font-size: 11px; 
+                overflow-x: auto; 
+                white-space: pre-wrap; 
+                margin-top: 8px;
+                max-height: 400px;
+                overflow-y: auto;">
+[[${stackTrace}]]
+            </pre>
+        </div>
+
+        <p style="font-size: 12px; color: #64748b; margin-top: 20px;">
+            Este é um relatório automático gerado pelo RestExceptionHandler.
+        </p>
+    </div>
+</body>
+
+</html>

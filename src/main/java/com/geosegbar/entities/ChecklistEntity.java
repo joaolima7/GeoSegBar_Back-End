@@ -20,6 +20,7 @@ import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -31,11 +32,16 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "checklists", indexes = {
-    @Index(name = "idx_checklist_name", columnList = "name"),
-    @Index(name = "idx_checklist_created_at", columnList = "created_at"),
-    @Index(name = "idx_checklist_dam_id", columnList = "dam_id")
-})
+@Table(name = "checklists",
+        indexes = {
+            @Index(name = "idx_checklist_name", columnList = "name"),
+            @Index(name = "idx_checklist_created_at", columnList = "created_at"),
+            @Index(name = "idx_checklist_dam_id", columnList = "dam_id")
+        },
+        uniqueConstraints = {
+            @UniqueConstraint(name = "uk_checklist_name_dam", columnNames = {"name", "dam_id"})
+        }
+)
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class ChecklistEntity {
 

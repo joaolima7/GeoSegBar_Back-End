@@ -245,8 +245,8 @@ public class ChecklistResponseSubmissionService {
     }
 
     private void validateAllRequiredQuestionnaires(ChecklistResponseSubmissionDTO submissionDto) {
-        ChecklistEntity checklist = checklistRepository.findByNameIgnoreCase(submissionDto.getChecklistName())
-                .orElseThrow(() -> new NotFoundException("Checklist não encontrado com o nome: " + submissionDto.getChecklistName()));
+        ChecklistEntity checklist = checklistRepository.findById(submissionDto.getChecklistId())
+                .orElseThrow(() -> new NotFoundException("Checklist não encontrado com o ID: " + submissionDto.getChecklistId()));
 
         Set<TemplateQuestionnaireEntity> requiredTemplates = checklist.getTemplateQuestionnaires();
 

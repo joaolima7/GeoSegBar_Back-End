@@ -80,19 +80,19 @@ public class ChecklistResponseEntity {
     @JsonManagedReference(value = "checklist-questionnaire-responses")
     private Set<QuestionnaireResponseEntity> questionnaireResponses = new HashSet<>();
 
-    @Column(name = "upstream_level", precision = 10, scale = 2)
+    @Column(name = "upstream_level")
     private Double upstreamLevel;
 
-    @Column(name = "downstream_level", precision = 10, scale = 2)
+    @Column(name = "downstream_level")
     private Double downstreamLevel;
 
-    @Column(name = "spilled_flow", precision = 10, scale = 2)
+    @Column(name = "spilled_flow")
     private Double spilledFlow;
 
-    @Column(name = "turbined_flow", precision = 10, scale = 2)
+    @Column(name = "turbined_flow")
     private Double turbinedFlow;
 
-    @Column(name = "accumulated_rainfall", precision = 10, scale = 2)
+    @Column(name = "accumulated_rainfall")
     private Double accumulatedRainfall;
 
     @Enumerated(EnumType.STRING)

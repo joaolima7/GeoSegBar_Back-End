@@ -8,10 +8,13 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.geosegbar.common.enums.WeatherConditionEnum;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -76,4 +79,23 @@ public class ChecklistResponseEntity {
             cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference(value = "checklist-questionnaire-responses")
     private Set<QuestionnaireResponseEntity> questionnaireResponses = new HashSet<>();
+
+    @Column(name = "upstream_level", precision = 10, scale = 2)
+    private Double upstreamLevel;
+
+    @Column(name = "downstream_level", precision = 10, scale = 2)
+    private Double downstreamLevel;
+
+    @Column(name = "spilled_flow", precision = 10, scale = 2)
+    private Double spilledFlow;
+
+    @Column(name = "turbined_flow", precision = 10, scale = 2)
+    private Double turbinedFlow;
+
+    @Column(name = "accumulated_rainfall", precision = 10, scale = 2)
+    private Double accumulatedRainfall;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "weather_condition", length = 50)
+    private WeatherConditionEnum weatherCondition;
 }

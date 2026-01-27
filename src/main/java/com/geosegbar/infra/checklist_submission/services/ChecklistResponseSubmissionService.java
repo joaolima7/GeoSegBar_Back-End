@@ -1,5 +1,7 @@
 package com.geosegbar.infra.checklist_submission.services;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.Base64;
 import java.util.HashSet;
@@ -352,8 +354,23 @@ public class ChecklistResponseSubmissionService {
         checklistResponse.setChecklistId(submissionDto.getChecklistId());
         checklistResponse.setDam(dam);
         checklistResponse.setUser(user);
+        checklistResponse.setUpstreamLevel(formatToTwoDecimals(submissionDto.getUpstreamLevel()));
+        checklistResponse.setDownstreamLevel(formatToTwoDecimals(submissionDto.getDownstreamLevel()));
+        checklistResponse.setSpilledFlow(formatToTwoDecimals(submissionDto.getSpilledFlow()));
+        checklistResponse.setTurbinedFlow(formatToTwoDecimals(submissionDto.getTurbinedFlow()));
+        checklistResponse.setAccumulatedRainfall(formatToTwoDecimals(submissionDto.getAccumulatedRainfall()));
+        checklistResponse.setWeatherCondition(submissionDto.getWeatherCondition());
 
         return checklistResponseRepository.save(checklistResponse);
+    }
+
+    private Double formatToTwoDecimals(Double value) {
+        if (value == null) {
+            return null;
+        }
+        return BigDecimal.valueOf(value)
+                .setScale(2, RoundingMode.HALF_UP)
+                .doubleValue();
     }
 
     private QuestionnaireResponseEntity createQuestionnaireResponse(

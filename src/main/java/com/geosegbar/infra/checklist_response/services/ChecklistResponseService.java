@@ -152,6 +152,12 @@ public class ChecklistResponseService {
         dto.setCreatedAt(checklistResponse.getCreatedAt());
         dto.setUserId(checklistResponse.getUser().getId());
         dto.setUserName(checklistResponse.getUser().getName());
+        dto.setUpstreamLevel(checklistResponse.getUpstreamLevel());
+        dto.setDownstreamLevel(checklistResponse.getDownstreamLevel());
+        dto.setSpilledFlow(checklistResponse.getSpilledFlow());
+        dto.setTurbinedFlow(checklistResponse.getTurbinedFlow());
+        dto.setAccumulatedRainfall(checklistResponse.getAccumulatedRainfall());
+        dto.setWeatherCondition(checklistResponse.getWeatherCondition());
 
         DamEntity dam = checklistResponse.getDam();
         DamInfoDTO damInfo = new DamInfoDTO();

@@ -63,7 +63,13 @@ class ChecklistResponseEntityTest extends BaseUnitTest {
                 now,
                 dam,
                 user,
-                responses
+                responses,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                null
         );
 
         assertThat(checklistResponse).satisfies(r -> {

@@ -111,6 +111,23 @@ services:
     depends_on:
       - postgres-dev
 
+  redis-dev:
+    image: redis:7-alpine
+    container_name: geosegbar-redis-dev
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-dev-data:/data
+    networks:
+      - geosegbar-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 networks:
   geosegbar-network:
     driver: bridge
@@ -119,3 +136,4 @@ volumes:
   postgres-dev-data:
   prometheus-data:
   grafana-data:
+  redis-dev-data:

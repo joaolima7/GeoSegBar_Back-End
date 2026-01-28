@@ -234,6 +234,38 @@ else
 fi
 
 # ============================================
+# REDIS
+# ============================================
+if docker ps -q -f name=redis-prod | grep -q .; then
+    echo "✅ Redis já está rodando"
+elif docker ps -a -q -f name=redis-prod | grep -q .; then
+    echo "🔄 Container do Redis existe mas está parado. Reiniciando..."
+    docker start redis-prod
+    echo "✅ Redis reiniciado"
+else
+    echo "📦 Container do Redis não encontrado. Criando..."
+    
+    if ! docker volume ls -q -f name=redis-prod-data | grep -q .; then
+        echo "📦 Criando volume para Redis..."
+        docker volume create redis-prod-data
+    fi
+    
+    echo "🚀 Iniciando Redis..."
+    docker run -d \
+      --name redis-prod \
+      --restart unless-stopped \
+      --network geosegbar-network \
+      -p 6379:6379 \
+      -v redis-prod-data:/data \
+      redis:7-alpine \
+      redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+      
+    echo "⏳ Aguardando Redis inicializar..."
+    sleep 5
+    echo "✅ Redis iniciado"
+fi
+
+# ============================================
 # APPLICATION
 # ============================================
 echo "🛑 Parando container atual da API..."
@@ -272,6 +304,9 @@ docker run -d \
   -e ANA_API_PASSWORD="${ANA_API_PASSWORD}" \
   -e ANA_API_AUTH_URL="${ANA_API_AUTH_URL}" \
   -e ANA_API_TELEMETRY_URL="${ANA_API_TELEMETRY_URL}" \
+  -e REDIS_HOST="${REDIS_HOST}" \
+  -e REDIS_PORT="${REDIS_PORT}" \
+  -e REDIS_PASSWORD="${REDIS_PASSWORD}" \
   -e TZ="${TZ}" \
   -v ${FILE_UPLOAD_DIR}:${FILE_UPLOAD_DIR} \
   -v $SCRIPT_DIR/logs:/app/logs \

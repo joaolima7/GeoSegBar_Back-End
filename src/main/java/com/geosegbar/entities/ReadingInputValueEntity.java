@@ -1,5 +1,7 @@
 package com.geosegbar.entities;
 
+import java.math.BigDecimal;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.Column;
@@ -44,8 +46,8 @@ public class ReadingInputValueEntity {
     private String inputName;
 
     @NotNull(message = "Valor do input é obrigatório!")
-    @Column(nullable = false)
-    private Double value;
+    @Column(nullable = false, precision = 20, scale = 10)
+    private BigDecimal value;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reading_id", nullable = false)

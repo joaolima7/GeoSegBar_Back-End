@@ -1,6 +1,9 @@
 package com.geosegbar.unit.entities;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
+import java.math.BigDecimal;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,14 +34,14 @@ class ReadingInputValueEntityTest extends BaseUnitTest {
         inputValue.setId(1L);
         inputValue.setInputAcronym("X");
         inputValue.setInputName("Cota");
-        inputValue.setValue(125.5);
+        inputValue.setValue(BigDecimal.valueOf(125.5));
         inputValue.setReading(reading);
 
         assertThat(inputValue).satisfies(iv -> {
             assertThat(iv.getId()).isEqualTo(1L);
             assertThat(iv.getInputAcronym()).isEqualTo("X");
             assertThat(iv.getInputName()).isEqualTo("Cota");
-            assertThat(iv.getValue()).isEqualTo(125.5);
+            assertThat(iv.getValue()).isEqualByComparingTo(BigDecimal.valueOf(125.5));
             assertThat(iv.getReading()).isEqualTo(reading);
         });
     }
@@ -51,14 +54,14 @@ class ReadingInputValueEntityTest extends BaseUnitTest {
                 1L,
                 "Y",
                 "Pressão",
-                50.2,
+                BigDecimal.valueOf(50.2),
                 reading
         );
 
         assertThat(inputValue.getId()).isEqualTo(1L);
         assertThat(inputValue.getInputAcronym()).isEqualTo("Y");
         assertThat(inputValue.getInputName()).isEqualTo("Pressão");
-        assertThat(inputValue.getValue()).isEqualTo(50.2);
+        assertThat(inputValue.getValue()).isEqualByComparingTo(BigDecimal.valueOf(50.2));
         assertThat(inputValue.getReading()).isEqualTo(reading);
     }
 
@@ -127,9 +130,9 @@ class ReadingInputValueEntityTest extends BaseUnitTest {
     void shouldSupportPositiveValues() {
 
         ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
-        inputValue.setValue(100.5);
+        inputValue.setValue(BigDecimal.valueOf(100.5));
 
-        assertThat(inputValue.getValue()).isEqualTo(100.5);
+        assertThat(inputValue.getValue()).isEqualByComparingTo(BigDecimal.valueOf(100.5));
     }
 
     @Test
@@ -137,9 +140,9 @@ class ReadingInputValueEntityTest extends BaseUnitTest {
     void shouldSupportNegativeValues() {
 
         ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
-        inputValue.setValue(-25.3);
+        inputValue.setValue(BigDecimal.valueOf(-25.3));
 
-        assertThat(inputValue.getValue()).isEqualTo(-25.3);
+        assertThat(inputValue.getValue()).isEqualByComparingTo(BigDecimal.valueOf(-25.3));
     }
 
     @Test
@@ -147,7 +150,7 @@ class ReadingInputValueEntityTest extends BaseUnitTest {
     void shouldSupportZeroValue() {
 
         ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
-        inputValue.setValue(0.0);
+        inputValue.setValue(BigDecimal.valueOf(0.0));
 
         assertThat(inputValue.getValue()).isZero();
     }
@@ -157,9 +160,9 @@ class ReadingInputValueEntityTest extends BaseUnitTest {
     void shouldSupportHighPrecisionValues() {
 
         ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
-        inputValue.setValue(123.456789);
+        inputValue.setValue(BigDecimal.valueOf(123.456789));
 
-        assertThat(inputValue.getValue()).isEqualTo(123.456789);
+        assertThat(inputValue.getValue()).isEqualByComparingTo(BigDecimal.valueOf(123.456789));
     }
 
     @Test
@@ -167,9 +170,9 @@ class ReadingInputValueEntityTest extends BaseUnitTest {
     void shouldSupportVerySmallDecimalValues() {
 
         ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
-        inputValue.setValue(0.0001);
+        inputValue.setValue(BigDecimal.valueOf(0.0001));
 
-        assertThat(inputValue.getValue()).isEqualTo(0.0001);
+        assertThat(inputValue.getValue()).isEqualByComparingTo(BigDecimal.valueOf(0.0001));
     }
 
     @Test
@@ -177,9 +180,9 @@ class ReadingInputValueEntityTest extends BaseUnitTest {
     void shouldSupportLargeValues() {
 
         ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
-        inputValue.setValue(9999.99);
+        inputValue.setValue(BigDecimal.valueOf(9999.99));
 
-        assertThat(inputValue.getValue()).isEqualTo(9999.99);
+        assertThat(inputValue.getValue()).isEqualByComparingTo(BigDecimal.valueOf(9999.99));
     }
 
     @Test
@@ -188,11 +191,11 @@ class ReadingInputValueEntityTest extends BaseUnitTest {
 
         ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
         inputValue.setId(1L);
-        inputValue.setValue(10.0);
+        inputValue.setValue(BigDecimal.valueOf(10.0));
 
         Long originalId = inputValue.getId();
 
-        inputValue.setValue(20.0);
+        inputValue.setValue(BigDecimal.valueOf(20.0));
 
         assertThat(inputValue.getId()).isEqualTo(originalId);
     }
@@ -247,15 +250,15 @@ class ReadingInputValueEntityTest extends BaseUnitTest {
 
         ReadingInputValueEntity x = new ReadingInputValueEntity();
         x.setInputAcronym("X");
-        x.setValue(10.0);
+        x.setValue(BigDecimal.valueOf(10.0));
 
         ReadingInputValueEntity y = new ReadingInputValueEntity();
         y.setInputAcronym("Y");
-        y.setValue(6.0);
+        y.setValue(BigDecimal.valueOf(6.0));
 
         ReadingInputValueEntity z = new ReadingInputValueEntity();
         z.setInputAcronym("Z");
-        z.setValue(1.0);
+        z.setValue(BigDecimal.valueOf(1.0));
 
         assertThat(x.getValue()).isEqualTo(10.0);
         assertThat(y.getValue()).isEqualTo(6.0);

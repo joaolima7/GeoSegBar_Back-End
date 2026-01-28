@@ -363,7 +363,7 @@ public class ReadingService {
 
         validateInputValues(instrument, request.getInputValues());
 
-        Map<String, Double> formattedInputValues = new HashMap<>();
+        Map<String, BigDecimal> formattedInputValues = new HashMap<>();
         Map<String, String> inputNames = new HashMap<>();
 
         for (InputEntity input : instrument.getInputs()) {
@@ -392,7 +392,7 @@ public class ReadingService {
             reading.setLimitStatus(determineLimitStatus(instrument, calculatedValue, output));
 
             Set<ReadingInputValueEntity> inputValuesSet = new HashSet<>(formattedInputValues.size());
-            for (Map.Entry<String, Double> entry : formattedInputValues.entrySet()) {
+            for (Map.Entry<String, BigDecimal> entry : formattedInputValues.entrySet()) {
                 ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
                 inputValue.setInputAcronym(entry.getKey());
                 inputValue.setInputName(inputNames.get(entry.getKey()));
@@ -724,7 +724,7 @@ public class ReadingService {
             }
         }
 
-        Map<String, Double> calculationInputs = new HashMap<>();
+        Map<String, BigDecimal> calculationInputs = new HashMap<>();
         for (ReadingEntity reading : groupReadings) {
             for (ReadingInputValueEntity riv : reading.getInputValues()) {
                 calculationInputs.putIfAbsent(riv.getInputAcronym(), riv.getValue());
@@ -733,9 +733,10 @@ public class ReadingService {
 
         boolean inputsChanged = false;
         for (Map.Entry<String, Double> entry : newInputValues.entrySet()) {
-            if (!Objects.equals(calculationInputs.get(entry.getKey()), entry.getValue())) {
+            BigDecimal currentValue = calculationInputs.get(entry.getKey());
+            if (!Objects.equals(currentValue != null ? currentValue.doubleValue() : null, entry.getValue())) {
                 inputsChanged = true;
-                calculationInputs.put(entry.getKey(), entry.getValue());
+                calculationInputs.put(entry.getKey(), BigDecimal.valueOf(entry.getValue()));
             }
         }
 
@@ -745,7 +746,7 @@ public class ReadingService {
                 for (ReadingInputValueEntity riv : reading.getInputValues()) {
                     Double newValue = newInputValues.get(riv.getInputAcronym());
                     if (newValue != null) {
-                        riv.setValue(newValue);
+                        riv.setValue(BigDecimal.valueOf(newValue));
                     }
                 }
 
@@ -850,7 +851,7 @@ public class ReadingService {
         ReadingInputValueDTO dto = new ReadingInputValueDTO();
         dto.setInputAcronym(entity.getInputAcronym());
         dto.setInputName(entity.getInputName());
-        dto.setValue(entity.getValue());
+        dto.setValue(entity.getValue() != null ? entity.getValue().doubleValue() : null);
         return dto;
     }
 
@@ -941,13 +942,12 @@ public class ReadingService {
         return response;
     }
 
-    private Double formatToSpecificPrecision(Double value, Integer precision) {
+    private BigDecimal formatToSpecificPrecision(Double value, Integer precision) {
         if (value == null || precision == null) {
-            return value;
+            return value != null ? BigDecimal.valueOf(value) : null;
         }
         return BigDecimal.valueOf(value)
-                .setScale(precision, RoundingMode.HALF_UP)
-                .doubleValue();
+                .setScale(precision, RoundingMode.HALF_UP);
     }
 
     private record DateTimePair(LocalDate date, LocalTime hour) {

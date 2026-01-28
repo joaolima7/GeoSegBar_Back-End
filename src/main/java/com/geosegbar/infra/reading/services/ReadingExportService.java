@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -154,11 +155,13 @@ public class ReadingExportService {
                 newGroup.setComment(reading.getComment());
                 newGroup.setCreatedBy(reading.getUser() != null ? reading.getUser().getName() : "-");
 
-                Map<String, Double> inputValues = reading.getInputValues().stream()
-                        .collect(Collectors.toMap(
-                                ReadingInputValueEntity::getInputAcronym,
-                                ReadingInputValueEntity::getValue
-                        ));
+                Map<String, Double> inputValues = new HashMap<>();
+                for (ReadingInputValueEntity riv : reading.getInputValues()) {
+                    inputValues.put(
+                            riv.getInputAcronym(),
+                            riv.getValue() != null ? riv.getValue().doubleValue() : 0.0
+                    );
+                }
                 newGroup.setInputValues(inputValues);
 
                 return newGroup;

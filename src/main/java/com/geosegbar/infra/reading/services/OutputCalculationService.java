@@ -19,27 +19,29 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class OutputCalculationService {
 
-    public Double calculateOutput(OutputEntity output, ReadingRequestDTO reading, Map<String, Double> inputValues) {
+    public Double calculateOutput(OutputEntity output, ReadingRequestDTO reading, Map<String, BigDecimal> inputValues) {
         InstrumentEntity instrument = output.getInstrument();
 
-        
-        Map<String, Double> variables = new HashMap<>(inputValues);
+        // Converte BigDecimal para Double para o evaluator
+        Map<String, Double> variables = new HashMap<>();
+        for (Map.Entry<String, BigDecimal> entry : inputValues.entrySet()) {
+            variables.put(entry.getKey(), entry.getValue().doubleValue());
+        }
 
-        
+        // Adiciona constantes ao mapa de variáveis
         for (ConstantEntity constant : instrument.getConstants()) {
             variables.put(constant.getAcronym(), constant.getValue());
         }
 
-        
+        // Avalia a equação
         Double result = ExpressionEvaluator.evaluate(output.getEquation(), variables);
 
-        
+        // Formata com a precisão especificada
         return formatToSpecificPrecision(result, output.getPrecision());
     }
 
-
     public Map<String, Double> calculateAllOutputs(InstrumentEntity instrument, ReadingRequestDTO reading,
-            Map<String, Double> inputValues) {
+            Map<String, BigDecimal> inputValues) {
         Map<String, Double> results = new HashMap<>();
 
         for (OutputEntity output : instrument.getOutputs()) {

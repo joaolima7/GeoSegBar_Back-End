@@ -1,0 +1,161 @@
+services:
+  postgres-prod:
+    image: postgres:16-alpine
+    container_name: geosegbar-postgres-prod
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      TZ: ${TZ}
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - postgres-prod-data:/var/lib/postgresql/data
+    networks:
+      - geosegbar-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2"
+        reservations:
+          memory: 512M
+          cpus: "0.5"
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: postgres-exporter-prod
+    restart: always
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres-prod:5432/${DB_NAME}?sslmode=disable"
+    ports:
+      - "9187:9187"
+    networks:
+      - geosegbar-network
+    depends_on:
+      postgres-prod:
+        condition: service_healthy
+
+  geosegbar-api:
+    build: .
+    image: geosegbar-prod:latest
+    container_name: geosegbar-api-prod
+    restart: always
+    depends_on:
+      postgres-prod:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - DB_HOST=postgres-prod
+    env_file:
+      - .env.prod
+    ports:
+      - "${SERVER_PORT}:9090"
+    networks:
+      - geosegbar-network
+    volumes:
+      - ${FILE_UPLOAD_DIR}:${FILE_UPLOAD_DIR}
+      - ./logs:/app/logs
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:9090/actuator/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2.5G
+          cpus: "2"
+        reservations:
+          memory: 1G
+          cpus: "1"
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: prometheus-prod
+    restart: always
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--web.enable-lifecycle"
+      - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-90d}"
+      - "--storage.tsdb.retention.size=10GB"
+    volumes:
+      - ./prometheus-prod/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus-prod/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-prod-data:/prometheus
+    ports:
+      - "9091:9090"
+    networks:
+      - geosegbar-network
+    depends_on:
+      - geosegbar-api
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
+
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: grafana-prod
+    restart: always
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_INSTALL_PLUGINS=redis-datasource
+      - GF_SERVER_ROOT_URL=${FRONTEND_URL}/grafana
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SECURITY_DISABLE_GRAVATAR=true
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+    volumes:
+      - grafana-prod-data:/var/lib/grafana
+      - ./grafana-prod/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana-prod/dashboards:/etc/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    networks:
+      - geosegbar-network
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 128M
+          cpus: "0.1"
+
+networks:
+  geosegbar-network:
+    driver: bridge
+
+volumes:
+  postgres-prod-data:
+    driver: local
+  prometheus-prod-data:
+    driver: local
+  grafana-prod-data:
+    driver: local

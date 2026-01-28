@@ -18,7 +18,6 @@ public class ChecklistResponseDetailDTO {
     private String checklistName;
     private Long checklistId;
     private LocalDateTime createdAt;
-    private List<TemplateWithAnswersDTO> templates;
     private Long userId;
     private String userName;
     private DamInfoDTO dam;
@@ -28,4 +27,5 @@ public class ChecklistResponseDetailDTO {
     private Double turbinedFlow;
     private Double accumulatedRainfall;
     private WeatherConditionEnum weatherCondition;
+    private List<TemplateWithAnswersDTO> templates;
 }

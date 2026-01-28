@@ -71,7 +71,6 @@ public class ReadingService {
     private final ClientRepository clientRepository;
     private final UserRepository userRepository;
 
-    // ⭐ OTIMIZAÇÃO: Prioridade de status crítico pré-computada (O(1) lookup)
     private static final Map<LimitStatusEnum, Integer> STATUS_PRIORITY;
 
     static {
@@ -84,12 +83,8 @@ public class ReadingService {
         STATUS_PRIORITY.put(LimitStatusEnum.NORMAL, 0);
     }
 
-    // ⭐ OTIMIZAÇÃO: Paginação e ordenação padrão reutilizáveis
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "date", "hour");
 
-    // ==========================================
-    // ⭐ CONSULTAS - MÁXIMA PERFORMANCE
-    // ==========================================
     @Transactional(readOnly = true)
     public List<ReadingResponseDTO> findByInstrumentId(Long instrumentId) {
         validateViewPermission();
@@ -117,7 +112,6 @@ public class ReadingService {
             return buildInstrumentLimitStatusDTO(instrument, LimitStatusEnum.NORMAL, null);
         }
 
-        // ⭐ OTIMIZADO: Encontrar mais recente em uma passagem
         ReadingEntity latest = recentReadings.stream()
                 .max(Comparator.comparing(ReadingEntity::getDate)
                         .thenComparing(ReadingEntity::getHour))
@@ -126,7 +120,6 @@ public class ReadingService {
         LocalDate latestDate = latest.getDate();
         LocalTime latestHour = latest.getHour();
 
-        // ⭐ OTIMIZADO: Filtrar e encontrar status crítico em uma passagem
         LimitStatusEnum mostCritical = recentReadings.stream()
                 .filter(r -> r.getDate().equals(latestDate) && r.getHour().equals(latestHour))
                 .map(ReadingEntity::getLimitStatus)
@@ -156,7 +149,6 @@ public class ReadingService {
                     .collect(Collectors.toList());
         }
 
-        // ⭐ OTIMIZADO: Processar projeções agrupadas por instrumento
         Map<Long, List<InstrumentLimitStatusProjection>> byInstrument = projections.stream()
                 .collect(Collectors.groupingBy(InstrumentLimitStatusProjection::getInstrumentId));
 
@@ -169,7 +161,6 @@ public class ReadingService {
             LocalDate latestDate = first.getReadingDate();
             LocalTime latestHour = first.getReadingHour();
 
-            // ⭐ CORRIGIDO: Converter String para Enum
             LimitStatusEnum mostCritical = instrumentReadings.stream()
                     .filter(p -> p.getReadingDate().equals(latestDate) && p.getReadingHour().equals(latestHour))
                     .map(p -> parseLimitStatus(p.getLimitStatus()))
@@ -179,7 +170,6 @@ public class ReadingService {
             results.add(buildInstrumentLimitStatusDTOFromProjection(first, mostCritical, latestDate + " " + latestHour));
         }
 
-        // Adicionar instrumentos sem readings
         Set<Long> instrumentsWithReadings = byInstrument.keySet();
         for (InstrumentEntity instrument : allActiveInstruments) {
             if (!instrumentsWithReadings.contains(instrument.getId())) {
@@ -233,7 +223,6 @@ public class ReadingService {
             return createEmptyPagedResponse(dateHourPage);
         }
 
-        // ⭐ OTIMIZADO: Extrair datas/horas em uma passagem
         int size = dateHourPage.getContent().size();
         List<LocalDate> dates = new ArrayList<>(size);
         List<LocalTime> hours = new ArrayList<>(size);
@@ -263,7 +252,6 @@ public class ReadingService {
             return List.of();
         }
 
-        // ⭐ OTIMIZADO: Processar metadata em uma passagem
         Set<Long> instrumentIds = new HashSet<>();
         Map<Long, List<DateTimePair>> instrumentDateHoursMap = new HashMap<>();
 
@@ -279,7 +267,6 @@ public class ReadingService {
                     .add(new DateTimePair(date, hour));
         }
 
-        // ⭐ OTIMIZADO: Duas queries totais
         Map<Long, InstrumentEntity> instrumentsMap = instrumentRepository.findAllById(instrumentIds)
                 .stream()
                 .collect(Collectors.toMap(InstrumentEntity::getId, Function.identity()));
@@ -287,7 +274,6 @@ public class ReadingService {
         List<ReadingEntity> allReadings = readingRepository
                 .findByInstrumentIdsAndActiveTrueWithAllRelations(new ArrayList<>(instrumentIds));
 
-        // ⭐ OTIMIZADO: Indexar readings por instrumento e dateTime
         Map<Long, Map<String, List<ReadingEntity>>> readingsByInstrumentAndDateTime = new HashMap<>();
         for (ReadingEntity reading : allReadings) {
             Long instId = reading.getInstrument().getId();
@@ -299,7 +285,6 @@ public class ReadingService {
                     .add(reading);
         }
 
-        // Construir resultado
         List<InstrumentGroupedReadingsDTO> result = new ArrayList<>(instrumentIds.size());
 
         for (Map.Entry<Long, List<DateTimePair>> entry : instrumentDateHoursMap.entrySet()) {
@@ -343,16 +328,12 @@ public class ReadingService {
         return result;
     }
 
-    // ==========================================
-    // ⭐ MODIFICAÇÕES - MÁXIMA PERFORMANCE
-    // ==========================================
     @Transactional
     public List<ReadingResponseDTO> create(Long instrumentId, ReadingRequestDTO request, boolean skipPermissionCheck) {
         LocalTime truncatedHour = request.getHour().withNano(0);
         LocalDateTime readingDateTime = LocalDateTime.of(request.getDate(), truncatedHour);
         LocalDateTime now = LocalDateTime.now();
 
-        // Validações
         if (readingDateTime.truncatedTo(ChronoUnit.MINUTES).isAfter(now.truncatedTo(ChronoUnit.MINUTES))) {
             throw new InvalidInputException("Não é possível criar leituras com data e hora futura. "
                     + "Data/hora informada: " + DateFormatter.formatDateTime(readingDateTime)
@@ -382,7 +363,6 @@ public class ReadingService {
 
         validateInputValues(instrument, request.getInputValues());
 
-        // ⭐ OTIMIZADO: Pré-processar inputs uma vez
         Map<String, Double> formattedInputValues = new HashMap<>();
         Map<String, String> inputNames = new HashMap<>();
 
@@ -395,7 +375,6 @@ public class ReadingService {
             }
         }
 
-        // ⭐ OTIMIZADO: Criar todas as readings antes de salvar
         List<ReadingEntity> readingsToSave = new ArrayList<>(activeOutputs.size());
 
         for (OutputEntity output : activeOutputs) {
@@ -412,7 +391,6 @@ public class ReadingService {
             reading.setComment(request.getComment());
             reading.setLimitStatus(determineLimitStatus(instrument, calculatedValue, output));
 
-            // ⭐ OTIMIZADO: InputValues vinculados diretamente (cascade automático)
             Set<ReadingInputValueEntity> inputValuesSet = new HashSet<>(formattedInputValues.size());
             for (Map.Entry<String, Double> entry : formattedInputValues.entrySet()) {
                 ReadingInputValueEntity inputValue = new ReadingInputValueEntity();
@@ -427,7 +405,6 @@ public class ReadingService {
             readingsToSave.add(reading);
         }
 
-        // ⭐ OTIMIZADO: Salvar todas de uma vez
         List<ReadingEntity> createdReadings = readingRepository.saveAll(readingsToSave);
 
         return createdReadings.stream()
@@ -480,7 +457,6 @@ public class ReadingService {
             updateInputValuesForGroup(instrumentId, originalDate, originalHour, request.getInputValues(), instrument);
         }
 
-        // ⭐ OTIMIZADO: Atualizar grupo em batch
         List<ReadingEntity> groupReadings = readingRepository.findAllReadingsInGroupWithRelations(
                 instrumentId, originalDate, originalHour);
 
@@ -501,11 +477,9 @@ public class ReadingService {
         List<Long> successfulIds = new ArrayList<>(readingIds.size());
         List<BulkToggleActiveResponseDTO.FailedOperation> failedOperations = new ArrayList<>();
 
-        // ⭐ OTIMIZADO: Buscar todas de uma vez
         List<ReadingEntity> readings = readingRepository.findAllByIdWithMinimalData(readingIds);
         Set<Long> foundIds = readings.stream().map(ReadingEntity::getId).collect(Collectors.toSet());
 
-        // Registrar não encontrados
         for (Long requestedId : readingIds) {
             if (!foundIds.contains(requestedId)) {
                 failedOperations.add(new BulkToggleActiveResponseDTO.FailedOperation(
@@ -513,7 +487,6 @@ public class ReadingService {
             }
         }
 
-        // ⭐ OTIMIZADO: Processar em batch
         for (ReadingEntity reading : readings) {
             reading.setActive(active);
             successfulIds.add(reading.getId());
@@ -534,14 +507,10 @@ public class ReadingService {
         ReadingEntity reading = readingRepository.findByIdWithAllRelations(id)
                 .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
 
-        // ⭐ Com @OneToMany orphanRemoval=true, cascade deleta inputValues automaticamente
         readingRepository.delete(reading);
         log.info("Leitura excluída: ID {}", id);
     }
 
-    // ==========================================
-    // CONSULTAS ADICIONAIS
-    // ==========================================
     @Transactional(readOnly = true)
     public PagedReadingResponseDTO<ReadingResponseDTO> findByInstrumentId(Long instrumentId, Pageable pageable) {
         pageable = ensureDefaultSort(pageable);
@@ -637,7 +606,6 @@ public class ReadingService {
             return new MultiInstrumentReadingsResponseDTO(List.of(), pageSize, 0);
         }
 
-        // ⭐ OTIMIZADO: Duas queries totais
         Map<Long, InstrumentEntity> instrumentsMap = instrumentRepository.findAllById(uniqueInstrumentIds)
                 .stream()
                 .collect(Collectors.toMap(InstrumentEntity::getId, Function.identity()));
@@ -672,9 +640,6 @@ public class ReadingService {
         return new MultiInstrumentReadingsResponseDTO(result, pageSize, uniqueInstrumentIds.size());
     }
 
-    // ==========================================
-    // ⭐ MÉTODOS AUXILIARES PRIVADOS
-    // ==========================================
     private void validateViewPermission() {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity user = AuthenticatedUserUtil.getCurrentUser();
@@ -759,7 +724,6 @@ public class ReadingService {
             }
         }
 
-        // Coletar valores atuais
         Map<String, Double> calculationInputs = new HashMap<>();
         for (ReadingEntity reading : groupReadings) {
             for (ReadingInputValueEntity riv : reading.getInputValues()) {
@@ -767,7 +731,6 @@ public class ReadingService {
             }
         }
 
-        // Verificar mudanças
         boolean inputsChanged = false;
         for (Map.Entry<String, Double> entry : newInputValues.entrySet()) {
             if (!Objects.equals(calculationInputs.get(entry.getKey()), entry.getValue())) {
@@ -778,7 +741,7 @@ public class ReadingService {
 
         if (inputsChanged) {
             for (ReadingEntity reading : groupReadings) {
-                // Atualizar inputValues
+
                 for (ReadingInputValueEntity riv : reading.getInputValues()) {
                     Double newValue = newInputValues.get(riv.getInputAcronym());
                     if (newValue != null) {
@@ -786,7 +749,6 @@ public class ReadingService {
                     }
                 }
 
-                // Recalcular
                 OutputEntity output = reading.getOutput();
                 Double newCalculatedValue = outputCalculationService.calculateOutput(output, null, calculationInputs);
                 reading.setCalculatedValue(newCalculatedValue);
@@ -855,9 +817,6 @@ public class ReadingService {
         return LimitStatusEnum.NORMAL;
     }
 
-    // ==========================================
-    // ⭐ MAPEAMENTO DTO - MÁXIMA PERFORMANCE
-    // ==========================================
     public ReadingResponseDTO mapToResponseDTO(ReadingEntity reading) {
         ReadingResponseDTO dto = new ReadingResponseDTO();
         dto.setId(reading.getId());
@@ -880,7 +839,6 @@ public class ReadingService {
                     reading.getUser().getEmail()));
         }
 
-        // ⭐ InputValues já carregados via JOIN FETCH
         dto.setInputValues(reading.getInputValues().stream()
                 .map(this::mapToInputValueDTO)
                 .collect(Collectors.toList()));
@@ -930,9 +888,6 @@ public class ReadingService {
         return dto;
     }
 
-    // ==========================================
-    // ⭐ HELPERS
-    // ==========================================
     private Pageable ensureDefaultSort(Pageable pageable) {
         if (pageable.getSort().isUnsorted()) {
             return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), DEFAULT_SORT);
@@ -995,7 +950,6 @@ public class ReadingService {
                 .doubleValue();
     }
 
-    // ⭐ Record para evitar criação de arrays
     private record DateTimePair(LocalDate date, LocalTime hour) {
 
     }

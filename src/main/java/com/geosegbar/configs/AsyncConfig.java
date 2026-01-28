@@ -11,6 +11,10 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 @EnableAsync
 public class AsyncConfig {
 
+    /**
+     * Thread pool para coleta hidrotelemétrica instantânea (leitura do dia
+     * atual)
+     */
     @Bean(name = "hydrotelemetricTaskExecutor")
     public Executor hydrotelemetricTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -20,6 +24,25 @@ public class AsyncConfig {
         executor.setThreadNamePrefix("hydrotelemetric-async-");
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(60);
+        executor.initialize();
+        return executor;
+    }
+
+    /**
+     * Thread pool dedicado para coleta histórica (10 anos de dados) - Menor
+     * paralelismo para não sobrecarregar API externa (ANA) - Maior timeout para
+     * aguardar shutdown graceful
+     */
+    @Bean(name = "historicalDataExecutor")
+    public Executor historicalDataExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);      // Máximo 2 instrumentos simultâneos
+        executor.setMaxPoolSize(3);       // Máximo absoluto de 3 threads
+        executor.setQueueCapacity(50);    // Até 50 jobs na fila em memória
+        executor.setThreadNamePrefix("historical-data-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(300); // 5 min para finalizar
+        executor.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
         executor.initialize();
         return executor;
     }

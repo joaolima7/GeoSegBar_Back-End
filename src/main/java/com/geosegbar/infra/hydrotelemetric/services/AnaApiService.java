@@ -125,6 +125,117 @@ public class AnaApiService {
         }
     }
 
+    /**
+     * Busca dados históricos de telemetria para um período de 30 dias
+     *
+     * Diferente do getTelemetryData() que busca apenas 2 dias recentes, este
+     * método busca dados históricos com: - Range DIAS_30 (retorna até 30 dias
+     * de dados) - Data específica de busca - Retry automático para 401
+     * Unauthorized (renova token) - Retry automático para timeout/erro de rede
+     * (até 3 tentativas)
+     *
+     * @param stationCode Código da estação
+     * @param startDate Data inicial do período (formato yyyy-MM-dd)
+     * @param authToken Token de autenticação (pode ser renovado
+     * automaticamente)
+     * @return Lista de itens de telemetria para o período
+     */
+    public List<TelemetryItem> getTelemetryDataForHistoricalPeriod(String stationCode, LocalDate startDate, String authToken) {
+        int maxRetries = 3;
+        String currentToken = authToken;
+
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+                String dateStr = startDate.toString(); // yyyy-MM-dd
+                String url = telemetryUrl
+                        + "?C%C3%B3digo%20da%20Esta%C3%A7%C3%A3o=" + stationCode
+                        + "&Tipo%20Filtro%20Data=DATA_LEITURA"
+                        + "&Data%20de%20Busca%20%28yyyy-MM-dd%29=" + dateStr
+                        + "&Range%20Intervalo%20de%20busca=DIAS_30";
+
+                log.debug("Buscando dados históricos: estação={}, data={}, tentativa={}/{}",
+                        stationCode, dateStr, attempt, maxRetries);
+
+                HttpGet request = new HttpGet(url);
+                request.setHeader("Authorization", "Bearer " + currentToken);
+                request.setHeader("Accept", "*/*");
+                request.setHeader("User-Agent", "Mozilla/5.0");
+                request.setHeader("Content-Type", "application/json");
+                request.setHeader("Host", "www.ana.gov.br");
+
+                CloseableHttpResponse response = httpClient.execute(request);
+                int statusCode = response.getStatusLine().getStatusCode();
+                HttpEntity entity = response.getEntity();
+
+                // 401 Unauthorized: renova token e tenta novamente
+                if (statusCode == 401) {
+                    String errorBody = EntityUtils.toString(entity);
+                    log.warn("Token expirado (401). Renovando token e tentando novamente... (tentativa {}/{})",
+                            attempt, maxRetries);
+                    currentToken = getAuthToken(); // Renova token
+                    Thread.sleep(1000); // Aguarda 1s antes de tentar novamente
+                    continue;
+                }
+
+                // Outros erros HTTP
+                if (statusCode != 200) {
+                    String errorBody = EntityUtils.toString(entity);
+                    log.error("Erro na resposta da API: {} - {}", statusCode, errorBody);
+
+                    // Se for erro 5xx (server error) ou timeout, tenta novamente
+                    if (statusCode >= 500 || statusCode == 408) {
+                        if (attempt < maxRetries) {
+                            log.warn("Erro de servidor/timeout ({}). Tentando novamente em 2s... (tentativa {}/{})",
+                                    statusCode, attempt, maxRetries);
+                            Thread.sleep(2000);
+                            continue;
+                        }
+                    }
+
+                    throw new ExternalApiException("Erro ao obter dados históricos: " + errorBody);
+                }
+
+                // Sucesso: parseia resposta
+                String responseBody = EntityUtils.toString(entity);
+                AnaTelemetryResponse telemetryResponse = objectMapper.readValue(responseBody, AnaTelemetryResponse.class);
+
+                if (telemetryResponse == null) {
+                    throw new ExternalApiException("Resposta da API da ANA inválida");
+                }
+
+                // Retorna lista vazia se não houver dados (message: "Não houve retorno de registros")
+                if (telemetryResponse.getItems() == null) {
+                    log.debug("Sem dados disponíveis para estação {} na data {}", stationCode, dateStr);
+                    return List.of();
+                }
+
+                log.debug("Dados históricos obtidos com sucesso: {} leituras", telemetryResponse.getItems().size());
+                return telemetryResponse.getItems();
+
+            } catch (IOException e) {
+                log.warn("Erro de I/O ao obter dados históricos (tentativa {}/{}): {}",
+                        attempt, maxRetries, e.getMessage());
+
+                if (attempt < maxRetries) {
+                    try {
+                        Thread.sleep(2000); // Aguarda 2s antes de retry
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new ExternalApiException("Interrompido durante retry", ie);
+                    }
+                    continue;
+                }
+
+                throw new ExternalApiException("Falha ao obter dados históricos após " + maxRetries + " tentativas: " + e.getMessage(), e);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new ExternalApiException("Interrompido durante sleep de retry", e);
+            }
+        }
+
+        throw new ExternalApiException("Falha ao obter dados históricos após " + maxRetries + " tentativas");
+    }
+
     public Double calculateAverageLevel(List<TelemetryItem> items, LocalDate date) {
         if (items == null || items.isEmpty()) {
             return null;

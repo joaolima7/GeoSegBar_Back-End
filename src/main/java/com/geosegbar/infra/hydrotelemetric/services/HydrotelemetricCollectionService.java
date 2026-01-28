@@ -47,9 +47,8 @@ public class HydrotelemetricCollectionService {
             List<TelemetryItem> telemetryData = anaApiService.getTelemetryData(stationCode, authToken);
 
             Double averageMm = anaApiService.calculateAverageLevel(telemetryData, date);
-            Double averageM = averageMm != null ? averageMm / 1000.0 : null;
 
-            if (averageM == null) {
+            if (averageMm == null) {
                 log.warn("Valor nulo obtido para instrumento: {}. Nenhuma leitura será registrada.",
                         instrument.getName());
                 return;
@@ -71,7 +70,7 @@ public class HydrotelemetricCollectionService {
             readingRequest.setHour(LocalTime.of(0, 30));
 
             Map<String, Double> inputValues = new HashMap<>();
-            inputValues.put(inputAcronym, averageM);
+            inputValues.put(inputAcronym, averageMm);
             readingRequest.setInputValues(inputValues);
 
             String baseComment = "Leitura automática pela ANA";
@@ -79,8 +78,8 @@ public class HydrotelemetricCollectionService {
 
             readingService.create(instrument.getId(), readingRequest, true);
 
-            log.info("Leitura linimétrica registrada com sucesso para instrumento: {} - Valor: {}m",
-                    instrument.getName(), averageM);
+            log.info("Leitura linimétrica registrada com sucesso para instrumento: {} - Valor: {} mm",
+                    instrument.getName(), averageMm);
 
         } catch (Exception e) {
             log.error("Erro ao coletar dados para instrumento {}: {}",

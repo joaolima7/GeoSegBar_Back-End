@@ -116,14 +116,10 @@ public class MeasurementUnitService {
     }
 
     private String formatName(String name) {
-        if (name == null || name.isBlank()) {
-            return name;
-        }
-        String trimmed = name.trim();
-        return trimmed.substring(0, 1).toUpperCase() + trimmed.substring(1).toLowerCase();
+        return name == null ? null : name.trim();
     }
 
     private String formatAcronym(String acronym) {
-        return acronym == null ? null : acronym.trim().toUpperCase();
+        return acronym == null ? null : acronym.trim();
     }
 }

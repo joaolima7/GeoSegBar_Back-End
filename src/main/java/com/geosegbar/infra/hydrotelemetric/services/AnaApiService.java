@@ -125,28 +125,13 @@ public class AnaApiService {
         }
     }
 
-    /**
-     * Busca dados históricos de telemetria para um período de 30 dias
-     *
-     * Diferente do getTelemetryData() que busca apenas 2 dias recentes, este
-     * método busca dados históricos com: - Range DIAS_30 (retorna até 30 dias
-     * de dados) - Data específica de busca - Retry automático para 401
-     * Unauthorized (renova token) - Retry automático para timeout/erro de rede
-     * (até 3 tentativas)
-     *
-     * @param stationCode Código da estação
-     * @param startDate Data inicial do período (formato yyyy-MM-dd)
-     * @param authToken Token de autenticação (pode ser renovado
-     * automaticamente)
-     * @return Lista de itens de telemetria para o período
-     */
     public List<TelemetryItem> getTelemetryDataForHistoricalPeriod(String stationCode, LocalDate startDate, String authToken) {
         int maxRetries = 3;
         String currentToken = authToken;
 
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
             try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
-                String dateStr = startDate.toString(); // yyyy-MM-dd
+                String dateStr = startDate.toString();
                 String url = telemetryUrl
                         + "?C%C3%B3digo%20da%20Esta%C3%A7%C3%A3o=" + stationCode
                         + "&Tipo%20Filtro%20Data=DATA_LEITURA"
@@ -167,22 +152,19 @@ public class AnaApiService {
                 int statusCode = response.getStatusLine().getStatusCode();
                 HttpEntity entity = response.getEntity();
 
-                // 401 Unauthorized: renova token e tenta novamente
                 if (statusCode == 401) {
                     String errorBody = EntityUtils.toString(entity);
                     log.warn("Token expirado (401). Renovando token e tentando novamente... (tentativa {}/{})",
                             attempt, maxRetries);
-                    currentToken = getAuthToken(); // Renova token
-                    Thread.sleep(1000); // Aguarda 1s antes de tentar novamente
+                    currentToken = getAuthToken();
+                    Thread.sleep(1000);
                     continue;
                 }
 
-                // Outros erros HTTP
                 if (statusCode != 200) {
                     String errorBody = EntityUtils.toString(entity);
                     log.error("Erro na resposta da API: {} - {}", statusCode, errorBody);
 
-                    // Se for erro 5xx (server error) ou timeout, tenta novamente
                     if (statusCode >= 500 || statusCode == 408) {
                         if (attempt < maxRetries) {
                             log.warn("Erro de servidor/timeout ({}). Tentando novamente em 2s... (tentativa {}/{})",
@@ -195,7 +177,6 @@ public class AnaApiService {
                     throw new ExternalApiException("Erro ao obter dados históricos: " + errorBody);
                 }
 
-                // Sucesso: parseia resposta
                 String responseBody = EntityUtils.toString(entity);
                 AnaTelemetryResponse telemetryResponse = objectMapper.readValue(responseBody, AnaTelemetryResponse.class);
 
@@ -203,7 +184,6 @@ public class AnaApiService {
                     throw new ExternalApiException("Resposta da API da ANA inválida");
                 }
 
-                // Retorna lista vazia se não houver dados (message: "Não houve retorno de registros")
                 if (telemetryResponse.getItems() == null) {
                     log.debug("Sem dados disponíveis para estação {} na data {}", stationCode, dateStr);
                     return List.of();
@@ -218,7 +198,7 @@ public class AnaApiService {
 
                 if (attempt < maxRetries) {
                     try {
-                        Thread.sleep(2000); // Aguarda 2s antes de retry
+                        Thread.sleep(2000);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         throw new ExternalApiException("Interrompido durante retry", ie);

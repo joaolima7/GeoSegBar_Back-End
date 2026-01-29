@@ -13,7 +13,6 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.geosegbar.common.enums.JobStatus;
 import com.geosegbar.common.response.AnaTelemetryResponse.TelemetryItem;
 import com.geosegbar.entities.HistoricalDataJobEntity;
 import com.geosegbar.entities.InstrumentEntity;
@@ -40,9 +39,9 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class HistoricalDataJobProcessor {
 
-    private static final int BATCH_SIZE = 40; // Inserções por transação
-    private static final int DAYS_PER_REQUEST = 30; // Dias por chamada à API ANA
-    private static final String INPUT_ACRONYM = "LEI"; // Leitura linimétrica
+    private static final int BATCH_SIZE = 40;
+    private static final int DAYS_PER_REQUEST = 30;
+    private static final String INPUT_ACRONYM = "LEI";
 
     private final HistoricalDataJobService jobService;
     private final InstrumentRepository instrumentRepository;
@@ -63,32 +62,26 @@ public class HistoricalDataJobProcessor {
         log.info("🚀 Iniciando processamento do job {}", jobId);
 
         try {
-            // Carrega job e valida
+
             HistoricalDataJobEntity job = jobService.findById(jobId)
                     .orElseThrow(() -> new IllegalArgumentException("Job não encontrado: " + jobId));
 
-            // Marca como PROCESSING
             jobService.markAsProcessing(jobId);
 
-            // Carrega instrumento
             InstrumentEntity instrument = instrumentRepository.findById(job.getInstrumentId())
                     .orElseThrow(() -> new IllegalArgumentException(
                     "Instrumento não encontrado: " + job.getInstrumentId()));
 
-            // Valida régua linimétrica
             if (instrument.getLinimetricRulerCode() == null) {
                 throw new IllegalStateException(
                         "Instrumento não possui código de régua linimétrica: " + instrument.getName());
             }
 
-            // Obtém token ANA (válido para toda a sessão)
             String authToken = anaApiService.getAuthToken();
             log.info("Token ANA obtido para job {}", jobId);
 
-            // Processa período completo
             processHistoricalPeriod(job, instrument, authToken);
 
-            // Marca como completado
             jobService.markAsCompleted(jobId);
             log.info("✅ Job {} COMPLETADO com sucesso", jobId);
 
@@ -110,21 +103,21 @@ public class HistoricalDataJobProcessor {
      * cada batch para permitir resume.
      */
     private void processHistoricalPeriod(HistoricalDataJobEntity job, InstrumentEntity instrument, String authToken) {
-        LocalDate currentDate = job.getCheckpointDate(); // Resume de onde parou
+        LocalDate currentDate = job.getCheckpointDate();
         LocalDate endDate = job.getEndDate();
         String stationCode = String.valueOf(instrument.getLinimetricRulerCode());
 
         List<ReadingRequestDTO> readingBatch = new ArrayList<>();
         int totalCreated = 0;
         int totalSkipped = 0;
-        String currentToken = authToken; // Token que pode ser renovado
+        String currentToken = authToken;
 
         log.info("Processando período: {} até {} para instrumento {}",
                 currentDate, endDate, instrument.getName());
 
         while (!currentDate.isAfter(endDate)) {
             try {
-                // Define período de 30 dias
+
                 LocalDate periodEnd = currentDate.plusDays(DAYS_PER_REQUEST - 1);
                 if (periodEnd.isAfter(endDate)) {
                     periodEnd = endDate;
@@ -132,7 +125,6 @@ public class HistoricalDataJobProcessor {
 
                 log.debug("Coletando dados: {} a {} (job {})", currentDate, periodEnd, job.getId());
 
-                // Chama API ANA com DIAS_30 e data específica
                 List<TelemetryItem> telemetryData = anaApiService.getTelemetryDataForHistoricalPeriod(
                         stationCode,
                         currentDate,
@@ -142,7 +134,6 @@ public class HistoricalDataJobProcessor {
                 log.debug("API retornou {} itens para período {} a {} (job {})",
                         telemetryData.size(), currentDate, periodEnd, job.getId());
 
-                // Se retornou vazio, pula este período
                 if (telemetryData.isEmpty()) {
                     log.warn("⚠️ Sem dados disponíveis para período {} a {} (estação: {})",
                             currentDate, periodEnd, stationCode);
@@ -151,11 +142,10 @@ public class HistoricalDataJobProcessor {
                     continue;
                 }
 
-                // Agrupa leituras por dia e calcula médias diárias
                 Map<LocalDate, List<TelemetryItem>> itemsByDate = new HashMap<>();
                 for (TelemetryItem item : telemetryData) {
                     if (item.getDataHoraMedicao() != null) {
-                        String dateStr = item.getDataHoraMedicao().substring(0, 10); // "2015-05-03 00:30:00.0" -> "2015-05-03"
+                        String dateStr = item.getDataHoraMedicao().substring(0, 10);
                         LocalDate itemDate = LocalDate.parse(dateStr);
                         itemsByDate.computeIfAbsent(itemDate, k -> new ArrayList<>()).add(item);
                     }
@@ -165,13 +155,10 @@ public class HistoricalDataJobProcessor {
                         itemsByDate.size(), currentDate, periodEnd);
                 log.info("📅 Dias com dados na API: {}", itemsByDate.keySet().stream().sorted().toList());
 
-                // Processa TODOS os dias que vieram da API (não apenas o período solicitado)
-                // A API pode retornar dados de dias anteriores/posteriores ao solicitado
                 for (Map.Entry<LocalDate, List<TelemetryItem>> entry : itemsByDate.entrySet()) {
                     LocalDate date = entry.getKey();
                     List<TelemetryItem> dayItems = entry.getValue();
 
-                    // Verifica se já existe leitura
                     boolean exists = readingService.existsByInstrumentAndDate(instrument.getId(), date);
                     if (exists) {
                         log.debug("Pulando {}: leitura já existe", date);
@@ -179,7 +166,6 @@ public class HistoricalDataJobProcessor {
                         continue;
                     }
 
-                    // Busca leituras deste dia específico
                     if (dayItems == null || dayItems.isEmpty()) {
                         log.debug("Pulando {}: sem dados da API para este dia", date);
                         totalSkipped++;
@@ -188,7 +174,6 @@ public class HistoricalDataJobProcessor {
 
                     log.debug("Processando {}: {} leituras encontradas", date, dayItems.size());
 
-                    // Calcula média do dia (apenas valores válidos de Cota_Adotada)
                     Double averageMm = dayItems.stream()
                             .filter(item -> item.getCotaAdotada() != null && !item.getCotaAdotada().isEmpty())
                             .filter(item -> !item.getCotaAdotada().equals("0.00"))
@@ -212,26 +197,21 @@ public class HistoricalDataJobProcessor {
 
                     log.info("✅ Criando reading para {}: {} mm (job {})", date, averageMm, job.getId());
 
-                    // Cria reading
                     ReadingRequestDTO reading = createReading(date, averageMm);
                     readingBatch.add(reading);
                     totalCreated++;
 
-                    // Batch insert quando atingir tamanho
                     if (readingBatch.size() >= BATCH_SIZE) {
                         batchInsertReadings(instrument.getId(), readingBatch);
                         readingBatch.clear();
 
-                        // Atualiza checkpoint
                         jobService.updateProgress(job.getId(), date, BATCH_SIZE, totalSkipped);
-                        totalSkipped = 0; // Reset após checkpoint
+                        totalSkipped = 0;
                     }
                 }
 
-                // Avança para próximo período
                 currentDate = periodEnd.plusDays(1);
 
-                // Pequena pausa entre requisições (rate limiting)
                 Thread.sleep(500);
 
             } catch (ExternalApiException e) {
@@ -247,7 +227,6 @@ public class HistoricalDataJobProcessor {
             }
         }
 
-        // Insere últimas readings do batch
         if (!readingBatch.isEmpty()) {
             batchInsertReadings(instrument.getId(), readingBatch);
             jobService.updateProgress(job.getId(), endDate, readingBatch.size(), totalSkipped);
@@ -263,7 +242,7 @@ public class HistoricalDataJobProcessor {
     private ReadingRequestDTO createReading(LocalDate date, Double valueMm) {
         ReadingRequestDTO reading = new ReadingRequestDTO();
         reading.setDate(date);
-        reading.setHour(LocalTime.of(0, 30)); // Horário padrão
+        reading.setHour(LocalTime.of(0, 30));
 
         Map<String, Double> inputValues = new HashMap<>();
         inputValues.put(INPUT_ACRONYM, valueMm);
@@ -283,7 +262,7 @@ public class HistoricalDataJobProcessor {
     private void batchInsertReadings(Long instrumentId, List<ReadingRequestDTO> readings) {
         try {
             for (ReadingRequestDTO reading : readings) {
-                readingService.create(instrumentId, reading, true); // skipPermissionCheck
+                readingService.create(instrumentId, reading, true);
             }
             log.debug("Batch de {} readings inserido", readings.size());
         } catch (Exception e) {

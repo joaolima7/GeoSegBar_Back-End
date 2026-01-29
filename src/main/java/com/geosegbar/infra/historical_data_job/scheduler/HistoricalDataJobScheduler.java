@@ -16,16 +16,6 @@ import com.geosegbar.infra.historical_data_job.service.HistoricalDataJobService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-/**
- * Scheduler para processamento automático de jobs de coleta histórica
- *
- * Responsabilidades: - Polling da fila Redis a cada 30 segundos - Dispara
- * processor assíncrono para cada job - Detecta jobs travados (>1 hora em
- * PROCESSING) - Re-enfileira jobs PAUSED e jobs travados
- *
- * Pode ser desabilitado via propriedade:
- * historical-data-job.scheduler.enabled=false
- */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -39,34 +29,25 @@ public class HistoricalDataJobScheduler {
     private final HistoricalDataJobService jobService;
     private final HistoricalDataJobProcessor jobProcessor;
 
-    /**
-     * Processa fila de jobs a cada 30 segundos
-     *
-     * - Remove job do início da fila (LPOP) - Verifica se job ainda está QUEUED
-     * - Dispara processor assíncrono - Continua até fila vazia
-     *
-     * Fixo delay: aguarda 30s após conclusão da iteração anterior
-     */
     @Scheduled(fixedDelay = 30000, initialDelay = 120000)
     public void processQueue() {
         try {
-            // Verifica tamanho da fila
+
             Long queueSize = jobService.getQueueSize();
             if (queueSize == 0) {
-                return; // Fila vazia, não loga
+                return;
             }
 
             log.debug("Fila de jobs históricos: {} jobs pendentes", queueSize);
 
-            // Processa jobs até fila esvaziar ou limite de iterações
             int processed = 0;
-            int maxIterations = 10; // Limita para não bloquear scheduler muito tempo
+            int maxIterations = 10;
 
             while (processed < maxIterations) {
                 Optional<Long> jobIdOpt = jobService.popFromRedisQueue();
 
                 if (jobIdOpt.isEmpty()) {
-                    break; // Fila vazia
+                    break;
                 }
 
                 Long jobId = jobIdOpt.get();
@@ -79,14 +60,12 @@ public class HistoricalDataJobScheduler {
 
                 HistoricalDataJobEntity job = jobOpt.get();
 
-                // Só processa se estiver QUEUED
                 if (job.getStatus() != JobStatus.QUEUED) {
                     log.warn("Job {} não está QUEUED (status: {}). Ignorando.",
                             jobId, job.getStatus());
                     continue;
                 }
 
-                // Dispara processamento assíncrono
                 log.info("📥 Disparando processamento do job {} (instrumento: {})",
                         jobId, job.getInstrumentName());
 
@@ -103,16 +82,7 @@ public class HistoricalDataJobScheduler {
         }
     }
 
-    /**
-     * Detecta e reprocessa jobs travados a cada 10 minutos
-     *
-     * Jobs em PROCESSING por mais de 1 hora são considerados travados: - Worker
-     * pode ter morrido - API ANA pode estar lenta - Timeout de rede
-     *
-     * Estratégia: - Se retry < 3: marca como PAUSED e re-enfileira
-     * - Se retry >= 3: marca como FAILED (não re-enfileira)
-     */
-    @Scheduled(cron = "0 */10 * * * *") // A cada 10 minutos
+    @Scheduled(cron = "0 */10 * * * *")
     public void detectStalledJobs() {
         try {
             List<HistoricalDataJobEntity> stalledJobs = jobService.findStalledJobs();
@@ -131,11 +101,10 @@ public class HistoricalDataJobScheduler {
                     log.warn("Job {} travado há {} minutos (instrumento: {}, retry: {}/3)",
                             job.getId(), minutesStuck, job.getInstrumentName(), job.getRetryCount());
 
-                    // Incrementa retry
                     boolean canRetry = jobService.incrementRetry(job.getId());
 
                     if (canRetry) {
-                        // Marca como PAUSED e re-enfileira
+
                         jobService.markAsPaused(job.getId(),
                                 "Job travado por " + minutesStuck + " minutos - re-enfileirando");
                         jobService.pushToRedisQueue(job.getId());
@@ -143,7 +112,7 @@ public class HistoricalDataJobScheduler {
                         log.info("Job {} pausado e re-enfileirado para retry {}/3",
                                 job.getId(), job.getRetryCount() + 1);
                     } else {
-                        // Falha definitiva
+
                         jobService.markAsFailed(job.getId(),
                                 "Job travado após 3 tentativas (" + minutesStuck + " minutos)");
 
@@ -160,15 +129,7 @@ public class HistoricalDataJobScheduler {
         }
     }
 
-    /**
-     * Re-enfileira jobs PAUSED para retry a cada 5 minutos
-     *
-     * Jobs pausados após erros temporários (token expirado, timeout) precisam
-     * ser re-tentados automaticamente.
-     *
-     * Executa em horário fixo (cron) para evitar sobreposição
-     */
-    @Scheduled(cron = "0 */5 * * * *") // A cada 5 minutos
+    @Scheduled(cron = "0 */5 * * * *")
     public void requeuePausedJobs() {
         try {
             List<HistoricalDataJobEntity> pausedJobs
@@ -184,7 +145,7 @@ public class HistoricalDataJobScheduler {
 
             for (HistoricalDataJobEntity job : pausedJobs) {
                 try {
-                    // Verifica se ainda pode retry
+
                     if (job.getRetryCount() >= 3) {
                         jobService.markAsFailed(job.getId(),
                                 "Job pausado com retry count >= 3");
@@ -192,7 +153,6 @@ public class HistoricalDataJobScheduler {
                         continue;
                     }
 
-                    // Volta para QUEUED
                     job.setStatus(JobStatus.QUEUED);
                     jobService.pushToRedisQueue(job.getId());
 
@@ -210,22 +170,15 @@ public class HistoricalDataJobScheduler {
         }
     }
 
-    /**
-     * Helper para buscar jobs PAUSED do repositório
-     */
     private List<HistoricalDataJobEntity> findPausedJobs() {
-        // Busca jobs PAUSED ordenados por data de criação
+
         return jobService.findById(0L).map(job -> List.<HistoricalDataJobEntity>of())
                 .orElseGet(() -> {
-                    // Fallback: busca do repositório diretamente
-                    // (jobService não tem método findByStatus, usar repository se necessário)
+
                     return List.of();
                 });
     }
 
-    /**
-     * Exibe métricas da fila a cada 2 minutos (apenas em modo DEBUG)
-     */
     @Scheduled(cron = "0 */2 * * * *")
     public void logQueueMetrics() {
         if (!log.isDebugEnabled()) {

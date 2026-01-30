@@ -126,6 +126,8 @@ public class RestExceptionHandler {
             errors.put(error.getField(), error.getDefaultMessage());
         }
 
+        logger.warn("Erro de validação: {} campos inválidos - {}", errors.size(), errors);
+
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(WebResponseEntity.errorValidation("Erro de validação", errors));
     }
@@ -140,6 +142,8 @@ public class RestExceptionHandler {
                     ? propertyPath.substring(propertyPath.lastIndexOf('.') + 1) : propertyPath;
             errors.put(field, violation.getMessage());
         }
+
+        logger.warn("ConstraintViolationException: {} violações - {}", errors.size(), errors);
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(WebResponseEntity.errorValidation("Inválido!", errors));
@@ -161,6 +165,8 @@ public class RestExceptionHandler {
                         ? propertyPath.substring(propertyPath.lastIndexOf('.') + 1) : propertyPath;
                 errors.put(field, violation.getMessage());
             }
+
+            logger.warn("Erro de validação na transação: {} violações - {}", errors.size(), errors);
 
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(WebResponseEntity.errorValidation("Inválido!", errors));

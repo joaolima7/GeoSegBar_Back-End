@@ -295,18 +295,18 @@ public class InstrumentService {
     private void validateOutputRequest(OutputDTO outputDTO, Boolean instrumentNoLimit) {
         if (Boolean.TRUE.equals(instrumentNoLimit)) {
             if (outputDTO.getStatisticalLimit() != null || outputDTO.getDeterministicLimit() != null) {
-                throw new InvalidInputException("Quando o instrumento está marcado como 'Sem Limites', seus outputs não devem ter limites estatísticos ou determinísticos");
+                throw new InvalidInputException("Quando o instrumento está marcado como 'Sem Limites', seus outputs não devem ter limites estatísticos ou determinísticos!");
             }
         } else {
             boolean hasStatistical = outputDTO.getStatisticalLimit() != null;
             boolean hasDeterministic = outputDTO.getDeterministicLimit() != null;
 
             if (!hasStatistical && !hasDeterministic) {
-                throw new InvalidInputException("Quando o instrumento não está marcado como 'Sem Limites', cada output deve ter um tipo de limite");
+                throw new InvalidInputException("Quando o instrumento não está marcado como 'Sem Limites', cada output deve ter um tipo de limite!");
             }
 
             if (hasStatistical && hasDeterministic) {
-                throw new InvalidInputException("Apenas um tipo de limite (estatístico ou determinístico) deve ser fornecido para um output, não ambos");
+                throw new InvalidInputException("Apenas um tipo de limite (estatístico ou determinístico) deve ser fornecido para um output, não ambos!");
             }
         }
     }

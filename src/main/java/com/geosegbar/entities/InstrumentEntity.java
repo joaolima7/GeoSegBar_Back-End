@@ -58,12 +58,10 @@ public class InstrumentEntity {
     @Column(nullable = true)
     private Double distanceOffset;
 
-    @NotNull(message = "Latitude do Instrumento é obrigatório!")
-    @Column(nullable = false)
+    @Column(nullable = true)
     private Double latitude;
 
-    @NotNull(message = "Longitude do Instrumento é obrigatório!")
-    @Column(nullable = false)
+    @Column(nullable = true)
     private Double longitude;
 
     @NotNull(message = "Campo 'Sem limites' do Instrumento é obrigatório!")

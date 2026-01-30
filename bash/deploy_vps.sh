@@ -266,25 +266,6 @@ else
 fi
 
 # ============================================
-# MIGRATIONS
-# ============================================
-echo "🔄 Verificando e executando migrations SQL..."
-if [ -d "./migrations" ] && [ "$(ls -A ./migrations/*.sql 2>/dev/null)" ]; then
-    echo "📝 Migrations encontradas. Executando..."
-    for migration_file in ./migrations/*.sql; do
-        if [ -f "$migration_file" ]; then
-            echo "   Executando: $(basename $migration_file)"
-            docker exec -i postgres-prod psql -U ${DB_USERNAME} -d ${DB_NAME} < "$migration_file" || {
-                echo "⚠️  Aviso: Migration $(basename $migration_file) pode já ter sido executada ou teve erro"
-            }
-        fi
-    done
-    echo "✅ Migrations processadas"
-else
-    echo "ℹ️  Nenhuma migration SQL encontrada em ./migrations"
-fi
-
-# ============================================
 # APPLICATION
 # ============================================
 echo "🛑 Parando container atual da API..."

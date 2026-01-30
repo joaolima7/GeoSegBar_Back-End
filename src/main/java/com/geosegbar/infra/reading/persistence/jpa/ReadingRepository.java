@@ -387,6 +387,23 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
     List<ReadingEntity> findAllByIdWithMinimalData(@Param("ids") List<Long> ids);
 
     @Query("""
+        SELECT DISTINCT r FROM ReadingEntity r
+        LEFT JOIN FETCH r.instrument i
+        LEFT JOIN FETCH i.instrumentType
+        LEFT JOIN FETCH r.output o
+        LEFT JOIN FETCH r.user u
+        LEFT JOIN FETCH r.inputValues
+        WHERE r.instrument.id = :instrumentId
+          AND r.date IN :dates
+          AND (:active IS NULL OR r.active = :active)
+        ORDER BY r.date DESC, r.hour DESC
+        """)
+    List<ReadingEntity> findByInstrumentIdAndDatesWithAllRelations(
+            @Param("instrumentId") Long instrumentId,
+            @Param("dates") List<LocalDate> dates,
+            @Param("active") Boolean active);
+
+    @Query("""
             SELECT DISTINCT r FROM ReadingEntity r
             LEFT JOIN FETCH r.instrument i
             LEFT JOIN FETCH r.output o

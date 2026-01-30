@@ -26,6 +26,7 @@ import com.geosegbar.infra.reading.dtos.InstrumentGroupedReadingsDTO;
 import com.geosegbar.infra.reading.dtos.InstrumentLimitStatusDTO;
 import com.geosegbar.infra.reading.dtos.InstrumentReadingsDTO.MultiInstrumentReadingsResponseDTO;
 import com.geosegbar.infra.reading.dtos.PagedReadingResponseDTO;
+import com.geosegbar.infra.reading.dtos.ReadingGroupDTO;
 import com.geosegbar.infra.reading.dtos.ReadingRequestDTO;
 import com.geosegbar.infra.reading.dtos.ReadingResponseDTO;
 import com.geosegbar.infra.reading.dtos.UpdateReadingRequestDTO;
@@ -58,12 +59,14 @@ public class ReadingController {
     }
 
     @GetMapping("/instrument/{instrumentId}/grouped")
-    public ResponseEntity<WebResponseEntity<PagedReadingResponseDTO<ReadingResponseDTO>>> getGroupedReadingsByInstrument(
+    public ResponseEntity<WebResponseEntity<PagedReadingResponseDTO<ReadingGroupDTO>>> getGroupedReadingsByInstrument(
             @PathVariable Long instrumentId,
             @RequestParam(required = false) Boolean active,
             Pageable pageable) {
-        PagedReadingResponseDTO<ReadingResponseDTO> result = readingService.findGroupedReadingsFlatByInstrument(
+
+        PagedReadingResponseDTO<ReadingGroupDTO> result = readingService.findGroupedReadingsByInstrument(
                 instrumentId, active, pageable);
+
         return ResponseEntity.ok(WebResponseEntity.success(result, "Leituras agrupadas obtidas com sucesso!"));
     }
 
@@ -208,15 +211,14 @@ public class ReadingController {
 
         ReadingResponseDTO updated = readingService.updateReading(id, request);
 
-        
         StringBuilder message = new StringBuilder("Leitura atualizada com sucesso");
-        
+
         boolean hasChanges = false;
         if (request.getDate() != null || request.getHour() != null) {
             message.append(" (data/hora alterada)");
             hasChanges = true;
         }
-        
+
         if (request.getUserId() != null) {
             if (hasChanges) {
                 message.append(" e");
@@ -224,7 +226,7 @@ public class ReadingController {
             message.append(" (usuário alterado)");
             hasChanges = true;
         }
-        
+
         if (request.getInputValues() != null && !request.getInputValues().isEmpty()) {
             if (hasChanges) {
                 message.append(" e");
@@ -232,7 +234,7 @@ public class ReadingController {
             message.append(" (valores de input e cálculos atualizados)");
             hasChanges = true;
         }
-        
+
         if (request.getComment() != null) {
             if (hasChanges) {
                 message.append(" e");
@@ -240,7 +242,7 @@ public class ReadingController {
             String commentAction = request.getComment().trim().isEmpty() ? "removido" : "atualizado";
             message.append(" (comentário ").append(commentAction).append(")");
         }
-        
+
         message.append("!");
 
         return ResponseEntity.ok(WebResponseEntity.success(updated, message.toString()));

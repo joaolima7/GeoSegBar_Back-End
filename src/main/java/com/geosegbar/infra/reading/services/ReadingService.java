@@ -48,6 +48,7 @@ import com.geosegbar.infra.reading.dtos.InstrumentLimitStatusDTO;
 import com.geosegbar.infra.reading.dtos.InstrumentReadingsDTO;
 import com.geosegbar.infra.reading.dtos.InstrumentReadingsDTO.MultiInstrumentReadingsResponseDTO;
 import com.geosegbar.infra.reading.dtos.PagedReadingResponseDTO;
+import com.geosegbar.infra.reading.dtos.ReadingGroupDTO;
 import com.geosegbar.infra.reading.dtos.ReadingRequestDTO;
 import com.geosegbar.infra.reading.dtos.ReadingResponseDTO;
 import com.geosegbar.infra.reading.dtos.ReadingResponseDTO.UserInfoDTO;
@@ -210,12 +211,14 @@ public class ReadingService {
                 .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
     }
 
+// Troque o método antigo por este:
     @Transactional(readOnly = true)
-    public PagedReadingResponseDTO<ReadingResponseDTO> findGroupedReadingsFlatByInstrument(
+    public PagedReadingResponseDTO<ReadingGroupDTO> findGroupedReadingsByInstrument( // Note a mudança no retorno
             Long instrumentId, Boolean active, Pageable pageable) {
 
         validateViewPermission();
 
+        // 1. Busca as Datas/Horas paginadas (Isso está funcionando, achou 19 elementos)
         Page<Object[]> dateHourPage = readingRepository.findDistinctDateHourByInstrumentIdAndActive(
                 instrumentId, active, pageable);
 
@@ -223,22 +226,42 @@ public class ReadingService {
             return createEmptyPagedResponse(dateHourPage);
         }
 
-        int size = dateHourPage.getContent().size();
-        List<LocalDate> dates = new ArrayList<>(size);
-        List<LocalTime> hours = new ArrayList<>(size);
+        // 2. Extrai as datas e horas da página atual
+        List<LocalDate> dates = new ArrayList<>();
+        List<LocalTime> hours = new ArrayList<>();
 
         for (Object[] dh : dateHourPage.getContent()) {
             dates.add((LocalDate) dh[0]);
             hours.add((LocalTime) dh[1]);
         }
 
-        List<ReadingResponseDTO> dtos = readingRepository
-                .findByInstrumentIdAndDateHoursWithAllRelations(instrumentId, dates, hours, active)
-                .stream()
-                .map(this::mapToResponseDTO)
-                .collect(Collectors.toList());
+        // 3. AQUI ESTÁ O TRUQUE PARA CORRIGIR O BUG DA DATA/HORA
+        // Em vez de confiar no "IN hours", vamos buscar tudo que tem nessas DATAS
+        // e depois filtramos na memória as horas exatas. Isso evita o problema de precisão do banco.
+        List<ReadingEntity> rawReadings = readingRepository
+                .findByInstrumentIdAndDatesWithAllRelations(instrumentId, dates, active);
 
-        return createPagedResponse(dtos, dateHourPage);
+        // 4. Agrupamento em Memória
+        List<ReadingGroupDTO> groupedResult = new ArrayList<>();
+
+        for (Object[] dh : dateHourPage.getContent()) {
+            LocalDate targetDate = (LocalDate) dh[0];
+            LocalTime targetHour = (LocalTime) dh[1];
+
+            // Filtra na lista bruta apenas o que bate com data E hora (com tolerância se necessário)
+            List<ReadingResponseDTO> groupReadings = rawReadings.stream()
+                    .filter(r -> r.getDate().equals(targetDate) && r.getHour().equals(targetHour)) // Comparação Java é mais segura aqui
+                    .map(this::mapToResponseDTO)
+                    .sorted(Comparator.comparing(ReadingResponseDTO::getOutputName)) // Ordena por output
+                    .collect(Collectors.toList());
+
+            if (!groupReadings.isEmpty()) {
+                groupedResult.add(new ReadingGroupDTO(targetDate, targetHour, groupReadings));
+            }
+        }
+
+        // Retorna a página de GRUPOS
+        return createPagedResponse(groupedResult, dateHourPage);
     }
 
     /**

@@ -1,26 +1,22 @@
 package com.geosegbar.infra.psb.services;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.DamEntity;
+import com.geosegbar.entities.PSBFileEntity;
 import com.geosegbar.entities.PSBFolderEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
+import com.geosegbar.infra.file_storage.FileStorageService;
 import com.geosegbar.infra.psb.dtos.CreatePSBFolderRequest;
 import com.geosegbar.infra.psb.dtos.PSBFolderCreationDTO;
 import com.geosegbar.infra.psb.persistence.PSBFolderRepository;
@@ -34,28 +30,18 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class PSBFolderService {
 
-    @Value("${file.psb-dir:${file.upload-dir}/psb}")
-    private String psbBaseDir;
-
     private final PSBFolderRepository psbFolderRepository;
     private final DamRepository damRepository;
     private final UserRepository userRepository;
+    private final FileStorageService fileStorageService;
 
     public List<PSBFolderEntity> findAllByDamId(Long damId) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getViewPSB()) {
-                throw new NotFoundException("Usuário não tem permissão para acessar as pastas PSB");
-            }
-        }
+        validateViewPermission();
         return psbFolderRepository.findByDamIdAndParentFolderIsNullOrderByFolderIndexAsc(damId);
     }
 
     public List<PSBFolderEntity> findSubfolders(Long parentFolderId) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getViewPSB()) {
-                throw new NotFoundException("Usuário não tem permissão para acessar as pastas PSB");
-            }
-        }
+        validateViewPermission();
         psbFolderRepository.findById(parentFolderId)
                 .orElseThrow(() -> new NotFoundException("Pasta pai não encontrada"));
         return psbFolderRepository.findByParentFolderIdOrderByFolderIndexAsc(parentFolderId);
@@ -63,11 +49,7 @@ public class PSBFolderService {
 
     @Transactional(readOnly = true)
     public List<PSBFolderEntity> findCompleteHierarchyByDamId(Long damId) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getViewPSB()) {
-                throw new NotFoundException("Usuário não tem permissão para acessar as pastas PSB");
-            }
-        }
+        validateViewPermission();
 
         damRepository.findById(damId)
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada"));
@@ -80,9 +62,7 @@ public class PSBFolderService {
     }
 
     private void initializeSubfolders(PSBFolderEntity folder) {
-
         folder.getFiles().size();
-
         folder.getSubfolders().forEach(subfolder -> {
             subfolder.getFiles().size();
             initializeSubfolders(subfolder);
@@ -91,20 +71,14 @@ public class PSBFolderService {
 
     @Transactional(readOnly = true)
     public PSBFolderEntity findById(Long id) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getViewPSB()) {
-                throw new NotFoundException("Usuário não tem permissão para acessar as pastas PSB");
-            }
-        }
+        validateViewPermission();
         PSBFolderEntity folder = psbFolderRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
 
         if (folder.getParentFolder() != null) {
             folder.getParentFolder().getName();
         }
-
         folder.getFiles().size();
-
         initializeSubfolders(folder);
 
         return folder;
@@ -112,11 +86,8 @@ public class PSBFolderService {
 
     @Transactional
     public PSBFolderEntity create(CreatePSBFolderRequest request) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getEditPSB()) {
-                throw new NotFoundException("Usuário não tem permissão para criar pastas PSB!");
-            }
-        }
+        validateEditPermission();
+
         DamEntity dam = damRepository.findById(request.getDamId())
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada"));
 
@@ -134,33 +105,10 @@ public class PSBFolderService {
             }
         }
 
-        if (parentFolder != null) {
-            if (psbFolderRepository.existsByDamIdAndNameAndParentFolderId(
-                    dam.getId(), request.getName(), parentFolder.getId())) {
-                throw new DuplicateResourceException("Já existe uma pasta com este nome neste nível");
-            }
-        } else {
-            if (psbFolderRepository.existsByDamIdAndNameAndParentFolderIsNull(
-                    dam.getId(), request.getName())) {
-                throw new DuplicateResourceException("Já existe uma pasta raiz com este nome");
-            }
-        }
-
-        if (parentFolder != null) {
-            if (psbFolderRepository.existsByParentFolderIdAndFolderIndex(
-                    parentFolder.getId(), request.getFolderIndex())) {
-                throw new DuplicateResourceException("Já existe uma pasta com este índice neste nível");
-            }
-        } else {
-            if (psbFolderRepository.existsByDamIdAndFolderIndexAndParentFolderIsNull(
-                    dam.getId(), request.getFolderIndex())) {
-                throw new DuplicateResourceException("Já existe uma pasta raiz com este índice");
-            }
-        }
+        validateDuplicates(dam.getId(), request.getName(), request.getFolderIndex(), parentFolder);
 
         String folderPath = createHierarchicalFolderPath(dam.getId(), parentFolder,
                 request.getFolderIndex(), request.getName());
-        ensureDirectoryExists(folderPath);
 
         PSBFolderEntity folder = new PSBFolderEntity();
         folder.setName(request.getName());
@@ -177,11 +125,7 @@ public class PSBFolderService {
 
     @Transactional
     public PSBFolderEntity update(Long id, CreatePSBFolderRequest request) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getEditPSB()) {
-                throw new NotFoundException("Usuário não tem permissão para editar pastas do PSB!");
-            }
-        }
+        validateEditPermission();
 
         PSBFolderEntity existingFolder = psbFolderRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
@@ -211,46 +155,8 @@ public class PSBFolderService {
                 || (currentParentId != null && !currentParentId.equals(newParentId))
                 || (currentParentId != null && newParentId == null);
 
-        if (nameChanged || parentChanged) {
-            if (newParentId != null) {
-                List<PSBFolderEntity> siblings = psbFolderRepository
-                        .findByParentFolderIdOrderByFolderIndexAsc(newParentId);
-                for (PSBFolderEntity sibling : siblings) {
-                    if (!sibling.getId().equals(id) && sibling.getName().equals(request.getName())) {
-                        throw new DuplicateResourceException("Já existe uma pasta com este nome neste nível");
-                    }
-                }
-            } else {
-                List<PSBFolderEntity> siblings = psbFolderRepository
-                        .findByDamIdAndParentFolderIsNullOrderByFolderIndexAsc(existingFolder.getDam().getId());
-                for (PSBFolderEntity sibling : siblings) {
-                    if (!sibling.getId().equals(id) && sibling.getName().equals(request.getName())) {
-                        throw new DuplicateResourceException("Já existe uma pasta raiz com este nome");
-                    }
-                }
-            }
-        }
-
-        if (indexChanged || parentChanged) {
-            if (newParentId != null) {
-                List<PSBFolderEntity> siblings = psbFolderRepository
-                        .findByParentFolderIdOrderByFolderIndexAsc(newParentId);
-                for (PSBFolderEntity sibling : siblings) {
-                    if (!sibling.getId().equals(id)
-                            && sibling.getFolderIndex().equals(request.getFolderIndex())) {
-                        throw new DuplicateResourceException("Já existe uma pasta com este índice neste nível");
-                    }
-                }
-            } else {
-                List<PSBFolderEntity> siblings = psbFolderRepository
-                        .findByDamIdAndParentFolderIsNullOrderByFolderIndexAsc(existingFolder.getDam().getId());
-                for (PSBFolderEntity sibling : siblings) {
-                    if (!sibling.getId().equals(id)
-                            && sibling.getFolderIndex().equals(request.getFolderIndex())) {
-                        throw new DuplicateResourceException("Já existe uma pasta raiz com este índice");
-                    }
-                }
-            }
+        if (nameChanged || indexChanged || parentChanged) {
+            validateDuplicatesForUpdate(existingFolder, request.getName(), request.getFolderIndex(), newParentId);
         }
 
         if (nameChanged || indexChanged || parentChanged) {
@@ -258,26 +164,8 @@ public class PSBFolderService {
                     existingFolder.getDam().getId(), newParent,
                     request.getFolderIndex(), request.getName());
 
-            try {
-                Path oldPath = Paths.get(existingFolder.getServerPath());
-                Path newPath = Paths.get(newFolderPath);
-
-                if (Files.exists(oldPath)) {
-                    Files.createDirectories(newPath.getParent());
-                    Files.move(oldPath, newPath);
-                    log.info("Pasta movida de {} para {}", oldPath, newPath);
-                } else {
-                    ensureDirectoryExists(newFolderPath);
-                }
-
-                existingFolder.setServerPath(newFolderPath);
-
-                updateSubfoldersPath(existingFolder);
-
-            } catch (IOException e) {
-                log.error("Erro ao mover pasta: {}", e.getMessage());
-                throw new BusinessRuleException("Erro ao mover pasta no sistema de arquivos");
-            }
+            existingFolder.setServerPath(newFolderPath);
+            updateSubfoldersPath(existingFolder);
         }
 
         existingFolder.setName(request.getName());
@@ -295,11 +183,7 @@ public class PSBFolderService {
 
     @Transactional
     public void delete(Long id) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getEditPSB()) {
-                throw new NotFoundException("Usuário não tem permissão para deletar pastas do PSB!");
-            }
-        }
+        validateEditPermission();
 
         PSBFolderEntity folderToDelete = psbFolderRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
@@ -308,26 +192,33 @@ public class PSBFolderService {
         Integer deletedFolderIndex = folderToDelete.getFolderIndex();
         PSBFolderEntity parentFolder = folderToDelete.getParentFolder();
 
-        try {
-            Path folderPath = Paths.get(folderToDelete.getServerPath());
-            if (Files.exists(folderPath)) {
-                Files.walk(folderPath)
-                        .sorted((a, b) -> b.toString().length() - a.toString().length())
-                        .forEach(path -> {
-                            try {
-                                Files.delete(path);
-                            } catch (Exception e) {
-                                log.error("Erro ao deletar: " + path + ": " + e.getMessage());
-                            }
-                        });
-                log.info("Pasta e subpastas excluídas fisicamente: {}", folderPath);
-            }
-        } catch (Exception e) {
-            log.error("Erro ao deletar diretório: {}", e.getMessage());
-        }
+        deleteS3ContentRecursively(folderToDelete);
 
         psbFolderRepository.delete(folderToDelete);
 
+        reindexSiblingsAfterDelete(damId, parentFolder, deletedFolderIndex);
+    }
+
+    /**
+     * Deleta recursivamente todos os arquivos físicos do S3 associados à pasta
+     * e subpastas.
+     */
+    private void deleteS3ContentRecursively(PSBFolderEntity folder) {
+
+        for (PSBFileEntity file : folder.getFiles()) {
+            try {
+                fileStorageService.deleteFile(file.getDownloadUrl());
+            } catch (Exception e) {
+                log.error("Erro ao deletar arquivo S3 {}: {}", file.getFilename(), e.getMessage());
+            }
+        }
+
+        for (PSBFolderEntity subfolder : folder.getSubfolders()) {
+            deleteS3ContentRecursively(subfolder);
+        }
+    }
+
+    private void reindexSiblingsAfterDelete(Long damId, PSBFolderEntity parentFolder, Integer deletedFolderIndex) {
         List<PSBFolderEntity> foldersToReindex;
         if (parentFolder != null) {
             foldersToReindex = psbFolderRepository
@@ -340,40 +231,57 @@ public class PSBFolderService {
         }
 
         for (PSBFolderEntity folder : foldersToReindex) {
-            Integer oldIndex = folder.getFolderIndex();
-            Integer newIndex = oldIndex - 1;
+            Integer newIndex = folder.getFolderIndex() - 1;
 
-            String oldFolderPath = folder.getServerPath();
             String newFolderPath = createHierarchicalFolderPath(
                     damId, folder.getParentFolder(), newIndex, folder.getName());
 
-            try {
-                Path sourcePath = Paths.get(oldFolderPath);
-                Path targetPath = Paths.get(newFolderPath);
+            folder.setFolderIndex(newIndex);
+            folder.setServerPath(newFolderPath);
+            folder.setUpdatedAt(LocalDateTime.now());
 
-                if (Files.exists(sourcePath) && !sourcePath.equals(targetPath)) {
-                    Files.move(sourcePath, targetPath);
-                    log.info("Pasta reindexada de {} para {}", sourcePath, targetPath);
-                }
-
-                folder.setFolderIndex(newIndex);
-                folder.setServerPath(newFolderPath);
-                folder.setUpdatedAt(LocalDateTime.now());
-
-                updateSubfoldersPath(folder);
-
-            } catch (IOException e) {
-                log.error("Erro ao reindexar pasta {}: {}", folder.getName(), e.getMessage());
-            }
+            updateSubfoldersPath(folder);
         }
 
         psbFolderRepository.saveAll(foldersToReindex);
     }
 
-    private String createFolderPath(Long damId, Integer folderIndex, String folderName) {
-        return createHierarchicalFolderPath(damId, null, folderIndex, folderName);
+    @Transactional
+    public List<PSBFolderEntity> createMultipleFolders(DamEntity dam, List<PSBFolderCreationDTO> folderRequests, Long createdById) {
+        validateEditPermission();
+
+        UserEntity creator = userRepository.findById(createdById)
+                .orElseThrow(() -> new NotFoundException("Usuário criador não encontrado"));
+
+        List<PSBFolderEntity> createdFolders = new ArrayList<>();
+
+        for (PSBFolderCreationDTO folderDTO : folderRequests) {
+
+            validateDuplicates(dam.getId(), folderDTO.getName(), folderDTO.getFolderIndex(), null);
+
+            String folderPath = createHierarchicalFolderPath(dam.getId(), null,
+                    folderDTO.getFolderIndex(), folderDTO.getName());
+
+            PSBFolderEntity folder = new PSBFolderEntity();
+            folder.setName(folderDTO.getName());
+            folder.setFolderIndex(folderDTO.getFolderIndex());
+            folder.setDescription(folderDTO.getDescription());
+            folder.setDam(dam);
+            folder.setServerPath(folderPath);
+            folder.setCreatedBy(creator);
+            folder.setColor(folderDTO.getColor());
+
+            createdFolders.add(psbFolderRepository.save(folder));
+        }
+
+        return createdFolders;
     }
 
+    /**
+     * Gera o caminho hierárquico LÓGICO para o S3. Exemplo:
+     * dam-1/001-geral/002-docs/ Substitui o File.separator por "/" para
+     * garantir compatibilidade S3/Linux/Windows.
+     */
     private String createHierarchicalFolderPath(Long damId, PSBFolderEntity parentFolder,
             Integer folderIndex, String folderName) {
         String normalizedName = folderName.trim()
@@ -391,66 +299,19 @@ public class PSBFolderService {
 
         if (parentFolder != null) {
 
-            return Paths.get(parentFolder.getServerPath(), folderDirName).toString();
+            String parentPath = parentFolder.getServerPath();
+            if (!parentPath.endsWith("/")) {
+                parentPath += "/";
+            }
+            return parentPath + folderDirName;
         } else {
 
-            return Paths.get(psbBaseDir, "dam-" + damId, folderDirName).toString();
-        }
-    }
-
-    @Transactional
-    public List<PSBFolderEntity> createMultipleFolders(DamEntity dam, List<PSBFolderCreationDTO> folderRequests, Long createdById) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getEditPSB()) {
-                throw new NotFoundException("Usuário não tem permissão para criar pastas PSB!");
-            }
-        }
-        UserEntity creator = userRepository.findById(createdById)
-                .orElseThrow(() -> new NotFoundException("Usuário criador não encontrado"));
-
-        List<PSBFolderEntity> createdFolders = new ArrayList<>();
-
-        for (PSBFolderCreationDTO folderDTO : folderRequests) {
-            if (psbFolderRepository.existsByDamIdAndName(dam.getId(), folderDTO.getName())) {
-                throw new DuplicateResourceException("Já existe uma pasta com este nome nesta barragem: " + folderDTO.getName());
-            }
-
-            if (psbFolderRepository.existsByDamIdAndFolderIndex(dam.getId(), folderDTO.getFolderIndex())) {
-                throw new DuplicateResourceException("Já existe uma pasta com este índice nesta barragem: " + folderDTO.getFolderIndex());
-            }
-
-            String folderPath = createFolderPath(dam.getId(), folderDTO.getFolderIndex(), folderDTO.getName());
-            ensureDirectoryExists(folderPath);
-
-            PSBFolderEntity folder = new PSBFolderEntity();
-            folder.setName(folderDTO.getName());
-            folder.setFolderIndex(folderDTO.getFolderIndex());
-            folder.setDescription(folderDTO.getDescription());
-            folder.setDam(dam);
-            folder.setServerPath(folderPath);
-            folder.setCreatedBy(creator);
-            folder.setColor(folderDTO.getColor());
-
-            createdFolders.add(psbFolderRepository.save(folder));
-        }
-
-        return createdFolders;
-    }
-
-    private void ensureDirectoryExists(String dirPath) {
-        File directory = new File(dirPath);
-        if (!directory.exists()) {
-            if (!directory.mkdirs()) {
-                throw new RuntimeException("Não foi possível criar o diretório: " + dirPath);
-            }
-
-            directory.setReadable(true, false);
-            directory.setExecutable(true, false);
-            log.info("Diretório criado com permissões: {}", dirPath);
+            return "dam-" + damId + "/" + folderDirName;
         }
     }
 
     private void updateSubfoldersPath(PSBFolderEntity folder) {
+
         List<PSBFolderEntity> subfolders = psbFolderRepository
                 .findByParentFolderIdOrderByFolderIndexAsc(folder.getId());
 
@@ -458,48 +319,17 @@ public class PSBFolderService {
             String newSubfolderPath = createHierarchicalFolderPath(
                     folder.getDam().getId(), folder, subfolder.getFolderIndex(), subfolder.getName());
 
-            try {
-                Path oldPath = Paths.get(subfolder.getServerPath());
-                Path newPath = Paths.get(newSubfolderPath);
+            subfolder.setServerPath(newSubfolderPath);
+            psbFolderRepository.save(subfolder);
 
-                if (Files.exists(oldPath) && !oldPath.equals(newPath)) {
-                    Files.move(oldPath, newPath);
-                    log.info("Subpasta movida de {} para {}", oldPath, newPath);
-                }
-
-                subfolder.setServerPath(newSubfolderPath);
-                psbFolderRepository.save(subfolder);
-
-                updateSubfoldersPath(subfolder);
-
-            } catch (IOException e) {
-                log.error("Erro ao atualizar caminho da subpasta {}: {}",
-                        subfolder.getName(), e.getMessage());
-            }
+            updateSubfoldersPath(subfolder);
         }
-    }
-
-    private boolean isDescendant(PSBFolderEntity ancestor, PSBFolderEntity potentialDescendant) {
-        if (ancestor.getId().equals(potentialDescendant.getId())) {
-            return true;
-        }
-
-        PSBFolderEntity current = potentialDescendant.getParentFolder();
-        while (current != null) {
-            if (current.getId().equals(ancestor.getId())) {
-                return true;
-            }
-            current = current.getParentFolder();
-        }
-
-        return false;
     }
 
     @Transactional
     public void syncRootFolders(DamEntity dam, List<com.geosegbar.infra.psb.dtos.PSBFolderUpdateDTO> psbFolderDTOs,
             Long updatedById) {
         if (psbFolderDTOs == null || psbFolderDTOs.isEmpty()) {
-
             return;
         }
 
@@ -517,7 +347,8 @@ public class PSBFolderService {
         for (PSBFolderEntity existingFolder : existingRootFolders) {
             if (!sentFolderIds.contains(existingFolder.getId())) {
                 log.info("Deletando pasta raiz não enviada: {}", existingFolder.getName());
-                deleteWithoutReindex(existingFolder);
+
+                delete(existingFolder.getId());
             }
         }
 
@@ -525,62 +356,98 @@ public class PSBFolderService {
 
         for (com.geosegbar.infra.psb.dtos.PSBFolderUpdateDTO folderDTO : psbFolderDTOs) {
             if (folderDTO.getId() != null) {
-
                 updateRootFolder(folderDTO, dam, updater);
             } else {
-
                 createRootFolder(folderDTO, dam, updater);
             }
         }
     }
 
-    private void deleteWithoutReindex(PSBFolderEntity folderToDelete) {
-        try {
-            Path folderPath = Paths.get(folderToDelete.getServerPath());
-            if (Files.exists(folderPath)) {
-                Files.walk(folderPath)
-                        .sorted((a, b) -> b.toString().length() - a.toString().length())
-                        .forEach(path -> {
-                            try {
-                                Files.delete(path);
-                            } catch (Exception e) {
-                                log.error("Erro ao deletar: " + path + ": " + e.getMessage());
-                            }
-                        });
-                log.info("Pasta e subpastas excluídas fisicamente: {}", folderPath);
+    private void validateViewPermission() {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getViewPSB()) {
+                throw new NotFoundException("Usuário não tem permissão para acessar as pastas PSB");
             }
-        } catch (Exception e) {
-            log.error("Erro ao deletar diretório: {}", e.getMessage());
         }
-
-        psbFolderRepository.delete(folderToDelete);
     }
 
-    @SuppressWarnings("unused")
+    private void validateEditPermission() {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getEditPSB()) {
+                throw new NotFoundException("Usuário não tem permissão para editar pastas PSB!");
+            }
+        }
+    }
+
+    private void validateDuplicates(Long damId, String name, Integer index, PSBFolderEntity parent) {
+        if (parent != null) {
+            if (psbFolderRepository.existsByDamIdAndNameAndParentFolderId(damId, name, parent.getId())) {
+                throw new DuplicateResourceException("Já existe uma pasta com este nome neste nível");
+            }
+            if (psbFolderRepository.existsByParentFolderIdAndFolderIndex(parent.getId(), index)) {
+                throw new DuplicateResourceException("Já existe uma pasta com este índice neste nível");
+            }
+        } else {
+            if (psbFolderRepository.existsByDamIdAndNameAndParentFolderIsNull(damId, name)) {
+                throw new DuplicateResourceException("Já existe uma pasta raiz com este nome");
+            }
+            if (psbFolderRepository.existsByDamIdAndFolderIndexAndParentFolderIsNull(damId, index)) {
+                throw new DuplicateResourceException("Já existe uma pasta raiz com este índice");
+            }
+        }
+    }
+
+    private void validateDuplicatesForUpdate(PSBFolderEntity currentFolder, String newName, Integer newIndex, Long newParentId) {
+
+        List<PSBFolderEntity> siblings;
+
+        if (newParentId != null) {
+            siblings = psbFolderRepository.findByParentFolderIdOrderByFolderIndexAsc(newParentId);
+        } else {
+            siblings = psbFolderRepository.findByDamIdAndParentFolderIsNullOrderByFolderIndexAsc(currentFolder.getDam().getId());
+        }
+
+        for (PSBFolderEntity sibling : siblings) {
+            if (!sibling.getId().equals(currentFolder.getId())) {
+                if (sibling.getName().equals(newName)) {
+                    throw new DuplicateResourceException("Já existe uma pasta com este nome neste nível");
+                }
+                if (sibling.getFolderIndex().equals(newIndex)) {
+                    throw new DuplicateResourceException("Já existe uma pasta com este índice neste nível");
+                }
+            }
+        }
+    }
+
+    private boolean isDescendant(PSBFolderEntity ancestor, PSBFolderEntity potentialDescendant) {
+        if (ancestor.getId().equals(potentialDescendant.getId())) {
+            return true;
+        }
+        PSBFolderEntity current = potentialDescendant.getParentFolder();
+        while (current != null) {
+            if (current.getId().equals(ancestor.getId())) {
+                return true;
+            }
+            current = current.getParentFolder();
+        }
+        return false;
+    }
+
     private void updateRootFolder(com.geosegbar.infra.psb.dtos.PSBFolderUpdateDTO folderDTO,
             DamEntity dam, UserEntity updater) {
+
         PSBFolderEntity folder = psbFolderRepository.findById(folderDTO.getId())
                 .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada: " + folderDTO.getId()));
 
-        if (folder.getParentFolder() != null) {
-            throw new BusinessRuleException("Pasta " + folderDTO.getId() + " não é uma pasta raiz");
-        }
-        if (!folder.getDam().getId().equals(dam.getId())) {
-            throw new BusinessRuleException("Pasta " + folderDTO.getId() + " não pertence a esta barragem");
+        if (folder.getParentFolder() != null || !folder.getDam().getId().equals(dam.getId())) {
+            throw new BusinessRuleException("Conflito de hierarquia ou barragem na atualização de pasta raiz.");
         }
 
-        if (psbFolderRepository.existsByDamIdAndNameAndParentFolderIsNull(dam.getId(), folderDTO.getName())
-                && !folder.getName().equals(folderDTO.getName())) {
-            throw new DuplicateResourceException("Já existe uma pasta raiz com este nome nesta barragem");
+        if (!folder.getName().equals(folderDTO.getName()) || !folder.getFolderIndex().equals(folderDTO.getFolderIndex())) {
+            validateDuplicatesForUpdate(folder, folderDTO.getName(), folderDTO.getFolderIndex(), null);
         }
 
-        if (psbFolderRepository.existsByDamIdAndFolderIndexAndParentFolderIsNull(dam.getId(), folderDTO.getFolderIndex())
-                && !folder.getFolderIndex().equals(folderDTO.getFolderIndex())) {
-            throw new DuplicateResourceException("Já existe uma pasta raiz com este índice nesta barragem");
-        }
-
-        boolean needsPathUpdate = !folder.getName().equals(folderDTO.getName())
-                || !folder.getFolderIndex().equals(folderDTO.getFolderIndex());
+        boolean pathChanged = !folder.getName().equals(folderDTO.getName()) || !folder.getFolderIndex().equals(folderDTO.getFolderIndex());
 
         folder.setName(folderDTO.getName());
         folder.setFolderIndex(folderDTO.getFolderIndex());
@@ -588,46 +455,20 @@ public class PSBFolderService {
         folder.setColor(folderDTO.getColor());
         folder.setUpdatedAt(LocalDateTime.now());
 
-        if (needsPathUpdate) {
-            String oldPath = folder.getServerPath();
-            String newPath = createFolderPath(dam.getId(), folderDTO.getFolderIndex(), folderDTO.getName());
-
-            try {
-                Path sourcePath = Paths.get(oldPath);
-                Path targetPath = Paths.get(newPath);
-
-                if (Files.exists(sourcePath) && !sourcePath.equals(targetPath)) {
-                    Files.move(sourcePath, targetPath);
-                    log.info("Pasta movida de {} para {}", sourcePath, targetPath);
-                }
-
-                folder.setServerPath(newPath);
-
-                updateSubfoldersPath(folder);
-
-            } catch (IOException e) {
-                log.error("Erro ao mover pasta: {}", e.getMessage());
-                throw new BusinessRuleException("Erro ao atualizar caminho da pasta no storage");
-            }
+        if (pathChanged) {
+            String newPath = createHierarchicalFolderPath(dam.getId(), null, folderDTO.getFolderIndex(), folderDTO.getName());
+            folder.setServerPath(newPath);
+            updateSubfoldersPath(folder);
         }
 
         psbFolderRepository.save(folder);
-        log.info("Pasta raiz atualizada: {} (ID: {})", folder.getName(), folder.getId());
     }
 
     private void createRootFolder(com.geosegbar.infra.psb.dtos.PSBFolderUpdateDTO folderDTO,
             DamEntity dam, UserEntity creator) {
+        validateDuplicates(dam.getId(), folderDTO.getName(), folderDTO.getFolderIndex(), null);
 
-        if (psbFolderRepository.existsByDamIdAndNameAndParentFolderIsNull(dam.getId(), folderDTO.getName())) {
-            throw new DuplicateResourceException("Já existe uma pasta raiz com este nome nesta barragem");
-        }
-
-        if (psbFolderRepository.existsByDamIdAndFolderIndexAndParentFolderIsNull(dam.getId(), folderDTO.getFolderIndex())) {
-            throw new DuplicateResourceException("Já existe uma pasta raiz com este índice nesta barragem");
-        }
-
-        String folderPath = createFolderPath(dam.getId(), folderDTO.getFolderIndex(), folderDTO.getName());
-        ensureDirectoryExists(folderPath);
+        String folderPath = createHierarchicalFolderPath(dam.getId(), null, folderDTO.getFolderIndex(), folderDTO.getName());
 
         PSBFolderEntity folder = new PSBFolderEntity();
         folder.setName(folderDTO.getName());
@@ -640,6 +481,5 @@ public class PSBFolderService {
         folder.setColor(folderDTO.getColor());
 
         psbFolderRepository.save(folder);
-        log.info("Nova pasta raiz criada: {} (Índice: {})", folder.getName(), folder.getFolderIndex());
     }
 }

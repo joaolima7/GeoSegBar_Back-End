@@ -133,10 +133,6 @@ public class PSBFileService {
         log.info("Arquivo PSB excluído: {} (ID: {})", file.getFilename(), fileId);
     }
 
-    /**
-     * Garante que o caminho da pasta esteja limpo para uso como prefixo S3.
-     * Remove barras iniciais e referências a discos locais antigos se houver.
-     */
     private String sanitizeFolderPath(String serverPath) {
         if (serverPath == null) {
             return "uploads";
@@ -156,9 +152,6 @@ public class PSBFileService {
         return cleanPath;
     }
 
-    /**
-     * Extrai o nome do arquivo da URL do S3.
-     */
     private String extractFilenameFromUrl(String url) {
         if (url == null) {
             return null;

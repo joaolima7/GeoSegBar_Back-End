@@ -211,14 +211,12 @@ public class ReadingService {
                 .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
     }
 
-// Troque o método antigo por este:
     @Transactional(readOnly = true)
-    public PagedReadingResponseDTO<ReadingGroupDTO> findGroupedReadingsByInstrument( // Note a mudança no retorno
+    public PagedReadingResponseDTO<ReadingGroupDTO> findGroupedReadingsByInstrument(
             Long instrumentId, Boolean active, Pageable pageable) {
 
         validateViewPermission();
 
-        // 1. Busca as Datas/Horas paginadas (Isso está funcionando, achou 19 elementos)
         Page<Object[]> dateHourPage = readingRepository.findDistinctDateHourByInstrumentIdAndActive(
                 instrumentId, active, pageable);
 
@@ -226,7 +224,6 @@ public class ReadingService {
             return createEmptyPagedResponse(dateHourPage);
         }
 
-        // 2. Extrai as datas e horas da página atual
         List<LocalDate> dates = new ArrayList<>();
         List<LocalTime> hours = new ArrayList<>();
 
@@ -235,24 +232,19 @@ public class ReadingService {
             hours.add((LocalTime) dh[1]);
         }
 
-        // 3. AQUI ESTÁ O TRUQUE PARA CORRIGIR O BUG DA DATA/HORA
-        // Em vez de confiar no "IN hours", vamos buscar tudo que tem nessas DATAS
-        // e depois filtramos na memória as horas exatas. Isso evita o problema de precisão do banco.
         List<ReadingEntity> rawReadings = readingRepository
                 .findByInstrumentIdAndDatesWithAllRelations(instrumentId, dates, active);
 
-        // 4. Agrupamento em Memória
         List<ReadingGroupDTO> groupedResult = new ArrayList<>();
 
         for (Object[] dh : dateHourPage.getContent()) {
             LocalDate targetDate = (LocalDate) dh[0];
             LocalTime targetHour = (LocalTime) dh[1];
 
-            // Filtra na lista bruta apenas o que bate com data E hora (com tolerância se necessário)
             List<ReadingResponseDTO> groupReadings = rawReadings.stream()
-                    .filter(r -> r.getDate().equals(targetDate) && r.getHour().equals(targetHour)) // Comparação Java é mais segura aqui
+                    .filter(r -> r.getDate().equals(targetDate) && r.getHour().equals(targetHour))
                     .map(this::mapToResponseDTO)
-                    .sorted(Comparator.comparing(ReadingResponseDTO::getOutputName)) // Ordena por output
+                    .sorted(Comparator.comparing(ReadingResponseDTO::getOutputName))
                     .collect(Collectors.toList());
 
             if (!groupReadings.isEmpty()) {
@@ -260,7 +252,6 @@ public class ReadingService {
             }
         }
 
-        // Retorna a página de GRUPOS
         return createPagedResponse(groupedResult, dateHourPage);
     }
 
@@ -401,7 +392,7 @@ public class ReadingService {
         List<ReadingEntity> readingsToSave = new ArrayList<>(activeOutputs.size());
 
         for (OutputEntity output : activeOutputs) {
-            Double calculatedValue = outputCalculationService.calculateOutput(output, request, formattedInputValues);
+            BigDecimal calculatedValue = outputCalculationService.calculateOutput(output, request, formattedInputValues);
 
             ReadingEntity reading = new ReadingEntity();
             reading.setDate(request.getDate());
@@ -774,7 +765,7 @@ public class ReadingService {
                 }
 
                 OutputEntity output = reading.getOutput();
-                Double newCalculatedValue = outputCalculationService.calculateOutput(output, null, calculationInputs);
+                BigDecimal newCalculatedValue = outputCalculationService.calculateOutput(output, null, calculationInputs);
                 reading.setCalculatedValue(newCalculatedValue);
                 reading.setLimitStatus(determineLimitStatus(instrument, newCalculatedValue, output));
             }
@@ -808,17 +799,17 @@ public class ReadingService {
         return hasChanges;
     }
 
-    private LimitStatusEnum determineLimitStatus(InstrumentEntity instrument, Double value, OutputEntity output) {
-        if (Boolean.TRUE.equals(instrument.getNoLimit())) {
+    private LimitStatusEnum determineLimitStatus(InstrumentEntity instrument, BigDecimal value, OutputEntity output) {
+        if (Boolean.TRUE.equals(instrument.getNoLimit()) || value == null) {
             return LimitStatusEnum.NORMAL;
         }
 
         StatisticalLimitEntity statisticalLimit = output.getStatisticalLimit();
         if (statisticalLimit != null) {
-            if (statisticalLimit.getLowerValue() != null && value < statisticalLimit.getLowerValue()) {
+            if (statisticalLimit.getLowerValue() != null && value.compareTo(statisticalLimit.getLowerValue()) < 0) {
                 return LimitStatusEnum.INFERIOR;
             }
-            if (statisticalLimit.getUpperValue() != null && value > statisticalLimit.getUpperValue()) {
+            if (statisticalLimit.getUpperValue() != null && value.compareTo(statisticalLimit.getUpperValue()) > 0) {
                 return LimitStatusEnum.SUPERIOR;
             }
             return LimitStatusEnum.NORMAL;
@@ -826,13 +817,13 @@ public class ReadingService {
 
         DeterministicLimitEntity deterministicLimit = output.getDeterministicLimit();
         if (deterministicLimit != null) {
-            if (deterministicLimit.getEmergencyValue() != null && value >= deterministicLimit.getEmergencyValue()) {
+            if (deterministicLimit.getEmergencyValue() != null && value.compareTo(deterministicLimit.getEmergencyValue()) >= 0) {
                 return LimitStatusEnum.EMERGENCIA;
             }
-            if (deterministicLimit.getAlertValue() != null && value >= deterministicLimit.getAlertValue()) {
+            if (deterministicLimit.getAlertValue() != null && value.compareTo(deterministicLimit.getAlertValue()) >= 0) {
                 return LimitStatusEnum.ALERTA;
             }
-            if (deterministicLimit.getAttentionValue() != null && value >= deterministicLimit.getAttentionValue()) {
+            if (deterministicLimit.getAttentionValue() != null && value.compareTo(deterministicLimit.getAttentionValue()) >= 0) {
                 return LimitStatusEnum.ATENCAO;
             }
             return LimitStatusEnum.NORMAL;

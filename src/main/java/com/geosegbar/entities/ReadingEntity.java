@@ -1,5 +1,6 @@
 package com.geosegbar.entities;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.HashSet;
@@ -69,8 +70,9 @@ public class ReadingEntity {
     @Column(nullable = false)
     private LocalTime hour;
 
+    @NotNull(message = "Valor calculado é obrigatório!")
     @Column(nullable = false)
-    private Double calculatedValue;
+    private BigDecimal calculatedValue;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

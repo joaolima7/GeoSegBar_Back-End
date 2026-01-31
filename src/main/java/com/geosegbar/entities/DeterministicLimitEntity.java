@@ -1,5 +1,7 @@
 package com.geosegbar.entities;
 
+import java.math.BigDecimal;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.Column;
@@ -28,13 +30,13 @@ public class DeterministicLimitEntity {
     private Long id;
 
     @Column(nullable = true)
-    private Double attentionValue;
+    private BigDecimal attentionValue;
 
     @Column(nullable = true)
-    private Double alertValue;
+    private BigDecimal alertValue;
 
     @Column(nullable = true)
-    private Double emergencyValue;
+    private BigDecimal emergencyValue;
 
     @OneToOne
     @JoinColumn(name = "output_id", nullable = false)

@@ -1,5 +1,7 @@
 package com.geosegbar.entities;
 
+import java.math.BigDecimal;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.Column;
@@ -28,10 +30,10 @@ public class StatisticalLimitEntity {
     private Long id;
 
     @Column(nullable = true)
-    private Double lowerValue;
+    private BigDecimal lowerValue;
 
     @Column(nullable = true)
-    private Double upperValue;
+    private BigDecimal upperValue;
 
     @OneToOne
     @JoinColumn(name = "output_id", nullable = false)

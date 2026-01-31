@@ -1,5 +1,6 @@
 package com.geosegbar.infra.instrument_graph_pattern.dtos;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import com.geosegbar.common.enums.CustomizationTypeEnum;
@@ -110,8 +111,8 @@ public class GraphPatternDetailResponseDTO {
     public static class RelatedStatisticalLimitDTO {
 
         private Long id;
-        private Double lowerValue;
-        private Double upperValue;
+        private BigDecimal lowerValue;
+        private BigDecimal upperValue;
         private RelatedOutputDTO output;
     }
 
@@ -121,9 +122,9 @@ public class GraphPatternDetailResponseDTO {
     public static class RelatedDeterministicLimitDTO {
 
         private Long id;
-        private Double attentionValue;
-        private Double alertValue;
-        private Double emergencyValue;
+        private BigDecimal attentionValue;
+        private BigDecimal alertValue;
+        private BigDecimal emergencyValue;
         private RelatedOutputDTO output;
     }
 

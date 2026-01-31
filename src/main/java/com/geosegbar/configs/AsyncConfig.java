@@ -36,12 +36,12 @@ public class AsyncConfig {
     @Bean(name = "historicalDataExecutor")
     public Executor historicalDataExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(2);      // Máximo 2 instrumentos simultâneos
-        executor.setMaxPoolSize(3);       // Máximo absoluto de 3 threads
-        executor.setQueueCapacity(50);    // Até 50 jobs na fila em memória
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(3);
+        executor.setQueueCapacity(50);
         executor.setThreadNamePrefix("historical-data-");
         executor.setWaitForTasksToCompleteOnShutdown(true);
-        executor.setAwaitTerminationSeconds(300); // 5 min para finalizar
+        executor.setAwaitTerminationSeconds(300);
         executor.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
         executor.initialize();
         return executor;

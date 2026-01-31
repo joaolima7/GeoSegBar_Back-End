@@ -1,5 +1,6 @@
 package com.geosegbar.infra.reading.dtos;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -19,7 +20,7 @@ public class ReadingResponseDTO {
     private Long id;
     private LocalDate date;
     private LocalTime hour;
-    private Double calculatedValue;
+    private BigDecimal calculatedValue;
     private LimitStatusEnum limitStatus;
     private Long instrumentId;
     private String instrumentName;

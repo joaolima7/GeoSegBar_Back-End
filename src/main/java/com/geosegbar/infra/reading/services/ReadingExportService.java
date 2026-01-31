@@ -266,7 +266,7 @@ public class ReadingExportService {
 
                 Cell valueCell = row.createCell(colIndex++);
                 if (reading != null) {
-                    valueCell.setCellValue(reading.getCalculatedValue());
+                    valueCell.setCellValue(reading.getCalculatedValue().doubleValue());
                     valueCell.setCellStyle(styles.get("number"));
                 } else {
                     valueCell.setCellValue("-");

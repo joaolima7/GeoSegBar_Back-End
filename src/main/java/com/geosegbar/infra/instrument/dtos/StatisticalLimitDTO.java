@@ -1,5 +1,7 @@
 package com.geosegbar.infra.instrument.dtos;
 
+import java.math.BigDecimal;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -10,6 +12,6 @@ import lombok.NoArgsConstructor;
 public class StatisticalLimitDTO {
 
     private Long id;
-    private Double lowerValue;
-    private Double upperValue;
+    private BigDecimal lowerValue;
+    private BigDecimal upperValue;
 }

@@ -333,20 +333,21 @@ public class BulkInstrumentImportService {
 
             String type = getString(row, idx, "Tipo de Limite");
             LimitData ld = new LimitData();
+
             if ("Estatistico".equalsIgnoreCase(type)) {
                 ld.isStatistical = true;
                 ld.statDTO = new StatisticalLimitDTO(
                         null,
-                        getDouble(row, idx, "Valor Inferior"),
-                        getDouble(row, idx, "Valor Superior")
+                        getBigDecimal(row, idx, "Valor Inferior"),
+                        getBigDecimal(row, idx, "Valor Superior")
                 );
             } else {
                 ld.isStatistical = false;
                 ld.detDTO = new DeterministicLimitDTO(
                         null,
-                        getDouble(row, idx, "Valor de Atenção"),
-                        getDouble(row, idx, "Valor de Alerta"),
-                        getDouble(row, idx, "Valor de Emergência")
+                        getBigDecimal(row, idx, "Valor de Atenção"),
+                        getBigDecimal(row, idx, "Valor de Alerta"),
+                        getBigDecimal(row, idx, "Valor de Emergência")
                 );
             }
             map.put(new Key(id, out), ld);
@@ -360,6 +361,45 @@ public class BulkInstrumentImportService {
             idx.put(c.getStringCellValue(), c.getColumnIndex());
         }
         return idx;
+    }
+
+    private BigDecimal getBigDecimal(Row r, Map<String, Integer> ix, String col) {
+        Integer i = ix.get(col);
+        if (i == null) {
+            return null;
+        }
+        Cell c = r.getCell(i);
+        if (c == null) {
+            return null;
+        }
+
+        switch (c.getCellType()) {
+            case NUMERIC:
+
+                return BigDecimal.valueOf(c.getNumericCellValue());
+            case STRING:
+                String val = c.getStringCellValue();
+                if (val == null || val.isBlank()) {
+                    return null;
+                }
+                try {
+
+                    String cleanVal = val.trim().replace(",", ".");
+                    return new BigDecimal(cleanVal);
+                } catch (NumberFormatException e) {
+                    log.warn("Valor inválido na coluna {}: {}", col, val);
+                    return null;
+                }
+            case FORMULA:
+                try {
+
+                    return BigDecimal.valueOf(c.getNumericCellValue());
+                } catch (Exception e) {
+                    return null;
+                }
+            default:
+                return null;
+        }
     }
 
     private String getString(Row r, Map<String, Integer> ix, String col) {

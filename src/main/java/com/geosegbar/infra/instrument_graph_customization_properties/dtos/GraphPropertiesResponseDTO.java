@@ -1,5 +1,6 @@
 package com.geosegbar.infra.instrument_graph_customization_properties.dtos;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import com.geosegbar.common.enums.CustomizationTypeEnum;
@@ -66,8 +67,8 @@ public class GraphPropertiesResponseDTO {
     public static class StatisticalLimitDetailDTO {
 
         private Long id;
-        private Double lowerValue;
-        private Double upperValue;
+        private BigDecimal lowerValue;
+        private BigDecimal upperValue;
         private OutputDetailDTO output;
     }
 
@@ -77,9 +78,9 @@ public class GraphPropertiesResponseDTO {
     public static class DeterministicLimitDetailDTO {
 
         private Long id;
-        private Double attentionValue;
-        private Double alertValue;
-        private Double emergencyValue;
+        private BigDecimal attentionValue;
+        private BigDecimal alertValue;
+        private BigDecimal emergencyValue;
         private OutputDetailDTO output;
     }
 

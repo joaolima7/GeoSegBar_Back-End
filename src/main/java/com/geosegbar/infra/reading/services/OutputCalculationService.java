@@ -19,46 +19,47 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class OutputCalculationService {
 
-    public Double calculateOutput(OutputEntity output, ReadingRequestDTO reading, Map<String, BigDecimal> inputValues) {
+    public BigDecimal calculateOutput(OutputEntity output, ReadingRequestDTO reading, Map<String, BigDecimal> inputValues) {
         InstrumentEntity instrument = output.getInstrument();
 
-        // Converte BigDecimal para Double para o evaluator
         Map<String, Double> variables = new HashMap<>();
+
         for (Map.Entry<String, BigDecimal> entry : inputValues.entrySet()) {
             variables.put(entry.getKey(), entry.getValue().doubleValue());
         }
 
-        // Adiciona constantes ao mapa de variáveis
         for (ConstantEntity constant : instrument.getConstants()) {
             variables.put(constant.getAcronym(), constant.getValue());
         }
 
-        // Avalia a equação
-        Double result = ExpressionEvaluator.evaluate(output.getEquation(), variables);
+        Double rawResult = ExpressionEvaluator.evaluate(output.getEquation(), variables);
 
-        // Formata com a precisão especificada
-        return formatToSpecificPrecision(result, output.getPrecision());
+        return formatToSpecificPrecision(rawResult, output.getPrecision());
     }
 
-    public Map<String, Double> calculateAllOutputs(InstrumentEntity instrument, ReadingRequestDTO reading,
+    public Map<String, BigDecimal> calculateAllOutputs(InstrumentEntity instrument, ReadingRequestDTO reading,
             Map<String, BigDecimal> inputValues) {
-        Map<String, Double> results = new HashMap<>();
+        Map<String, BigDecimal> results = new HashMap<>();
 
         for (OutputEntity output : instrument.getOutputs()) {
-            Double value = calculateOutput(output, reading, inputValues);
+            BigDecimal value = calculateOutput(output, reading, inputValues);
             results.put(output.getAcronym(), value);
         }
 
         return results;
     }
 
-    private Double formatToSpecificPrecision(Double value, Integer precision) {
-        if (value == null || precision == null) {
-            return value;
+    private BigDecimal formatToSpecificPrecision(Double value, Integer precision) {
+        if (value == null) {
+            return null;
         }
 
         BigDecimal bd = BigDecimal.valueOf(value);
-        bd = bd.setScale(precision, RoundingMode.HALF_UP);
-        return bd.doubleValue();
+
+        if (precision != null) {
+            bd = bd.setScale(precision, RoundingMode.HALF_UP);
+        }
+
+        return bd;
     }
 }

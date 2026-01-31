@@ -2,14 +2,12 @@ package com.geosegbar.infra.checklist_submission.services;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.stereotype.Component;
 
-import com.geosegbar.entities.OptionEntity;
 import com.geosegbar.exceptions.InvalidInputException;
-import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.checklist_submission.dtos.AnswerSubmissionDTO;
-import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -17,61 +15,47 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class PVAnswerValidator {
 
-    private final OptionRepository optionRepository;
-
-    public void validatePVAnswer(AnswerSubmissionDTO answerDto, String questionText) {
-        boolean isPVAnswer = false;
-
-        if (answerDto.getSelectedOptionIds() != null && !answerDto.getSelectedOptionIds().isEmpty()) {
-            for (Long optionId : answerDto.getSelectedOptionIds()) {
-                OptionEntity option = optionRepository.findById(optionId)
-                        .orElseThrow(() -> new NotFoundException("Opção não encontrada: " + optionId));
-
-                if ("PV".equals(option.getLabel())) {
-                    isPVAnswer = true;
-                    break;
-                }
-            }
-        }
+    public void validatePVAnswer(AnswerSubmissionDTO answerDto, String questionText, Map<Long, String> optionsCache) {
+        boolean isPVAnswer = isPVAnswer(answerDto, optionsCache);
 
         if (isPVAnswer) {
             List<String> missingFields = new ArrayList<>();
 
             if (answerDto.getAnomalyRecommendation() == null || answerDto.getAnomalyRecommendation().trim().isEmpty()) {
-                missingFields.add("recommendation");
+                missingFields.add("Recomendação");
             }
 
             if (answerDto.getAnomalyDangerLevelId() == null) {
-                missingFields.add("dangerLevelId");
+                missingFields.add("Nível de Perigo");
             }
 
             if (answerDto.getAnomalyStatusId() == null) {
-                missingFields.add("statusId");
+                missingFields.add("Status");
             }
 
             if (answerDto.getPhotos() == null || answerDto.getPhotos().isEmpty()) {
-                missingFields.add("photo");
+                missingFields.add("Foto");
             }
 
             if (answerDto.getLatitude() == null || answerDto.getLongitude() == null) {
-                missingFields.add("latitude/longitude");
+                missingFields.add("Localização (Lat/Long)");
             }
 
             if (!missingFields.isEmpty()) {
                 throw new InvalidInputException("A pergunta '" + questionText
-                        + "' foi marcada como PV, mas faltam os seguintes campos obrigatórios para criar a anomalia: "
+                        + "' foi marcada como PV (Patologia), mas faltam campos obrigatórios: "
                         + String.join(", ", missingFields));
             }
         }
     }
 
-    public boolean isPVAnswer(AnswerSubmissionDTO answerDto) {
+    public boolean isPVAnswer(AnswerSubmissionDTO answerDto, Map<Long, String> optionsCache) {
         if (answerDto.getSelectedOptionIds() != null && !answerDto.getSelectedOptionIds().isEmpty()) {
             for (Long optionId : answerDto.getSelectedOptionIds()) {
-                OptionEntity option = optionRepository.findById(optionId)
-                        .orElseThrow(() -> new NotFoundException("Opção não encontrada: " + optionId));
 
-                if ("PV".equals(option.getLabel())) {
+                String label = optionsCache.get(optionId);
+
+                if ("PV".equals(label)) {
                     return true;
                 }
             }

@@ -3,9 +3,11 @@ package com.geosegbar.infra.checklist_submission.services;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -97,10 +99,14 @@ public class ChecklistResponseSubmissionService {
             }
         }
 
+        Map<Long, String> optionsCache = optionRepository.findAll().stream()
+                .collect(Collectors.toMap(OptionEntity::getId, OptionEntity::getLabel));
+
         ChecklistResponseEntity checklistResponse = createChecklistResponse(submissionDto);
 
         validateAllRequiredQuestionnaires(submissionDto);
-        validatePVAnswersHaveRequiredFields(submissionDto);
+
+        validatePVAnswersHaveRequiredFields(submissionDto, optionsCache);
 
         for (QuestionnaireResponseSubmissionDTO questionnaireDto : submissionDto.getQuestionnaireResponses()) {
             validateAllQuestionsAnswered(questionnaireDto);
@@ -108,9 +114,12 @@ public class ChecklistResponseSubmissionService {
             QuestionnaireResponseEntity questionnaireResponse = createQuestionnaireResponse(questionnaireDto, checklistResponse);
 
             for (AnswerSubmissionDTO answerDto : questionnaireDto.getAnswers()) {
-                createAnswer(answerDto, questionnaireResponse);
 
-                if (pvAnswerValidator.isPVAnswer(answerDto)) {
+                validateCriticalAnswerRequirements(answerDto, optionsCache);
+
+                createAnswer(answerDto, questionnaireResponse, optionsCache);
+
+                if (pvAnswerValidator.isPVAnswer(answerDto, optionsCache)) {
                     createAnomalyFromPVAnswer(
                             answerDto,
                             submissionDto.getUserId(),
@@ -124,6 +133,64 @@ public class ChecklistResponseSubmissionService {
         updateLastAchievementChecklist(submissionDto.getDamId());
 
         return checklistResponse;
+    }
+
+    private void validateCriticalAnswerRequirements(AnswerSubmissionDTO answerDto, Map<Long, String> optionsCache) {
+        if (answerDto.getSelectedOptionIds() == null || answerDto.getSelectedOptionIds().isEmpty()) {
+            return;
+        }
+
+        boolean isCritical = false;
+        List<String> foundLabels = new ArrayList<>();
+
+        Set<String> criticalLabels = Set.of("AU", "DM", "PC", "DS");
+
+        for (Long id : answerDto.getSelectedOptionIds()) {
+            String label = optionsCache.get(id);
+            if (label != null && criticalLabels.contains(label)) {
+                isCritical = true;
+                foundLabels.add(label);
+            }
+        }
+
+        if (isCritical) {
+            List<String> missingFields = new ArrayList<>();
+
+            if (answerDto.getComment() == null || answerDto.getComment().trim().isEmpty()) {
+                missingFields.add("Comentário/Observação");
+            }
+
+            if (answerDto.getPhotos() == null || answerDto.getPhotos().isEmpty()) {
+                missingFields.add("Foto");
+            }
+
+            if (!missingFields.isEmpty()) {
+
+                String questionText = questionRepository.findById(answerDto.getQuestionId())
+                        .map(QuestionEntity::getQuestionText)
+                        .orElse("Desconhecida");
+
+                throw new InvalidInputException(String.format(
+                        "A resposta para a pergunta '%s' foi marcada com %s e exige obrigatoriamente: %s.",
+                        questionText,
+                        foundLabels,
+                        String.join(" e ", missingFields)
+                ));
+            }
+        }
+    }
+
+    private void validatePVAnswersHaveRequiredFields(ChecklistResponseSubmissionDTO submissionDto, Map<Long, String> optionsCache) {
+        for (QuestionnaireResponseSubmissionDTO questionnaireDto : submissionDto.getQuestionnaireResponses()) {
+            for (AnswerSubmissionDTO answerDto : questionnaireDto.getAnswers()) {
+                if (pvAnswerValidator.isPVAnswer(answerDto, optionsCache)) {
+                    QuestionEntity question = questionRepository.findById(answerDto.getQuestionId())
+                            .orElseThrow(() -> new NotFoundException("Pergunta não encontrada: " + answerDto.getQuestionId()));
+
+                    pvAnswerValidator.validatePVAnswer(answerDto, question.getQuestionText(), optionsCache);
+                }
+            }
+        }
     }
 
     private void updateLastAchievementChecklist(Long damId) {
@@ -166,17 +233,6 @@ public class ChecklistResponseSubmissionService {
                     "Usuário não tem permissão específica para acessar esta barragem. "
                     + "Verifique as permissões de acesso na administração do sistema."
             );
-        }
-    }
-
-    private void validatePVAnswersHaveRequiredFields(ChecklistResponseSubmissionDTO submissionDto) {
-        for (QuestionnaireResponseSubmissionDTO questionnaireDto : submissionDto.getQuestionnaireResponses()) {
-            for (AnswerSubmissionDTO answerDto : questionnaireDto.getAnswers()) {
-                QuestionEntity question = questionRepository.findById(answerDto.getQuestionId())
-                        .orElseThrow(() -> new NotFoundException("Pergunta não encontrada: " + answerDto.getQuestionId()));
-
-                pvAnswerValidator.validatePVAnswer(answerDto, question.getQuestionText());
-            }
         }
     }
 
@@ -250,48 +306,42 @@ public class ChecklistResponseSubmissionService {
         ChecklistEntity checklist = checklistRepository.findById(submissionDto.getChecklistId())
                 .orElseThrow(() -> new NotFoundException("Checklist não encontrado com o ID: " + submissionDto.getChecklistId()));
 
-        Set<TemplateQuestionnaireEntity> requiredTemplates = checklist.getTemplateQuestionnaires();
-
-        Set<Long> requiredTemplateIds = requiredTemplates.stream()
+        Set<Long> requiredTemplateIds = checklist.getTemplateQuestionnaires().stream()
                 .map(TemplateQuestionnaireEntity::getId)
                 .collect(Collectors.toSet());
 
-        Set<Long> submittedTemplateIds = submissionDto.getQuestionnaireResponses().stream()
+        List<Long> submittedTemplateIdsList = submissionDto.getQuestionnaireResponses().stream()
                 .map(QuestionnaireResponseSubmissionDTO::getTemplateQuestionnaireId)
-                .collect(Collectors.toSet());
+                .collect(Collectors.toList());
 
-        if (!submittedTemplateIds.containsAll(requiredTemplateIds)) {
-            Set<Long> missingTemplateIds = new HashSet<>(requiredTemplateIds);
-            missingTemplateIds.removeAll(submittedTemplateIds);
+        Set<Long> submittedTemplateIdsSet = new HashSet<>(submittedTemplateIdsList);
 
-            List<String> missingTemplateNames = missingTemplateIds.stream()
-                    .map(id -> {
-                        TemplateQuestionnaireEntity template = templateQuestionnaireRepository.findById(id)
-                                .orElseThrow(() -> new NotFoundException("Template de questionário não encontrado: " + id));
-                        return template.getName();
-                    })
-                    .collect(Collectors.toList());
-
-            String errorMsg = String.format(
-                    "Os seguintes questionários obrigatórios não foram incluídos no checklist '%s': %s",
-                    checklist.getName(),
-                    String.join(", ", missingTemplateNames)
-            );
-
-            throw new InvalidInputException(errorMsg);
+        if (submittedTemplateIdsSet.size() < submittedTemplateIdsList.size()) {
+            throw new InvalidInputException("Existem questionários duplicados na submissão do checklist '" + checklist.getName() + "'.");
         }
 
-        if (!requiredTemplateIds.containsAll(submittedTemplateIds)) {
-            Set<Long> extraTemplateIds = new HashSet<>(submittedTemplateIds);
+        if (!submittedTemplateIdsSet.containsAll(requiredTemplateIds)) {
+            Set<Long> missingTemplateIds = new HashSet<>(requiredTemplateIds);
+            missingTemplateIds.removeAll(submittedTemplateIdsSet);
+
+            List<String> missingNames = templateQuestionnaireRepository.findAllById(missingTemplateIds).stream()
+                    .map(TemplateQuestionnaireEntity::getName)
+                    .collect(Collectors.toList());
+
+            throw new InvalidInputException(String.format(
+                    "Checklist incompleto. Faltam os questionários: %s",
+                    String.join(", ", missingNames)
+            ));
+        }
+
+        if (!requiredTemplateIds.containsAll(submittedTemplateIdsSet)) {
+            Set<Long> extraTemplateIds = new HashSet<>(submittedTemplateIdsSet);
             extraTemplateIds.removeAll(requiredTemplateIds);
 
-            String errorMsg = String.format(
-                    "Os seguintes questionários não pertencem ao checklist '%s': %s",
-                    checklist.getName(),
+            throw new InvalidInputException(String.format(
+                    "Checklist inválido. Foram enviados questionários que não pertencem a este checklist (IDs: %s).",
                     extraTemplateIds
-            );
-
-            throw new InvalidInputException(errorMsg);
+            ));
         }
     }
 
@@ -301,46 +351,44 @@ public class ChecklistResponseSubmissionService {
                 .orElseThrow(() -> new NotFoundException("Modelo de questionário não encontrado: "
                 + questionnaireDto.getTemplateQuestionnaireId()));
 
-        Set<Long> templateQuestionIds = template.getTemplateQuestions().stream()
+        Set<Long> expectedQuestionIds = template.getTemplateQuestions().stream()
                 .map(tq -> tq.getQuestion().getId())
                 .collect(Collectors.toSet());
 
-        Set<Long> answeredQuestionIds = questionnaireDto.getAnswers().stream()
+        List<Long> submittedQuestionIdsList = questionnaireDto.getAnswers().stream()
                 .map(AnswerSubmissionDTO::getQuestionId)
-                .collect(Collectors.toSet());
+                .collect(Collectors.toList());
 
-        if (!answeredQuestionIds.containsAll(templateQuestionIds)) {
-            Set<Long> missingQuestionIds = new HashSet<>(templateQuestionIds);
-            missingQuestionIds.removeAll(answeredQuestionIds);
+        Set<Long> uniqueSubmittedIds = new HashSet<>(submittedQuestionIdsList);
 
-            List<String> missingQuestionTexts = missingQuestionIds.stream()
-                    .map(id -> {
-                        QuestionEntity question = questionRepository.findById(id)
-                                .orElseThrow(() -> new NotFoundException("Pergunta não encontrada: " + id));
-                        return question.getQuestionText();
-                    })
-                    .collect(Collectors.toList());
-
-            String errorMsg = String.format(
-                    "As seguintes perguntas não foram respondidas para o questionário '%s': %s",
-                    template.getName(),
-                    String.join(", ", missingQuestionTexts)
-            );
-
-            throw new InvalidInputException(errorMsg);
+        if (uniqueSubmittedIds.size() < submittedQuestionIdsList.size()) {
+            throw new InvalidInputException("Existem respostas duplicadas para a mesma pergunta no questionário '" + template.getName() + "'. Verifique os dados enviados.");
         }
 
-        if (!templateQuestionIds.containsAll(answeredQuestionIds)) {
-            Set<Long> extraQuestionIds = new HashSet<>(answeredQuestionIds);
-            extraQuestionIds.removeAll(templateQuestionIds);
+        if (!uniqueSubmittedIds.containsAll(expectedQuestionIds)) {
+            Set<Long> missingIds = new HashSet<>(expectedQuestionIds);
+            missingIds.removeAll(uniqueSubmittedIds);
 
-            String errorMsg = String.format(
-                    "As seguintes perguntas não pertencem ao questionário '%s': %s",
+            List<String> missingTexts = questionRepository.findAllById(missingIds).stream()
+                    .map(QuestionEntity::getQuestionText)
+                    .collect(Collectors.toList());
+
+            throw new InvalidInputException(String.format(
+                    "O checklist mudou ou está incompleto. As seguintes perguntas não foram respondidas no questionário '%s': %s",
                     template.getName(),
-                    extraQuestionIds
-            );
+                    String.join(", ", missingTexts)
+            ));
+        }
 
-            throw new InvalidInputException(errorMsg);
+        if (!expectedQuestionIds.containsAll(uniqueSubmittedIds)) {
+            Set<Long> extraIds = new HashSet<>(uniqueSubmittedIds);
+            extraIds.removeAll(expectedQuestionIds);
+
+            throw new InvalidInputException(String.format(
+                    "O checklist mudou. Sua submissão contém perguntas que não pertencem mais ao questionário '%s' (IDs extras: %s). Atualize seu aplicativo.",
+                    template.getName(),
+                    extraIds
+            ));
         }
     }
 
@@ -389,7 +437,7 @@ public class ChecklistResponseSubmissionService {
         return questionnaireResponseRepository.save(questionnaireResponse);
     }
 
-    private AnswerEntity createAnswer(AnswerSubmissionDTO answerDto, QuestionnaireResponseEntity questionnaireResponse) {
+    private AnswerEntity createAnswer(AnswerSubmissionDTO answerDto, QuestionnaireResponseEntity questionnaireResponse, Map<Long, String> optionsCache) {
         QuestionEntity question = questionRepository
                 .findById(answerDto.getQuestionId())
                 .orElseThrow(() -> new NotFoundException("Pergunta não encontrada: " + answerDto.getQuestionId()));
@@ -414,10 +462,11 @@ public class ChecklistResponseSubmissionService {
 
             Set<OptionEntity> options = new HashSet<>();
             for (Long optionId : answerDto.getSelectedOptionIds()) {
-                OptionEntity option = optionRepository
-                        .findById(optionId)
-                        .orElseThrow(() -> new NotFoundException("Opção não encontrada: " + optionId));
-                options.add(option);
+                if (!optionsCache.containsKey(optionId)) {
+                    throw new NotFoundException("Opção inválida ou não encontrada: " + optionId);
+                }
+
+                options.add(optionRepository.getReferenceById(optionId));
             }
             answer.setSelectedOptions(options);
             answer.setComment(answerDto.getComment());

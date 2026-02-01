@@ -224,8 +224,8 @@ public class ReadingService {
             return createEmptyPagedResponse(dateHourPage);
         }
 
-        List<LocalDate> dates = new ArrayList<>();
-        List<LocalTime> hours = new ArrayList<>();
+        List<LocalDate> dates = new ArrayList<>(dateHourPage.getContent().size());
+        List<LocalTime> hours = new ArrayList<>(dateHourPage.getContent().size());
 
         for (Object[] dh : dateHourPage.getContent()) {
             dates.add((LocalDate) dh[0]);
@@ -233,21 +233,28 @@ public class ReadingService {
         }
 
         List<ReadingEntity> rawReadings = readingRepository
-                .findByInstrumentIdAndDatesWithAllRelations(instrumentId, dates, active);
+                .findByInstrumentIdAndDatesOptimized(instrumentId, dates, hours, active);
 
-        List<ReadingGroupDTO> groupedResult = new ArrayList<>();
+        Map<String, List<ReadingResponseDTO>> readingsMap = new HashMap<>();
+
+        for (ReadingEntity reading : rawReadings) {
+            String key = reading.getDate().toString() + "_" + reading.getHour().toString();
+
+            readingsMap.computeIfAbsent(key, k -> new ArrayList<>())
+                    .add(mapToResponseDTO(reading));
+        }
+
+        List<ReadingGroupDTO> groupedResult = new ArrayList<>(dateHourPage.getContent().size());
 
         for (Object[] dh : dateHourPage.getContent()) {
             LocalDate targetDate = (LocalDate) dh[0];
             LocalTime targetHour = (LocalTime) dh[1];
+            String key = targetDate.toString() + "_" + targetHour.toString();
 
-            List<ReadingResponseDTO> groupReadings = rawReadings.stream()
-                    .filter(r -> r.getDate().equals(targetDate) && r.getHour().equals(targetHour))
-                    .map(this::mapToResponseDTO)
-                    .sorted(Comparator.comparing(ReadingResponseDTO::getOutputName))
-                    .collect(Collectors.toList());
+            List<ReadingResponseDTO> groupReadings = readingsMap.get(key);
 
-            if (!groupReadings.isEmpty()) {
+            if (groupReadings != null && !groupReadings.isEmpty()) {
+
                 groupedResult.add(new ReadingGroupDTO(targetDate, targetHour, groupReadings));
             }
         }
@@ -488,11 +495,10 @@ public class ReadingService {
     public BulkToggleActiveResponseDTO bulkToggleActive(Boolean active, List<Long> readingIds) {
         validateEditPermission();
 
-        List<Long> successfulIds = new ArrayList<>(readingIds.size());
-        List<BulkToggleActiveResponseDTO.FailedOperation> failedOperations = new ArrayList<>();
+        List<Long> foundIds = readingRepository.findAllById(readingIds)
+                .stream().map(ReadingEntity::getId).toList();
 
-        List<ReadingEntity> readings = readingRepository.findAllByIdWithMinimalData(readingIds);
-        Set<Long> foundIds = readings.stream().map(ReadingEntity::getId).collect(Collectors.toSet());
+        List<BulkToggleActiveResponseDTO.FailedOperation> failedOperations = new ArrayList<>();
 
         for (Long requestedId : readingIds) {
             if (!foundIds.contains(requestedId)) {
@@ -501,17 +507,12 @@ public class ReadingService {
             }
         }
 
-        for (ReadingEntity reading : readings) {
-            reading.setActive(active);
-            successfulIds.add(reading.getId());
+        if (!foundIds.isEmpty()) {
+            readingRepository.updateActiveStatusByIds(active, foundIds);
+            log.info("Bulk toggle: {} readings atualizadas via Direct SQL", foundIds.size());
         }
 
-        if (!readings.isEmpty()) {
-            readingRepository.saveAll(readings);
-            log.info("Bulk toggle: {} readings atualizadas", successfulIds.size());
-        }
-
-        return buildBulkToggleResponse(readingIds.size(), successfulIds, failedOperations);
+        return buildBulkToggleResponse(readingIds.size(), foundIds, failedOperations);
     }
 
     @Transactional

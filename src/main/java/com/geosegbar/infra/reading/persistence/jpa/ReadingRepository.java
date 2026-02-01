@@ -193,6 +193,23 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             @Param("active") Boolean active,
             Pageable pageable);
 
+    @Query("""
+            SELECT DISTINCT r FROM ReadingEntity r
+            JOIN FETCH r.output o
+            LEFT JOIN FETCH r.user u
+            LEFT JOIN FETCH r.inputValues iv
+            WHERE r.instrument.id = :instrumentId
+              AND r.date IN :dates
+              AND r.hour IN :hours
+              AND (:active IS NULL OR r.active = :active)
+            ORDER BY r.date DESC, r.hour DESC, o.name ASC
+            """)
+    List<ReadingEntity> findByInstrumentIdAndDatesOptimized(
+            @Param("instrumentId") Long instrumentId,
+            @Param("dates") List<LocalDate> dates,
+            @Param("hours") List<LocalTime> hours,
+            @Param("active") Boolean active);
+
     @Query(value = """
             SELECT DISTINCT r.date, r.hour
             FROM ReadingEntity r
@@ -432,6 +449,10 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
     @Modifying
     @Query("UPDATE ReadingEntity r SET r.active = :active WHERE r.id IN :ids")
     int bulkUpdateActiveStatus(@Param("ids") List<Long> ids, @Param("active") Boolean active);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE ReadingEntity r SET r.active = :active WHERE r.id IN :ids")
+    int updateActiveStatusByIds(@Param("active") Boolean active, @Param("ids") List<Long> ids);
 
     @Modifying
     @Query("DELETE FROM ReadingEntity r WHERE r.instrument.id = :instrumentId")

@@ -21,18 +21,28 @@ import lombok.RequiredArgsConstructor;
 public class ChecklistResponseSubmissionController {
 
     private final ChecklistResponseSubmissionService checklistResponseSubmissionService;
-    
+
     @PostMapping
     public ResponseEntity<WebResponseEntity<ChecklistResponseEntity>> submitChecklistResponse(
             @Valid @RequestBody ChecklistResponseSubmissionDTO submissionDto) {
-        
+
+        // ============ DEBUG NO CONTROLLER ============
+        System.out.println("\n🎯 ===== CONTROLLER RECEBEU REQUEST =====");
+        System.out.println("📦 DTO Object: " + submissionDto);
+        System.out.println("📱 isMobile no DTO: " + submissionDto.isMobile());
+        System.out.println("👤 userId: " + submissionDto.getUserId());
+        System.out.println("🏗️ damId: " + submissionDto.getDamId());
+        System.out.println("📋 checklistName: " + submissionDto.getChecklistName());
+        System.out.println("🎯 ==========================================\n");
+        // ============ FIM DEBUG CONTROLLER ============
+
         ChecklistResponseEntity result = checklistResponseSubmissionService.submitChecklistResponse(submissionDto);
-        
+
         WebResponseEntity<ChecklistResponseEntity> response = WebResponseEntity.success(
-            result, 
-            "Resposta de checklist e questionários submetida com sucesso!"
+                result,
+                "Resposta de checklist e questionários submetida com sucesso!"
         );
-        
+
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 }

@@ -29,12 +29,14 @@ import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.InvalidTokenException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.exceptions.RateLimitExceededException;
 import com.geosegbar.exceptions.ShareFolderException;
 import com.geosegbar.exceptions.TokenExpiredException;
 import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.exceptions.UnsupportedFileTypeException;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 
@@ -73,6 +75,21 @@ public class RestExceptionHandler {
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<WebResponseEntity<String>> handleForbiddenException(ForbiddenException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(WebResponseEntity.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<WebResponseEntity<String>> handleRateLimitExceededException(
+            RateLimitExceededException ex, HttpServletResponse response) {
+
+        // Adiciona cabeçalhos X-RateLimit-* para compatibilidade com clientes
+        response.setHeader("X-RateLimit-Limit", String.valueOf(ex.getCapacity()));
+        response.setHeader("X-RateLimit-Remaining", String.valueOf(ex.getRemainingTokens()));
+        response.setHeader("X-RateLimit-Reset", String.valueOf(System.currentTimeMillis() / 1000 + ex.getSecondsUntilRefill()));
+
+        logger.warn("Rate limit excedido: {}", ex.getMessage());
+
+        return ResponseEntity.status(429) // 429 Too Many Requests
                 .body(WebResponseEntity.error(ex.getMessage()));
     }
 

@@ -2,6 +2,7 @@ package com.geosegbar.infra.checklist_submission.dtos;
 
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.geosegbar.common.enums.WeatherConditionEnum;
 
 import jakarta.validation.Valid;
@@ -39,6 +40,7 @@ public class ChecklistResponseSubmissionDTO {
     @Valid
     private List<QuestionnaireResponseSubmissionDTO> questionnaireResponses;
 
+    @JsonProperty("isMobile")
     private boolean isMobile;
 
     @DecimalMin(value = "0.0", message = "Nível do montante deve ser maior ou igual a zero")

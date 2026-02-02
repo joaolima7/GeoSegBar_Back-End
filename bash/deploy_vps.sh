@@ -204,7 +204,7 @@ else
       --name postgres-prod \
       --restart unless-stopped \
       --network geosegbar-network \
-      -p ${DB_PORT}:5432 \
+      -p 5433:5432 \
       -e POSTGRES_DB=${DB_NAME} \
       -e POSTGRES_USER=${DB_USERNAME} \
       -e POSTGRES_PASSWORD=${DB_PASSWORD} \
@@ -223,11 +223,11 @@ if docker ps -q -f name=postgres-exporter-prod | grep -q .; then
     echo "✅ Postgres Exporter já está rodando"
 else
     echo "🔄 Iniciando Postgres Exporter..."
+    docker rm -f postgres-exporter-prod 2>/dev/null || true
     docker run -d \
       --name postgres-exporter-prod \
       --restart unless-stopped \
       --network geosegbar-network \
-      -p 9187:9187 \
       -e DATA_SOURCE_NAME="postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres-prod:5432/${DB_NAME}?sslmode=disable" \
       prometheuscommunity/postgres-exporter:v0.15.0
     echo "✅ Postgres Exporter iniciado"

@@ -14,9 +14,11 @@ import com.geosegbar.infra.file_storage.FileStorageService;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AnswerPhotoService {
 
     private final AnswerPhotoRepository answerPhotoRepository;
@@ -32,27 +34,36 @@ public class AnswerPhotoService {
             fileStorageService.deleteFile(photo.getImagePath());
         }
 
-        answerPhotoRepository.deleteById(id);
+        answerPhotoRepository.delete(photo);
+        log.info("Foto deletada: ID {}", id);
     }
 
     @Transactional
     public AnswerPhotoEntity savePhoto(Long answerId, MultipartFile photo) {
-        AnswerEntity answer = answerRepository.findById(answerId)
-                .orElseThrow(() -> new NotFoundException("Resposta não encontrada!"));
+
+        if (!answerRepository.existsById(answerId)) {
+            throw new NotFoundException("Resposta não encontrada!");
+        }
+
+        AnswerEntity answerRef = answerRepository.getReferenceById(answerId);
 
         String photoUrl = fileStorageService.storeFile(photo, "answer-photos");
 
         AnswerPhotoEntity answerPhoto = new AnswerPhotoEntity();
-        answerPhoto.setAnswer(answer);
+        answerPhoto.setAnswer(answerRef);
         answerPhoto.setImagePath(photoUrl);
 
-        return answerPhotoRepository.save(answerPhoto);
+        AnswerPhotoEntity saved = answerPhotoRepository.save(answerPhoto);
+        log.info("Nova foto salva para a resposta {}: {}", answerId, saved.getId());
+
+        return saved;
     }
 
     @Transactional
     public AnswerPhotoEntity update(AnswerPhotoEntity answerPhoto) {
-        answerPhotoRepository.findById(answerPhoto.getId())
-                .orElseThrow(() -> new NotFoundException("Foto da resposta não encontrada para atualização!"));
+        if (!answerPhotoRepository.existsById(answerPhoto.getId())) {
+            throw new NotFoundException("Foto da resposta não encontrada para atualização!");
+        }
         return answerPhotoRepository.save(answerPhoto);
     }
 
@@ -72,6 +83,7 @@ public class AnswerPhotoService {
     }
 
     public AnswerPhotoEntity findById(Long id) {
+
         return answerPhotoRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Foto da resposta não encontrada!"));
     }
@@ -81,6 +93,7 @@ public class AnswerPhotoService {
     }
 
     public List<AnswerPhotoEntity> findByAnswerId(Long answerId) {
+
         return answerPhotoRepository.findByAnswerId(answerId);
     }
 }

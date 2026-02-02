@@ -112,7 +112,7 @@ public class AnomalyService {
             }
         }
 
-        return savedAnomaly;
+        return findById(savedAnomaly.getId());
     }
 
     @Transactional
@@ -124,10 +124,8 @@ public class AnomalyService {
 
         DamEntity dam = damRepository.findById(request.getDamId())
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
-
         DangerLevelEntity dangerLevel = dangerLevelRepository.findById(request.getDangerLevelId())
                 .orElseThrow(() -> new NotFoundException("Nível de perigo não encontrado!"));
-
         AnomalyStatusEntity status = statusRepository.findById(request.getStatusId())
                 .orElseThrow(() -> new NotFoundException("Status não encontrado!"));
 
@@ -143,13 +141,17 @@ public class AnomalyService {
         anomaly.setDangerLevel(dangerLevel);
         anomaly.setStatus(status);
 
+        anomaly = anomalyRepository.save(anomaly);
+
         if (request.getPhotos() != null && !request.getPhotos().isEmpty()) {
+
             for (AnomalyPhotoEntity photo : new ArrayList<>(anomaly.getPhotos())) {
                 if (photo.getImagePath() != null && !photo.getImagePath().isEmpty()) {
                     fileStorageService.deleteFile(photo.getImagePath());
                 }
                 anomalyPhotoRepository.delete(photo);
             }
+
             anomaly.getPhotos().clear();
 
             for (PhotoSubmissionDTO photoDto : request.getPhotos()) {
@@ -157,16 +159,18 @@ public class AnomalyService {
             }
         }
 
-        return anomalyRepository.save(anomaly);
+        return findById(anomaly.getId());
     }
 
     @Transactional
     public void delete(Long id) {
         AnomalyEntity anomaly = findById(id);
 
-        for (AnomalyPhotoEntity photo : anomaly.getPhotos()) {
-            if (photo.getImagePath() != null && !photo.getImagePath().isEmpty()) {
-                fileStorageService.deleteFile(photo.getImagePath());
+        if (anomaly.getPhotos() != null) {
+            for (AnomalyPhotoEntity photo : anomaly.getPhotos()) {
+                if (photo.getImagePath() != null && !photo.getImagePath().isEmpty()) {
+                    fileStorageService.deleteFile(photo.getImagePath());
+                }
             }
         }
 

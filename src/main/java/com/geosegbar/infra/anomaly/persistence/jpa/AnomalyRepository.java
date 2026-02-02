@@ -12,20 +12,20 @@ import com.geosegbar.entities.AnomalyEntity;
 @Repository
 public interface AnomalyRepository extends JpaRepository<AnomalyEntity, Long> {
 
-    @EntityGraph(value = "anomaly.complete")
+    @EntityGraph(attributePaths = {"user", "dam", "dam.client", "photos", "dangerLevel", "status"})
     List<AnomalyEntity> findByUserId(Long userId);
 
-    @EntityGraph(value = "anomaly.complete")
+    @EntityGraph(attributePaths = {"user", "dam", "dam.client", "photos", "dangerLevel", "status"})
     List<AnomalyEntity> findByDamIdAndUserId(Long damId, Long userId);
 
     @Override
-    @EntityGraph(value = "anomaly.complete")
+    @EntityGraph(attributePaths = {"user", "dam", "dam.client", "photos", "dangerLevel", "status"})
     List<AnomalyEntity> findAll();
 
     @Override
-    @EntityGraph(value = "anomaly.complete")
+    @EntityGraph(attributePaths = {"user", "dam", "dam.client", "photos", "dangerLevel", "status"})
     Optional<AnomalyEntity> findById(Long id);
 
-    @EntityGraph(value = "anomaly.complete")
+    @EntityGraph(attributePaths = {"user", "dam", "dam.client", "photos", "dangerLevel", "status"})
     List<AnomalyEntity> findByDamId(Long damId);
 }

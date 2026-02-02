@@ -1,5 +1,6 @@
 package com.geosegbar.infra.checklist.persistence.jpa;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -18,19 +19,37 @@ public interface ChecklistRepository extends JpaRepository<ChecklistEntity, Long
     @EntityGraph(attributePaths = {"templateQuestionnaires"})
     ChecklistEntity findByDamId(Long damId);
 
-    @EntityGraph(attributePaths = {"templateQuestionnaires", "templateQuestionnaires.templateQuestions",
+    @EntityGraph(attributePaths = {
+        "templateQuestionnaires",
+        "templateQuestionnaires.templateQuestions",
         "templateQuestionnaires.templateQuestions.question",
-        "templateQuestionnaires.templateQuestions.question.options", "dam"})
+        "templateQuestionnaires.templateQuestions.question.options",
+        "dam"
+    })
     @Query("SELECT c FROM ChecklistEntity c WHERE c.dam.id = :damId")
     ChecklistEntity findByDamIdWithFullDetails(@Param("damId") Long damId);
 
-    @EntityGraph(attributePaths = {"templateQuestionnaires", "templateQuestionnaires.templateQuestions",
+    @EntityGraph(attributePaths = {
+        "templateQuestionnaires",
+        "templateQuestionnaires.templateQuestions",
         "templateQuestionnaires.templateQuestions.question",
-        "templateQuestionnaires.templateQuestions.question.options", "dam"})
+        "templateQuestionnaires.templateQuestions.question.options",
+        "dam",
+        "dam.client"
+    })
     @Query("SELECT c FROM ChecklistEntity c WHERE c.id = :id")
     Optional<ChecklistEntity> findByIdWithFullDetails(@Param("id") Long id);
 
-    Optional<ChecklistEntity> findByNameIgnoreCase(String name);
+    @EntityGraph(attributePaths = {
+        "templateQuestionnaires",
+        "templateQuestionnaires.templateQuestions",
+        "templateQuestionnaires.templateQuestions.question",
+        "templateQuestionnaires.templateQuestions.question.options",
+        "dam",
+        "dam.client"
+    })
+    @Query("SELECT DISTINCT c FROM ChecklistEntity c WHERE c.dam.client.id = :clientId")
+    List<ChecklistEntity> findAllByClientIdWithDetails(@Param("clientId") Long clientId);
 
     @EntityGraph(attributePaths = {"dam"})
     @Query("SELECT c FROM ChecklistEntity c WHERE c.id = :checklistId")
@@ -44,7 +63,7 @@ public interface ChecklistRepository extends JpaRepository<ChecklistEntity, Long
 
     boolean existsByNameAndDamIdAndIdNot(String name, Long damId, Long id);
 
-    @EntityGraph(attributePaths = {"dam"})
-    @Query("SELECT c FROM ChecklistEntity c")
+    @Query(value = "SELECT c FROM ChecklistEntity c JOIN FETCH c.dam",
+            countQuery = "SELECT count(c) FROM ChecklistEntity c")
     Page<ChecklistEntity> findAllWithDams(Pageable pageable);
 }

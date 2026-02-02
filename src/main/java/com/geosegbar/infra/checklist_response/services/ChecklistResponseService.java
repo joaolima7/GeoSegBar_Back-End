@@ -51,69 +51,59 @@ public class ChecklistResponseService {
     }
 
     public ChecklistResponseEntity findById(Long id) {
-        return checklistResponseRepository.findById(id)
+        return checklistResponseRepository.findByIdWithBasicInfo(id)
                 .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para id: " + id));
     }
 
     public List<ChecklistResponseEntity> findByDamId(Long damId) {
         damService.findById(damId);
-        List<ChecklistResponseEntity> responses = checklistResponseRepository.findByDamId(damId);
-        return responses;
+        return checklistResponseRepository.findByDamId(damId);
     }
 
     @Transactional
-
     public ChecklistResponseEntity save(ChecklistResponseEntity checklistResponse) {
         Long damId = checklistResponse.getDam().getId();
+
         DamEntity dam = damService.findById(damId);
         checklistResponse.setDam(dam);
 
         ChecklistResponseEntity saved = checklistResponseRepository.save(checklistResponse);
 
-        return saved;
+        return findById(saved.getId());
     }
 
     @Transactional
-
     public ChecklistResponseEntity update(ChecklistResponseEntity checklistResponse) {
         ChecklistResponseEntity existing = checklistResponseRepository.findById(checklistResponse.getId())
                 .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para atualização!"));
 
-        Long oldDamId = existing.getDam().getId();
-        DamEntity oldDam = damService.findById(oldDamId);
-        Long oldClientId = oldDam.getClient().getId();
-        Long oldUserId = existing.getUser().getId();
+        if (checklistResponse.getDam() != null && checklistResponse.getDam().getId() != null) {
+            DamEntity newDam = damService.findById(checklistResponse.getDam().getId());
+            checklistResponse.setDam(newDam);
+        } else {
+            checklistResponse.setDam(existing.getDam());
+        }
 
-        Long newDamId = checklistResponse.getDam().getId();
-        DamEntity newDam = damService.findById(newDamId);
-        checklistResponse.setDam(newDam);
-        Long newClientId = newDam.getClient().getId();
-        Long newUserId = checklistResponse.getUser().getId();
+        if (checklistResponse.getUser() == null) {
+            checklistResponse.setUser(existing.getUser());
+        }
 
         ChecklistResponseEntity saved = checklistResponseRepository.save(checklistResponse);
 
-        return saved;
+        return findById(saved.getId());
     }
 
     @Transactional
-
     public void deleteById(Long id) {
-        ChecklistResponseEntity existing = checklistResponseRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para exclusão!"));
-
-        Long damId = existing.getDam().getId();
-        DamEntity dam = damService.findById(damId);
-        Long clientId = dam.getClient().getId();
-        Long userId = existing.getUser().getId();
-
+        if (!checklistResponseRepository.existsById(id)) {
+            throw new NotFoundException("Resposta de Checklist não encontrada para exclusão!");
+        }
         checklistResponseRepository.deleteById(id);
     }
 
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByDamId(Long damId) {
         damService.findById(damId);
-
         List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByDamId(damId);
-
         return checklistResponses.stream()
                 .map(this::convertToDetailDto)
                 .collect(Collectors.toList());
@@ -123,35 +113,33 @@ public class ChecklistResponseService {
             Long clientId, Pageable pageable) {
 
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByClientIdOptimized(clientId, pageable);
-
-        List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
-                .map(this::convertToDetailDto)
-                .collect(Collectors.toList());
-
-        return new PagedChecklistResponseDTO<>(
-                dtos,
-                page.getNumber(),
-                page.getSize(),
-                page.getTotalElements(),
-                page.getTotalPages(),
-                page.isLast(),
-                page.isFirst()
-        );
+        return convertPageToResponse(page);
     }
 
     public ChecklistResponseDetailDTO findChecklistResponseById(Long checklistResponseId) {
+
         ChecklistResponseEntity checklistResponse = findById(checklistResponseId);
+
         return convertToDetailDto(checklistResponse);
     }
 
+    /**
+     * Converte Entity para DTO carregando os detalhes profundos em uma query
+     * separada. Essa abordagem evita o Produto Cartesiano (MultipleBagFetch) e
+     * N+1.
+     */
     private ChecklistResponseDetailDTO convertToDetailDto(ChecklistResponseEntity checklistResponse) {
         ChecklistResponseDetailDTO dto = new ChecklistResponseDetailDTO();
         dto.setId(checklistResponse.getId());
         dto.setChecklistName(checklistResponse.getChecklistName());
         dto.setChecklistId(checklistResponse.getChecklistId());
         dto.setCreatedAt(checklistResponse.getCreatedAt());
-        dto.setUserId(checklistResponse.getUser().getId());
-        dto.setUserName(checklistResponse.getUser().getName());
+
+        if (checklistResponse.getUser() != null) {
+            dto.setUserId(checklistResponse.getUser().getId());
+            dto.setUserName(checklistResponse.getUser().getName());
+        }
+
         dto.setUpstreamLevel(checklistResponse.getUpstreamLevel());
         dto.setDownstreamLevel(checklistResponse.getDownstreamLevel());
         dto.setSpilledFlow(checklistResponse.getSpilledFlow());
@@ -160,10 +148,12 @@ public class ChecklistResponseService {
         dto.setWeatherCondition(checklistResponse.getWeatherCondition());
 
         DamEntity dam = checklistResponse.getDam();
-        DamInfoDTO damInfo = new DamInfoDTO();
-        damInfo.setId(dam.getId());
-        damInfo.setName(dam.getName());
-        dto.setDam(damInfo);
+        if (dam != null) {
+            DamInfoDTO damInfo = new DamInfoDTO();
+            damInfo.setId(dam.getId());
+            damInfo.setName(dam.getName());
+            dto.setDam(damInfo);
+        }
 
         List<QuestionnaireResponseEntity> questionnaireResponses
                 = questionnaireResponseRepository.findByChecklistResponseIdOptimized(checklistResponse.getId());
@@ -219,88 +209,45 @@ public class ChecklistResponseService {
             }
         }
 
-        List<TemplateWithAnswersDTO> templates = new ArrayList<>(templateMap.values());
-        dto.setTemplates(templates);
-
+        dto.setTemplates(new ArrayList<>(templateMap.values()));
         return dto;
     }
 
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByUserId(Long userId) {
-        List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByUserId(userId);
-
-        return checklistResponses.stream()
+        return checklistResponseRepository.findByUserId(userId).stream()
                 .map(this::convertToDetailDto)
                 .collect(Collectors.toList());
     }
 
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByDateRange(LocalDateTime startDate, LocalDateTime endDate) {
-        List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByCreatedAtBetween(startDate, endDate);
-
-        return checklistResponses.stream()
+        return checklistResponseRepository.findByCreatedAtBetween(startDate, endDate).stream()
                 .map(this::convertToDetailDto)
                 .collect(Collectors.toList());
     }
 
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByDamIdPaged(Long damId, Pageable pageable) {
         damService.findById(damId);
-
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdOptimized(damId, pageable);
-
-        List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
-                .map(this::convertToDetailDto)
-                .collect(Collectors.toList());
-
-        return new PagedChecklistResponseDTO<>(
-                dtos,
-                page.getNumber(),
-                page.getSize(),
-                page.getTotalElements(),
-                page.getTotalPages(),
-                page.isLast(),
-                page.isFirst()
-        );
+        return convertPageToResponse(page);
     }
 
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByUserIdPaged(Long userId, Pageable pageable) {
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByUserId(userId, pageable);
-
-        List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
-                .map(this::convertToDetailDto)
-                .collect(Collectors.toList());
-
-        return new PagedChecklistResponseDTO<>(
-                dtos,
-                page.getNumber(),
-                page.getSize(),
-                page.getTotalElements(),
-                page.getTotalPages(),
-                page.isLast(),
-                page.isFirst()
-        );
+        return convertPageToResponse(page);
     }
 
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByDateRangePaged(
             LocalDateTime startDate, LocalDateTime endDate, Pageable pageable) {
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByCreatedAtBetween(startDate, endDate, pageable);
-
-        List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
-                .map(this::convertToDetailDto)
-                .collect(Collectors.toList());
-
-        return new PagedChecklistResponseDTO<>(
-                dtos,
-                page.getNumber(),
-                page.getSize(),
-                page.getTotalElements(),
-                page.getTotalPages(),
-                page.isLast(),
-                page.isFirst()
-        );
+        return convertPageToResponse(page);
     }
 
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findAllChecklistResponsesPaged(Pageable pageable) {
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findAll(pageable);
+        return convertPageToResponse(page);
+    }
 
+    private PagedChecklistResponseDTO<ChecklistResponseDetailDTO> convertPageToResponse(Page<ChecklistResponseEntity> page) {
         List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
                 .map(this::convertToDetailDto)
                 .collect(Collectors.toList());
@@ -323,6 +270,7 @@ public class ChecklistResponseService {
         List<DamLastChecklistDTO> result = new ArrayList<>();
 
         for (DamEntity dam : dams) {
+
             List<ChecklistResponseEntity> responses = checklistResponseRepository.findByDamId(dam.getId());
             if (responses.isEmpty()) {
                 result.add(new DamLastChecklistDTO(dam.getId(), dam.getName(), "Nenhuma inspeção realizada."));
@@ -337,6 +285,9 @@ public class ChecklistResponseService {
         return result;
     }
 
+    /**
+     * ⭐ MÉTODO OTIMIZADO: Evita carregar entidade pesada sem necessidade
+     */
     public ClientDetailedChecklistResponsesDTO findLatestDetailedChecklistResponsesByClientId(Long clientId, int limit) {
 
         ClientEntity client = clientRepository.findById(clientId)
@@ -348,33 +299,27 @@ public class ChecklistResponseService {
             return new ClientDetailedChecklistResponsesDTO(clientId, client.getName(), List.of());
         }
 
-        List<ChecklistResponseEntity> responses = new ArrayList<>();
-        for (Long id : responseIds) {
-
-            ChecklistResponseEntity response = checklistResponseRepository.findByIdWithFullDetails(id)
-                    .orElse(null);
-            if (response != null) {
-                responses.add(response);
-            }
-        }
-
         Map<Long, ClientDetailedChecklistResponsesDTO.ChecklistWithDetailedResponsesDTO> checklistMap = new HashMap<>();
 
-        for (ChecklistResponseEntity response : responses) {
-            Long checklistId = response.getChecklistId();
+        for (Long id : responseIds) {
 
-            ClientDetailedChecklistResponsesDTO.ChecklistWithDetailedResponsesDTO checklistDto
-                    = checklistMap.computeIfAbsent(
-                            checklistId,
-                            id -> new ClientDetailedChecklistResponsesDTO.ChecklistWithDetailedResponsesDTO(
-                                    checklistId,
-                                    response.getChecklistName(),
-                                    new ArrayList<>()
-                            )
-                    );
+            checklistResponseRepository.findByIdWithBasicInfo(id).ifPresent(response -> {
 
-            ChecklistResponseDetailDTO detailedDto = convertToDetailDto(response);
-            checklistDto.getLatestResponses().add(detailedDto);
+                Long checklistId = response.getChecklistId();
+
+                ClientDetailedChecklistResponsesDTO.ChecklistWithDetailedResponsesDTO checklistDto
+                        = checklistMap.computeIfAbsent(
+                                checklistId,
+                                cid -> new ClientDetailedChecklistResponsesDTO.ChecklistWithDetailedResponsesDTO(
+                                        checklistId,
+                                        response.getChecklistName(),
+                                        new ArrayList<>()
+                                )
+                        );
+
+                ChecklistResponseDetailDTO detailedDto = convertToDetailDto(response);
+                checklistDto.getLatestResponses().add(detailedDto);
+            });
         }
 
         return new ClientDetailedChecklistResponsesDTO(

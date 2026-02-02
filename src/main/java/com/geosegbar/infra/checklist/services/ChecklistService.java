@@ -12,6 +12,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import com.geosegbar.common.enums.TypeQuestionEnum;
 import com.geosegbar.entities.AnswerEntity;
 import com.geosegbar.entities.ChecklistEntity;
 import com.geosegbar.entities.ClientEntity;
@@ -63,14 +64,20 @@ public class ChecklistService {
         return checklistRepository.findAllWithDams(pageable);
     }
 
+    /**
+     * ✅ OTIMIZAÇÃO: Usa query com details para montar o DTO sem lazy exception.
+     */
     public ChecklistCompleteDTO findByIdDTO(Long id) {
-        ChecklistEntity entity = checklistRepository.findById(id)
+        ChecklistEntity entity = checklistRepository.findByIdWithFullDetails(id)
                 .orElseThrow(() -> new NotFoundException("Checklist não encontrado para id: " + id));
         return convertToCompleteDTO(entity);
     }
 
+    /**
+     * ✅ OTIMIZAÇÃO: Retorna entidade carregada.
+     */
     public ChecklistEntity findById(Long id) {
-        return checklistRepository.findById(id)
+        return checklistRepository.findByIdWithFullDetails(id)
                 .orElseThrow(() -> new NotFoundException("Checklist não encontrada para id: " + id));
     }
 
@@ -85,7 +92,7 @@ public class ChecklistService {
         Long damId = dam.getId();
 
         DamEntity fullDam = damService.findById(damId);
-        Long clientId = fullDam.getClient().getId();
+        // Long clientId = fullDam.getClient().getId(); // Não usado, removido para limpar aviso
 
         ChecklistEntity existingChecklist = checklistRepository.findByDamId(damId);
         if (existingChecklist != null) {
@@ -121,14 +128,16 @@ public class ChecklistService {
 
         ChecklistEntity saved = checklistRepository.save(checklist);
 
-        return saved;
+        // ✅ SEGURANÇA OSIV: Retorna objeto recarregado com grafo completo
+        return findById(saved.getId());
     }
 
     @Transactional()
     public List<ChecklistWithLastAnswersDTO> findChecklistsWithLastAnswersForDam(Long damId) {
-
+        // Valida existência da barragem
         damService.findById(damId);
 
+        // Busca checklist com toda a árvore carregada
         ChecklistEntity checklist = checklistRepository.findByDamIdWithFullDetails(damId);
 
         List<ChecklistWithLastAnswersDTO> result = new ArrayList<>();
@@ -137,11 +146,70 @@ public class ChecklistService {
             return result;
         }
 
+        result.add(buildChecklistWithAnswersDTO(checklist, damId));
+
+        return result;
+    }
+
+    @Transactional()
+    public List<ChecklistWithLastAnswersAndDamDTO> findAllChecklistsWithLastAnswersByClientId(Long clientId) {
+
+        // ✅ OTIMIZAÇÃO MASSIVA: Busca todos os checklists do cliente em 1 Query
+        // Em vez de iterar barragens (N) e buscar checklists (N), fazemos 1 busca só.
+        List<ChecklistEntity> allChecklistsEntities = checklistRepository.findAllByClientIdWithDetails(clientId);
+
+        List<ChecklistWithLastAnswersAndDamDTO> allChecklists = new ArrayList<>();
+
+        for (ChecklistEntity checklist : allChecklistsEntities) {
+
+            // Reutiliza a lógica de montagem
+            ChecklistWithLastAnswersAndDamDTO checklistDTO = new ChecklistWithLastAnswersAndDamDTO();
+            checklistDTO.setId(checklist.getId());
+            checklistDTO.setName(checklist.getName());
+            checklistDTO.setCreatedAt(checklist.getCreatedAt());
+
+            DamEntity dam = checklist.getDam();
+            ChecklistWithLastAnswersAndDamDTO.DamInfoDTO damInfo = new ChecklistWithLastAnswersAndDamDTO.DamInfoDTO(
+                    dam.getId(),
+                    dam.getName(),
+                    dam.getCity(),
+                    dam.getState(),
+                    dam.getLatitude(),
+                    dam.getLongitude()
+            );
+            checklistDTO.setDam(damInfo);
+
+            // Popula os templates e respostas
+            // Nota: dam.getId() aqui é seguro pois o graph carregou a dam
+            populateTemplatesWithAnswers(checklistDTO, checklist, dam.getId());
+
+            allChecklists.add(checklistDTO);
+        }
+
+        allChecklists.sort((a, b) -> {
+            int damComparison = a.getDam().getName().compareTo(b.getDam().getName());
+            return damComparison != 0 ? damComparison : a.getName().compareTo(b.getName());
+        });
+
+        return allChecklists;
+    }
+
+    // --- Métodos Auxiliares de Construção (Extraídos para reutilização e clareza) ---
+    private ChecklistWithLastAnswersDTO buildChecklistWithAnswersDTO(ChecklistEntity checklist, Long damId) {
         ChecklistWithLastAnswersDTO checklistDTO = new ChecklistWithLastAnswersDTO();
         checklistDTO.setId(checklist.getId());
         checklistDTO.setName(checklist.getName());
         checklistDTO.setCreatedAt(checklist.getCreatedAt());
 
+        populateTemplatesWithAnswers(checklistDTO, checklist, damId);
+
+        return checklistDTO;
+    }
+
+    // Método genérico para popular templates em qualquer DTO que herde ou tenha estrutura similar
+    // Como os DTOs são diferentes classes mas mesma estrutura, mantive a lógica duplicada no loop acima
+    // mas aqui extraio a lógica comum do "miolo".
+    private void populateTemplatesWithAnswers(Object checklistDTO, ChecklistEntity checklist, Long damId) {
         List<TemplateQuestionnaireWithAnswersDTO> templateDTOs = new ArrayList<>();
 
         for (TemplateQuestionnaireEntity template : checklist.getTemplateQuestionnaires()) {
@@ -164,11 +232,12 @@ public class ChecklistService {
                         .collect(Collectors.toList());
                 questionDTO.setAllOptions(allOptionDTOs);
 
+                // Esta query busca a última resposta. Como estamos em transação, ok.
+                // Otimização futura: Buscar todas as respostas do checklist em batch.
                 Optional<AnswerEntity> lastNonNIAnswer = answerRepository.findLatestNonNIAnswer(
                         damId, question.getId(), template.getId());
 
                 lastNonNIAnswer.ifPresent(answer -> {
-
                     Optional<OptionEntity> nonNIOption = answer.getSelectedOptions().stream()
                             .filter(opt -> !"NI".equalsIgnoreCase(opt.getLabel()))
                             .findFirst();
@@ -188,98 +257,11 @@ public class ChecklistService {
             templateDTOs.add(templateDTO);
         }
 
-        checklistDTO.setTemplateQuestionnaires(templateDTOs);
-        result.add(checklistDTO);
-
-        return result;
-    }
-
-    @Transactional()
-    public List<ChecklistWithLastAnswersAndDamDTO> findAllChecklistsWithLastAnswersByClientId(Long clientId) {
-
-        List<DamEntity> clientDams = damService.findDamsByClientId(clientId);
-        List<ChecklistWithLastAnswersAndDamDTO> allChecklists = new ArrayList<>();
-
-        for (DamEntity dam : clientDams) {
-
-            ChecklistEntity checklist = checklistRepository.findByDamIdWithFullDetails(dam.getId());
-
-            if (checklist == null) {
-                continue;
-            }
-
-            ChecklistWithLastAnswersAndDamDTO checklistDTO = new ChecklistWithLastAnswersAndDamDTO();
-            checklistDTO.setId(checklist.getId());
-            checklistDTO.setName(checklist.getName());
-            checklistDTO.setCreatedAt(checklist.getCreatedAt());
-
-            ChecklistWithLastAnswersAndDamDTO.DamInfoDTO damInfo
-                    = new ChecklistWithLastAnswersAndDamDTO.DamInfoDTO(
-                            dam.getId(),
-                            dam.getName(),
-                            dam.getCity(),
-                            dam.getState(),
-                            dam.getLatitude(),
-                            dam.getLongitude()
-                    );
-            checklistDTO.setDam(damInfo);
-
-            List<TemplateQuestionnaireWithAnswersDTO> templateDTOs = new ArrayList<>();
-
-            for (TemplateQuestionnaireEntity template : checklist.getTemplateQuestionnaires()) {
-                TemplateQuestionnaireWithAnswersDTO templateDTO = new TemplateQuestionnaireWithAnswersDTO();
-                templateDTO.setId(template.getId());
-                templateDTO.setName(template.getName());
-
-                List<QuestionWithLastAnswerDTO> questionDTOs = new ArrayList<>();
-
-                for (TemplateQuestionnaireQuestionEntity tqQuestion : template.getTemplateQuestions()) {
-                    QuestionEntity question = tqQuestion.getQuestion();
-
-                    QuestionWithLastAnswerDTO questionDTO = new QuestionWithLastAnswerDTO();
-                    questionDTO.setId(question.getId());
-                    questionDTO.setQuestionText(question.getQuestionText());
-                    questionDTO.setType(question.getType());
-
-                    List<OptionDTO> allOptionDTOs = question.getOptions().stream()
-                            .map(opt -> new OptionDTO(opt.getId(), opt.getLabel(), opt.getValue()))
-                            .collect(Collectors.toList());
-                    questionDTO.setAllOptions(allOptionDTOs);
-
-                    Optional<AnswerEntity> lastNonNIAnswer = answerRepository.findLatestNonNIAnswer(
-                            dam.getId(), question.getId(), template.getId());
-
-                    lastNonNIAnswer.ifPresent(answer -> {
-
-                        Optional<OptionEntity> nonNIOption = answer.getSelectedOptions().stream()
-                                .filter(opt -> !"NI".equalsIgnoreCase(opt.getLabel()))
-                                .findFirst();
-
-                        nonNIOption.ifPresent(option -> {
-                            OptionDTO optionDTO = new OptionDTO(
-                                    option.getId(), option.getLabel(), option.getValue());
-                            questionDTO.setLastSelectedOption(optionDTO);
-                            questionDTO.setAnswerResponseId(answer.getId());
-                        });
-                    });
-
-                    questionDTOs.add(questionDTO);
-                }
-
-                templateDTO.setQuestions(questionDTOs);
-                templateDTOs.add(templateDTO);
-            }
-
-            checklistDTO.setTemplateQuestionnaires(templateDTOs);
-            allChecklists.add(checklistDTO);
+        if (checklistDTO instanceof ChecklistWithLastAnswersDTO) {
+            ((ChecklistWithLastAnswersDTO) checklistDTO).setTemplateQuestionnaires(templateDTOs);
+        } else if (checklistDTO instanceof ChecklistWithLastAnswersAndDamDTO) {
+            ((ChecklistWithLastAnswersAndDamDTO) checklistDTO).setTemplateQuestionnaires(templateDTOs);
         }
-
-        allChecklists.sort((a, b) -> {
-            int damComparison = a.getDam().getName().compareTo(b.getDam().getName());
-            return damComparison != 0 ? damComparison : a.getName().compareTo(b.getName());
-        });
-
-        return allChecklists;
     }
 
     @Transactional
@@ -293,11 +275,12 @@ public class ChecklistService {
         DamEntity oldDam = oldChecklist.getDam();
         Long oldDamId = oldDam.getId();
         DamEntity oldFullDam = damService.findById(oldDamId);
-        Long oldClientId = oldFullDam.getClient().getId();
+        // Long oldClientId = oldFullDam.getClient().getId(); // Removido
 
         DamEntity newDam = checklist.getDam();
         Long newDamId = newDam.getId();
 
+        // Não permite mudança da barragem após criação
         if (!oldDamId.equals(newDamId)) {
             throw new BusinessRuleException(
                     "Não é possível alterar a barragem de um checklist após sua criação. "
@@ -331,32 +314,19 @@ public class ChecklistService {
 
         ChecklistEntity saved = checklistRepository.save(checklist);
 
-        return saved;
+        // ✅ SEGURANÇA OSIV
+        return findById(saved.getId());
     }
 
     @Transactional
-
     public void deleteById(Long id) {
-
-        ChecklistEntity checklist = checklistRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Checklist não encontrada para exclusão!"));
-
-        DamEntity dam = checklist.getDam();
-        Long damId = dam.getId();
-        DamEntity fullDam = damService.findById(damId);
-        Long clientId = fullDam.getClient().getId();
-
+        // Apenas verifica existência, não precisa carregar grafo pesado para deletar
+        if (!checklistRepository.existsById(id)) {
+            throw new NotFoundException("Checklist não encontrada para exclusão!");
+        }
         checklistRepository.deleteById(id);
-
     }
 
-    /**
-     * Cria um checklist completo com templates e questões (novas ou
-     * existentes). Reaproveita a lógica de criação de templates e questões.
-     *
-     * @param dto Dados do checklist completo
-     * @return Checklist criado com todos os templates e questões
-     */
     @Transactional
     public ChecklistEntity createComplete(ChecklistCompleteCreationDTO dto) {
         log.info("Iniciando criação de checklist completo: {}", dto.getName());
@@ -387,7 +357,7 @@ public class ChecklistService {
 
         int templateCount = 0;
         for (TemplateInChecklistDTO templateDto : dto.getTemplates()) {
-
+            // ... (Validações de templateDTO mantidas) ...
             if (templateDto.isNewTemplate()) {
                 if (templateDto.getName() == null || templateDto.getName().trim().isEmpty()) {
                     throw new InvalidInputException("Nome do template é obrigatório ao criar um novo template!");
@@ -406,7 +376,6 @@ public class ChecklistService {
             TemplateQuestionnaireEntity template;
 
             if (templateDto.isExistingTemplate()) {
-
                 template = templateQuestionnaireRepository.findById(templateDto.getTemplateId())
                         .orElseThrow(() -> new NotFoundException(
                         "Template não encontrado com ID: " + templateDto.getTemplateId()));
@@ -419,10 +388,8 @@ public class ChecklistService {
                             + dam.getName() + "'. Todos os templates devem pertencer à mesma barragem."
                     );
                 }
-
                 log.info("Reutilizando template existente: {} (ID: {})", template.getName(), template.getId());
             } else {
-
                 template = createNewTemplate(templateDto, dam, clientId);
                 log.info("Novo template criado: {} (ID: {})", template.getName(), template.getId());
             }
@@ -436,21 +403,15 @@ public class ChecklistService {
         log.info("Checklist completo criado com sucesso: {} com {} template(s)",
                 saved.getName(), templateCount);
 
-        return saved;
+        // ✅ SEGURANÇA OSIV
+        return findById(saved.getId());
     }
 
-    /**
-     * Atualiza um checklist completo, incluindo templates e questões. Não
-     * permite mudança da dam do checklist.
-     *
-     * @param checklistId ID do checklist a ser atualizado
-     * @param dto Dados atualizados do checklist
-     * @return Checklist atualizado
-     */
     @Transactional
     public ChecklistEntity updateComplete(Long checklistId, ChecklistCompleteUpdateDTO dto) {
         log.info("Iniciando atualização completa do checklist {}", checklistId);
 
+        // Busca e carrega tudo
         ChecklistEntity existingChecklist = findById(checklistId);
         DamEntity dam = existingChecklist.getDam();
         Long damId = dam.getId();
@@ -461,12 +422,11 @@ public class ChecklistService {
         }
 
         existingChecklist.setName(dto.getName());
-
         existingChecklist.getTemplateQuestionnaires().clear();
 
         int templateCount = 0;
         for (TemplateInChecklistDTO templateDto : dto.getTemplates()) {
-
+            // ... (Validações mantidas) ...
             if (templateDto.isNewTemplate()) {
                 if (templateDto.getName() == null || templateDto.getName().trim().isEmpty()) {
                     throw new InvalidInputException("Nome do template é obrigatório ao criar um novo template!");
@@ -485,7 +445,6 @@ public class ChecklistService {
             TemplateQuestionnaireEntity template;
 
             if (templateDto.isExistingTemplate()) {
-
                 template = templateQuestionnaireRepository.findById(templateDto.getTemplateId())
                         .orElseThrow(() -> new NotFoundException(
                         "Template não encontrado com ID: " + templateDto.getTemplateId()));
@@ -498,10 +457,8 @@ public class ChecklistService {
                             + dam.getName() + "'. Todos os templates devem pertencer à mesma barragem."
                     );
                 }
-
                 log.info("Reutilizando template existente: {} (ID: {})", template.getName(), template.getId());
             } else {
-
                 template = createNewTemplate(templateDto, dam, clientId);
                 log.info("Novo template criado: {} (ID: {})", template.getName(), template.getId());
             }
@@ -515,18 +472,10 @@ public class ChecklistService {
         log.info("Checklist {} atualizado com sucesso com {} template(s)",
                 saved.getName(), templateCount);
 
-        return saved;
+        // ✅ SEGURANÇA OSIV
+        return findById(saved.getId());
     }
 
-    /**
-     * Cria um novo template com questões (reaproveitando lógica do
-     * TemplateQuestionnaireService).
-     *
-     * @param templateDto DTO com dados do template
-     * @param dam Barragem do template
-     * @param clientId ID do cliente
-     * @return Template criado
-     */
     private TemplateQuestionnaireEntity createNewTemplate(
             TemplateInChecklistDTO templateDto, DamEntity dam, Long clientId) {
 
@@ -571,16 +520,7 @@ public class ChecklistService {
         return templateQuestionnaireRepository.save(template);
     }
 
-    /**
-     * Cria uma nova questão (reaproveitando lógica do
-     * TemplateQuestionnaireService).
-     *
-     * @param questionDto DTO com dados da questão
-     * @param clientId ID do cliente
-     * @return Questão criada
-     */
     private QuestionEntity createNewQuestion(TemplateQuestionDTO questionDto, Long clientId) {
-
         if (questionDto.getQuestionText() == null || questionDto.getQuestionText().trim().isEmpty()) {
             throw new InvalidInputException("Texto da questão é obrigatório!");
         }
@@ -589,7 +529,7 @@ public class ChecklistService {
             throw new InvalidInputException("Tipo da questão é obrigatório!");
         }
 
-        if (com.geosegbar.common.enums.TypeQuestionEnum.CHECKBOX.equals(questionDto.getType())) {
+        if (TypeQuestionEnum.CHECKBOX.equals(questionDto.getType())) {
             if (questionDto.getOptionIds() == null || questionDto.getOptionIds().isEmpty()) {
                 throw new InvalidInputException(
                         "Questões do tipo CHECKBOX devem ter pelo menos uma opção associada!");
@@ -620,14 +560,6 @@ public class ChecklistService {
         return questionService.save(newQuestion);
     }
 
-    /**
-     * Valida se todos os templates pertencem à mesma barragem do checklist.
-     *
-     * @param templates Set de templates a serem validados
-     * @param damId ID da barragem do checklist
-     * @param damName Nome da barragem (para mensagens de erro)
-     * @throws BusinessRuleException se algum template não pertencer à barragem
-     */
     private void validateTemplatesBelongToDam(Set<TemplateQuestionnaireEntity> templates, Long damId, String damName) {
         if (templates == null || templates.isEmpty()) {
             return;
@@ -642,7 +574,6 @@ public class ChecklistService {
 
             Long templateDamId = template.getDam().getId();
             if (!templateDamId.equals(damId)) {
-
                 TemplateQuestionnaireEntity fullTemplate = templateQuestionnaireRepository.findById(template.getId())
                         .orElse(template);
 
@@ -657,13 +588,10 @@ public class ChecklistService {
                 );
             }
         }
-
-        log.info("Validação concluída: todos os {} templates pertencem à barragem {} (ID: {})",
-                templates.size(), damName, damId);
     }
 
     public List<ChecklistCompleteDTO> findByDamIdDTO(Long damId) {
-        ChecklistEntity checklist = checklistRepository.findByDamId(damId);
+        ChecklistEntity checklist = checklistRepository.findByDamIdWithFullDetails(damId);
         if (checklist == null) {
             return List.of();
         }
@@ -671,7 +599,7 @@ public class ChecklistService {
     }
 
     public ChecklistCompleteDTO findChecklistForDamDTO(Long damId, Long checklistId) {
-        ChecklistEntity checklist = findById(checklistId);
+        ChecklistEntity checklist = findById(checklistId); // Usa a busca completa
 
         if (checklist.getDam() != null && checklist.getDam().getId().equals(damId)) {
             return convertToCompleteDTO(checklist);
@@ -696,6 +624,7 @@ public class ChecklistService {
         dto.setName(entity.getName());
         dto.setCreatedAt(entity.getCreatedAt());
 
+        // Stream seguro pois 'entity' veio de findByIdWithFullDetails
         Set<ChecklistCompleteDTO.TemplateQuestionnaireDTO> templateDTOs = entity.getTemplateQuestionnaires().stream()
                 .map(template -> {
                     ChecklistCompleteDTO.TemplateQuestionnaireDTO templateDTO
@@ -758,22 +687,12 @@ public class ChecklistService {
         return dto;
     }
 
-    /**
-     * Replica um checklist completo de uma barragem para outra. Cria cópias
-     * independentes de todos os templates, questões e opções.
-     *
-     * @param sourceChecklistId ID do checklist de origem
-     * @param targetDamId ID da barragem de destino
-     * @return Checklist replicado com todos os templates, questões e opções
-     */
     @Transactional
     public ChecklistEntity replicateChecklist(Long sourceChecklistId, Long targetDamId) {
         log.info("Iniciando replicação do checklist {} para a barragem {}", sourceChecklistId, targetDamId);
 
-        ChecklistEntity sourceChecklist = checklistRepository
-                .findByIdWithFullDetails(sourceChecklistId)
-                .orElseThrow(() -> new NotFoundException(
-                "Checklist de origem não encontrado com ID: " + sourceChecklistId));
+        // Busca origem carregada
+        ChecklistEntity sourceChecklist = findById(sourceChecklistId);
 
         DamEntity targetDam = damService.findById(targetDamId);
 
@@ -851,15 +770,12 @@ public class ChecklistService {
             templateCount++;
         }
 
-        newChecklist = checklistRepository.save(newChecklist);
+        ChecklistEntity saved = checklistRepository.save(newChecklist);
 
         log.info("Replicação concluída: Checklist {} criado com {} template(s) para barragem {}",
-                newChecklist.getId(), templateCount, targetDamId);
+                saved.getId(), templateCount, targetDamId);
 
-        Long clientId = targetDam.getClient().getId();
-        log.info("Caches de checklist invalidados após replicação");
-
-        return newChecklist;
+        // ✅ SEGURANÇA OSIV
+        return findById(saved.getId());
     }
-
 }

@@ -62,8 +62,8 @@ public class CreateDamCompleteRequest {
 
     private String logoBase64;
     private String damImageBase64;
-    private String linkPSB;
-    private String linkLegislation;
+    private Long psbLinkFolderId;
+    private Long legislationLinkFolderId;
 
     private LocalDate lastUpdatePAE;
     private LocalDate nextUpdatePAE;

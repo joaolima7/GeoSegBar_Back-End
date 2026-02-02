@@ -3,6 +3,7 @@ package com.geosegbar.infra.answer.persistence.jpa;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -14,35 +15,50 @@ import com.geosegbar.entities.AnswerEntity;
 import jakarta.persistence.EntityManager;
 
 @Repository
-public interface AnswerRepository extends JpaRepository<AnswerEntity, Long>, AnswerRepositoryCustom {
+public interface AnswerRepository extends JpaRepository<AnswerEntity, Long> {
 
-    // OTIMIZAÇÃO: Busca resposta por ID com todos os detalhes
     @EntityGraph(attributePaths = {"question", "selectedOptions", "photos", "questionnaireResponse"})
     @Query("SELECT a FROM AnswerEntity a WHERE a.id = :id")
     Optional<AnswerEntity> findByIdWithAllDetails(@Param("id") Long id);
 
-    // OTIMIZAÇÃO: Busca respostas por questionário com detalhes
+    @Override
+    @EntityGraph(attributePaths = {"question", "selectedOptions", "photos"})
+    List<AnswerEntity> findAll();
+
     @EntityGraph(attributePaths = {"question", "selectedOptions", "photos"})
     @Query("SELECT a FROM AnswerEntity a WHERE a.questionnaireResponse.id = :questionnaireResponseId")
     List<AnswerEntity> findByQuestionnaireResponseIdWithDetails(@Param("questionnaireResponseId") Long questionnaireResponseId);
 
-    // OTIMIZAÇÃO: Busca respostas por pergunta específica
     @EntityGraph(attributePaths = {"selectedOptions", "photos", "questionnaireResponse"})
     @Query("SELECT a FROM AnswerEntity a WHERE a.question.id = :questionId")
     List<AnswerEntity> findByQuestionIdWithDetails(@Param("questionId") Long questionId);
 
-    // OTIMIZAÇÃO: Busca respostas que não contêm opção "NI"
     @Query("SELECT a FROM AnswerEntity a "
-            + "JOIN a.selectedOptions o "
+            + "LEFT JOIN FETCH a.selectedOptions o "
             + "WHERE a.questionnaireResponse.dam.id = :damId "
             + "AND a.question.id = :questionId "
-            + "AND LOWER(o.label) != 'ni' "
+            + "AND (o IS NULL OR LOWER(o.label) != 'ni') "
             + "ORDER BY a.questionnaireResponse.createdAt DESC")
-    @EntityGraph(attributePaths = {"selectedOptions", "question", "questionnaireResponse"})
+    @EntityGraph(attributePaths = {"question", "questionnaireResponse"})
     List<AnswerEntity> findNonNIAnswersByDamAndQuestion(
             @Param("damId") Long damId, @Param("questionId") Long questionId);
 
-    // OTIMIZAÇÃO: Busca a última resposta não-NI para uma pergunta
+    @Query("""
+        SELECT a FROM AnswerEntity a
+        JOIN a.selectedOptions o
+        WHERE a.questionnaireResponse.dam.id = :damId
+        AND a.question.id = :questionId
+        AND a.questionnaireResponse.templateQuestionnaire.id = :templateId
+        AND LOWER(o.label) != 'ni'
+        ORDER BY a.questionnaireResponse.createdAt DESC
+        """)
+    @EntityGraph(attributePaths = {"selectedOptions", "question", "questionnaireResponse"})
+    List<AnswerEntity> findLatestNonNIAnswerOptimized(
+            @Param("damId") Long damId,
+            @Param("questionId") Long questionId,
+            @Param("templateId") Long templateId,
+            Pageable pageable);
+
     @Query("SELECT a FROM AnswerEntity a "
             + "JOIN a.selectedOptions o "
             + "WHERE a.questionnaireResponse.dam.id = :damId "
@@ -62,9 +78,4 @@ public interface AnswerRepository extends JpaRepository<AnswerEntity, Long>, Ans
             @Param("damId") Long damId,
             @Param("questionId") Long questionId,
             @Param("templateId") Long templateId);
-}
-
-interface AnswerRepositoryCustom {
-
-    EntityManager getEntityManager();
 }

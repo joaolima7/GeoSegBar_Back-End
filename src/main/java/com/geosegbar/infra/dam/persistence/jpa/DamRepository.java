@@ -31,6 +31,9 @@ public interface DamRepository extends JpaRepository<DamEntity, Long> {
 
     boolean existsByNameAndClientIdAndIdNot(String name, Long clientId, Long id);
 
+    @Query("SELECT DISTINCT d FROM DamEntity d LEFT JOIN FETCH d.sections WHERE d.id = :id")
+    Optional<DamEntity> findByIdWithSections(@Param("id") Long id);
+
     @EntityGraph(attributePaths = {"psbFolders"})
     Optional<DamEntity> findWithPsbFoldersById(Long id);
 
@@ -69,4 +72,32 @@ public interface DamRepository extends JpaRepository<DamEntity, Long> {
     List<DamEntity> findWithDetailsByClientAndStatus(
             @Param("clientId") Long clientId,
             @Param("statusId") Long statusId);
+
+    @Query("""
+        SELECT DISTINCT d FROM DamEntity d
+        LEFT JOIN FETCH d.client
+        LEFT JOIN FETCH d.status
+        LEFT JOIN FETCH d.reservoirs r
+        LEFT JOIN FETCH r.level
+        LEFT JOIN FETCH d.regulatoryDam
+        LEFT JOIN FETCH d.documentationDam
+        LEFT JOIN FETCH d.psbLinkFolder
+        LEFT JOIN FETCH d.legislationLinkFolder
+        WHERE d.client.id = :clientId
+    """)
+    List<DamEntity> findByClientIdWithDetails(@Param("clientId") Long clientId);
+
+    @Query("""
+        SELECT DISTINCT d FROM DamEntity d
+        LEFT JOIN FETCH d.client
+        LEFT JOIN FETCH d.status
+        LEFT JOIN FETCH d.reservoirs r
+        LEFT JOIN FETCH r.level
+        LEFT JOIN FETCH d.regulatoryDam
+        LEFT JOIN FETCH d.documentationDam
+        LEFT JOIN FETCH d.psbLinkFolder
+        LEFT JOIN FETCH d.legislationLinkFolder
+        WHERE d.id = :id
+    """)
+    Optional<DamEntity> findByIdWithFullDetails(@Param("id") Long id);
 }

@@ -113,11 +113,15 @@ public class DamEntity {
     @Column(nullable = true)
     private String damImagePath;
 
-    @Column(nullable = true)
-    private String linkPSB;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "psb_link_folder_id")
+    @JsonIgnoreProperties({"subfolders", "files", "parentFolder", "shareLinks", "createdBy"})
+    private PSBFolderEntity psbLinkFolder;
 
-    @Column(nullable = true)
-    private String linkLegislation;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "legislation_link_folder_id")
+    @JsonIgnoreProperties({"subfolders", "files", "parentFolder", "shareLinks", "createdBy"})
+    private PSBFolderEntity legislationLinkFolder;
 
     @OneToOne(mappedBy = "dam", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnoreProperties({"dam"})

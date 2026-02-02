@@ -39,6 +39,7 @@ import com.geosegbar.infra.documentation_dam.persistence.DocumentationDamReposit
 import com.geosegbar.infra.file_storage.FileStorageService;
 import com.geosegbar.infra.level.persistence.LevelRepository;
 import com.geosegbar.infra.potential_damage.persistence.PotentialDamageRepository;
+import com.geosegbar.infra.psb.persistence.PSBFolderRepository;
 import com.geosegbar.infra.psb.services.PSBFolderService;
 import com.geosegbar.infra.regulatory_dam.persistence.RegulatoryDamRepository;
 import com.geosegbar.infra.reservoir.persistence.ReservoirRepository;
@@ -66,13 +67,21 @@ public class DamService {
     private final FileStorageService fileStorageService;
     private final LevelRepository levelRepository;
     private final ReservoirRepository reservoirRepository;
+    private final PSBFolderRepository psbFolderRepository;
     private final PSBFolderService psbFolderService;
     private final UserService userService;
 
+    private PSBFolderEntity resolvePSBFolderFromRequest(Long folderId) {
+        if (folderId == null) {
+            return null;
+        }
+        return psbFolderRepository.findById(folderId)
+                .orElseThrow(() -> new NotFoundException("PSB Folder não encontrado com ID: " + folderId));
+    }
+
     public DamEntity findByIdWithSections(Long id) {
-        DamEntity dam = findById(id);
-        Hibernate.initialize(dam.getSections());
-        return dam;
+        return damRepository.findByIdWithSections(id)
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
     }
 
     @Transactional
@@ -149,8 +158,8 @@ public class DamService {
         dam.setZipCode(request.getZipCode());
         dam.setClient(client);
         dam.setStatus(status);
-        dam.setLinkPSB(request.getLinkPSB());
-        dam.setLinkLegislation(request.getLinkLegislation());
+        dam.setPsbLinkFolder(resolvePSBFolderFromRequest(request.getPsbLinkFolderId()));
+        dam.setLegislationLinkFolder(resolvePSBFolderFromRequest(request.getLegislationLinkFolderId()));
 
         if (request.getLogoBase64() != null && !request.getLogoBase64().isEmpty()) {
             String base64Image = request.getLogoBase64();
@@ -350,8 +359,8 @@ public class DamService {
         existingDam.setZipCode(request.getZipCode());
         existingDam.setClient(client);
         existingDam.setStatus(status);
-        existingDam.setLinkPSB(request.getLinkPSB());
-        existingDam.setLinkLegislation(request.getLinkLegislation());
+        existingDam.setPsbLinkFolder(resolvePSBFolderFromRequest(request.getPsbLinkFolderId()));
+        existingDam.setLegislationLinkFolder(resolvePSBFolderFromRequest(request.getLegislationLinkFolderId()));
 
         if (request.getLogoBase64() != null && !request.getLogoBase64().isEmpty()) {
             if (existingDam.getLogoPath() != null) {
@@ -406,42 +415,21 @@ public class DamService {
     }
 
     public List<DamEntity> findDamsByClientId(Long clientId) {
-        List<DamEntity> damsWithFolders = damRepository.findWithPsbFoldersByClientId(clientId);
-        List<DamEntity> damsWithReservoirs = damRepository.findWithReservoirsByClientId(clientId);
-
-        for (DamEntity dam : damsWithFolders) {
-            for (DamEntity damWithReservoirs : damsWithReservoirs) {
-                if (dam.getId().equals(damWithReservoirs.getId())) {
-                    dam.setReservoirs(damWithReservoirs.getReservoirs());
-                    break;
-                }
-            }
-        }
-
-        return damsWithFolders;
+        return damRepository.findByClientIdWithDetails(clientId);
     }
 
     public DamEntity findById(Long id) {
-        DamEntity dam = damRepository.findWithPsbFoldersById(id)
+        return damRepository.findByIdWithFullDetails(id)
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
-
-        DamEntity damWithReservoirs = damRepository.findWithReservoirsById(id)
-                .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
-
-        dam.setReservoirs(damWithReservoirs.getReservoirs());
-
-        return dam;
     }
 
     public List<DamEntity> findAll() {
-        List<DamEntity> dams = damRepository.findAll();
-
-        for (DamEntity dam : dams) {
-            DamEntity damWithDetails = findById(dam.getId());
-            dam.setPsbFolders(damWithDetails.getPsbFolders());
-            dam.setReservoirs(damWithDetails.getReservoirs());
-        }
-
+        List<DamEntity> dams = damRepository.findAllByOrderByIdAsc();
+        // Inicializa o básico para não quebrar JSON
+        dams.forEach(d -> {
+            Hibernate.initialize(d.getClient());
+            Hibernate.initialize(d.getStatus());
+        });
         return dams;
     }
 
@@ -493,8 +481,8 @@ public class DamService {
         existingDam.setZipCode(request.getZipCode());
         existingDam.setClient(client);
         existingDam.setStatus(status);
-        existingDam.setLinkPSB(request.getLinkPSB());
-        existingDam.setLinkLegislation(request.getLinkLegislation());
+        existingDam.setPsbLinkFolder(resolvePSBFolderFromRequest(request.getPsbLinkFolderId()));
+        existingDam.setLegislationLinkFolder(resolvePSBFolderFromRequest(request.getLegislationLinkFolderId()));
 
         if (request.getLogoBase64() == null) {
 

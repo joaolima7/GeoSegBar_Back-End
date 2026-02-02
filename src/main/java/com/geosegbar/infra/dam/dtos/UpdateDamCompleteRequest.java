@@ -27,8 +27,8 @@ public class UpdateDamCompleteRequest {
     private String city;
     private String state;
     private String zipCode;
-    private String linkPSB;
-    private String linkLegislation;
+    private Long psbLinkFolderId;
+    private Long legislationLinkFolderId;
 
     @NotNull(message = "Cliente é obrigatório")
     private Long clientId;

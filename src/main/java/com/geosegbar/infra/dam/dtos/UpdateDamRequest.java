@@ -52,9 +52,9 @@ public class UpdateDamRequest {
     @NotNull(message = "ID do status é obrigatório!")
     private Long statusId;
 
-    private String linkPSB;
+    private Long psbLinkFolderId;
 
-    private String linkLegislation;
+    private Long legislationLinkFolderId;
 
     private String logoBase64;
     private String damImageBase64;

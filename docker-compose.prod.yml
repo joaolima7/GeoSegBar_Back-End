@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       TZ: ${TZ}
     ports:
-      - "${DB_PORT}:5432"
+      - "${DB_PORT}:5433"
     volumes:
       - postgres-prod-data:/var/lib/postgresql/data
     networks:
@@ -33,7 +33,7 @@ services:
     container_name: postgres-exporter-prod
     restart: always
     environment:
-      DATA_SOURCE_NAME: "postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres-prod:5432/${DB_NAME}?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres-prod:5433/${DB_NAME}?sslmode=disable"
     ports:
       - "9187:9187"
     networks:

@@ -10,7 +10,7 @@ rm -rf ./db-documentation
 mkdir -p ./db-documentation
 
 # String de conexão PostgreSQL
-DB_URL="postgres://postgres:Geometr!s@@localhost:5432/geosegbar_dev?sslmode=disable"
+DB_URL="postgres://postgres:Geometr!s@@localhost:5433/geosegbar_dev?sslmode=disable"
 
 # Gerar documentação
 tbls doc "$DB_URL" ./db-documentation

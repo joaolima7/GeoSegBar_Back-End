@@ -35,7 +35,7 @@ public class SecurityFilter extends OncePerRequestFilter {
         var login = tokenService.validateToken(token);
 
         if (login != null) {
-            // ✅ SEGURANÇA: Carrega usuário COM TODAS AS PERMISSÕES para validação correta
+
             UserEntity user = userRepository.findByEmailWithAllPermissions(login)
                     .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
             var authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"));

@@ -45,4 +45,12 @@ public interface DamPermissionRepository extends JpaRepository<DamPermissionEnti
             @Param("dam") DamEntity dam,
             @Param("client") ClientEntity client
     );
+
+    @Modifying
+    @Query("DELETE FROM DamPermissionEntity dp WHERE dp.dam.id = :damId")
+    void deleteByDamId(@Param("damId") Long damId);
+
+    @Modifying
+    @Query("DELETE FROM DamPermissionEntity dp WHERE dp.dam.id = :damId AND dp.client.id = :clientId")
+    void deleteByDamIdAndClientId(@Param("damId") Long damId, @Param("clientId") Long clientId);
 }

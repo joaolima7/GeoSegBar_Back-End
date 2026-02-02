@@ -32,24 +32,24 @@ public class DamPermissionService {
     private final UserRepository userRepository;
     private final DamRepository damRepository;
     private final ClientRepository clientRepository;
-    
+
     public List<DamPermissionEntity> findAllDamPermissionsForUserClients(Long userId) {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
-        
+
         Set<ClientEntity> userClients = user.getClients();
         if (userClients.isEmpty()) {
             return new ArrayList<>();
         }
-        
+
         List<DamPermissionEntity> allPermissions = new ArrayList<>();
-        
+
         for (ClientEntity client : userClients) {
             List<DamEntity> clientDams = damRepository.findByClient(client);
-            
+
             for (DamEntity dam : clientDams) {
                 var permission = damPermissionRepository.findByUserAndDamAndClient(user, dam, client);
-                
+
                 if (permission.isPresent()) {
                     allPermissions.add(permission.get());
                 } else {
@@ -57,57 +57,57 @@ public class DamPermissionService {
                     newPermission.setUser(user);
                     newPermission.setDam(dam);
                     newPermission.setClient(client);
-                    newPermission.setHasAccess(false); 
+                    newPermission.setHasAccess(false);
                     newPermission.setCreatedAt(LocalDateTime.now());
-                    
+
                     DamPermissionEntity savedPermission = damPermissionRepository.save(newPermission);
                     allPermissions.add(savedPermission);
                 }
             }
         }
-        
+
         return allPermissions;
     }
-    
+
     @Transactional
     public List<DamPermissionEntity> setupPermissionsForUser(Long userId, UserDamPermissionsRequestDTO requestDTO) {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
-        
+
         List<DamPermissionEntity> createdPermissions = new ArrayList<>();
         Set<String> processedKeys = new HashSet<>();
-        
+
         for (DamPermissionDTO permissionDTO : requestDTO.getPermissions()) {
             permissionDTO.setUserId(userId);
-            
+
             DamEntity dam = damRepository.findById(permissionDTO.getDamId())
                     .orElseThrow(() -> new NotFoundException(
-                            "Barragem não encontrada com ID: " + permissionDTO.getDamId()));
-            
+                    "Barragem não encontrada com ID: " + permissionDTO.getDamId()));
+
             ClientEntity client = clientRepository.findById(permissionDTO.getClientId())
                     .orElseThrow(() -> new NotFoundException(
-                            "Cliente não encontrado com ID: " + permissionDTO.getClientId()));
-            
+                    "Cliente não encontrado com ID: " + permissionDTO.getClientId()));
+
             if (!user.getClients().contains(client)) {
-                throw new InvalidInputException("O cliente " + client.getName() + 
-                        " não está associado ao usuário " + user.getName() + "!");
+                throw new InvalidInputException("O cliente " + client.getName()
+                        + " não está associado ao usuário " + user.getName() + "!");
             }
-            
+
             if (dam.getClient() == null || !dam.getClient().getId().equals(client.getId())) {
-                throw new InvalidInputException("A barragem " + dam.getName() + 
-                        " não está associada ao cliente " + client.getName() + "!");
+                throw new InvalidInputException("A barragem " + dam.getName()
+                        + " não está associada ao cliente " + client.getName() + "!");
             }
-            
+
             String key = userId + "-" + permissionDTO.getDamId() + "-" + permissionDTO.getClientId();
-            
+
             if (processedKeys.contains(key)) {
                 continue;
             }
-            
+
             processedKeys.add(key);
-            
+
             var existingPermission = damPermissionRepository.findByUserAndDamAndClient(user, dam, client);
-            
+
             if (existingPermission.isPresent()) {
                 DamPermissionEntity permission = existingPermission.get();
                 permission.setHasAccess(permissionDTO.getHasAccess());
@@ -123,52 +123,52 @@ public class DamPermissionService {
                 createdPermissions.add(damPermissionRepository.save(permission));
             }
         }
-        
+
         return createdPermissions;
     }
-    
+
     @Transactional
     public List<DamPermissionEntity> updatePermissionsForUser(Long userId, UserDamPermissionsRequestDTO requestDTO) {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
-        
+
         List<DamPermissionEntity> updatedPermissions = new ArrayList<>();
         Set<String> processedKeys = new HashSet<>();
-        
+
         List<DamPermissionEntity> currentPermissions = findAllDamPermissionsForUserClients(userId);
         Set<Long> updatedPermissionIds = new HashSet<>();
-        
+
         for (DamPermissionDTO permissionDTO : requestDTO.getPermissions()) {
             permissionDTO.setUserId(userId);
-            
+
             DamEntity dam = damRepository.findById(permissionDTO.getDamId())
                     .orElseThrow(() -> new NotFoundException(
-                            "Barragem não encontrada com ID: " + permissionDTO.getDamId()));
-            
+                    "Barragem não encontrada com ID: " + permissionDTO.getDamId()));
+
             ClientEntity client = clientRepository.findById(permissionDTO.getClientId())
                     .orElseThrow(() -> new NotFoundException(
-                            "Cliente não encontrado com ID: " + permissionDTO.getClientId()));
-            
+                    "Cliente não encontrado com ID: " + permissionDTO.getClientId()));
+
             if (!user.getClients().contains(client)) {
-                throw new InvalidInputException("O cliente " + client.getName() + 
-                        " não está associado ao usuário " + user.getName() + "!");
+                throw new InvalidInputException("O cliente " + client.getName()
+                        + " não está associado ao usuário " + user.getName() + "!");
             }
-            
+
             if (dam.getClient() == null || !dam.getClient().getId().equals(client.getId())) {
-                throw new InvalidInputException("A barragem " + dam.getName() + 
-                        " não está associada ao cliente " + client.getName() + "!");
+                throw new InvalidInputException("A barragem " + dam.getName()
+                        + " não está associada ao cliente " + client.getName() + "!");
             }
-            
+
             String key = userId + "-" + permissionDTO.getDamId() + "-" + permissionDTO.getClientId();
-            
+
             if (processedKeys.contains(key)) {
                 continue;
             }
-            
+
             processedKeys.add(key);
-            
+
             var existingPermission = damPermissionRepository.findByUserAndDamAndClient(user, dam, client);
-            
+
             if (existingPermission.isPresent()) {
                 DamPermissionEntity permission = existingPermission.get();
                 permission.setHasAccess(permissionDTO.getHasAccess());
@@ -188,7 +188,7 @@ public class DamPermissionService {
                 updatedPermissionIds.add(savedPermission.getId());
             }
         }
-        
+
         for (DamPermissionEntity currentPermission : currentPermissions) {
             if (!updatedPermissionIds.contains(currentPermission.getId())) {
                 currentPermission.setHasAccess(false);
@@ -196,10 +196,10 @@ public class DamPermissionService {
                 updatedPermissions.add(damPermissionRepository.save(currentPermission));
             }
         }
-        
+
         return updatedPermissions;
     }
-    
+
     @Transactional
     public void delete(Long id) {
         if (!damPermissionRepository.existsById(id)) {
@@ -207,28 +207,91 @@ public class DamPermissionService {
         }
         damPermissionRepository.deleteById(id);
     }
-    
+
     public boolean checkUserHasAccessToDam(Long userId, Long damId) {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
-                
+
         DamEntity dam = damRepository.findById(damId)
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + damId));
-        
+
         ClientEntity client = dam.getClient();
         if (client == null) {
             throw new NotFoundException("Barragem não está associada a nenhum cliente");
         }
-        
+
         if (!user.getClients().contains(client)) {
             return false;
         }
-        
+
         var permission = damPermissionRepository.findByUserAndDamAndClient(user, dam, client);
         if (permission.isPresent()) {
             return permission.get().getHasAccess();
         }
-        
+
         return user.getRole() != null && "ADMIN".equals(user.getRole().getName().name());
+    }
+
+    /**
+     * Cria DamPermissions padrão (hasAccess = false) para todos os usuários de
+     * um cliente quando uma nova Dam é criada.
+     *
+     * @param dam A Dam recém-criada
+     */
+    @Transactional
+    public void createDefaultPermissionsForDam(DamEntity dam) {
+        ClientEntity client = dam.getClient();
+        if (client == null) {
+            return;
+        }
+
+        // Buscar todos os usuários associados ao cliente
+        List<UserEntity> clientUsers = userRepository.findByClientId(client.getId());
+
+        for (UserEntity user : clientUsers) {
+            // Verificar se já existe permissão (evitar duplicatas)
+            var existingPermission = damPermissionRepository.findByUserAndDamAndClient(user, dam, client);
+
+            if (existingPermission.isEmpty()) {
+                DamPermissionEntity permission = new DamPermissionEntity();
+                permission.setUser(user);
+                permission.setDam(dam);
+                permission.setClient(client);
+                permission.setHasAccess(false); // Padrão: sem acesso
+                permission.setCreatedAt(LocalDateTime.now());
+                permission.setUpdatedAt(LocalDateTime.now());
+
+                damPermissionRepository.save(permission);
+            }
+        }
+    }
+
+    /**
+     * Remove todas as DamPermissions associadas a uma Dam quando ela é deletada
+     * ou muda de cliente.
+     *
+     * @param damId ID da Dam
+     */
+    @Transactional
+    public void removeAllPermissionsForDam(Long damId) {
+        damPermissionRepository.deleteByDamId(damId);
+    }
+
+    /**
+     * Sincroniza permissions quando uma Dam muda de cliente. Remove permissions
+     * antigas e cria novas para o novo cliente.
+     *
+     * @param dam A Dam que mudou de cliente
+     * @param oldClientId ID do cliente anterior
+     */
+    @Transactional
+    public void syncPermissionsOnClientChange(DamEntity dam, Long oldClientId) {
+        // Remove permissions do cliente antigo
+        if (oldClientId != null) {
+            damPermissionRepository.deleteByDamIdAndClientId(dam.getId(), oldClientId);
+        }
+
+        // Cria permissions para o novo cliente
+        createDefaultPermissionsForDam(dam);
     }
 }

@@ -70,6 +70,7 @@ public class DamService {
     private final PSBFolderRepository psbFolderRepository;
     private final PSBFolderService psbFolderService;
     private final UserService userService;
+    private final com.geosegbar.infra.permissions.dam_permissions.services.DamPermissionService damPermissionService;
 
     private PSBFolderEntity resolvePSBFolderFromRequest(Long folderId) {
         if (folderId == null) {
@@ -280,7 +281,12 @@ public class DamService {
             dam.setPsbFolders(foldersSet);
         }
 
-        return findById(dam.getId());
+        DamEntity savedDam = findById(dam.getId());
+
+        // ✅ Criar DamPermissions padrão para todos os usuários do cliente
+        damPermissionService.createDefaultPermissionsForDam(savedDam);
+
+        return savedDam;
     }
 
     private LevelEntity processLevel(LevelRequestDTO levelDTO) {
@@ -316,7 +322,8 @@ public class DamService {
             throw new BusinessRuleException(
                     "N\u00e3o \u00e9 poss\u00edvel excluir a barragem devido as depend\u00eancias existentes, recomenda-se inativar a barragem se necess\u00e1rio.");
         }
-
+        // ✅ Remover todas as DamPermissions associadas
+        damPermissionService.removeAllPermissionsForDam(id);
         damRepository.deleteById(id);
     }
 
@@ -405,10 +412,8 @@ public class DamService {
         DamEntity updatedDam = damRepository.save(existingDam);
 
         if (clientChanged) {
-
-            userService.removeDamPermissionsForDam(damId, oldClientId);
-
-            userService.createDamPermissionsForDam(damId, client.getId());
+            // ✅ Sincronizar DamPermissions quando muda de cliente
+            damPermissionService.syncPermissionsOnClientChange(updatedDam, oldClientId);
         }
 
         return findById(updatedDam.getId());
@@ -667,14 +672,14 @@ public class DamService {
             psbFolderService.syncRootFolders(finalDam, request.getPsbFolders(), currentUser.getId());
         }
 
+        savedDam = findById(damId);
+
         if (clientChanged) {
-
-            userService.removeDamPermissionsForDam(damId, oldClientId);
-
-            userService.createDamPermissionsForDam(damId, client.getId());
+            // ✅ Sincronizar DamPermissions quando muda de cliente
+            damPermissionService.syncPermissionsOnClientChange(savedDam, oldClientId);
         }
 
-        return findById(damId);
+        return savedDam;
     }
 
     /**

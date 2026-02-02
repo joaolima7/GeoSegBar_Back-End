@@ -20,22 +20,24 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 @Component
-public class SecurityFilter extends OncePerRequestFilter{
+public class SecurityFilter extends OncePerRequestFilter {
 
     @Autowired
     private TokenService tokenService;
 
     @Autowired
     private UserRepository userRepository;
-    
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         var token = this.recoverToken(request);
         var login = tokenService.validateToken(token);
 
-        if(login != null){
-            UserEntity user = userRepository.findByEmail(login).orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+        if (login != null) {
+            // ✅ SEGURANÇA: Carrega usuário COM TODAS AS PERMISSÕES para validação correta
+            UserEntity user = userRepository.findByEmailWithAllPermissions(login)
+                    .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
             var authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"));
             var authentication = new UsernamePasswordAuthenticationToken(user, null, authorities);
             SecurityContextHolder.getContext().setAuthentication(authentication);

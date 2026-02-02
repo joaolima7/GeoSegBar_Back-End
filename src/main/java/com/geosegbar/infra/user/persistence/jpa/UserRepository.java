@@ -158,7 +158,24 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
     @Query("SELECT u FROM UserEntity u "
             + "LEFT JOIN FETCH u.clients c "
             + "LEFT JOIN FETCH u.sex "
+            + "LEFT JOIN FETCH u.status "
             + "LEFT JOIN FETCH u.role "
+            + "LEFT JOIN FETCH u.createdBy cb "
+            + "LEFT JOIN FETCH u.attributionsPermission "
+            + "LEFT JOIN FETCH u.documentationPermission "
+            + "LEFT JOIN FETCH u.instrumentationPermission "
+            + "LEFT JOIN FETCH u.routineInspectionPermission "
+            + "WHERE u.email = :email")
+    Optional<UserEntity> findByEmailWithAllPermissions(@Param("email") String email);
+
+    @QueryHints(
+            @QueryHint(name = "org.hibernate.cacheable", value = "true"))
+    @Query("SELECT u FROM UserEntity u "
+            + "LEFT JOIN FETCH u.clients c "
+            + "LEFT JOIN FETCH u.sex "
+            + "LEFT JOIN FETCH u.status "
+            + "LEFT JOIN FETCH u.role "
+            + "LEFT JOIN FETCH u.createdBy cb "
             + "WHERE u.email = :email")
     Optional<UserEntity> findByEmailWithClientsAndDetails(@Param("email") String email);
 

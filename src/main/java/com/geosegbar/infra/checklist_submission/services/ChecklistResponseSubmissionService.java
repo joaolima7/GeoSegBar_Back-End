@@ -88,12 +88,19 @@ public class ChecklistResponseSubmissionService {
         validateUserAccessToDam(submissionDto.getUserId(), submissionDto.getDamId());
 
         if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity currentUser = AuthenticatedUserUtil.getCurrentUser();
+
+            // ✅ Verifica se o usuário tem a permissão de inspeção de rotina
+            if (currentUser.getRoutineInspectionPermission() == null) {
+                throw new UnauthorizedException("Usuário não tem permissão para preencher checklist!");
+            }
+
             if (submissionDto.isMobile()) {
-                if (!AuthenticatedUserUtil.getCurrentUser().getRoutineInspectionPermission().getIsFillMobile()) {
+                if (!currentUser.getRoutineInspectionPermission().getIsFillMobile()) {
                     throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via mobile!");
                 }
             } else if (!submissionDto.isMobile()) {
-                if (!AuthenticatedUserUtil.getCurrentUser().getRoutineInspectionPermission().getIsFillWeb()) {
+                if (!currentUser.getRoutineInspectionPermission().getIsFillWeb()) {
                     throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via web!");
                 }
             }

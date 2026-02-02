@@ -115,13 +115,23 @@ public class DamEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "psb_link_folder_id")
-    @JsonIgnoreProperties({"subfolders", "files", "parentFolder", "shareLinks", "createdBy"})
+    @JsonIgnore
     private PSBFolderEntity psbLinkFolder;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "legislation_link_folder_id")
-    @JsonIgnoreProperties({"subfolders", "files", "parentFolder", "shareLinks", "createdBy"})
+    @JsonIgnore
     private PSBFolderEntity legislationLinkFolder;
+
+    @com.fasterxml.jackson.annotation.JsonProperty("psbLinkFolderId")
+    public Long getPsbLinkFolderId() {
+        return psbLinkFolder != null ? psbLinkFolder.getId() : null;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("legislationLinkFolderId")
+    public Long getLegislationLinkFolderId() {
+        return legislationLinkFolder != null ? legislationLinkFolder.getId() : null;
+    }
 
     @OneToOne(mappedBy = "dam", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnoreProperties({"dam"})

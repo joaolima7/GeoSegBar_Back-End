@@ -75,28 +75,36 @@ public interface DamRepository extends JpaRepository<DamEntity, Long> {
 
     @Query("""
         SELECT DISTINCT d FROM DamEntity d
-        LEFT JOIN FETCH d.client
+        LEFT JOIN FETCH d.client c
+        LEFT JOIN FETCH c.status
         LEFT JOIN FETCH d.status
         LEFT JOIN FETCH d.reservoirs r
         LEFT JOIN FETCH r.level
-        LEFT JOIN FETCH d.regulatoryDam
+        LEFT JOIN FETCH d.regulatoryDam rd
+        LEFT JOIN FETCH rd.securityLevel
+        LEFT JOIN FETCH rd.supervisoryBody
+        LEFT JOIN FETCH rd.riskCategory
+        LEFT JOIN FETCH rd.potentialDamage
+        LEFT JOIN FETCH rd.classificationDam
         LEFT JOIN FETCH d.documentationDam
-        LEFT JOIN FETCH d.psbLinkFolder
-        LEFT JOIN FETCH d.legislationLinkFolder
         WHERE d.client.id = :clientId
     """)
     List<DamEntity> findByClientIdWithDetails(@Param("clientId") Long clientId);
 
     @Query("""
         SELECT DISTINCT d FROM DamEntity d
-        LEFT JOIN FETCH d.client
+        LEFT JOIN FETCH d.client c
+        LEFT JOIN FETCH c.status
         LEFT JOIN FETCH d.status
         LEFT JOIN FETCH d.reservoirs r
         LEFT JOIN FETCH r.level
-        LEFT JOIN FETCH d.regulatoryDam
+        LEFT JOIN FETCH d.regulatoryDam rd
+        LEFT JOIN FETCH rd.securityLevel
+        LEFT JOIN FETCH rd.supervisoryBody
+        LEFT JOIN FETCH rd.riskCategory
+        LEFT JOIN FETCH rd.potentialDamage
+        LEFT JOIN FETCH rd.classificationDam
         LEFT JOIN FETCH d.documentationDam
-        LEFT JOIN FETCH d.psbLinkFolder
-        LEFT JOIN FETCH d.legislationLinkFolder
         WHERE d.id = :id
     """)
     Optional<DamEntity> findByIdWithFullDetails(@Param("id") Long id);

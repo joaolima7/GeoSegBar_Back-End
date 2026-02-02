@@ -204,7 +204,7 @@ else
       --name postgres-prod \
       --restart unless-stopped \
       --network geosegbar-network \
-      -p ${DB_PORT}:5433 \
+      -p ${DB_PORT}:5432 \
       -e POSTGRES_DB=${DB_NAME} \
       -e POSTGRES_USER=${DB_USERNAME} \
       -e POSTGRES_PASSWORD=${DB_PASSWORD} \
@@ -228,7 +228,7 @@ else
       --restart unless-stopped \
       --network geosegbar-network \
       -p 9187:9187 \
-      -e DATA_SOURCE_NAME="postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres-prod:5433/${DB_NAME}?sslmode=disable" \
+      -e DATA_SOURCE_NAME="postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres-prod:5432/${DB_NAME}?sslmode=disable" \
       prometheuscommunity/postgres-exporter:v0.15.0
     echo "✅ Postgres Exporter iniciado"
 fi

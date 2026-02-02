@@ -87,24 +87,74 @@ public class ChecklistResponseSubmissionService {
     public ChecklistResponseEntity submitChecklistResponse(ChecklistResponseSubmissionDTO submissionDto) {
         validateUserAccessToDam(submissionDto.getUserId(), submissionDto.getDamId());
 
+        // ============ DEBUG LOGS ============
+        System.out.println("\n========================================");
+        System.out.println("🔍 DEBUG CHECKLIST SUBMISSION");
+        System.out.println("========================================");
+        System.out.println("📱 DTO isMobile: " + submissionDto.isMobile());
+        System.out.println("📝 DTO Mobile (raw): " + submissionDto.isMobile());
+        System.out.println("👤 User ID: " + submissionDto.getUserId());
+        System.out.println("🏗️ Dam ID: " + submissionDto.getDamId());
+
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity currentUser = AuthenticatedUserUtil.getCurrentUser();
 
+            System.out.println("\n👤 CURRENT USER INFO:");
+            System.out.println("   ID: " + currentUser.getId());
+            System.out.println("   Name: " + currentUser.getName());
+            System.out.println("   Email: " + currentUser.getEmail());
+            System.out.println("   Role: " + currentUser.getRole().getName());
+
+            System.out.println("\n🔐 ROUTINE INSPECTION PERMISSION:");
+            if (currentUser.getRoutineInspectionPermission() == null) {
+                System.out.println("   ⚠️ NULL - Usuário não tem permissão configurada!");
+            } else {
+                System.out.println("   Permission ID: " + currentUser.getRoutineInspectionPermission().getId());
+                System.out.println("   IsFillWeb: " + currentUser.getRoutineInspectionPermission().getIsFillWeb());
+                System.out.println("   IsFillMobile: " + currentUser.getRoutineInspectionPermission().getIsFillMobile());
+            }
+
+            System.out.println("\n🔍 VERIFICAÇÃO LÓGICA:");
+            System.out.println("   submissionDto.isMobile() = " + submissionDto.isMobile());
+            System.out.println("   !submissionDto.isMobile() = " + !submissionDto.isMobile());
+
             // ✅ Verifica se o usuário tem a permissão de inspeção de rotina
             if (currentUser.getRoutineInspectionPermission() == null) {
+                System.out.println("\n❌ ERRO: Permissão NULL - bloqueando acesso");
+                System.out.println("========================================\n");
                 throw new UnauthorizedException("Usuário não tem permissão para preencher checklist!");
             }
 
             if (submissionDto.isMobile()) {
+                System.out.println("\n📱 BRANCH: É MOBILE (submissionDto.isMobile() == true)");
+                System.out.println("   Verificando IsFillMobile: " + currentUser.getRoutineInspectionPermission().getIsFillMobile());
+
                 if (!currentUser.getRoutineInspectionPermission().getIsFillMobile()) {
+                    System.out.println("   ❌ BLOQUEADO: IsFillMobile = false");
+                    System.out.println("========================================\n");
                     throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via mobile!");
+                } else {
+                    System.out.println("   ✅ PERMITIDO: IsFillMobile = true");
                 }
-            } else if (!submissionDto.isMobile()) {
+            } else {
+                System.out.println("\n💻 BRANCH: É WEB (submissionDto.isMobile() == false)");
+                System.out.println("   Verificando IsFillWeb: " + currentUser.getRoutineInspectionPermission().getIsFillWeb());
+
                 if (!currentUser.getRoutineInspectionPermission().getIsFillWeb()) {
+                    System.out.println("   ❌ BLOQUEADO: IsFillWeb = false");
+                    System.out.println("========================================\n");
                     throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via web!");
+                } else {
+                    System.out.println("   ✅ PERMITIDO: IsFillWeb = true");
                 }
             }
+
+            System.out.println("========================================\n");
+        } else {
+            System.out.println("👑 ADMIN USER - Bypass permission check");
+            System.out.println("========================================\n");
         }
+        // ============ FIM DEBUG LOGS ============
 
         Map<Long, String> optionsCache = optionRepository.findAll().stream()
                 .collect(Collectors.toMap(OptionEntity::getId, OptionEntity::getLabel));

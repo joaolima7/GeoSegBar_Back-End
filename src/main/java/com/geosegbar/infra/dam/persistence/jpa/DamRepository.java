@@ -82,7 +82,6 @@ public interface DamRepository extends JpaRepository<DamEntity, Long> {
         LEFT JOIN FETCH r.level
         LEFT JOIN FETCH d.regulatoryDam rd
         LEFT JOIN FETCH rd.securityLevel
-        LEFT JOIN FETCH rd.supervisoryBody
         LEFT JOIN FETCH rd.riskCategory
         LEFT JOIN FETCH rd.potentialDamage
         LEFT JOIN FETCH rd.classificationDam
@@ -100,7 +99,6 @@ public interface DamRepository extends JpaRepository<DamEntity, Long> {
         LEFT JOIN FETCH r.level
         LEFT JOIN FETCH d.regulatoryDam rd
         LEFT JOIN FETCH rd.securityLevel
-        LEFT JOIN FETCH rd.supervisoryBody
         LEFT JOIN FETCH rd.riskCategory
         LEFT JOIN FETCH rd.potentialDamage
         LEFT JOIN FETCH rd.classificationDam

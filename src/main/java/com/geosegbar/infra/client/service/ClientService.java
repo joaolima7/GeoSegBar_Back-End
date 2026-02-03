@@ -42,10 +42,13 @@ public class ClientService {
 
     @Transactional
     public void deleteById(Long id) {
+
         ClientEntity client = clientRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Cliente não encontrado para exclusão!"));
 
-        if (!client.getDams().isEmpty() || !client.getDamPermissions().isEmpty() || !client.getUsers().isEmpty()) {
+        if (clientRepository.countDamsByClientId(id) > 0
+                || clientRepository.countDamPermissionsByClientId(id) > 0
+                || clientRepository.countUsersByClientId(id) > 0) {
             throw new BusinessRuleException(
                     "Não é possível excluir cliente devido as dependências existentes, recomenda-se inativar o cliente se necessário.");
         }
@@ -67,6 +70,7 @@ public class ClientService {
         statusChangeHandler.handleStatusChange(client, newStatus);
 
         client.setStatus(newStatus);
+
         return clientRepository.save(client);
     }
 
@@ -90,7 +94,7 @@ public class ClientService {
             associateUsersToClient(savedClient, clientDTO.getUserIds());
         }
 
-        return savedClient;
+        return findById(savedClient.getId());
     }
 
     @Transactional
@@ -106,19 +110,19 @@ public class ClientService {
             throw new DuplicateResourceException("Já existe um cliente com este email.");
         }
 
-        ClientEntity clientEntity = convertDTOToEntity(clientDTO);
+        updateEntityFromDTO(existingClient, clientDTO);
 
         if (clientDTO.getStatus() != null) {
             statusChangeHandler.handleStatusChange(existingClient, clientDTO.getStatus());
         }
 
-        processLogoUpdate(clientEntity, clientDTO.getLogoBase64(), existingClient);
+        processLogoUpdate(existingClient, clientDTO.getLogoBase64(), existingClient);
 
-        ClientEntity savedClient = clientRepository.save(clientEntity);
+        ClientEntity savedClient = clientRepository.save(existingClient);
 
         processUserAssociations(savedClient, clientDTO.getUserIds());
 
-        return savedClient;
+        return findById(savedClient.getId());
     }
 
     private void associateUsersToClient(ClientEntity client, Set<Long> userIds) {
@@ -137,19 +141,9 @@ public class ClientService {
             throw new NotFoundException("Usuários não encontrados com IDs: " + missingIds);
         }
 
-        if (client.getStatus() != null && client.getStatus().getStatus().name().equals("DISABLED")) {
-            for (UserEntity user : users) {
-                if (user.getStatus() != null && user.getStatus().getStatus().name().equals("ACTIVE")) {
-                    throw new BusinessRuleException(
-                            "Não é possível associar o usuário '" + user.getName()
-                            + "' ao cliente pois este cliente está desativado. Desative o usuário primeiro ou ative o cliente."
-                    );
-                }
-            }
-        }
+        validateClientStatusForAssociation(client, users);
 
         for (UserEntity user : users) {
-
             UserClientAssociationDTO associationDTO = new UserClientAssociationDTO();
             Set<Long> clientIdsForUser = new HashSet<>();
             clientIdsForUser.add(client.getId());
@@ -160,7 +154,6 @@ public class ClientService {
     }
 
     private void processUserAssociations(ClientEntity client, Set<Long> userIds) {
-
         if (userIds == null) {
             return;
         }
@@ -169,7 +162,6 @@ public class ClientService {
 
         if (userIds.isEmpty()) {
             for (UserEntity user : currentUsers) {
-
                 UserClientAssociationDTO associationDTO = new UserClientAssociationDTO();
                 associationDTO.setClientIds(new HashSet<>());
                 userService.updateUserClients(user.getId(), associationDTO);
@@ -193,7 +185,6 @@ public class ClientService {
                     .collect(Collectors.toList());
 
             for (UserEntity user : usersToRemoveList) {
-
                 UserClientAssociationDTO associationDTO = new UserClientAssociationDTO();
                 associationDTO.setClientIds(new HashSet<>());
                 userService.updateUserClients(user.getId(), associationDTO);
@@ -212,24 +203,27 @@ public class ClientService {
                 throw new NotFoundException("Usuários não encontrados com IDs: " + missingIds);
             }
 
-            if (client.getStatus() != null && client.getStatus().getStatus().name().equals("DISABLED")) {
-                for (UserEntity user : usersToAddList) {
-                    if (user.getStatus() != null && user.getStatus().getStatus().name().equals("ACTIVE")) {
-                        throw new BusinessRuleException(
-                                "Não é possível associar o usuário '" + user.getName()
-                                + "' ao cliente pois este cliente está desativado. Desative o usuário primeiro ou ative o cliente."
-                        );
-                    }
-                }
-            }
+            validateClientStatusForAssociation(client, usersToAddList);
 
             for (UserEntity user : usersToAddList) {
-
                 UserClientAssociationDTO associationDTO = new UserClientAssociationDTO();
                 Set<Long> clientIdsForUser = new HashSet<>();
                 clientIdsForUser.add(client.getId());
                 associationDTO.setClientIds(clientIdsForUser);
                 userService.updateUserClients(user.getId(), associationDTO);
+            }
+        }
+    }
+
+    private void validateClientStatusForAssociation(ClientEntity client, List<UserEntity> users) {
+        if (client.getStatus() != null && "DISABLED".equals(client.getStatus().getStatus().name())) {
+            for (UserEntity user : users) {
+                if (user.getStatus() != null && "ACTIVE".equals(user.getStatus().getStatus().name())) {
+                    throw new BusinessRuleException(
+                            "Não é possível associar o usuário '" + user.getName()
+                            + "' ao cliente pois este cliente está desativado. Desative o usuário primeiro ou ative o cliente."
+                    );
+                }
             }
         }
     }
@@ -255,13 +249,11 @@ public class ClientService {
 
     private String processAndSaveLogo(String base64Image) {
         try {
-
             if (base64Image.contains(",")) {
                 base64Image = base64Image.split(",")[1];
             }
 
             base64Image = base64Image.trim().replaceAll("\\s", "");
-
             byte[] imageBytes = Base64.getDecoder().decode(base64Image);
 
             String contentType = "image/png";
@@ -290,6 +282,7 @@ public class ClientService {
     }
 
     public ClientEntity findById(Long id) {
+
         return clientRepository.findById(id).
                 orElseThrow(() -> new NotFoundException("Cliente não encontrado!"));
     }
@@ -302,10 +295,7 @@ public class ClientService {
         if (statusId == null) {
             throw new NotFoundException("Status não informado para filtro de clientes!");
         }
-
-        List<ClientEntity> clients = clientRepository.findByStatus(statusId);
-
-        return clients;
+        return clientRepository.findByStatus(statusId);
     }
 
     public boolean existsByName(String name) {
@@ -326,6 +316,11 @@ public class ClientService {
 
     private ClientEntity convertDTOToEntity(ClientDTO clientDTO) {
         ClientEntity entity = new ClientEntity();
+        updateEntityFromDTO(entity, clientDTO);
+        return entity;
+    }
+
+    private void updateEntityFromDTO(ClientEntity entity, ClientDTO clientDTO) {
         entity.setId(clientDTO.getId());
         entity.setName(clientDTO.getName());
         entity.setEmail(clientDTO.getEmail());
@@ -340,8 +335,6 @@ public class ClientService {
         entity.setWhatsappPhone(clientDTO.getWhatsappPhone());
         entity.setEmailContact(clientDTO.getEmailContact());
         entity.setStatus(clientDTO.getStatus());
-
-        return entity;
     }
 
     private void processLogoUpdate(ClientEntity clientEntity, String logoBase64, ClientEntity existingClient) {
@@ -364,7 +357,6 @@ public class ClientService {
         }
 
         try {
-
             if (existingClient != null && existingClient.getLogoPath() != null) {
                 fileStorageService.deleteFile(existingClient.getLogoPath());
             }
@@ -376,5 +368,4 @@ public class ClientService {
             throw new FileStorageException("Erro ao processar logo: " + e.getMessage(), e);
         }
     }
-
 }

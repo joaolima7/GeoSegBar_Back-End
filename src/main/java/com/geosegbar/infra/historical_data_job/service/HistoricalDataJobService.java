@@ -80,9 +80,10 @@ public class HistoricalDataJobService {
         return Optional.empty();
     }
 
+    // ✅ OTIMIZADO: Usa findTopBy para pegar apenas 1 registro do banco
+    @Transactional(readOnly = true)
     public Optional<HistoricalDataJobEntity> getNextQueuedJob() {
-        List<HistoricalDataJobEntity> jobs = jobRepository.findByStatusOrderByCreatedAtAsc(JobStatus.QUEUED);
-        return jobs.isEmpty() ? Optional.empty() : Optional.of(jobs.get(0));
+        return jobRepository.findTopByStatusOrderByCreatedAtAsc(JobStatus.QUEUED);
     }
 
     @Transactional
@@ -174,27 +175,44 @@ public class HistoricalDataJobService {
         return canRetry;
     }
 
+    @Transactional(readOnly = true)
     public List<HistoricalDataJobEntity> findStalledJobs() {
         LocalDateTime timeout = LocalDateTime.now().minusHours(STALLED_JOB_TIMEOUT_HOURS);
         return jobRepository.findStalledJobs(JobStatus.PROCESSING, timeout);
     }
 
+    // ✅ OTIMIZADO: Usa GROUP BY no banco para evitar múltiplas queries (N+1)
+    @Transactional(readOnly = true)
     public Map<JobStatus, Long> getJobCountsByStatus() {
+        List<Object[]> results = jobRepository.countJobsGroupedByStatus();
         Map<JobStatus, Long> counts = new HashMap<>();
+
+        // Inicializa com zero para todos os status
         for (JobStatus status : JobStatus.values()) {
-            counts.put(status, jobRepository.countByStatus(status));
+            counts.put(status, 0L);
         }
+
+        // Preenche com os valores do banco
+        for (Object[] result : results) {
+            JobStatus status = (JobStatus) result[0];
+            Long count = (Long) result[1];
+            counts.put(status, count);
+        }
+
         return counts;
     }
 
+    @Transactional(readOnly = true)
     public boolean hasActiveJobForInstrument(Long instrumentId) {
         return jobRepository.existsActiveJobForInstrument(instrumentId);
     }
 
+    @Transactional(readOnly = true)
     public Optional<HistoricalDataJobEntity> findById(Long jobId) {
         return jobRepository.findById(jobId);
     }
 
+    @Transactional(readOnly = true)
     public List<HistoricalDataJobEntity> findJobsByInstrument(Long instrumentId) {
         return jobRepository.findByInstrumentIdOrderByCreatedAtDesc(instrumentId);
     }

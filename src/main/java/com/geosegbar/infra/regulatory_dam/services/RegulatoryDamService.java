@@ -14,7 +14,7 @@ import com.geosegbar.entities.SecurityLevelEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.exceptions.UnauthorizedException;
-import com.geosegbar.infra.classification_dam.peristence.ClassificationDamRepository;
+import com.geosegbar.infra.classification_dam.persistence.ClassificationDamRepository;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.potential_damage.persistence.PotentialDamageRepository;
 import com.geosegbar.infra.regulatory_dam.dtos.RegulatoryDamDTO;

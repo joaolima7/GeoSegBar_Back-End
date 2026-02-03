@@ -1,4 +1,4 @@
-package com.geosegbar.infra.classification_dam.peristence;
+package com.geosegbar.infra.classification_dam.persistence;
 
 import java.util.List;
 
@@ -9,7 +9,10 @@ import com.geosegbar.entities.ClassificationDamEntity;
 
 @Repository
 public interface ClassificationDamRepository extends JpaRepository<ClassificationDamEntity, Long> {
+
     List<ClassificationDamEntity> findAllByOrderByIdAsc();
+
     boolean existsByClassification(String classification);
+
     boolean existsByClassificationAndIdNot(String classification, Long id);
 }

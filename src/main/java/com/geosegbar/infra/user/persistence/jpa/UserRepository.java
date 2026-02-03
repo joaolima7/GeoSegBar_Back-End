@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.QueryHints;
@@ -81,6 +82,16 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
             + "WHERE u.id = :id")
     Optional<UserEntity> findByIdWithClients(@Param("id") Long id);
 
+    @EntityGraph(attributePaths = {
+        "clients",
+        "damPermissions",
+        "damPermissions.dam",
+        "damPermissions.client",
+        "routineInspectionPermission"
+    })
+    @Query("SELECT u FROM UserEntity u WHERE u.id = :id")
+    Optional<UserEntity> findByIdWithPermissions(@Param("id") Long id);
+
     @QueryHints(
             @QueryHint(name = "org.hibernate.cacheable", value = "true"))
     @Query("SELECT u FROM UserEntity u "
@@ -101,22 +112,16 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
             + "ORDER BY u.id ASC")
     List<UserEntity> findAllWithBasicDetails();
 
-    @QueryHints(
-            @QueryHint(name = "org.hibernate.cacheable", value = "true"))
+    @EntityGraph(attributePaths = {"clients", "sex", "status", "role", "createdBy"})
     @Query("SELECT DISTINCT u FROM UserEntity u "
-            + "LEFT JOIN FETCH u.clients c "
-            + "LEFT JOIN FETCH u.sex "
-            + "LEFT JOIN FETCH u.status "
-            + "LEFT JOIN FETCH u.role "
-            + "LEFT JOIN FETCH u.createdBy cb "
             + "WHERE u.name != 'SISTEMA' "
             + "AND u.email != 'noreply@geometrisa-prod.com.br' "
             + "AND (:roleId IS NULL OR u.role.id = :roleId) "
             + "AND (:statusId IS NULL OR u.status.id = :statusId) "
             + "AND ("
             + "    (:clientId IS NULL) "
-            + "    OR (c.id = :clientId) "
-            + "    OR (:withoutClient = true AND (SELECT COUNT(uc) FROM u.clients uc) = 0)"
+            + "    OR (EXISTS (SELECT 1 FROM u.clients c WHERE c.id = :clientId)) "
+            + "    OR (:withoutClient = true AND u.clients IS EMPTY)"
             + ") "
             + "ORDER BY u.id ASC")
     List<UserEntity> findByRoleAndClientWithDetails(

@@ -25,6 +25,8 @@ public interface HistoricalDataJobRepository extends JpaRepository<HistoricalDat
 
     List<HistoricalDataJobEntity> findByStatusOrderByCreatedAtAsc(JobStatus status);
 
+    Optional<HistoricalDataJobEntity> findTopByStatusOrderByCreatedAtAsc(JobStatus status);
+
     @Query("SELECT j FROM HistoricalDataJobEntity j WHERE j.status = :status "
             + "AND j.startedAt < :timeout")
     List<HistoricalDataJobEntity> findStalledJobs(
@@ -33,6 +35,9 @@ public interface HistoricalDataJobRepository extends JpaRepository<HistoricalDat
     );
 
     Long countByStatus(JobStatus status);
+
+    @Query("SELECT j.status, COUNT(j) FROM HistoricalDataJobEntity j GROUP BY j.status")
+    List<Object[]> countJobsGroupedByStatus();
 
     List<HistoricalDataJobEntity> findByInstrumentIdOrderByCreatedAtDesc(Long instrumentId);
 

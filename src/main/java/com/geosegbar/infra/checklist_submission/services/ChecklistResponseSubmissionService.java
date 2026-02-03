@@ -14,7 +14,6 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.common.enums.AnomalyOriginEnum;
-import com.geosegbar.common.enums.TypeQuestionEnum;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.AnomalyEntity;
 import com.geosegbar.entities.AnomalyPhotoEntity;
@@ -83,31 +82,42 @@ public class ChecklistResponseSubmissionService {
     private final DocumentationDamRepository documentationDamRepository;
 
     @Transactional
-
     public ChecklistResponseEntity submitChecklistResponse(ChecklistResponseSubmissionDTO submissionDto) {
+
         validateUserAccessToDam(submissionDto.getUserId(), submissionDto.getDamId());
 
         if (!AuthenticatedUserUtil.isAdmin()) {
+
             UserEntity currentUser = AuthenticatedUserUtil.getCurrentUser();
 
-            // ✅ Verifica se o usuário tem a permissão de inspeção de rotina
+            if (currentUser.getRoutineInspectionPermission() == null) {
+                currentUser = userRepository.findByIdWithPermissions(currentUser.getId())
+                        .orElseThrow(() -> new NotFoundException("Usuário logado não encontrado"));
+            }
+
             if (currentUser.getRoutineInspectionPermission() == null) {
                 throw new UnauthorizedException("Usuário não tem permissão para preencher checklist!");
             }
 
             if (submissionDto.isMobile()) {
-                if (!currentUser.getRoutineInspectionPermission().getIsFillMobile()) {
+                if (!Boolean.TRUE.equals(currentUser.getRoutineInspectionPermission().getIsFillMobile())) {
                     throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via mobile!");
                 }
-            } else if (!submissionDto.isMobile()) {
-                if (!currentUser.getRoutineInspectionPermission().getIsFillWeb()) {
+            } else {
+                if (!Boolean.TRUE.equals(currentUser.getRoutineInspectionPermission().getIsFillWeb())) {
                     throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via web!");
                 }
             }
         }
 
-        Map<Long, String> optionsCache = optionRepository.findAll().stream()
-                .collect(Collectors.toMap(OptionEntity::getId, OptionEntity::getLabel));
+        Set<Long> allOptionIds = collectOptionIds(submissionDto);
+        Map<Long, String> optionsCache;
+        if (allOptionIds.isEmpty()) {
+            optionsCache = Map.of();
+        } else {
+            optionsCache = optionRepository.findAllById(allOptionIds).stream()
+                    .collect(Collectors.toMap(OptionEntity::getId, OptionEntity::getLabel));
+        }
 
         ChecklistResponseEntity checklistResponse = createChecklistResponse(submissionDto);
 
@@ -142,6 +152,22 @@ public class ChecklistResponseSubmissionService {
         return checklistResponse;
     }
 
+    private Set<Long> collectOptionIds(ChecklistResponseSubmissionDTO dto) {
+        Set<Long> ids = new HashSet<>();
+        if (dto.getQuestionnaireResponses() != null) {
+            for (QuestionnaireResponseSubmissionDTO q : dto.getQuestionnaireResponses()) {
+                if (q.getAnswers() != null) {
+                    for (AnswerSubmissionDTO a : q.getAnswers()) {
+                        if (a.getSelectedOptionIds() != null) {
+                            ids.addAll(a.getSelectedOptionIds());
+                        }
+                    }
+                }
+            }
+        }
+        return ids;
+    }
+
     private void validateCriticalAnswerRequirements(AnswerSubmissionDTO answerDto, Map<Long, String> optionsCache) {
         if (answerDto.getSelectedOptionIds() == null || answerDto.getSelectedOptionIds().isEmpty()) {
             return;
@@ -172,7 +198,6 @@ public class ChecklistResponseSubmissionService {
             }
 
             if (!missingFields.isEmpty()) {
-
                 String questionText = questionRepository.findById(answerDto.getQuestionId())
                         .map(QuestionEntity::getQuestionText)
                         .orElse("Desconhecida");
@@ -191,6 +216,7 @@ public class ChecklistResponseSubmissionService {
         for (QuestionnaireResponseSubmissionDTO questionnaireDto : submissionDto.getQuestionnaireResponses()) {
             for (AnswerSubmissionDTO answerDto : questionnaireDto.getAnswers()) {
                 if (pvAnswerValidator.isPVAnswer(answerDto, optionsCache)) {
+
                     QuestionEntity question = questionRepository.findById(answerDto.getQuestionId())
                             .orElseThrow(() -> new NotFoundException("Pergunta não encontrada: " + answerDto.getQuestionId()));
 
@@ -208,7 +234,8 @@ public class ChecklistResponseSubmissionService {
     }
 
     private void validateUserAccessToDam(Long userId, Long damId) {
-        UserEntity user = userRepository.findByIdWithClients(userId)
+
+        UserEntity user = userRepository.findByIdWithPermissions(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
 
         DamEntity dam = damRepository.findById(damId)
@@ -231,7 +258,7 @@ public class ChecklistResponseSubmissionService {
         boolean hasSpecificPermission = user.getDamPermissions().stream()
                 .anyMatch(permission
                         -> permission.getDam().getId().equals(damId)
-                && permission.getHasAccess()
+                && Boolean.TRUE.equals(permission.getHasAccess())
                 && permission.getClient().getId().equals(dam.getClient().getId())
                 );
 
@@ -249,17 +276,10 @@ public class ChecklistResponseSubmissionService {
             Long damId,
             Long questionnaireId) {
 
-        UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
-
-        DamEntity dam = damRepository.findById(damId)
-                .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
-
-        DangerLevelEntity dangerLevel = dangerLevelRepository.findById(answerDto.getAnomalyDangerLevelId())
-                .orElseThrow(() -> new NotFoundException("Nível de perigo não encontrado!"));
-
-        AnomalyStatusEntity status = anomalyStatusRepository.findById(answerDto.getAnomalyStatusId())
-                .orElseThrow(() -> new NotFoundException("Status não encontrado!"));
+        UserEntity user = userRepository.getReferenceById(userId);
+        DamEntity dam = damRepository.getReferenceById(damId);
+        DangerLevelEntity dangerLevel = dangerLevelRepository.getReferenceById(answerDto.getAnomalyDangerLevelId());
+        AnomalyStatusEntity status = anomalyStatusRepository.getReferenceById(answerDto.getAnomalyStatusId());
 
         AnomalyEntity anomaly = new AnomalyEntity();
         anomaly.setUser(user);
@@ -278,18 +298,18 @@ public class ChecklistResponseSubmissionService {
 
         if (answerDto.getPhotos() != null && !answerDto.getPhotos().isEmpty()) {
             for (PhotoSubmissionDTO photoDto : answerDto.getPhotos()) {
-                saveAnomalyPhoto(photoDto, savedAnomaly, dam.getId());
+                saveAnomalyPhoto(photoDto, savedAnomaly, damId);
             }
         }
     }
 
     private void saveAnomalyPhoto(PhotoSubmissionDTO photoDto, AnomalyEntity anomaly, Long damId) {
         try {
+
             String base64Image = photoDto.getBase64Image();
             if (base64Image.contains(",")) {
                 base64Image = base64Image.split(",")[1];
             }
-
             byte[] imageBytes = Base64.getDecoder().decode(base64Image);
 
             String photoUrl = fileStorageService.storeFileFromBytes(
@@ -310,8 +330,9 @@ public class ChecklistResponseSubmissionService {
     }
 
     private void validateAllRequiredQuestionnaires(ChecklistResponseSubmissionDTO submissionDto) {
-        ChecklistEntity checklist = checklistRepository.findById(submissionDto.getChecklistId())
-                .orElseThrow(() -> new NotFoundException("Checklist não encontrado com o ID: " + submissionDto.getChecklistId()));
+
+        ChecklistEntity checklist = checklistRepository.findByIdWithFullDetails(submissionDto.getChecklistId())
+                .orElseThrow(() -> new NotFoundException("Checklist não encontrado: " + submissionDto.getChecklistId()));
 
         Set<Long> requiredTemplateIds = checklist.getTemplateQuestionnaires().stream()
                 .map(TemplateQuestionnaireEntity::getId)
@@ -324,39 +345,31 @@ public class ChecklistResponseSubmissionService {
         Set<Long> submittedTemplateIdsSet = new HashSet<>(submittedTemplateIdsList);
 
         if (submittedTemplateIdsSet.size() < submittedTemplateIdsList.size()) {
-            throw new InvalidInputException("Existem questionários duplicados na submissão do checklist '" + checklist.getName() + "'.");
+            throw new InvalidInputException("Existem questionários duplicados na submissão.");
         }
 
         if (!submittedTemplateIdsSet.containsAll(requiredTemplateIds)) {
+
             Set<Long> missingTemplateIds = new HashSet<>(requiredTemplateIds);
             missingTemplateIds.removeAll(submittedTemplateIdsSet);
 
             List<String> missingNames = templateQuestionnaireRepository.findAllById(missingTemplateIds).stream()
-                    .map(TemplateQuestionnaireEntity::getName)
-                    .collect(Collectors.toList());
-
-            throw new InvalidInputException(String.format(
-                    "Checklist incompleto. Faltam os questionários: %s",
-                    String.join(", ", missingNames)
-            ));
+                    .map(TemplateQuestionnaireEntity::getName).toList();
+            throw new InvalidInputException("Checklist incompleto. Faltam: " + missingNames);
         }
 
         if (!requiredTemplateIds.containsAll(submittedTemplateIdsSet)) {
             Set<Long> extraTemplateIds = new HashSet<>(submittedTemplateIdsSet);
             extraTemplateIds.removeAll(requiredTemplateIds);
-
-            throw new InvalidInputException(String.format(
-                    "Checklist inválido. Foram enviados questionários que não pertencem a este checklist (IDs: %s).",
-                    extraTemplateIds
-            ));
+            throw new InvalidInputException("Questionários extras enviados: " + extraTemplateIds);
         }
     }
 
     private void validateAllQuestionsAnswered(QuestionnaireResponseSubmissionDTO questionnaireDto) {
+
         TemplateQuestionnaireEntity template = templateQuestionnaireRepository
-                .findById(questionnaireDto.getTemplateQuestionnaireId())
-                .orElseThrow(() -> new NotFoundException("Modelo de questionário não encontrado: "
-                + questionnaireDto.getTemplateQuestionnaireId()));
+                .findByIdWithFullDetails(questionnaireDto.getTemplateQuestionnaireId())
+                .orElseThrow(() -> new NotFoundException("Template não encontrado"));
 
         Set<Long> expectedQuestionIds = template.getTemplateQuestions().stream()
                 .map(tq -> tq.getQuestion().getId())
@@ -369,7 +382,7 @@ public class ChecklistResponseSubmissionService {
         Set<Long> uniqueSubmittedIds = new HashSet<>(submittedQuestionIdsList);
 
         if (uniqueSubmittedIds.size() < submittedQuestionIdsList.size()) {
-            throw new InvalidInputException("Existem respostas duplicadas para a mesma pergunta no questionário '" + template.getName() + "'. Verifique os dados enviados.");
+            throw new InvalidInputException("Respostas duplicadas no questionário: " + template.getName());
         }
 
         if (!uniqueSubmittedIds.containsAll(expectedQuestionIds)) {
@@ -377,32 +390,21 @@ public class ChecklistResponseSubmissionService {
             missingIds.removeAll(uniqueSubmittedIds);
 
             List<String> missingTexts = questionRepository.findAllById(missingIds).stream()
-                    .map(QuestionEntity::getQuestionText)
-                    .collect(Collectors.toList());
+                    .map(QuestionEntity::getQuestionText).toList();
 
-            throw new InvalidInputException(String.format(
-                    "O checklist mudou ou está incompleto. As seguintes perguntas não foram respondidas no questionário '%s': %s",
-                    template.getName(),
-                    String.join(", ", missingTexts)
-            ));
+            throw new InvalidInputException("Perguntas não respondidas em '" + template.getName() + "': " + missingTexts);
         }
 
         if (!expectedQuestionIds.containsAll(uniqueSubmittedIds)) {
             Set<Long> extraIds = new HashSet<>(uniqueSubmittedIds);
             extraIds.removeAll(expectedQuestionIds);
-
-            throw new InvalidInputException(String.format(
-                    "O checklist mudou. Sua submissão contém perguntas que não pertencem mais ao questionário '%s' (IDs extras: %s). Atualize seu aplicativo.",
-                    template.getName(),
-                    extraIds
-            ));
+            throw new InvalidInputException("Perguntas extras em '" + template.getName() + "': " + extraIds);
         }
     }
 
     private ChecklistResponseEntity createChecklistResponse(ChecklistResponseSubmissionDTO submissionDto) {
         DamEntity dam = damService.findById(submissionDto.getDamId());
-        UserEntity user = userRepository.findById(submissionDto.getUserId())
-                .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+        UserEntity user = userRepository.getReferenceById(submissionDto.getUserId());
 
         ChecklistResponseEntity checklistResponse = new ChecklistResponseEntity();
         checklistResponse.setChecklistName(submissionDto.getChecklistName());
@@ -423,9 +425,7 @@ public class ChecklistResponseSubmissionService {
         if (value == null) {
             return null;
         }
-        return BigDecimal.valueOf(value)
-                .setScale(2, RoundingMode.HALF_UP)
-                .doubleValue();
+        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
 
     private QuestionnaireResponseEntity createQuestionnaireResponse(
@@ -433,8 +433,7 @@ public class ChecklistResponseSubmissionService {
             ChecklistResponseEntity checklistResponse) {
 
         TemplateQuestionnaireEntity templateQuestionnaire = templateQuestionnaireRepository
-                .findById(questionnaireDto.getTemplateQuestionnaireId())
-                .orElseThrow(() -> new NotFoundException("Modelo de questionário não encontrado!"));
+                .getReferenceById(questionnaireDto.getTemplateQuestionnaireId());
 
         QuestionnaireResponseEntity questionnaireResponse = new QuestionnaireResponseEntity();
         questionnaireResponse.setTemplateQuestionnaire(templateQuestionnaire);
@@ -445,9 +444,7 @@ public class ChecklistResponseSubmissionService {
     }
 
     private AnswerEntity createAnswer(AnswerSubmissionDTO answerDto, QuestionnaireResponseEntity questionnaireResponse, Map<Long, String> optionsCache) {
-        QuestionEntity question = questionRepository
-                .findById(answerDto.getQuestionId())
-                .orElseThrow(() -> new NotFoundException("Pergunta não encontrada: " + answerDto.getQuestionId()));
+        QuestionEntity question = questionRepository.getReferenceById(answerDto.getQuestionId());
 
         AnswerEntity answer = new AnswerEntity();
         answer.setQuestion(question);
@@ -455,28 +452,19 @@ public class ChecklistResponseSubmissionService {
         answer.setLatitude(answerDto.getLatitude());
         answer.setLongitude(answerDto.getLongitude());
 
-        if (TypeQuestionEnum.TEXT.equals(question.getType())) {
-            if (answerDto.getComment() == null || answerDto.getComment().trim().isEmpty()) {
-                throw new InvalidInputException("A pergunta '" + question.getQuestionText()
-                        + "' é do tipo TEXT e requer uma resposta textual!");
-            }
+        if (answerDto.getComment() != null) {
             answer.setComment(answerDto.getComment());
-        } else if (TypeQuestionEnum.CHECKBOX.equals(question.getType())) {
-            if (answerDto.getSelectedOptionIds() == null || answerDto.getSelectedOptionIds().isEmpty()) {
-                throw new InvalidInputException("A pergunta '" + question.getQuestionText()
-                        + "' é do tipo CHECKBOX e requer ao menos uma opção selecionada!");
-            }
+        }
 
+        if (answerDto.getSelectedOptionIds() != null && !answerDto.getSelectedOptionIds().isEmpty()) {
             Set<OptionEntity> options = new HashSet<>();
             for (Long optionId : answerDto.getSelectedOptionIds()) {
                 if (!optionsCache.containsKey(optionId)) {
-                    throw new NotFoundException("Opção inválida ou não encontrada: " + optionId);
+                    throw new NotFoundException("Opção inválida: " + optionId);
                 }
-
                 options.add(optionRepository.getReferenceById(optionId));
             }
             answer.setSelectedOptions(options);
-            answer.setComment(answerDto.getComment());
         }
 
         AnswerEntity savedAnswer = answerRepository.save(answer);
@@ -492,7 +480,12 @@ public class ChecklistResponseSubmissionService {
 
     private AnswerPhotoEntity saveAnswerPhoto(PhotoSubmissionDTO photoDto, AnswerEntity answer) {
         try {
-            byte[] imageBytes = Base64.getDecoder().decode(photoDto.getBase64Image());
+
+            String base64Image = photoDto.getBase64Image();
+            if (base64Image.contains(",")) {
+                base64Image = base64Image.split(",")[1];
+            }
+            byte[] imageBytes = Base64.getDecoder().decode(base64Image);
 
             String photoUrl = fileStorageService.storeFileFromBytes(
                     imageBytes,

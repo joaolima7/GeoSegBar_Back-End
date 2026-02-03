@@ -27,14 +27,18 @@ public class DeterministicLimitService {
     private final DeterministicLimitRepository deterministicLimitRepository;
     private final OutputRepository outputRepository;
 
+    @Transactional(readOnly = true)
     public Optional<DeterministicLimitEntity> findByOutputId(Long outputId) {
+
         return deterministicLimitRepository.findByOutputId(outputId);
     }
 
+    @Transactional(readOnly = true)
     public List<Long> findDeterministicLimitIdsByOutputInstrumentDamId(Long damId) {
         return deterministicLimitRepository.findLimitIdsByOutputInstrumentDamId(damId);
     }
 
+    @Transactional(readOnly = true)
     public DeterministicLimitEntity findById(Long id) {
         return deterministicLimitRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Limite determinístico não encontrado com ID: " + id));
@@ -54,6 +58,7 @@ public class DeterministicLimitService {
         )
     })
     public DeterministicLimitEntity createOrUpdate(Long outputId, DeterministicLimitEntity limit) {
+
         OutputEntity output = outputRepository.findById(outputId)
                 .orElseThrow(() -> new NotFoundException("Output não encontrado com ID: " + outputId));
 
@@ -71,20 +76,23 @@ public class DeterministicLimitService {
         }
 
         Optional<DeterministicLimitEntity> existingLimit = deterministicLimitRepository.findByOutputId(outputId);
+        DeterministicLimitEntity savedLimit;
 
         if (existingLimit.isPresent()) {
             DeterministicLimitEntity existingEntity = existingLimit.get();
             existingEntity.setAttentionValue(limit.getAttentionValue());
             existingEntity.setAlertValue(limit.getAlertValue());
             existingEntity.setEmergencyValue(limit.getEmergencyValue());
-            return deterministicLimitRepository.save(existingEntity);
+            savedLimit = deterministicLimitRepository.save(existingEntity);
         } else {
             limit.setOutput(output);
-            DeterministicLimitEntity savedLimit = deterministicLimitRepository.save(limit);
+            savedLimit = deterministicLimitRepository.save(limit);
+
             output.setDeterministicLimit(savedLimit);
             outputRepository.save(output);
-            return savedLimit;
         }
+
+        return findById(savedLimit.getId());
     }
 
     @Transactional

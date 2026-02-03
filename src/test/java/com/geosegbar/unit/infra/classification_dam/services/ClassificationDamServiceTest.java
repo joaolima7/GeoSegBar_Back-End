@@ -27,7 +27,7 @@ import com.geosegbar.config.BaseUnitTest;
 import com.geosegbar.entities.ClassificationDamEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
-import com.geosegbar.infra.classification_dam.peristence.ClassificationDamRepository;
+import com.geosegbar.infra.classification_dam.persistence.ClassificationDamRepository;
 import com.geosegbar.infra.classification_dam.services.ClassificationDamService;
 
 @ExtendWith(MockitoExtension.class)

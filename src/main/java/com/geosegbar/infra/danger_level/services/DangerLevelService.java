@@ -4,13 +4,13 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.entities.DangerLevelEntity;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.danger_level.persistence.jpa.DangerLevelRepository;
 
 import jakarta.annotation.PostConstruct;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -40,15 +40,18 @@ public class DangerLevelService {
         }
     }
 
+    @Transactional(readOnly = true)
     public List<DangerLevelEntity> findAll() {
         return dangerLevelRepository.findAll();
     }
 
+    @Transactional(readOnly = true)
     public DangerLevelEntity findById(Long id) {
         return dangerLevelRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Danger level not found!"));
     }
 
+    @Transactional(readOnly = true)
     public DangerLevelEntity findByName(String name) {
         return dangerLevelRepository.findByName(name)
                 .orElseThrow(() -> new NotFoundException("Danger level not found with name: " + name));

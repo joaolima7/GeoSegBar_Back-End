@@ -22,16 +22,20 @@ public class DocumentationDamService {
     private final DocumentationDamRepository documentationDamRepository;
     private final DamRepository damRepository;
 
+    @Transactional(readOnly = true)
     public DocumentationDamEntity findById(Long id) {
+
         return documentationDamRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Documentação de barragem não encontrada com ID: " + id));
     }
 
+    @Transactional(readOnly = true)
     public DocumentationDamEntity findByDamId(Long damId) {
         return documentationDamRepository.findByDamId(damId)
                 .orElseThrow(() -> new NotFoundException("Documentação não encontrada para a barragem com ID: " + damId));
     }
 
+    @Transactional(readOnly = true)
     public List<DocumentationDamEntity> findAll() {
         return documentationDamRepository.findAll();
     }
@@ -57,6 +61,7 @@ public class DocumentationDamService {
 
             documentationDam = new DocumentationDamEntity();
             documentationDam.setDam(dam);
+
             dam.setDocumentationDam(documentationDam);
         }
 
@@ -77,13 +82,14 @@ public class DocumentationDamService {
         documentationDam.setLastExternalSimulation(documentationDamDTO.getLastExternalSimulation());
         documentationDam.setNextExternalSimulation(documentationDamDTO.getNextExternalSimulation());
 
-        return documentationDamRepository.save(documentationDam);
+        DocumentationDamEntity saved = documentationDamRepository.save(documentationDam);
+
+        return findById(saved.getId());
     }
 
     @Transactional
     public void delete(Long id) {
-        DocumentationDamEntity documentationDam = documentationDamRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Documentação de barragem não encontrada com ID: " + id));
+        DocumentationDamEntity documentationDam = findById(id);
 
         DamEntity dam = documentationDam.getDam();
         if (dam != null) {

@@ -7,6 +7,7 @@ import java.util.Set;
 
 import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.ClassificationDamEntity;
@@ -26,7 +27,7 @@ import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.exceptions.UnauthorizedException;
-import com.geosegbar.infra.classification_dam.peristence.ClassificationDamRepository;
+import com.geosegbar.infra.classification_dam.persistence.ClassificationDamRepository;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.dtos.CreateDamCompleteRequest;
 import com.geosegbar.infra.dam.dtos.DamStatusUpdateDTO;
@@ -48,7 +49,6 @@ import com.geosegbar.infra.security_level.persistence.SecurityLevelRepository;
 import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
 import com.geosegbar.infra.user.service.UserService;
 
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -72,24 +72,78 @@ public class DamService {
     private final UserService userService;
     private final com.geosegbar.infra.permissions.dam_permissions.services.DamPermissionService damPermissionService;
 
-    private PSBFolderEntity resolvePSBFolderFromRequest(Long folderId) {
-        if (folderId == null) {
-            return null;
-        }
-        return psbFolderRepository.findById(folderId)
-                .orElseThrow(() -> new NotFoundException("PSB Folder não encontrado com ID: " + folderId));
+    /**
+     * Busca a barragem com TODOS os detalhes para exibição completa. Inicializa
+     * coleções lazy para garantir compatibilidade com OSIV=false.
+     */
+    @Transactional(readOnly = true)
+    public DamEntity findById(Long id) {
+
+        DamEntity dam = damRepository.findByIdWithFullDetails(id)
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
+
+        Hibernate.initialize(dam.getPsbFolders());
+        Hibernate.initialize(dam.getSections());
+
+        return dam;
     }
 
+    @Transactional(readOnly = true)
     public DamEntity findByIdWithSections(Long id) {
         return damRepository.findByIdWithSections(id)
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
     }
 
+    @Transactional(readOnly = true)
+    public List<DamEntity> findAll() {
+        List<DamEntity> dams = damRepository.findAllByOrderByIdAsc();
+
+        dams.forEach(d -> {
+            Hibernate.initialize(d.getClient());
+            Hibernate.initialize(d.getStatus());
+        });
+        return dams;
+    }
+
+    public List<DamEntity> findAllWithSections() {
+        return damRepository.findAllWithSections();
+    }
+
+    @Transactional(readOnly = true)
+    public List<DamEntity> findDamsByClientId(Long clientId) {
+        List<DamEntity> dams = damRepository.findByClientIdWithDetails(clientId);
+
+        dams.forEach(d -> Hibernate.initialize(d.getPsbFolders()));
+        return dams;
+    }
+
+    public List<DamEntity> findDamsByClientIdWithSections(Long clientId) {
+        return damRepository.findByClientIdWithSections(clientId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DamEntity> findByClientAndStatus(Long clientId, Long statusId) {
+        List<DamEntity> dams = damRepository.findWithDetailsByClientAndStatus(clientId, statusId);
+
+        dams.forEach(d -> Hibernate.initialize(d.getPsbFolders()));
+        return dams;
+    }
+
+    public List<DamEntity> findByClientAndStatusWithSections(Long clientId, Long statusId) {
+        return damRepository.findByClientAndStatusWithSections(clientId, statusId);
+    }
+
+    public boolean existsByName(String name) {
+        return damRepository.existsByName(name);
+    }
+
+    public boolean existsByNameAndIdNot(String name, Long id) {
+        return damRepository.existsByNameAndIdNot(name, id);
+    }
+
     @Transactional
     public int synchronizeClientDamsStatus(Long clientId, StatusEntity status) {
-        int updatedCount = damRepository.updateStatusByClientId(clientId, status);
-
-        return updatedCount;
+        return damRepository.updateStatusByClientId(clientId, status);
     }
 
     @Transactional
@@ -101,31 +155,16 @@ public class DamService {
             }
         }
 
-        DamEntity dam = findById(damId);
+        DamEntity dam = damRepository.findById(damId)
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada"));
 
         StatusEntity status = statusRepository.findById(statusUpdateDTO.getStatusId())
                 .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + statusUpdateDTO.getStatusId()));
 
         dam.setStatus(status);
-        return damRepository.save(dam);
-    }
+        damRepository.save(dam);
 
-    public List<DamEntity> findAllWithSections() {
-        List<DamEntity> dams = findAll();
-        dams.forEach(dam -> Hibernate.initialize(dam.getSections()));
-        return dams;
-    }
-
-    public List<DamEntity> findDamsByClientIdWithSections(Long clientId) {
-        List<DamEntity> dams = findDamsByClientId(clientId);
-        dams.forEach(dam -> Hibernate.initialize(dam.getSections()));
-        return dams;
-    }
-
-    public List<DamEntity> findByClientAndStatusWithSections(Long clientId, Long statusId) {
-        List<DamEntity> dams = findByClientAndStatus(clientId, statusId);
-        dams.forEach(dam -> Hibernate.initialize(dam.getSections()));
-        return dams;
+        return findById(damId);
     }
 
     @Transactional
@@ -235,7 +274,6 @@ public class DamService {
 
         if (request.getSupervisoryBodyName() != null) {
             regulatoryDam.setSupervisoryBodyName(request.getSupervisoryBodyName());
-
         }
 
         if (request.getRiskCategoryId() != null) {
@@ -283,46 +321,23 @@ public class DamService {
 
         DamEntity savedDam = findById(dam.getId());
 
-        // ✅ Criar DamPermissions padrão para todos os usuários do cliente
         damPermissionService.createDefaultPermissionsForDam(savedDam);
 
         return savedDam;
     }
 
-    private LevelEntity processLevel(LevelRequestDTO levelDTO) {
-        if (levelDTO.getId() != null) {
-            return levelRepository.findById(levelDTO.getId())
-                    .orElseThrow(() -> new NotFoundException("Nível não encontrado com ID: " + levelDTO.getId()));
-        }
-
-        return levelRepository.findByName(levelDTO.getName())
-                .orElseGet(() -> {
-                    LevelEntity newLevel = new LevelEntity();
-                    newLevel.setName(levelDTO.getName());
-                    newLevel.setValue(levelDTO.getValue());
-                    newLevel.setUnitLevel(levelDTO.getUnitLevel());
-                    return levelRepository.save(newLevel);
-                });
-    }
-
-    public List<DamEntity> findByClientAndStatus(Long clientId, Long statusId) {
-        List<DamEntity> dams = damRepository.findWithDetailsByClientAndStatus(clientId, statusId);
-
-        return dams;
-    }
-
     @Transactional
     public void deleteById(Long id) {
         DamEntity dam = damRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Barragem n\u00e3o encontrada para exclus\u00e3o!"));
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada para exclusão!"));
 
         if (dam.getChecklist() != null || !dam.getChecklistResponses().isEmpty()
                 || !dam.getSections().isEmpty() || !dam.getDamPermissions().isEmpty()
                 || !dam.getInstruments().isEmpty()) {
             throw new BusinessRuleException(
-                    "N\u00e3o \u00e9 poss\u00edvel excluir a barragem devido as depend\u00eancias existentes, recomenda-se inativar a barragem se necess\u00e1rio.");
+                    "Não é possível excluir a barragem devido as dependências existentes, recomenda-se inativar a barragem se necessário.");
         }
-        // ✅ Remover todas as DamPermissions associadas
+
         damPermissionService.removeAllPermissionsForDam(id);
         damRepository.deleteById(id);
     }
@@ -412,38 +427,10 @@ public class DamService {
         DamEntity updatedDam = damRepository.save(existingDam);
 
         if (clientChanged) {
-            // ✅ Sincronizar DamPermissions quando muda de cliente
             damPermissionService.syncPermissionsOnClientChange(updatedDam, oldClientId);
         }
 
         return findById(updatedDam.getId());
-    }
-
-    public List<DamEntity> findDamsByClientId(Long clientId) {
-        return damRepository.findByClientIdWithDetails(clientId);
-    }
-
-    public DamEntity findById(Long id) {
-        return damRepository.findByIdWithFullDetails(id)
-                .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
-    }
-
-    public List<DamEntity> findAll() {
-        List<DamEntity> dams = damRepository.findAllByOrderByIdAsc();
-        // Inicializa o básico para não quebrar JSON
-        dams.forEach(d -> {
-            Hibernate.initialize(d.getClient());
-            Hibernate.initialize(d.getStatus());
-        });
-        return dams;
-    }
-
-    public boolean existsByName(String name) {
-        return damRepository.existsByName(name);
-    }
-
-    public boolean existsByNameAndIdNot(String name, Long id) {
-        return damRepository.existsByNameAndIdNot(name, id);
     }
 
     @Transactional
@@ -490,13 +477,11 @@ public class DamService {
         existingDam.setLegislationLinkFolder(resolvePSBFolderFromRequest(request.getLegislationLinkFolderId()));
 
         if (request.getLogoBase64() == null) {
-
             if (existingDam.getLogoPath() != null) {
                 fileStorageService.deleteFile(existingDam.getLogoPath());
                 existingDam.setLogoPath(null);
             }
         } else if (!request.getLogoBase64().isEmpty()) {
-
             if (existingDam.getLogoPath() != null) {
                 fileStorageService.deleteFile(existingDam.getLogoPath());
             }
@@ -517,13 +502,11 @@ public class DamService {
         }
 
         if (request.getDamImageBase64() == null) {
-
             if (existingDam.getDamImagePath() != null) {
                 fileStorageService.deleteFile(existingDam.getDamImagePath());
                 existingDam.setDamImagePath(null);
             }
         } else if (!request.getDamImageBase64().isEmpty()) {
-
             if (existingDam.getDamImagePath() != null) {
                 fileStorageService.deleteFile(existingDam.getDamImagePath());
             }
@@ -624,20 +607,16 @@ public class DamService {
         regulatoryDamRepository.save(regulatoryDam);
 
         if (request.getReservoirs() != null) {
-
             List<ReservoirEntity> currentReservoirs = reservoirRepository.findByDamIdOrderByCreatedAtDesc(damId);
             Set<Long> receivedReservoirIds = new HashSet<>();
 
             for (ReservoirRequestDTO reservoirDTO : request.getReservoirs()) {
                 if (reservoirDTO.getId() != null) {
-
                     ReservoirEntity existingReservoir = reservoirRepository.findById(reservoirDTO.getId())
-                            .orElseThrow(() -> new NotFoundException(
-                            "Reservatório não encontrado com ID: " + reservoirDTO.getId()));
+                            .orElseThrow(() -> new NotFoundException("Reservatório não encontrado com ID: " + reservoirDTO.getId()));
 
                     if (!existingReservoir.getDam().getId().equals(damId)) {
-                        throw new BusinessRuleException(
-                                "Reservatório com ID " + reservoirDTO.getId() + " não pertence a esta barragem!");
+                        throw new BusinessRuleException("Reservatório com ID " + reservoirDTO.getId() + " não pertence a esta barragem!");
                     }
 
                     LevelEntity level = processLevelForUpdate(reservoirDTO.getLevel(), existingReservoir.getLevel());
@@ -646,9 +625,7 @@ public class DamService {
                     reservoirRepository.save(existingReservoir);
                     receivedReservoirIds.add(reservoirDTO.getId());
                 } else {
-
                     LevelEntity level = processLevel(reservoirDTO.getLevel());
-
                     ReservoirEntity newReservoir = new ReservoirEntity();
                     newReservoir.setDam(finalDam);
                     newReservoir.setLevel(level);
@@ -672,25 +649,38 @@ public class DamService {
             psbFolderService.syncRootFolders(finalDam, request.getPsbFolders(), currentUser.getId());
         }
 
-        savedDam = findById(damId);
-
         if (clientChanged) {
-            // ✅ Sincronizar DamPermissions quando muda de cliente
-            damPermissionService.syncPermissionsOnClientChange(savedDam, oldClientId);
+            damPermissionService.syncPermissionsOnClientChange(finalDam, oldClientId);
         }
 
-        return savedDam;
+        return findById(damId);
     }
 
-    /**
-     * Processa a atualização de um Level existente ou cria um novo
-     *
-     * @param levelDTO Dados do level recebidos no request
-     * @param currentLevel Level atual do reservoir
-     * @return LevelEntity processado
-     */
-    private LevelEntity processLevelForUpdate(LevelRequestDTO levelDTO, LevelEntity currentLevel) {
+    private PSBFolderEntity resolvePSBFolderFromRequest(Long folderId) {
+        if (folderId == null) {
+            return null;
+        }
+        return psbFolderRepository.findById(folderId)
+                .orElseThrow(() -> new NotFoundException("PSB Folder não encontrado com ID: " + folderId));
+    }
 
+    private LevelEntity processLevel(LevelRequestDTO levelDTO) {
+        if (levelDTO.getId() != null) {
+            return levelRepository.findById(levelDTO.getId())
+                    .orElseThrow(() -> new NotFoundException("Nível não encontrado com ID: " + levelDTO.getId()));
+        }
+
+        return levelRepository.findByName(levelDTO.getName())
+                .orElseGet(() -> {
+                    LevelEntity newLevel = new LevelEntity();
+                    newLevel.setName(levelDTO.getName());
+                    newLevel.setValue(levelDTO.getValue());
+                    newLevel.setUnitLevel(levelDTO.getUnitLevel());
+                    return levelRepository.save(newLevel);
+                });
+    }
+
+    private LevelEntity processLevelForUpdate(LevelRequestDTO levelDTO, LevelEntity currentLevel) {
         if (levelDTO.getId() != null) {
             return levelRepository.findById(levelDTO.getId())
                     .orElseThrow(() -> new NotFoundException("Nível não encontrado com ID: " + levelDTO.getId()));

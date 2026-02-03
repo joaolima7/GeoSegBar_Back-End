@@ -3,6 +3,7 @@ package com.geosegbar.infra.deterministic_limit.persistence.jpa;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,9 +14,13 @@ import com.geosegbar.entities.DeterministicLimitEntity;
 @Repository
 public interface DeterministicLimitRepository extends JpaRepository<DeterministicLimitEntity, Long> {
 
+    @EntityGraph(attributePaths = {"output", "output.instrument"})
     Optional<DeterministicLimitEntity> findByOutputId(Long outputId);
+
+    @Override
+    @EntityGraph(attributePaths = {"output", "output.instrument"})
+    Optional<DeterministicLimitEntity> findById(Long id);
 
     @Query("SELECT dl.id FROM DeterministicLimitEntity dl WHERE dl.output.instrument.dam.id = :damId")
     List<Long> findLimitIdsByOutputInstrumentDamId(@Param("damId") Long damId);
-
 }

@@ -17,6 +17,7 @@ import com.geosegbar.entities.StatusEntity;
 @Repository
 public interface DamRepository extends JpaRepository<DamEntity, Long> {
 
+    @EntityGraph(attributePaths = {"client", "status"})
     List<DamEntity> findAllByOrderByIdAsc();
 
     List<DamEntity> findByClient(ClientEntity client);
@@ -33,6 +34,15 @@ public interface DamRepository extends JpaRepository<DamEntity, Long> {
 
     @Query("SELECT DISTINCT d FROM DamEntity d LEFT JOIN FETCH d.sections WHERE d.id = :id")
     Optional<DamEntity> findByIdWithSections(@Param("id") Long id);
+
+    @Query("SELECT DISTINCT d FROM DamEntity d LEFT JOIN FETCH d.sections ORDER BY d.id ASC")
+    List<DamEntity> findAllWithSections();
+
+    @Query("SELECT DISTINCT d FROM DamEntity d LEFT JOIN FETCH d.sections WHERE d.client.id = :clientId ORDER BY d.id ASC")
+    List<DamEntity> findByClientIdWithSections(@Param("clientId") Long clientId);
+
+    @Query("SELECT DISTINCT d FROM DamEntity d LEFT JOIN FETCH d.sections WHERE d.client.id = :clientId AND d.status.id = :statusId")
+    List<DamEntity> findByClientAndStatusWithSections(@Param("clientId") Long clientId, @Param("statusId") Long statusId);
 
     @EntityGraph(attributePaths = {"psbFolders"})
     Optional<DamEntity> findWithPsbFoldersById(Long id);

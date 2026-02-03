@@ -4,13 +4,13 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.entities.OptionEntity;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
 
 import jakarta.annotation.PostConstruct;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -74,11 +74,13 @@ public class OptionService {
         return saved;
     }
 
+    @Transactional(readOnly = true)
     public OptionEntity findById(Long id) {
         return optionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Opção não encontrada!"));
     }
 
+    @Transactional(readOnly = true)
     public List<OptionEntity> findAll() {
         return optionRepository.findAllByOrderByOrderIndexAsc();
     }

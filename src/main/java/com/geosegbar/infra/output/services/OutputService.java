@@ -19,10 +19,12 @@ public class OutputService {
 
     private final OutputRepository outputRepository;
 
+    @Transactional(readOnly = true)
     public List<OutputEntity> findByInstrumentId(Long instrumentId) {
         return outputRepository.findByInstrumentIdAndActiveTrue(instrumentId);
     }
 
+    @Transactional(readOnly = true)
     public OutputEntity findById(Long id) {
         return outputRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Output não encontrado com ID: " + id));

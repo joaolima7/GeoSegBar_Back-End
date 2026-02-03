@@ -40,6 +40,7 @@ public class InstrumentGraphPatternService {
     private final InstrumentGraphPatternFolderRepository folderRepository;
     private final DamService damService;
 
+    @Transactional(readOnly = true)
     @Cacheable(value = "graphPatternsByInstrument", key = "#instrumentId", cacheManager = "instrumentGraphCacheManager")
     public List<GraphPatternResponseDTO> findByInstrument(Long instrumentId) {
         return patternRepository.findByInstrumentId(instrumentId)
@@ -48,42 +49,41 @@ public class InstrumentGraphPatternService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     @Cacheable(value = "graphPatternsByInstrument", key = "'details-' + #instrumentId", cacheManager = "instrumentGraphCacheManager")
     public List<GraphPatternDetailResponseDTO> findByInstrumentWithDetails(Long instrumentId) {
+
         return patternRepository.findByInstrumentIdWithAllDetails(instrumentId)
                 .stream()
                 .map(this::mapToDetailResponseDTO)
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public InstrumentGraphPatternEntity findById(Long id) {
         return patternRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Padrão de Gráfico não encontrado com ID: " + id + "."));
     }
 
+    @Transactional(readOnly = true)
     @Cacheable(value = "graphPatternsByDam", key = "#damId", cacheManager = "instrumentGraphCacheManager")
     public List<GraphPatternDetailResponseDTO> findAllPatternsByDam(Long damId) {
-
         damService.findById(damId);
 
         List<InstrumentGraphPatternEntity> patterns = patternRepository.findByInstrumentDamIdWithAllDetails(damId);
 
-        List<GraphPatternDetailResponseDTO> patternDTOs = patterns.stream()
+        return patterns.stream()
                 .map(this::mapToDetailResponseDTO)
                 .collect(Collectors.toList());
-
-        log.info("Patterns de barragem obtidos: damId={}, totalPatterns={}", damId, patternDTOs.size());
-
-        return patternDTOs;
     }
 
+    @Transactional
     @Caching(evict = {
         @CacheEvict(
                 value = "graphPatternById",
                 key = "#id",
                 cacheManager = "instrumentGraphCacheManager"
         ),
-
         @CacheEvict(
                 value = {"graphPatternsByInstrument", "graphPatternsByDam",
                     "folderWithPatterns", "damFoldersWithPatterns"},
@@ -98,9 +98,12 @@ public class InstrumentGraphPatternService {
                     "Já existe um Padrão de Gráfico com o nome '" + newName + "' para este instrumento!");
         }
         pattern.setName(newName);
-        return mapToDetailResponseDTO(patternRepository.save(pattern));
+        InstrumentGraphPatternEntity saved = patternRepository.save(pattern);
+
+        return mapToDetailResponseDTO(saved);
     }
 
+    @Transactional(readOnly = true)
     @Cacheable(value = "graphPatternById", key = "#id", cacheManager = "instrumentGraphCacheManager")
     public GraphPatternDetailResponseDTO findByIdWithDetails(Long id) {
         InstrumentGraphPatternEntity pattern = patternRepository.findByIdWithAllDetails(id)
@@ -111,24 +114,9 @@ public class InstrumentGraphPatternService {
 
     @Transactional
     @Caching(evict = {
-        @CacheEvict(
-                value = "graphPatternById",
-                key = "#patternId",
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-
-        @CacheEvict(
-                value = {"graphAxes", "graphProperties"},
-                key = "#patternId",
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-
-        @CacheEvict(
-                value = {"graphPatternsByInstrument", "graphPatternsByDam",
-                    "folderWithPatterns", "damFoldersWithPatterns"},
-                allEntries = true,
-                cacheManager = "instrumentGraphCacheManager"
-        )
+        @CacheEvict(value = "graphPatternById", key = "#patternId", cacheManager = "instrumentGraphCacheManager"),
+        @CacheEvict(value = {"graphAxes", "graphProperties"}, key = "#patternId", cacheManager = "instrumentGraphCacheManager"),
+        @CacheEvict(value = {"graphPatternsByInstrument", "graphPatternsByDam", "folderWithPatterns", "damFoldersWithPatterns"}, allEntries = true, cacheManager = "instrumentGraphCacheManager")
     })
     public void deleteById(Long patternId) {
         findById(patternId);
@@ -151,6 +139,7 @@ public class InstrumentGraphPatternService {
 
         InstrumentEntity instrument = instrumentRepository.findById(request.getInstrumentId())
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + request.getInstrumentId()));
+
         InstrumentGraphPatternFolder folder = null;
         if (request.getFolderId() != null) {
             folder = folderRepository.findById(request.getFolderId())
@@ -171,13 +160,11 @@ public class InstrumentGraphPatternService {
         axes.setAbscissaGridLinesEnable(true);
         axes.setPrimaryOrdinateGridLinesEnable(true);
         axesRepository.save(axes);
-        pattern.setAxes(axes);
 
+        pattern.setAxes(axes);
         patternRepository.save(pattern);
 
-        log.info("Pattern criado: id={}, name={}, instrumentId={}, folderId={}",
-                pattern.getId(), pattern.getName(), instrument.getId(),
-                folder != null ? folder.getId() : null);
+        log.info("Pattern criado: id={}, name={}", pattern.getId(), pattern.getName());
 
         return mapToResponseDTO(pattern);
     }
@@ -199,10 +186,9 @@ public class InstrumentGraphPatternService {
     }
 
     public GraphPatternDetailResponseDTO mapToDetailResponseDTO(InstrumentGraphPatternEntity pattern) {
-
         final InstrumentGraphPatternEntity finalPattern;
 
-        if (!Hibernate.isInitialized(pattern.getProperties())) {
+        if (pattern.getProperties() == null || !Hibernate.isInitialized(pattern.getProperties())) {
             finalPattern = patternRepository.findByIdWithAllDetails(pattern.getId())
                     .orElse(pattern);
         } else {
@@ -248,7 +234,7 @@ public class InstrumentGraphPatternService {
             ));
         }
 
-        if (finalPattern.getProperties() != null) {
+        if (finalPattern.getProperties() != null && Hibernate.isInitialized(finalPattern.getProperties())) {
             List<GraphPatternDetailResponseDTO.PropertyDetailDTO> properties = finalPattern.getProperties().stream()
                     .map(property -> mapToPropertyDetailDTO(property, finalPattern.getInstrument()))
                     .collect(Collectors.toList());

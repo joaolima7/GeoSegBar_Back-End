@@ -24,6 +24,7 @@ public class MeasurementUnitService {
     private final MeasurementUnitRepository measurementUnitRepository;
 
     @PostConstruct
+    @Transactional
     public void initDefaultUnits() {
         if (measurementUnitRepository.count() == 0) {
             createDefaultUnit("Metros", "M");
@@ -48,26 +49,29 @@ public class MeasurementUnitService {
         measurementUnitRepository.save(unit);
     }
 
+    @Transactional(readOnly = true)
     public List<MeasurementUnitEntity> findAll() {
         return measurementUnitRepository.findAllByOrderByNameAsc();
     }
 
+    @Transactional(readOnly = true)
     public MeasurementUnitEntity findById(Long id) {
         return measurementUnitRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Unidade de medida não encontrada com ID: " + id));
     }
 
+    @Transactional(readOnly = true)
     public Optional<MeasurementUnitEntity> findByName(String name) {
         return measurementUnitRepository.findByName(name);
     }
 
+    @Transactional(readOnly = true)
     public Optional<MeasurementUnitEntity> findByAcronym(String acronym) {
         return measurementUnitRepository.findByAcronym(acronym);
     }
 
     @Transactional
     public MeasurementUnitEntity create(MeasurementUnitEntity measurementUnit) {
-
         measurementUnit.setName(formatName(measurementUnit.getName()));
         measurementUnit.setAcronym(formatAcronym(measurementUnit.getAcronym()));
 
@@ -79,8 +83,7 @@ public class MeasurementUnitService {
             throw new DuplicateResourceException("Unidade de medida com sigla '" + measurementUnit.getAcronym() + "' já existe");
         }
 
-        MeasurementUnitEntity savedUnit = measurementUnitRepository.save(measurementUnit);
-        return savedUnit;
+        return measurementUnitRepository.save(measurementUnit);
     }
 
     @Transactional
@@ -101,13 +104,13 @@ public class MeasurementUnitService {
         existingUnit.setName(normalizedName);
         existingUnit.setAcronym(normalizedAcronym);
 
-        MeasurementUnitEntity updatedUnit = measurementUnitRepository.save(existingUnit);
-        return updatedUnit;
+        return measurementUnitRepository.save(existingUnit);
     }
 
     @Transactional
     public void delete(Long id) {
         MeasurementUnitEntity measurementUnit = findById(id);
+
         if (!measurementUnit.getConstants().isEmpty() || !measurementUnit.getOutputs().isEmpty() || !measurementUnit.getInputs().isEmpty()) {
             throw new BusinessRuleException("Não é possível excluir a unidade de medida pois existem registros associados a ela.");
         }

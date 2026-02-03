@@ -20,16 +20,19 @@ public class InstrumentTypeService {
 
     private final InstrumentTypeRepository instrumentTypeRepository;
 
+    @Transactional(readOnly = true)
     public List<InstrumentTypeDTO> findAll() {
         return instrumentTypeRepository.findAllByOrderByNameAsc().stream()
                 .map(this::mapToDTO)
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public InstrumentTypeDTO findById(Long id) {
         return mapToDTO(getEntityById(id));
     }
 
+    @Transactional(readOnly = true)
     public InstrumentTypeEntity getEntityById(Long id) {
         return instrumentTypeRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Tipo de instrumento não encontrado com ID: " + id));

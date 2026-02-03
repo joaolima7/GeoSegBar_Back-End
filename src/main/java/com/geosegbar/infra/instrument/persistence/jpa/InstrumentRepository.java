@@ -16,14 +16,16 @@ import com.geosegbar.entities.SectionEntity;
 @Repository
 public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Long> {
 
-    @EntityGraph(attributePaths = {"dam", "section", "instrumentType"})
+    @EntityGraph(attributePaths = {"dam", "dam.client", "section", "instrumentType"})
     List<InstrumentEntity> findAllByOrderByNameAsc();
 
-    @EntityGraph(attributePaths = {"dam", "section", "instrumentType"})
+    @EntityGraph(attributePaths = {"dam", "dam.client", "section", "instrumentType"})
     List<InstrumentEntity> findByDamId(Long damId);
 
+    @EntityGraph(attributePaths = {"instrumentType", "section"})
     List<InstrumentEntity> findByDam(DamEntity dam);
 
+    @EntityGraph(attributePaths = {"dam", "dam.client", "instrumentType"})
     List<InstrumentEntity> findBySectionId(Long sectionId);
 
     List<InstrumentEntity> findBySection(SectionEntity section);
@@ -37,18 +39,22 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
     @Query("SELECT i.id FROM InstrumentEntity i WHERE i.dam.id = :damId")
     List<Long> findInstrumentIdsByDamId(@Param("damId") Long damId);
 
-    @EntityGraph(attributePaths = {"inputs", "constants", "outputs"})
+    @EntityGraph(attributePaths = {"inputs", "constants", "outputs", "dam", "instrumentType"})
     Optional<InstrumentEntity> findWithIOCById(Long id);
 
-    @EntityGraph(attributePaths = {"inputs", "constants", "outputs", "outputs.statisticalLimit", "outputs.deterministicLimit"})
-    @Query("SELECT i FROM InstrumentEntity i LEFT JOIN FETCH i.outputs o WHERE i.id = :id AND (o.active = true OR o IS NULL)")
+    @EntityGraph(attributePaths = {"inputs", "constants", "outputs", "outputs.statisticalLimit", "outputs.deterministicLimit", "dam", "instrumentType"})
+    @Query("SELECT DISTINCT i FROM InstrumentEntity i LEFT JOIN FETCH i.outputs o WHERE i.id = :id AND (o.active = true OR o IS NULL)")
     Optional<InstrumentEntity> findWithActiveOutputsById(@Param("id") Long id);
 
     @Query("SELECT i FROM InstrumentEntity i WHERE i.dam.client.id = :clientId")
     List<InstrumentEntity> findByClientId(@Param("clientId") Long clientId);
 
-    @EntityGraph(attributePaths = {"inputs", "constants", "outputs", "outputs.statisticalLimit", "outputs.deterministicLimit"})
-    @Query("SELECT i FROM InstrumentEntity i WHERE i.dam.client.id = :clientId AND (:active IS NULL OR i.active = :active)")
+    @EntityGraph(attributePaths = {
+        "inputs", "constants", "outputs",
+        "outputs.statisticalLimit", "outputs.deterministicLimit",
+        "dam", "dam.client", "instrumentType"
+    })
+    @Query("SELECT DISTINCT i FROM InstrumentEntity i WHERE i.dam.client.id = :clientId AND (:active IS NULL OR i.active = :active)")
     List<InstrumentEntity> findWithAllDetailsByClientId(
             @Param("clientId") Long clientId,
             @Param("active") Boolean active);
@@ -57,27 +63,27 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
         "inputs", "inputs.measurementUnit",
         "constants", "constants.measurementUnit",
         "outputs", "outputs.measurementUnit", "outputs.statisticalLimit", "outputs.deterministicLimit",
-        "dam", "dam.client", "section"
+        "dam", "dam.client", "section", "instrumentType"
     })
-    @Query("SELECT i FROM InstrumentEntity i WHERE i.id = :id")
+    @Query("SELECT DISTINCT i FROM InstrumentEntity i WHERE i.id = :id")
     Optional<InstrumentEntity> findWithCompleteDetailsById(@Param("id") Long id);
 
     @EntityGraph(attributePaths = {
         "inputs", "inputs.measurementUnit",
         "constants", "constants.measurementUnit",
         "outputs", "outputs.measurementUnit", "outputs.statisticalLimit", "outputs.deterministicLimit",
-        "dam", "dam.client", "section"
+        "dam", "dam.client", "section", "instrumentType"
     })
-    @Query("SELECT i FROM InstrumentEntity i WHERE i.dam.client.id = :clientId AND (:active IS NULL OR i.active = :active)")
+    @Query("SELECT DISTINCT i FROM InstrumentEntity i WHERE i.dam.client.id = :clientId AND (:active IS NULL OR i.active = :active)")
     List<InstrumentEntity> findByClientIdOptimized(@Param("clientId") Long clientId, @Param("active") Boolean active);
 
     @EntityGraph(attributePaths = {
         "inputs", "inputs.measurementUnit",
         "constants", "constants.measurementUnit",
         "outputs", "outputs.measurementUnit", "outputs.statisticalLimit", "outputs.deterministicLimit",
-        "dam", "dam.client", "section"
+        "dam", "dam.client", "section", "instrumentType"
     })
-    @Query("SELECT i FROM InstrumentEntity i "
+    @Query("SELECT DISTINCT i FROM InstrumentEntity i "
             + "WHERE (:damId IS NULL OR i.dam.id = :damId) "
             + "AND (:instrumentTypeId IS NULL OR i.instrumentType.id = :instrumentTypeId) "
             + "AND (:sectionId IS NULL OR i.section.id = :sectionId) "
@@ -93,6 +99,7 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
     @Query("SELECT i FROM InstrumentEntity i "
             + "LEFT JOIN FETCH i.instrumentType "
             + "LEFT JOIN FETCH i.section "
+            + "LEFT JOIN FETCH i.dam "
             + "WHERE i.id = :id")
     Optional<InstrumentEntity> findByIdWithBasicRelations(@Param("id") Long id);
 

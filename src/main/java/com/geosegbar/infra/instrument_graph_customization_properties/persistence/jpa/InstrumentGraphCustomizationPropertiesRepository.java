@@ -3,6 +3,7 @@ package com.geosegbar.infra.instrument_graph_customization_properties.persistenc
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.QueryHints;
@@ -19,38 +20,41 @@ import jakarta.persistence.QueryHint;
 @Repository
 public interface InstrumentGraphCustomizationPropertiesRepository extends JpaRepository<InstrumentGraphCustomizationPropertiesEntity, Long> {
 
+    @EntityGraph(attributePaths = {
+        "pattern",
+        "output", "output.measurementUnit",
+        "statisticalLimit", "statisticalLimit.output", "statisticalLimit.output.measurementUnit",
+        "deterministicLimit", "deterministicLimit.output", "deterministicLimit.output.measurementUnit",
+        "instrument",
+        "constant", "constant.measurementUnit"
+    })
     @QueryHints(
             @QueryHint(name = "org.hibernate.cacheable", value = "true"))
-    @Query("SELECT DISTINCT p FROM InstrumentGraphCustomizationPropertiesEntity p "
-            + "LEFT JOIN FETCH p.output o "
-            + "LEFT JOIN FETCH o.measurementUnit "
-            + "LEFT JOIN FETCH p.statisticalLimit sl "
-            + "LEFT JOIN FETCH sl.output slo "
-            + "LEFT JOIN FETCH slo.measurementUnit "
-            + "LEFT JOIN FETCH p.deterministicLimit dl "
-            + "LEFT JOIN FETCH dl.output dlo "
-            + "LEFT JOIN FETCH dlo.measurementUnit "
-            + "LEFT JOIN FETCH p.instrument i "
-            + "LEFT JOIN FETCH p.constant c "
-            + "LEFT JOIN FETCH c.measurementUnit "
-            + "WHERE p.pattern.id = :patternId")
-    List<InstrumentGraphCustomizationPropertiesEntity> findByPatternId(@Param("patternId") Long patternId);
+    List<InstrumentGraphCustomizationPropertiesEntity> findByPatternId(Long patternId);
 
+    @EntityGraph(attributePaths = {"output", "constant", "statisticalLimit", "deterministicLimit", "instrument"})
     List<InstrumentGraphCustomizationPropertiesEntity> findByConstantId(Long constantId);
 
+    @EntityGraph(attributePaths = {"output", "constant", "statisticalLimit", "deterministicLimit", "instrument"})
     List<InstrumentGraphCustomizationPropertiesEntity> findByCustomizationType(CustomizationTypeEnum customizationType);
 
+    @EntityGraph(attributePaths = {"pattern", "output", "constant", "statisticalLimit", "deterministicLimit", "instrument"})
     List<InstrumentGraphCustomizationPropertiesEntity> findByPatternIdAndCustomizationType(
             Long patternId, CustomizationTypeEnum customizationType);
 
+    @EntityGraph(attributePaths = {"pattern"})
     Optional<InstrumentGraphCustomizationPropertiesEntity> findByNameAndPatternId(String name, Long patternId);
 
+    @EntityGraph(attributePaths = {"pattern", "output", "statisticalLimit", "deterministicLimit"})
     List<InstrumentGraphCustomizationPropertiesEntity> findByOutputId(Long outputId);
 
+    @EntityGraph(attributePaths = {"pattern", "statisticalLimit"})
     List<InstrumentGraphCustomizationPropertiesEntity> findByStatisticalLimitId(Long statisticalLimitId);
 
+    @EntityGraph(attributePaths = {"pattern", "deterministicLimit"})
     List<InstrumentGraphCustomizationPropertiesEntity> findByDeterministicLimitId(Long deterministicLimitId);
 
+    @EntityGraph(attributePaths = {"pattern", "instrument"})
     List<InstrumentGraphCustomizationPropertiesEntity> findByInstrumentId(Long instrumentId);
 
     List<InstrumentGraphCustomizationPropertiesEntity> findByLabelEnableTrue();
@@ -65,24 +69,29 @@ public interface InstrumentGraphCustomizationPropertiesRepository extends JpaRep
 
     boolean existsByNameAndPatternId(String name, Long patternId);
 
+    @EntityGraph(attributePaths = {"pattern", "instrument", "output", "constant"})
     @Query("SELECT p FROM InstrumentGraphCustomizationPropertiesEntity p "
             + "WHERE p.pattern.instrument.id = :instrumentId")
     List<InstrumentGraphCustomizationPropertiesEntity> findByPatternInstrumentId(@Param("instrumentId") Long instrumentId);
 
     void deleteByPatternId(Long patternId);
 
+    @EntityGraph(attributePaths = {"statisticalLimit", "pattern"})
     List<InstrumentGraphCustomizationPropertiesEntity> findByPatternIdAndStatisticalLimitIdAndLimitValueType(
             Long patternId, Long statisticalLimitId, LimitValueTypeEnum limitValueType);
 
+    @EntityGraph(attributePaths = {"deterministicLimit", "pattern"})
     List<InstrumentGraphCustomizationPropertiesEntity> findByPatternIdAndDeterministicLimitIdAndLimitValueType(
             Long patternId, Long deterministicLimitId, LimitValueTypeEnum limitValueType);
 
+    @EntityGraph(attributePaths = {"statisticalLimit", "pattern"})
     @Query("SELECT p FROM InstrumentGraphCustomizationPropertiesEntity p "
             + "WHERE p.pattern.id = :patternId AND p.customizationType = 'STATISTICAL_LIMIT' "
             + "AND p.statisticalLimit.id = :limitId")
     List<InstrumentGraphCustomizationPropertiesEntity> findStatisticalLimitPropertiesByPatternAndLimit(
             @Param("patternId") Long patternId, @Param("limitId") Long limitId);
 
+    @EntityGraph(attributePaths = {"deterministicLimit", "pattern"})
     @Query("SELECT p FROM InstrumentGraphCustomizationPropertiesEntity p "
             + "WHERE p.pattern.id = :patternId AND p.customizationType = 'DETERMINISTIC_LIMIT' "
             + "AND p.deterministicLimit.id = :limitId")

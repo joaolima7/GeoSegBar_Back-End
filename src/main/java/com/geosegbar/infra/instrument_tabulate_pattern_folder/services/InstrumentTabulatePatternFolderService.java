@@ -81,7 +81,6 @@ public class InstrumentTabulatePatternFolderService {
         List<InstrumentTabulatePatternFolder> folders = folderRepository.findByDamIdWithDamDetails(damId);
 
         List<InstrumentTabulatePatternEntity> patternsInFolders = patternRepository.findByFolderDamIdWithAllDetails(damId);
-
         List<InstrumentTabulatePatternEntity> patternsWithoutFolder = patternRepository.findByDamIdWithoutFolderWithAllDetails(damId);
 
         Map<Long, List<InstrumentTabulatePatternEntity>> patternsByFolder = patternsInFolders.stream()
@@ -89,7 +88,6 @@ public class InstrumentTabulatePatternFolderService {
 
         List<TabulateFolderWithPatternsDetailResponseDTO> folderDTOs = folders.stream()
                 .map(folder -> {
-
                     List<InstrumentTabulatePatternEntity> folderPatterns = patternsByFolder.getOrDefault(folder.getId(), List.of());
 
                     List<TabulatePatternResponseDTO> patternDTOs = folderPatterns.stream()
@@ -126,10 +124,7 @@ public class InstrumentTabulatePatternFolderService {
         responseDTO.setFolders(folderDTOs);
         responseDTO.setPatternsWithoutFolder(patternsWithoutFolderDTOs);
 
-        int totalPatternsInFolders = folderDTOs.stream()
-                .mapToInt(f -> f.getPatterns().size())
-                .sum();
-
+        int totalPatternsInFolders = folderDTOs.stream().mapToInt(f -> f.getPatterns().size()).sum();
         log.debug("Dam {} - Folders: {}, Patterns em folders: {}, Patterns sem folder: {}, Total patterns: {}",
                 damId, folderDTOs.size(), totalPatternsInFolders, patternsWithoutFolderDTOs.size(),
                 totalPatternsInFolders + patternsWithoutFolderDTOs.size());
@@ -149,7 +144,6 @@ public class InstrumentTabulatePatternFolderService {
                 key = "#folderId",
                 cacheManager = "instrumentTabulateCacheManager"
         ),
-
         @CacheEvict(
                 value = "damTabulateFoldersWithPatterns",
                 key = "#result.damId",
@@ -161,7 +155,8 @@ public class InstrumentTabulatePatternFolderService {
                 cacheManager = "instrumentTabulateCacheManager"
         )
     })
-    public void delete(Long folderId) {
+    public InstrumentTabulatePatternFolder delete(Long folderId) {
+
         InstrumentTabulatePatternFolder folder = findById(folderId);
 
         List<InstrumentTabulatePatternEntity> patterns = patternRepository.findByFolderId(folderId);
@@ -179,8 +174,12 @@ public class InstrumentTabulatePatternFolderService {
 
         log.info("Pasta de padrões de tabela excluída: id={}, name={}, padrões afetados={}",
                 folderId, folder.getName(), patterns.size());
+
+        return folder;
+
     }
 
+    @Transactional(readOnly = true)
     public TabulateFolderResponseDTO findByIdSimple(Long folderId) {
         InstrumentTabulatePatternFolder folder = findById(folderId);
         return mapToResponseDTO(folder);
@@ -193,7 +192,6 @@ public class InstrumentTabulatePatternFolderService {
                 key = "#folderId",
                 cacheManager = "instrumentTabulateCacheManager"
         ),
-
         @CacheEvict(
                 value = "damTabulateFoldersWithPatterns",
                 key = "#result.dam.id",
@@ -219,14 +217,16 @@ public class InstrumentTabulatePatternFolderService {
         return mapToResponseDTO(folder);
     }
 
+    @Transactional(readOnly = true)
     public InstrumentTabulatePatternFolder findById(Long folderId) {
+
         return folderRepository.findById(folderId)
                 .orElseThrow(() -> new NotFoundException("Pasta de padrões de tabela não encontrada com ID: " + folderId));
     }
 
+    @Transactional(readOnly = true)
     @Cacheable(value = "tabulateFoldersByDam", key = "#damId", cacheManager = "instrumentTabulateCacheManager")
     public List<TabulateFolderResponseDTO> findByDamId(Long damId) {
-
         damService.findById(damId);
 
         List<InstrumentTabulatePatternFolder> folders = folderRepository.findByDamIdWithDamDetails(damId);

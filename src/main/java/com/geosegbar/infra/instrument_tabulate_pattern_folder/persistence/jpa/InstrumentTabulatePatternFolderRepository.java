@@ -3,15 +3,13 @@ package com.geosegbar.infra.instrument_tabulate_pattern_folder.persistence.jpa;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.geosegbar.entities.InstrumentTabulatePatternFolder;
-
-import jakarta.persistence.QueryHint;
 
 @Repository
 public interface InstrumentTabulatePatternFolderRepository extends JpaRepository<InstrumentTabulatePatternFolder, Long> {
@@ -22,34 +20,40 @@ public interface InstrumentTabulatePatternFolderRepository extends JpaRepository
 
     boolean existsByNameAndDamId(String name, Long damId);
 
+    @EntityGraph(attributePaths = {"dam"})
     List<InstrumentTabulatePatternFolder> findAllByOrderByNameAsc();
 
+    @EntityGraph(attributePaths = {"dam"})
     List<InstrumentTabulatePatternFolder> findByDamId(Long damId);
 
+    @EntityGraph(attributePaths = {"dam"})
     List<InstrumentTabulatePatternFolder> findByDamIdOrderByNameAsc(Long damId);
 
     @Query("SELECT f FROM InstrumentTabulatePatternFolder f WHERE f.name LIKE %:name%")
+    @EntityGraph(attributePaths = {"dam"})
     List<InstrumentTabulatePatternFolder> findByNameContaining(@Param("name") String name);
 
     @Query("SELECT f FROM InstrumentTabulatePatternFolder f "
             + "WHERE f.dam.id = :damId AND f.name LIKE %:name%")
+    @EntityGraph(attributePaths = {"dam"})
     List<InstrumentTabulatePatternFolder> findByDamIdAndNameContaining(@Param("damId") Long damId, @Param("name") String name);
 
     @Query("SELECT DISTINCT f FROM InstrumentTabulatePatternFolder f "
             + "JOIN f.patterns p "
             + "JOIN p.associations a "
+            + "LEFT JOIN FETCH f.dam "
             + "WHERE a.instrument.id = :instrumentId")
     List<InstrumentTabulatePatternFolder> findByPatternInstrumentId(@Param("instrumentId") Long instrumentId);
 
-    @QueryHints(
-            @QueryHint(name = "org.hibernate.cacheable", value = "true"))
     @Query("SELECT f FROM InstrumentTabulatePatternFolder f "
             + "LEFT JOIN FETCH f.dam d "
             + "WHERE f.id = :folderId")
     Optional<InstrumentTabulatePatternFolder> findByIdWithDam(@Param("folderId") Long folderId);
 
-    @QueryHints(
-            @QueryHint(name = "org.hibernate.cacheable", value = "true"))
+    @Override
+    @EntityGraph(attributePaths = {"dam"})
+    Optional<InstrumentTabulatePatternFolder> findById(Long id);
+
     @Query("SELECT f FROM InstrumentTabulatePatternFolder f "
             + "LEFT JOIN FETCH f.dam d "
             + "WHERE f.dam.id = :damId "

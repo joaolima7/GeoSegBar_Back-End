@@ -2,6 +2,7 @@ package com.geosegbar.infra.instrument_graph_axes.persistence.jpa;
 
 import java.util.Optional;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,8 +13,10 @@ import com.geosegbar.entities.InstrumentGraphAxesEntity;
 @Repository
 public interface InstrumentGraphAxesRepository extends JpaRepository<InstrumentGraphAxesEntity, Long> {
 
+    @EntityGraph(attributePaths = {"pattern"})
     Optional<InstrumentGraphAxesEntity> findByPatternId(Long patternId);
 
+    @EntityGraph(attributePaths = {"pattern"})
     @Query("SELECT a FROM InstrumentGraphAxesEntity a "
             + "WHERE a.pattern.instrument.id = :instrumentId")
     Optional<InstrumentGraphAxesEntity> findByPatternInstrumentId(@Param("instrumentId") Long instrumentId);

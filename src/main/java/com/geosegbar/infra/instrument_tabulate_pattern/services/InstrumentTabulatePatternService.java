@@ -110,8 +110,7 @@ public class InstrumentTabulatePatternService {
                 pattern.getId(), pattern.getName(), dam.getId(),
                 folder != null ? folder.getId() : "sem pasta");
 
-        return mapper.mapToResponseDTO(patternRepository.findByIdWithAllDetails(pattern.getId())
-                .orElseThrow(() -> new NotFoundException("Padrão de tabela não encontrado após criação")));
+        return mapper.mapToResponseDTO(findEntityByIdWithAllDetails(pattern.getId()));
     }
 
     @Transactional
@@ -121,7 +120,6 @@ public class InstrumentTabulatePatternService {
                 key = "#patternId",
                 cacheManager = "instrumentTabulateCacheManager"
         ),
-
         @CacheEvict(
                 value = "tabulatePatternsByDam",
                 key = "#result.damId",
@@ -129,23 +127,22 @@ public class InstrumentTabulatePatternService {
         ),
         @CacheEvict(
                 value = "damTabulateFoldersWithPatterns",
-                key = "#result.damId",
+                allEntries = true,
                 cacheManager = "instrumentTabulateCacheManager"
         ),
         @CacheEvict(
                 value = "tabulatePatternsByFolder",
-                key = "#result.folderId",
-                condition = "#result.folderId != null",
+                allEntries = true,
                 cacheManager = "instrumentTabulateCacheManager"
         ),
         @CacheEvict(
                 value = "tabulateFolderWithPatterns",
-                key = "#result.folderId",
-                condition = "#result.folderId != null",
+                allEntries = true,
                 cacheManager = "instrumentTabulateCacheManager"
         )
     })
     public void delete(Long patternId) {
+
         InstrumentTabulatePatternEntity pattern = patternRepository.findByIdWithBasicDetails(patternId)
                 .orElseThrow(() -> new NotFoundException("Padrão de tabela não encontrado com ID: " + patternId));
 
@@ -161,33 +158,11 @@ public class InstrumentTabulatePatternService {
 
     @Transactional
     @Caching(evict = {
-        @CacheEvict(
-                value = "tabulatePatterns",
-                key = "#patternId",
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-
-        @CacheEvict(
-                value = "tabulatePatternsByDam",
-                key = "#result.damId",
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-        @CacheEvict(
-                value = "damTabulateFoldersWithPatterns",
-                key = "#result.damId",
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-
-        @CacheEvict(
-                value = "tabulatePatternsByFolder",
-                allEntries = true,
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-        @CacheEvict(
-                value = "tabulateFolderWithPatterns",
-                allEntries = true,
-                cacheManager = "instrumentTabulateCacheManager"
-        )
+        @CacheEvict(value = "tabulatePatterns", key = "#patternId", cacheManager = "instrumentTabulateCacheManager"),
+        @CacheEvict(value = "tabulatePatternsByDam", allEntries = true, cacheManager = "instrumentTabulateCacheManager"),
+        @CacheEvict(value = "damTabulateFoldersWithPatterns", allEntries = true, cacheManager = "instrumentTabulateCacheManager"),
+        @CacheEvict(value = "tabulatePatternsByFolder", allEntries = true, cacheManager = "instrumentTabulateCacheManager"),
+        @CacheEvict(value = "tabulateFolderWithPatterns", allEntries = true, cacheManager = "instrumentTabulateCacheManager")
     })
     public TabulatePatternResponseDTO update(Long patternId, UpdateTabulatePatternRequestDTO request) {
 
@@ -223,14 +198,13 @@ public class InstrumentTabulatePatternService {
         pattern.getAssociations().clear();
         pattern.getAssociations().addAll(newAssociations);
 
-        pattern = patternRepository.save(pattern);
+        patternRepository.save(pattern);
 
         log.info("Padrão de tabela atualizado: id={}, name={}, damId={}, folderId={}",
                 pattern.getId(), pattern.getName(), pattern.getDam().getId(),
                 folder != null ? folder.getId() : "sem pasta");
 
-        return mapper.mapToResponseDTO(patternRepository.findByIdWithAllDetails(pattern.getId())
-                .orElseThrow(() -> new NotFoundException("Padrão de tabela não encontrado após atualização")));
+        return mapper.mapToResponseDTO(findEntityByIdWithAllDetails(patternId));
     }
 
     @Transactional(readOnly = true)
@@ -243,7 +217,6 @@ public class InstrumentTabulatePatternService {
     @Transactional(readOnly = true)
     @Cacheable(value = "tabulatePatternsByDam", key = "#damId", cacheManager = "instrumentTabulateCacheManager")
     public List<TabulatePatternResponseDTO> findByDamId(Long damId) {
-
         damService.findById(damId);
 
         List<InstrumentTabulatePatternEntity> patterns = patternRepository.findByDamIdWithAllDetails(damId);
@@ -255,7 +228,6 @@ public class InstrumentTabulatePatternService {
     @Transactional(readOnly = true)
     @Cacheable(value = "tabulatePatternsByFolder", key = "#folderId", cacheManager = "instrumentTabulateCacheManager")
     public List<TabulatePatternResponseDTO> findByFolderId(Long folderId) {
-
         folderService.findById(folderId);
 
         List<InstrumentTabulatePatternEntity> patterns = patternRepository.findByFolderIdWithAllDetails(folderId);
@@ -312,11 +284,9 @@ public class InstrumentTabulatePatternService {
             InstrumentTabulateAssociationEntity association;
 
             if (dto.getId() != null && existingAssociationsMap.containsKey(dto.getId())) {
-
                 association = existingAssociationsMap.get(dto.getId());
 
                 if (!association.getInstrument().getId().equals(dto.getInstrumentId())) {
-
                     InstrumentEntity newInstrument = instrumentService.findById(dto.getInstrumentId());
                     if (!newInstrument.getDam().getId().equals(pattern.getDam().getId())) {
                         throw new InvalidInputException(
@@ -324,10 +294,8 @@ public class InstrumentTabulatePatternService {
                     }
                     association.setInstrument(newInstrument);
                 }
-
                 association.getOutputAssociations().clear();
             } else {
-
                 association = new InstrumentTabulateAssociationEntity();
                 association.setPattern(pattern);
 
@@ -488,11 +456,9 @@ public class InstrumentTabulatePatternService {
         }
 
         Set<Long> processedOutputIds = new HashSet<>();
-
         Set<InstrumentTabulateOutputAssociationEntity> outputAssociations = new HashSet<>();
 
         for (CreateTabulatePatternRequestDTO.OutputAssociationDTO dto : outputDTOs) {
-
             OutputEntity output = outputService.findById(dto.getOutputId());
             if (!output.getInstrument().getId().equals(instrument.getId())) {
                 throw new InvalidInputException(
@@ -516,7 +482,6 @@ public class InstrumentTabulatePatternService {
             outputAssociation.setOutputIndex(outputIndex);
 
             outputAssociations.add(outputAssociation);
-
             nextAvailableIndex = getNextAvailableIndex(usedIndices);
         }
 
@@ -536,11 +501,9 @@ public class InstrumentTabulatePatternService {
         }
 
         Set<Long> processedOutputIds = new HashSet<>();
-
         Set<InstrumentTabulateOutputAssociationEntity> outputAssociations = new HashSet<>();
 
         for (UpdateTabulatePatternRequestDTO.OutputAssociationDTO dto : outputDTOs) {
-
             OutputEntity output = outputService.findById(dto.getOutputId());
             if (!output.getInstrument().getId().equals(instrument.getId())) {
                 throw new InvalidInputException(
@@ -565,7 +528,6 @@ public class InstrumentTabulatePatternService {
             outputAssociation.setOutputIndex(outputIndex);
 
             outputAssociations.add(outputAssociation);
-
             nextAvailableIndex = getNextAvailableIndex(usedIndices);
         }
 

@@ -73,42 +73,48 @@ public class InstrumentService {
     private final InstrumentTypeRepository instrumentTypeRepository;
     private final ApplicationEventPublisher eventPublisher;
 
+    @Transactional(readOnly = true)
     public List<InstrumentResponseDTO> findAll() {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getViewInstruments()) {
+            if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getViewInstruments())) {
                 throw new UnauthorizedException("Usuário não tem permissão para visualizar instrumentos!");
             }
         }
         return mapToResponseDTOList(instrumentRepository.findAllByOrderByNameAsc());
     }
 
+    @Transactional(readOnly = true)
     public List<InstrumentResponseDTO> findByDamId(Long damId) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getViewInstruments()) {
+            if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getViewInstruments())) {
                 throw new UnauthorizedException("Usuário não tem permissão para visualizar instrumentos!");
             }
         }
         return mapToResponseDTOList(instrumentRepository.findByDamId(damId));
     }
 
+    @Transactional(readOnly = true)
     public InstrumentResponseDTO findByIdDTO(Long id) {
 
-        InstrumentEntity entity = instrumentRepository.findByIdWithBasicRelations(id)
+        InstrumentEntity entity = instrumentRepository.findWithCompleteDetailsById(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
         return mapToResponseDTO(entity);
     }
 
+    @Transactional(readOnly = true)
     public InstrumentEntity findById(Long id) {
+
         return instrumentRepository.findByIdWithBasicRelations(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
     }
 
+    @Transactional(readOnly = true)
     public InstrumentResponseDTO findWithAllDetails(Long id) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getViewInstruments()) {
+            if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getViewInstruments())) {
                 throw new UnauthorizedException("Usuário não tem permissão para visualizar instrumentos!");
             }
         }
@@ -116,13 +122,15 @@ public class InstrumentService {
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id)));
     }
 
+    @Transactional(readOnly = true)
     public List<InstrumentResponseDTO> findByClientId(Long clientId, Boolean active) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getViewInstruments()) {
+            if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getViewInstruments())) {
                 throw new UnauthorizedException("Usuário não tem permissão para visualizar instrumentos!");
             }
         }
+
         return mapToResponseDTOList(instrumentRepository.findByClientIdOptimized(clientId, active));
     }
 
@@ -130,7 +138,7 @@ public class InstrumentService {
     public InstrumentEntity createComplete(CreateInstrumentRequest request) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getEditInstruments()) {
+            if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getEditInstruments())) {
                 throw new UnauthorizedException("Usuário não tem permissão para criar instrumentos!");
             }
         }
@@ -140,7 +148,6 @@ public class InstrumentService {
         }
 
         if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
-
             request.setNoLimit(true);
 
             if (request.getLinimetricRulerCode() != null
@@ -151,9 +158,7 @@ public class InstrumentService {
             if (request.getOutputs() == null || request.getOutputs().isEmpty()) {
                 throw new InvalidInputException("Para réguas linimétricas, é obrigatório informar pelo menos um output.");
             }
-
         } else {
-
             validateRequest(request);
             validateUniqueAcronymsAcrossComponents(
                     request.getInputs(),
@@ -198,7 +203,6 @@ public class InstrumentService {
         InstrumentEntity savedInstrument = instrumentRepository.save(instrument);
 
         if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
-
             processLinimetricRulerComponents(savedInstrument, request);
         } else {
             processInputs(savedInstrument, request.getInputs());
@@ -261,7 +265,6 @@ public class InstrumentService {
     }
 
     private void validateRequest(UpdateInstrumentRequest request) {
-
         if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
             return;
         }
@@ -441,12 +444,14 @@ public class InstrumentService {
     public InstrumentEntity update(Long id, UpdateInstrumentRequest request) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getEditInstruments()) {
+            if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getEditInstruments())) {
                 throw new UnauthorizedException("Usuário não tem permissão para editar instrumentos!");
             }
         }
 
-        InstrumentEntity oldInstrument = findById(id);
+        InstrumentEntity oldInstrument = instrumentRepository.findWithIOCById(id)
+                .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
+
         Long oldLinimetricCode = oldInstrument.getLinimetricRulerCode();
 
         if (!oldInstrument.getIsLinimetricRuler().equals(request.getIsLinimetricRuler())) {
@@ -470,7 +475,6 @@ public class InstrumentService {
         updateInstrumentBasicFields(oldInstrument, request);
 
         if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
-
             if (request.getLinimetricRulerCode() != null
                     && instrumentRepository.existsByLinimetricRulerCodeAndIdNot(request.getLinimetricRulerCode(), id)) {
                 throw new DuplicateResourceException("Já existe uma régua linimétrica com o código " + request.getLinimetricRulerCode());
@@ -481,13 +485,9 @@ public class InstrumentService {
             }
 
             processInputsForLinimetricRulerUpdate(oldInstrument, request.getInputs(), existingInputsByAcronym);
-
             processOutputsForUpdate(oldInstrument, request.getOutputs(), existingOutputsByAcronym);
-
             deleteUnusedComponents(existingInputsByAcronym, existingConstantsByAcronym);
-
         } else {
-
             validateRequest(request);
             validateUniqueAcronymsAcrossComponents(request.getInputs(), request.getConstants(), request.getOutputs());
 
@@ -552,18 +552,15 @@ public class InstrumentService {
                 .orElseThrow(() -> new NotFoundException("Unidade de medida não encontrada com ID: " + sourceDTO.getMeasurementUnitId()));
 
         if (inputLei != null) {
-
             boolean precisionChanged = !inputLei.getPrecision().equals(sourceDTO.getPrecision());
             boolean unitChanged = !inputLei.getMeasurementUnit().getId().equals(sourceDTO.getMeasurementUnitId());
 
             inputLei.setName("Leitura");
             inputLei.setAcronym("LEI");
-
             inputLei.setPrecision(sourceDTO.getPrecision() != null ? sourceDTO.getPrecision() : 6);
             inputLei.setMeasurementUnit(measurementUnit);
 
             inputRepository.save(inputLei);
-
             existingInputsByAcronym.remove("LEI");
 
             if (precisionChanged || unitChanged) {
@@ -571,7 +568,6 @@ public class InstrumentService {
                 log.info("Atualizada régua linimétrica '{}': precisão/unidade do input LEI alterados.", instrument.getName());
             }
         } else {
-
             inputLei = new InputEntity();
             inputLei.setAcronym("LEI");
             inputLei.setName("Leitura");
@@ -628,13 +624,10 @@ public class InstrumentService {
     }
 
     private void processLinimetricRulerComponents(InstrumentEntity instrument, CreateInstrumentRequest request) {
-
         InputDTO inputDTO;
-
         if (request.getInputs() != null && !request.getInputs().isEmpty()) {
             inputDTO = request.getInputs().get(0);
         } else {
-
             inputDTO = new InputDTO();
             inputDTO.setPrecision(6);
             inputDTO.setMeasurementUnitId(1L);
@@ -644,10 +637,8 @@ public class InstrumentService {
                 .orElseThrow(() -> new NotFoundException("Unidade de medida não encontrada com ID: " + inputDTO.getMeasurementUnitId()));
 
         InputEntity input = new InputEntity();
-
         input.setAcronym("LEI");
         input.setName("Leitura");
-
         input.setPrecision(inputDTO.getPrecision() != null ? inputDTO.getPrecision() : 6);
         input.setMeasurementUnit(measurementUnit);
         input.setInstrument(instrument);
@@ -656,8 +647,7 @@ public class InstrumentService {
         instrument.getInputs().add(input);
 
         processOutputs(instrument, request.getOutputs());
-
-        log.info("Componentes da régua linimétrica (Input LEI customizado + Outputs manuais) criados para o instrumento ID: {}", instrument.getId());
+        log.info("Componentes da régua linimétrica criados para o instrumento ID: {}", instrument.getId());
     }
 
     private void updateInstrumentBasicFields(InstrumentEntity instrument, UpdateInstrumentRequest request) {
@@ -686,19 +676,19 @@ public class InstrumentService {
         if (Boolean.TRUE.equals(instrument.getIsLinimetricRuler())) {
             instrument.setLinimetricRulerCode(request.getLinimetricRulerCode());
         }
-
     }
 
     @Transactional
     public void delete(Long id) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getEditInstruments()) {
+            if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getEditInstruments())) {
                 throw new UnauthorizedException("Usuário não tem permissão para deletar instrumentos!");
             }
         }
 
-        InstrumentEntity instrument = findById(id);
+        InstrumentEntity instrument = instrumentRepository.findWithIOCById(id)
+                .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
 
         for (OutputEntity output : instrument.getOutputs()) {
             if (output.getStatisticalLimit() != null) {
@@ -714,32 +704,31 @@ public class InstrumentService {
         outputRepository.deleteByInstrumentId(id);
 
         instrumentRepository.delete(instrument);
-        log.info("Instrumento {} deletado. Caches de reading invalidados granularmente.", id);
+        log.info("Instrumento {} deletado.", id);
     }
 
     @Transactional
     public InstrumentEntity toggleActiveInstrument(Long id, Boolean active) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getEditInstruments()) {
+            if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getEditInstruments())) {
                 throw new UnauthorizedException("Usuário não tem permissão para alterar status de instrumentos!");
             }
         }
 
         InstrumentEntity instrument = findById(id);
-
         instrument.setActive(active);
         InstrumentEntity saved = instrumentRepository.save(instrument);
-        log.info("Status do instrumento {} alterado para {}. Caches de reading invalidados granularmente.",
-                id, active);
+        log.info("Status do instrumento {} alterado para {}.", id, active);
 
         return saved;
     }
 
+    @Transactional(readOnly = true)
     public List<InstrumentResponseDTO> findByFilters(Long damId, Long instrumentTypeId, Long sectionId, Boolean active, Long clientId) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getViewInstruments()) {
+            if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getViewInstruments())) {
                 throw new UnauthorizedException("Usuário não tem permissão para visualizar instrumentos!");
             }
         }
@@ -988,7 +977,6 @@ public class InstrumentService {
 
             if (output == null) {
                 significantChange = true;
-
                 output = new OutputEntity();
                 output.setAcronym(outputDTO.getAcronym().toUpperCase());
                 output.setName(outputDTO.getName());
@@ -1020,7 +1008,6 @@ public class InstrumentService {
                         savedOutput.setDeterministicLimit(deterministicLimit);
                     }
                 }
-
                 instrument.getOutputs().add(savedOutput);
                 createdCount++;
             } else {
@@ -1040,7 +1027,6 @@ public class InstrumentService {
                 output.setActive(true);
 
                 if (instrument.getNoLimit()) {
-
                     if (output.getStatisticalLimit() != null) {
                         statisticalLimitRepository.delete(output.getStatisticalLimit());
                         output.setStatisticalLimit(null);
@@ -1050,9 +1036,7 @@ public class InstrumentService {
                         output.setDeterministicLimit(null);
                     }
                 } else {
-
                     if (outputDTO.getStatisticalLimit() != null) {
-
                         if (output.getDeterministicLimit() != null) {
                             deterministicLimitRepository.delete(output.getDeterministicLimit());
                             output.setDeterministicLimit(null);
@@ -1070,7 +1054,6 @@ public class InstrumentService {
                             output.setStatisticalLimit(statisticalLimit);
                         }
                     } else if (outputDTO.getDeterministicLimit() != null) {
-
                         if (output.getStatisticalLimit() != null) {
                             statisticalLimitRepository.delete(output.getStatisticalLimit());
                             output.setStatisticalLimit(null);
@@ -1100,7 +1083,6 @@ public class InstrumentService {
                     StatisticalLimitEntity limit = output.getStatisticalLimit();
                     boolean lowerChanged = !limit.getLowerValue().equals(outputDTO.getStatisticalLimit().getLowerValue());
                     boolean upperChanged = !limit.getUpperValue().equals(outputDTO.getStatisticalLimit().getUpperValue());
-
                     if (lowerChanged || upperChanged) {
                         significantChange = true;
                     }
@@ -1111,7 +1093,6 @@ public class InstrumentService {
                     boolean attentionChanged = !limit.getAttentionValue().equals(outputDTO.getDeterministicLimit().getAttentionValue());
                     boolean alertChanged = !limit.getAlertValue().equals(outputDTO.getDeterministicLimit().getAlertValue());
                     boolean emergencyChanged = !limit.getEmergencyValue().equals(outputDTO.getDeterministicLimit().getEmergencyValue());
-
                     if (attentionChanged || alertChanged || emergencyChanged) {
                         significantChange = true;
                     }
@@ -1130,32 +1111,26 @@ public class InstrumentService {
 
         if (significantChange) {
             instrument.setLastUpdateVariablesDate(LocalDateTime.now());
-            log.info("Atualizada data de modificação de variáveis do instrumento ID: {} devido a mudanças nos outputs",
-                    instrument.getId());
+            log.info("Atualizada data de modificação de variáveis do instrumento ID: {} devido a mudanças nos outputs", instrument.getId());
         }
 
-        log.info("Outputs processados: {} atualizados, {} criados, {} desativados",
-                updatedCount, createdCount, existingOutputsByAcronym.size());
+        log.info("Outputs processados: {} atualizados, {} criados, {} desativados", updatedCount, createdCount, existingOutputsByAcronym.size());
     }
 
     private void deleteUnusedComponents(Map<String, InputEntity> unusedInputs, Map<String, ConstantEntity> unusedConstants) {
         for (InputEntity input : unusedInputs.values()) {
-
             InstrumentEntity instrument = input.getInstrument();
             instrument.getInputs().remove(input);
             input.setInstrument(null);
             input.setMeasurementUnit(null);
-
             inputRepository.delete(input);
         }
 
         for (ConstantEntity constant : unusedConstants.values()) {
-
             InstrumentEntity instrument = constant.getInstrument();
             instrument.getConstants().remove(constant);
             constant.setInstrument(null);
             constant.setMeasurementUnit(null);
-
             constantRepository.delete(constant);
         }
     }
@@ -1164,7 +1139,7 @@ public class InstrumentService {
     public InstrumentEntity toggleSectionVisibility(Long id, Boolean active) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getEditInstruments()) {
+            if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getEditInstruments())) {
                 throw new UnauthorizedException("Usuário não tem permissão para alterar visibilidade de instrumentos nas seções!");
             }
         }
@@ -1191,12 +1166,16 @@ public class InstrumentService {
         dto.setLastUpdateVariablesDate(instrument.getLastUpdateVariablesDate());
 
         DamEntity dam = instrument.getDam();
-        dto.setDamId(dam.getId());
-        dto.setDamName(dam.getName());
+        if (dam != null) {
+            dto.setDamId(dam.getId());
+            dto.setDamName(dam.getName());
+        }
 
         InstrumentTypeEntity type = instrument.getInstrumentType();
-        dto.setInstrumentTypeId(type.getId());
-        dto.setInstrumentType(type.getName());
+        if (type != null) {
+            dto.setInstrumentTypeId(type.getId());
+            dto.setInstrumentType(type.getName());
+        }
 
         SectionEntity section = instrument.getSection();
         if (section != null) {
@@ -1215,9 +1194,11 @@ public class InstrumentService {
             inputDTO.setPrecision(input.getPrecision());
 
             MeasurementUnitEntity unit = input.getMeasurementUnit();
-            inputDTO.setMeasurementUnitId(unit.getId());
-            inputDTO.setMeasurementUnitName(unit.getName());
-            inputDTO.setMeasurementUnitAcronym(unit.getAcronym());
+            if (unit != null) {
+                inputDTO.setMeasurementUnitId(unit.getId());
+                inputDTO.setMeasurementUnitName(unit.getName());
+                inputDTO.setMeasurementUnitAcronym(unit.getAcronym());
+            }
 
             inputDTOs.add(inputDTO);
         }
@@ -1233,9 +1214,11 @@ public class InstrumentService {
             constantDTO.setValue(constant.getValue());
 
             MeasurementUnitEntity unit = constant.getMeasurementUnit();
-            constantDTO.setMeasurementUnitId(unit.getId());
-            constantDTO.setMeasurementUnitName(unit.getName());
-            constantDTO.setMeasurementUnitAcronym(unit.getAcronym());
+            if (unit != null) {
+                constantDTO.setMeasurementUnitId(unit.getId());
+                constantDTO.setMeasurementUnitName(unit.getName());
+                constantDTO.setMeasurementUnitAcronym(unit.getAcronym());
+            }
 
             constantDTOs.add(constantDTO);
         }
@@ -1255,9 +1238,11 @@ public class InstrumentService {
             outputDTO.setPrecision(output.getPrecision());
 
             MeasurementUnitEntity unit = output.getMeasurementUnit();
-            outputDTO.setMeasurementUnitId(unit.getId());
-            outputDTO.setMeasurementUnitName(unit.getName());
-            outputDTO.setMeasurementUnitAcronym(unit.getAcronym());
+            if (unit != null) {
+                outputDTO.setMeasurementUnitId(unit.getId());
+                outputDTO.setMeasurementUnitName(unit.getName());
+                outputDTO.setMeasurementUnitAcronym(unit.getAcronym());
+            }
 
             StatisticalLimitEntity statLimit = output.getStatisticalLimit();
             if (statLimit != null) {

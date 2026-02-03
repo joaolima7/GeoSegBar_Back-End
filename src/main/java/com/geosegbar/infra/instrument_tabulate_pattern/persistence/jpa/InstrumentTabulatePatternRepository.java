@@ -3,6 +3,7 @@ package com.geosegbar.infra.instrument_tabulate_pattern.persistence.jpa;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.QueryHints;
@@ -16,10 +17,13 @@ import jakarta.persistence.QueryHint;
 @Repository
 public interface InstrumentTabulatePatternRepository extends JpaRepository<InstrumentTabulatePatternEntity, Long> {
 
+    @EntityGraph(attributePaths = {"dam", "folder"})
     List<InstrumentTabulatePatternEntity> findByDamId(Long damId);
 
+    @EntityGraph(attributePaths = {"dam", "folder"})
     List<InstrumentTabulatePatternEntity> findByFolderId(Long folderId);
 
+    @EntityGraph(attributePaths = {"dam", "folder"})
     List<InstrumentTabulatePatternEntity> findByDamIdOrderByNameAsc(Long damId);
 
     boolean existsByNameAndDamId(String name, Long damId);
@@ -29,6 +33,7 @@ public interface InstrumentTabulatePatternRepository extends JpaRepository<Instr
     @Query("SELECT p FROM InstrumentTabulatePatternEntity p "
             + "WHERE p.dam.id = :damId AND p.folder IS NULL "
             + "ORDER BY p.name ASC")
+    @EntityGraph(attributePaths = {"dam"})
     List<InstrumentTabulatePatternEntity> findByDamIdWithoutFolder(@Param("damId") Long damId);
 
     @QueryHints(

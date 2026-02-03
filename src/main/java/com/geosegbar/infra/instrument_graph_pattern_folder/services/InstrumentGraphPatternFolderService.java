@@ -48,7 +48,6 @@ public class InstrumentGraphPatternFolderService {
             cacheManager = "instrumentGraphCacheManager"
     )
     public FolderResponseDTO create(CreateFolderRequestDTO request) {
-
         if (folderRepository.existsByNameAndDamId(request.getName(), request.getDamId())) {
             throw new DuplicateResourceException(
                     "Já existe uma pasta com o nome '" + request.getName() + "' nesta barragem!");
@@ -75,7 +74,6 @@ public class InstrumentGraphPatternFolderService {
                 key = "#folderId",
                 cacheManager = "instrumentGraphCacheManager"
         ),
-
         @CacheEvict(
                 value = {"damFoldersWithPatterns", "graphPatternsByDam"},
                 allEntries = true,
@@ -99,16 +97,15 @@ public class InstrumentGraphPatternFolderService {
             updatePatternAssociations(folder, request.getPatternIds());
         }
 
-        folder = folderRepository.save(folder);
+        InstrumentGraphPatternFolder saved = folderRepository.save(folder);
 
         log.info("Pasta atualizada: id={}, newName={}, patternIds={}",
-                folder.getId(), folder.getName(), request.getPatternIds());
+                saved.getId(), saved.getName(), request.getPatternIds());
 
-        return mapToResponseDTO(folder);
+        return mapToResponseDTO(saved);
     }
 
     private void updatePatternAssociations(InstrumentGraphPatternFolder folder, List<Long> newPatternIds) {
-
         List<InstrumentGraphPatternEntity> currentPatterns = patternRepository.findByFolderId(folder.getId());
         Set<Long> currentPatternIds = currentPatterns.stream()
                 .map(InstrumentGraphPatternEntity::getId)
@@ -185,7 +182,6 @@ public class InstrumentGraphPatternFolderService {
                 key = "#folderId",
                 cacheManager = "instrumentGraphCacheManager"
         ),
-
         @CacheEvict(
                 value = {"damFoldersWithPatterns", "graphPatternsByDam"},
                 allEntries = true,
@@ -206,11 +202,10 @@ public class InstrumentGraphPatternFolderService {
         }
 
         folderRepository.delete(folder);
-
-        log.info("Pasta excluída: id={}, name={}, patterns afetados={}",
-                folderId, folder.getName(), patterns.size());
+        log.info("Pasta excluída: id={}, name={}", folderId, folder.getName());
     }
 
+    @Transactional(readOnly = true)
     public FolderDetailResponseDTO findByIdWithDetails(Long folderId) {
         InstrumentGraphPatternFolder folder = folderRepository.findByIdWithDam(folderId)
                 .orElseThrow(() -> new NotFoundException("Pasta não encontrada com ID: " + folderId));
@@ -218,73 +213,22 @@ public class InstrumentGraphPatternFolderService {
         return mapToDetailResponseDTO(folder);
     }
 
+    @Transactional(readOnly = true)
     public FolderResponseDTO findByIdSimple(Long folderId) {
         InstrumentGraphPatternFolder folder = findById(folderId);
         return mapToResponseDTO(folder);
     }
 
+    @Transactional(readOnly = true)
     public InstrumentGraphPatternFolder findById(Long folderId) {
+
         return folderRepository.findById(folderId)
                 .orElseThrow(() -> new NotFoundException("Pasta não encontrada com ID: " + folderId));
     }
 
-    private FolderResponseDTO mapToResponseDTO(InstrumentGraphPatternFolder folder) {
-        FolderResponseDTO dto = new FolderResponseDTO();
-        dto.setId(folder.getId());
-        dto.setName(folder.getName());
-
-        if (folder.getDam() != null) {
-            dto.setDam(new FolderResponseDTO.DamSummaryDTO(
-                    folder.getDam().getId(),
-                    folder.getDam().getName()
-            ));
-        }
-
-        return dto;
-    }
-
-    private FolderDetailResponseDTO mapToDetailResponseDTO(InstrumentGraphPatternFolder folder) {
-        FolderDetailResponseDTO dto = new FolderDetailResponseDTO();
-        dto.setId(folder.getId());
-        dto.setName(folder.getName());
-
-        if (folder.getDam() != null) {
-            dto.setDam(new FolderDetailResponseDTO.DamDetailDTO(
-                    folder.getDam().getId(),
-                    folder.getDam().getName(),
-                    folder.getDam().getCity(),
-                    folder.getDam().getState()
-            ));
-        }
-
-        List<InstrumentGraphPatternEntity> patterns = patternRepository.findByFolderId(folder.getId());
-        List<FolderDetailResponseDTO.PatternSummaryDTO> patternDTOs = patterns.stream()
-                .map(pattern -> {
-                    FolderDetailResponseDTO.InstrumentSummaryDTO instrumentDTO = null;
-                    if (pattern.getInstrument() != null) {
-                        instrumentDTO = new FolderDetailResponseDTO.InstrumentSummaryDTO(
-                                pattern.getInstrument().getId(),
-                                pattern.getInstrument().getName(),
-                                pattern.getInstrument().getLocation()
-                        );
-                    }
-
-                    return new FolderDetailResponseDTO.PatternSummaryDTO(
-                            pattern.getId(),
-                            pattern.getName(),
-                            instrumentDTO
-                    );
-                })
-                .collect(Collectors.toList());
-
-        dto.setPatterns(patternDTOs);
-
-        return dto;
-    }
-
+    @Transactional(readOnly = true)
     @Cacheable(value = "folderWithPatterns", key = "#folderId", cacheManager = "instrumentGraphCacheManager")
     public FolderWithPatternsDetailResponseDTO findByIdWithPatternsDetails(Long folderId) {
-
         InstrumentGraphPatternFolder folder = folderRepository.findByIdWithDam(folderId)
                 .orElseThrow(() -> new NotFoundException("Pasta não encontrada com ID: " + folderId));
 
@@ -309,22 +253,17 @@ public class InstrumentGraphPatternFolderService {
         }
 
         dto.setPatterns(patternDTOs);
-
-        log.debug("Pasta com patterns detalhados obtida: folderId={}, patternsCount={}",
-                folderId, patternDTOs.size());
-
         return dto;
     }
 
+    @Transactional(readOnly = true)
     @Cacheable(value = "damFoldersWithPatterns", key = "#damId", cacheManager = "instrumentGraphCacheManager")
     public DamFoldersWithPatternsDetailResponseDTO findFoldersWithPatternsDetailsByDam(Long damId) {
-
         DamEntity dam = damService.findById(damId);
 
         List<InstrumentGraphPatternFolder> folders = folderRepository.findByDamIdWithDamDetails(damId);
 
         List<InstrumentGraphPatternEntity> patternsInFolders = patternRepository.findByFolderDamIdWithAllDetails(damId);
-
         List<InstrumentGraphPatternEntity> patternsWithoutFolder = patternRepository.findByInstrumentDamIdWithoutFolderWithAllDetails(damId);
 
         Map<Long, List<InstrumentGraphPatternEntity>> patternsByFolder = patternsInFolders.stream()
@@ -332,7 +271,6 @@ public class InstrumentGraphPatternFolderService {
 
         List<FolderWithPatternsDetailResponseDTO> folderDTOs = folders.stream()
                 .map(folder -> {
-
                     List<InstrumentGraphPatternEntity> folderPatterns = patternsByFolder.getOrDefault(folder.getId(), List.of());
 
                     List<com.geosegbar.infra.instrument_graph_pattern.dtos.GraphPatternDetailResponseDTO> patternDTOs
@@ -372,5 +310,57 @@ public class InstrumentGraphPatternFolderService {
         responseDTO.setPatternsWithoutFolder(patternsWithoutFolderDTOs);
 
         return responseDTO;
+    }
+
+    private FolderResponseDTO mapToResponseDTO(InstrumentGraphPatternFolder folder) {
+        FolderResponseDTO dto = new FolderResponseDTO();
+        dto.setId(folder.getId());
+        dto.setName(folder.getName());
+
+        if (folder.getDam() != null) {
+            dto.setDam(new FolderResponseDTO.DamSummaryDTO(
+                    folder.getDam().getId(),
+                    folder.getDam().getName()
+            ));
+        }
+        return dto;
+    }
+
+    private FolderDetailResponseDTO mapToDetailResponseDTO(InstrumentGraphPatternFolder folder) {
+        FolderDetailResponseDTO dto = new FolderDetailResponseDTO();
+        dto.setId(folder.getId());
+        dto.setName(folder.getName());
+
+        if (folder.getDam() != null) {
+            dto.setDam(new FolderDetailResponseDTO.DamDetailDTO(
+                    folder.getDam().getId(),
+                    folder.getDam().getName(),
+                    folder.getDam().getCity(),
+                    folder.getDam().getState()
+            ));
+        }
+
+        List<InstrumentGraphPatternEntity> patterns = patternRepository.findByFolderId(folder.getId());
+
+        List<FolderDetailResponseDTO.PatternSummaryDTO> patternDTOs = patterns.stream()
+                .map(pattern -> {
+                    FolderDetailResponseDTO.InstrumentSummaryDTO instrumentDTO = null;
+                    if (pattern.getInstrument() != null) {
+                        instrumentDTO = new FolderDetailResponseDTO.InstrumentSummaryDTO(
+                                pattern.getInstrument().getId(),
+                                pattern.getInstrument().getName(),
+                                pattern.getInstrument().getLocation()
+                        );
+                    }
+                    return new FolderDetailResponseDTO.PatternSummaryDTO(
+                            pattern.getId(),
+                            pattern.getName(),
+                            instrumentDTO
+                    );
+                })
+                .collect(Collectors.toList());
+
+        dto.setPatterns(patternDTOs);
+        return dto;
     }
 }

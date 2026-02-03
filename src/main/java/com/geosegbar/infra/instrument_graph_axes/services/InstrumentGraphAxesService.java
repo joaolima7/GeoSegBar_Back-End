@@ -43,6 +43,7 @@ public class InstrumentGraphAxesService {
         )
     })
     public GraphAxesResponseDTO updateAxes(Long patternId, UpdateGraphAxesRequestDTO req) {
+
         patternService.findById(patternId);
 
         InstrumentGraphAxesEntity axes = findByPatternId(patternId);
@@ -63,11 +64,14 @@ public class InstrumentGraphAxesService {
         axes.setSecondaryOrdinateMaximumValue(req.getSecondaryOrdinateMaximumValue());
 
         InstrumentGraphAxesEntity saved = axesRepository.save(axes);
+
         return mapToResponseDTO(saved);
     }
 
+    @Transactional(readOnly = true)
     @Cacheable(value = "graphAxes", key = "#patternId", cacheManager = "instrumentGraphCacheManager")
     public InstrumentGraphAxesEntity findByPatternId(Long patternId) {
+
         return axesRepository.findByPatternId(patternId)
                 .orElseThrow(() -> new NotFoundException("Eixos não encontrados para o padrão ID: " + patternId));
     }

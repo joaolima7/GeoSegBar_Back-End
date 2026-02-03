@@ -3,6 +3,7 @@ package com.geosegbar.infra.instrument_graph_pattern.persistence.jpa;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.QueryHints;
@@ -16,6 +17,7 @@ import jakarta.persistence.QueryHint;
 @Repository
 public interface InstrumentGraphPatternRepository extends JpaRepository<InstrumentGraphPatternEntity, Long> {
 
+    @EntityGraph(attributePaths = {"instrument", "folder"})
     List<InstrumentGraphPatternEntity> findByInstrumentId(Long instrumentId);
 
     Optional<InstrumentGraphPatternEntity> findByNameAndInstrumentId(String name, Long instrumentId);
@@ -66,9 +68,8 @@ public interface InstrumentGraphPatternRepository extends JpaRepository<Instrume
 
     @QueryHints(
             @QueryHint(name = "org.hibernate.cacheable", value = "true"))
-    @Query("SELECT p FROM InstrumentGraphPatternEntity p "
-            + "LEFT JOIN FETCH p.instrument "
-            + "WHERE p.instrument.dam.id = :damId")
+    @EntityGraph(attributePaths = {"instrument"})
+    @Query("SELECT p FROM InstrumentGraphPatternEntity p WHERE p.instrument.dam.id = :damId")
     List<InstrumentGraphPatternEntity> findByInstrumentDamId(@Param("damId") Long damId);
 
     @Query("SELECT DISTINCT p FROM InstrumentGraphPatternEntity p "

@@ -23,13 +23,6 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-/**
- * Serviço responsável por gerenciar rate limiting distribuído usando Bucket4j e
- * Redis.
- * <p>
- * Implementa estratégia híbrida: - Endpoints públicos: limitados por endereço
- * IP - Endpoints autenticados: limitados por ID do usuário
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -38,10 +31,8 @@ public class RateLimitService {
     private final RateLimitProperties properties;
     private final StringRedisTemplate redisTemplate;
 
-    // Cache local de ProxyManagers para evitar recriação
     private final Map<String, ProxyManager<String>> proxyManagerCache = new ConcurrentHashMap<>();
 
-    // Contadores para estatísticas
     private final AtomicLong allowedRequests = new AtomicLong(0);
     private final AtomicLong blockedRequests = new AtomicLong(0);
 
@@ -67,13 +58,6 @@ public class RateLimitService {
         }
     }
 
-    /**
-     * Tenta consumir um token do bucket para o identificador fornecido.
-     *
-     * @param identifier Identificador único (IP ou User ID)
-     * @param type Tipo de rate limit a ser aplicado
-     * @return Informações sobre o resultado da tentativa
-     */
     public RateLimitInfo tryConsume(String identifier, RateLimitType type) {
         if (!properties.isEnabled()) {
             // Rate limiting desabilitado - permitir todas requisições
@@ -114,13 +98,6 @@ public class RateLimitService {
         }
     }
 
-    /**
-     * Resolve ou cria um bucket para o identificador e tipo especificados.
-     *
-     * @param identifier Identificador único (IP ou User ID)
-     * @param type Tipo de rate limit
-     * @return Bucket configurado
-     */
     private Bucket resolveBucket(String identifier, RateLimitType type) {
         String bucketKey = buildBucketKey(identifier, type);
         ProxyManager<String> proxyManager = getOrCreateProxyManager();
@@ -130,23 +107,10 @@ public class RateLimitService {
         return proxyManager.builder().build(bucketKey, configuration);
     }
 
-    /**
-     * Constrói a chave do bucket no Redis.
-     *
-     * @param identifier Identificador único
-     * @param type Tipo de rate limit
-     * @return Chave formatada
-     */
     private String buildBucketKey(String identifier, RateLimitType type) {
         return String.format("rate-limit:%s:%s", type.name().toLowerCase(), identifier);
     }
 
-    /**
-     * Constrói a configuração do bucket baseada no tipo de rate limit.
-     *
-     * @param type Tipo de rate limit
-     * @return Configuração do bucket
-     */
     private BucketConfiguration buildBucketConfiguration(RateLimitType type) {
         RateLimitProperties.LimitConfig config = properties.getConfigForType(type);
 
@@ -162,12 +126,6 @@ public class RateLimitService {
                 .build();
     }
 
-    /**
-     * Obtém ou cria um ProxyManager para gerenciar buckets no Redis. Usa cache
-     * local para evitar recriação desnecessária.
-     *
-     * @return ProxyManager configurado
-     */
     private ProxyManager<String> getOrCreateProxyManager() {
         return proxyManagerCache.computeIfAbsent("default", key -> {
             try {
@@ -190,20 +148,10 @@ public class RateLimitService {
         });
     }
 
-    /**
-     * Retorna o estado atual do rate limiting.
-     *
-     * @return true se habilitado, false caso contrário
-     */
     public boolean isEnabled() {
         return properties.isEnabled();
     }
 
-    /**
-     * Retorna estatísticas de rate limiting.
-     *
-     * @return Mapa com estatísticas
-     */
     public Map<String, Object> getStatistics() {
         return Map.of(
                 "enabled", properties.isEnabled(),

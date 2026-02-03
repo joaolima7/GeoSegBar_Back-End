@@ -40,8 +40,8 @@ public class HistoricalDataJobService {
             );
         }
 
-        LocalDate endDate = LocalDate.now();
-        LocalDate startDate = endDate.minusYears(10);
+        LocalDate startDate = LocalDate.of(2015, 1, 1);
+        LocalDate endDate = LocalDate.now().plusMonths(1);
         int totalMonths = (int) ChronoUnit.MONTHS.between(startDate, endDate);
 
         HistoricalDataJobEntity job = new HistoricalDataJobEntity();

@@ -11,10 +11,6 @@ import com.geosegbar.common.response.WebResponseEntity;
 
 import lombok.RequiredArgsConstructor;
 
-/**
- * Controller para diagnóstico e monitoramento do rate limiting. Endpoints
- * administrativos para verificar configuração e estatísticas.
- */
 @RestController
 @RequestMapping("/api/rate-limit")
 @RequiredArgsConstructor
@@ -22,12 +18,6 @@ public class RateLimitController {
 
     private final RateLimitService rateLimitService;
 
-    /**
-     * Endpoint para verificar status e estatísticas do rate limiting. Útil para
-     * monitoramento e debugging em produção.
-     *
-     * @return Estatísticas de uso do rate limiting
-     */
     @GetMapping("/status")
     public ResponseEntity<WebResponseEntity<Map<String, Object>>> getStatus() {
         Map<String, Object> stats = rateLimitService.getStatistics();

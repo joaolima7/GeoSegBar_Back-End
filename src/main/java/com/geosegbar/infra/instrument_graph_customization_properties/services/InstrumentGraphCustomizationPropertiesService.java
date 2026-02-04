@@ -9,7 +9,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -230,12 +229,6 @@ public class InstrumentGraphCustomizationPropertiesService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(value = "graphPatternById", key = "#patternId", cacheManager = "instrumentGraphCacheManager"),
-        @CacheEvict(value = "graphProperties", key = "'pattern-' + #patternId", cacheManager = "instrumentGraphCacheManager"),
-        @CacheEvict(value = "graphProperties", key = "'pattern-properties-' + #patternId", cacheManager = "instrumentGraphCacheManager"),
-        @CacheEvict(value = {"folderWithPatterns", "damFoldersWithPatterns", "graphPatternsByInstrument"}, allEntries = true, cacheManager = "instrumentGraphCacheManager")
-    })
     public UpdatePropertiesBatchResponseDTO updatePropertiesBatch(Long patternId, UpdatePropertiesBatchRequestDTO req) {
         patternService.findById(patternId);
 
@@ -315,7 +308,6 @@ public class InstrumentGraphCustomizationPropertiesService {
         return new UpdatePropertiesBatchResponseDTO(patternId, updatedProperties.size(), updatedProperties, errors);
     }
 
-    @Cacheable(value = "graphProperties", key = "'property-' + #propertyId", cacheManager = "instrumentGraphCacheManager")
     public PropertyResponseDTO findPropertyById(Long propertyId) {
 
         InstrumentGraphCustomizationPropertiesEntity property = propertiesRepository.findById(propertyId)
@@ -324,7 +316,6 @@ public class InstrumentGraphCustomizationPropertiesService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "graphProperties", key = "'pattern-properties-' + #patternId", cacheManager = "instrumentGraphCacheManager")
     public List<PropertyResponseDTO> findPropertiesByPatternId(Long patternId) {
 
         List<InstrumentGraphCustomizationPropertiesEntity> properties = propertiesRepository.findByPatternId(patternId);
@@ -332,7 +323,6 @@ public class InstrumentGraphCustomizationPropertiesService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "graphProperties", key = "'pattern-' + #patternId", cacheManager = "instrumentGraphCacheManager")
     public GraphPropertiesResponseDTO findByPatternId(Long patternId) {
         patternService.findById(patternId);
 

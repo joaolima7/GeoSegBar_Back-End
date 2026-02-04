@@ -9,8 +9,10 @@ import com.geosegbar.entities.SexEntity;
 
 @Repository
 public interface SexRepository extends JpaRepository<SexEntity, Long> {
+
     List<SexEntity> findAllByOrderByIdAsc();
 
     boolean existsByName(String name);
+
     boolean existsByNameAndIdNot(String name, Long id);
 }

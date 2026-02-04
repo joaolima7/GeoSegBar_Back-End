@@ -23,16 +23,20 @@ public class AttributionsPermissionService {
     private final AttributionsPermissionRepository attrPermissionRepository;
     private final UserRepository userRepository;
 
+    @Transactional(readOnly = true)
     public List<AttributionsPermissionEntity> findAll() {
         return attrPermissionRepository.findAll();
     }
 
+    @Transactional(readOnly = true)
     public AttributionsPermissionEntity findById(Long id) {
         return attrPermissionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Permissão de atribuições não encontrada com ID: " + id));
     }
 
+    @Transactional(readOnly = true)
     public AttributionsPermissionEntity findByUser(Long userId) {
+
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
 
@@ -45,16 +49,12 @@ public class AttributionsPermissionService {
         UserEntity user = userRepository.findById(permissionDTO.getUserId())
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + permissionDTO.getUserId()));
 
-        AttributionsPermissionEntity permission;
-
-        var existingPermission = attrPermissionRepository.findByUser(user);
-
-        if (existingPermission.isPresent()) {
-            permission = existingPermission.get();
-        } else {
-            permission = new AttributionsPermissionEntity();
-            permission.setUser(user);
-        }
+        AttributionsPermissionEntity permission = attrPermissionRepository.findByUser(user)
+                .orElseGet(() -> {
+                    AttributionsPermissionEntity newPerm = new AttributionsPermissionEntity();
+                    newPerm.setUser(user);
+                    return newPerm;
+                });
 
         permission.setEditUser(permissionDTO.getEditUser());
         permission.setEditDam(permissionDTO.getEditDam());
@@ -80,9 +80,7 @@ public class AttributionsPermissionService {
             throw new NotFoundException("Permissão de atribuições não encontrada para o usuário");
         }
 
-        AttributionsPermissionEntity permission = attrPermissionRepository.findByUser(user).get();
-        permission.setUser(null);
-        attrPermissionRepository.delete(permission);
+        attrPermissionRepository.deleteByUser(user);
     }
 
     @Transactional
@@ -91,17 +89,14 @@ public class AttributionsPermissionService {
             UserEntity user = userRepository.findById(userId)
                     .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
 
-            if (attrPermissionRepository.existsByUser(user)) {
-                AttributionsPermissionEntity permission = attrPermissionRepository.findByUser(user).get();
+            attrPermissionRepository.findByUser(user).ifPresent(permission -> {
 
                 user.setAttributionsPermission(null);
                 permission.setUser(null);
 
                 userRepository.save(user);
-                attrPermissionRepository.save(permission);
-
                 attrPermissionRepository.delete(permission);
-            }
+            });
         } catch (Exception e) {
             log.error("Error while trying to delete attributions permission for user {}: {}", userId, e.getMessage(), e);
         }
@@ -109,18 +104,14 @@ public class AttributionsPermissionService {
 
     @Transactional
     public AttributionsPermissionEntity createDefaultPermission(UserEntity user) {
-
-        if (attrPermissionRepository.existsByUser(user)) {
-            return attrPermissionRepository.findByUser(user).get();
-        }
-
-        AttributionsPermissionEntity permission = new AttributionsPermissionEntity();
-        permission.setUser(user);
-        permission.setEditUser(false);
-        permission.setEditDam(false);
-        permission.setEditGeralData(false);
-
-        AttributionsPermissionEntity savedPermission = attrPermissionRepository.save(permission);
-        return savedPermission;
+        return attrPermissionRepository.findByUser(user)
+                .orElseGet(() -> {
+                    AttributionsPermissionEntity permission = new AttributionsPermissionEntity();
+                    permission.setUser(user);
+                    permission.setEditUser(false);
+                    permission.setEditDam(false);
+                    permission.setEditGeralData(false);
+                    return attrPermissionRepository.save(permission);
+                });
     }
 }

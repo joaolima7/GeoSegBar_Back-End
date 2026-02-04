@@ -3,12 +3,12 @@ package com.geosegbar.infra.section.services;
 import java.util.List;
 import java.util.Optional;
 
-import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
+import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.SectionEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.BusinessRuleException;
@@ -16,6 +16,7 @@ import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.exceptions.UnauthorizedException;
+import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.file_storage.FileStorageService;
 import com.geosegbar.infra.section.dtos.CreateSectionDTO;
 import com.geosegbar.infra.section.persistence.jpa.SectionRepository;
@@ -29,8 +30,10 @@ import lombok.extern.slf4j.Slf4j;
 public class SectionService {
 
     private final SectionRepository sectionRepository;
+    private final DamRepository damRepository;
     private final FileStorageService fileStorageService;
 
+    @Transactional(readOnly = true)
     public List<SectionEntity> findAll() {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -38,17 +41,11 @@ public class SectionService {
                 throw new UnauthorizedException("Usuário não autorizado a visualizar seções!");
             }
         }
-        List<SectionEntity> sections = sectionRepository.findAllByOrderByNameAsc();
 
-        sections.forEach(section -> {
-            if (section.getDam() != null) {
-                Hibernate.initialize(section.getDam());
-            }
-        });
-
-        return sections;
+        return sectionRepository.findAllByOrderByNameAsc();
     }
 
+    @Transactional(readOnly = true)
     public SectionEntity findById(Long id) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -56,16 +53,11 @@ public class SectionService {
                 throw new UnauthorizedException("Usuário não autorizado a visualizar seções!");
             }
         }
-        SectionEntity section = sectionRepository.findById(id)
+        return sectionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + id));
-
-        if (section.getDam() != null) {
-            Hibernate.initialize(section.getDam());
-        }
-
-        return section;
     }
 
+    @Transactional(readOnly = true)
     public List<SectionEntity> findAllByDamId(Long damId) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -73,18 +65,10 @@ public class SectionService {
                 throw new UnauthorizedException("Usuário não autorizado a visualizar seções!");
             }
         }
-
-        List<SectionEntity> sections = sectionRepository.findAllByDamId(damId);
-
-        sections.forEach(section -> {
-            if (section.getDam() != null) {
-                Hibernate.initialize(section.getDam());
-            }
-        });
-
-        return sections;
+        return sectionRepository.findAllByDamId(damId);
     }
 
+    @Transactional(readOnly = true)
     public Optional<SectionEntity> findByName(String name) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
@@ -117,9 +101,14 @@ public class SectionService {
 
     @Transactional
     public SectionEntity createWithFile(CreateSectionDTO dto, MultipartFile file) {
+
         if (dto.getDamId() == null) {
             throw new InvalidInputException("Barragem da seção é obrigatória.");
         }
+
+        DamEntity dam = damRepository.findById(dto.getDamId())
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + dto.getDamId()));
+
         if (sectionRepository.findByDamIdAndName(dto.getDamId(), dto.getName()).isPresent()) {
             throw new DuplicateResourceException("Já existe uma seção com esse nome para esta barragem.");
         }
@@ -144,6 +133,8 @@ public class SectionService {
         section.setFirstVertexLongitude(dto.getFirstVertexLongitude());
         section.setSecondVertexLongitude(dto.getSecondVertexLongitude());
 
+        section.setDam(dam);
+
         SectionEntity savedSection = sectionRepository.save(section);
         log.info("Nova seção criada com arquivo: {}", savedSection.getName());
         return savedSection;
@@ -157,21 +148,30 @@ public class SectionService {
                 throw new UnauthorizedException("Usuário não autorizado a editar seções!");
             }
         }
+
         SectionEntity existingSection = findById(id);
 
         if (dto.getDamId() == null) {
             throw new InvalidInputException("Barragem da seção é obrigatória.");
         }
+
+        if (!existingSection.getDam().getId().equals(dto.getDamId())) {
+            DamEntity newDam = damRepository.findById(dto.getDamId())
+                    .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + dto.getDamId()));
+            existingSection.setDam(newDam);
+        }
+
         if ((!existingSection.getName().equals(dto.getName())
                 || !existingSection.getDam().getId().equals(dto.getDamId()))
                 && sectionRepository.findByDamIdAndName(dto.getDamId(), dto.getName()).isPresent()) {
             throw new DuplicateResourceException("Já existe uma seção com esse nome para esta barragem.");
         }
-        if (existingSection.getFilePath() != null && !existingSection.getFilePath().isEmpty()) {
-            fileStorageService.deleteFile(existingSection.getFilePath());
-        }
 
         if (file != null && !file.isEmpty()) {
+            if (existingSection.getFilePath() != null && !existingSection.getFilePath().isEmpty()) {
+                fileStorageService.deleteFile(existingSection.getFilePath());
+            }
+
             String originalFilename = file.getOriginalFilename();
             if (originalFilename != null) {
                 String extension = originalFilename.substring(originalFilename.lastIndexOf(".") + 1).toLowerCase();
@@ -205,11 +205,19 @@ public class SectionService {
                 throw new UnauthorizedException("Usuário não autorizado a editar seções!");
             }
         }
+
         SectionEntity existingSection = findById(id);
 
         if (section.getDam() == null || section.getDam().getId() == null) {
             throw new InvalidInputException("Barragem da seção é obrigatória.");
         }
+
+        if (!existingSection.getDam().getId().equals(section.getDam().getId())) {
+            DamEntity newDam = damRepository.findById(section.getDam().getId())
+                    .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + section.getDam().getId()));
+            existingSection.setDam(newDam);
+        }
+
         if ((!existingSection.getName().equals(section.getName())
                 || !existingSection.getDam().getId().equals(section.getDam().getId()))
                 && sectionRepository.findByDamIdAndName(section.getDam().getId(), section.getName()).isPresent()) {
@@ -236,7 +244,9 @@ public class SectionService {
                 throw new UnauthorizedException("Usuário não autorizado a excluir seções!");
             }
         }
-        SectionEntity section = findById(id);
+
+        SectionEntity section = sectionRepository.findByIdWithInstruments(id)
+                .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + id));
 
         if (!section.getInstruments().isEmpty()) {
             throw new BusinessRuleException("Não é possível excluir uma seção que possui instrumentos associados");

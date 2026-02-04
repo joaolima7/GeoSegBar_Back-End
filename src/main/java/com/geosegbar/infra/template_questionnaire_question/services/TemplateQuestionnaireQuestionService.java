@@ -7,7 +7,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import com.geosegbar.entities.TemplateQuestionnaireEntity;
 import com.geosegbar.entities.TemplateQuestionnaireQuestionEntity;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
@@ -18,7 +20,6 @@ import com.geosegbar.infra.template_questionnaire_question.dtos.QuestionOrderDTO
 import com.geosegbar.infra.template_questionnaire_question.dtos.QuestionReorderDTO;
 import com.geosegbar.infra.template_questionnaire_question.persistence.jpa.TemplateQuestionnaireQuestionRepository;
 
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -32,6 +33,7 @@ public class TemplateQuestionnaireQuestionService {
 
     @Transactional
     public void deleteById(Long id) {
+
         TemplateQuestionnaireQuestionEntity questionToDelete = tqQuestionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Questão do template não encontrada para exclusão!"));
 
@@ -54,6 +56,7 @@ public class TemplateQuestionnaireQuestionService {
         for (TemplateQuestionnaireQuestionEntity question : remainingQuestions) {
             if (question.getOrderIndex() > deletedIndex) {
                 question.setOrderIndex(question.getOrderIndex() - 1);
+
                 tqQuestionRepository.save(question);
             }
         }
@@ -61,23 +64,26 @@ public class TemplateQuestionnaireQuestionService {
 
     @Transactional
     public TemplateQuestionnaireQuestionEntity save(TemplateQuestionnaireQuestionEntity tqQuestion) {
-        questionRepository.findById(tqQuestion.getQuestion().getId())
-                .orElseThrow(() -> new NotFoundException("Questão não encontrada!"));
 
-        var template = templateQuestionnaireRepository.findById(tqQuestion.getTemplateQuestionnaire().getId())
+        if (!questionRepository.existsById(tqQuestion.getQuestion().getId())) {
+            throw new NotFoundException("Questão não encontrada!");
+        }
+
+        TemplateQuestionnaireEntity template = templateQuestionnaireRepository.findById(tqQuestion.getTemplateQuestionnaire().getId())
                 .orElseThrow(() -> new NotFoundException("Template não encontrado!"));
+
         tqQuestion.setTemplateQuestionnaire(template);
 
         int currentQuestionCount = tqQuestionRepository.countQuestionsByTemplateId(template.getId());
 
         Integer requestedIndex = tqQuestion.getOrderIndex();
-        if (requestedIndex == null) {
+
+        if (requestedIndex == null || requestedIndex > currentQuestionCount + 1) {
             tqQuestion.setOrderIndex(currentQuestionCount + 1);
         } else if (requestedIndex <= 0) {
             throw new InvalidInputException("O índice de ordem deve ser um número positivo!");
-        } else if (requestedIndex > currentQuestionCount + 1) {
-            tqQuestion.setOrderIndex(currentQuestionCount + 1);
         } else {
+
             List<TemplateQuestionnaireQuestionEntity> existingQuestions
                     = tqQuestionRepository.findByTemplateQuestionnaireIdOrderByOrderIndex(template.getId());
 
@@ -89,9 +95,7 @@ public class TemplateQuestionnaireQuestionService {
             }
         }
 
-        TemplateQuestionnaireQuestionEntity saved = tqQuestionRepository.save(tqQuestion);
-
-        return saved;
+        return tqQuestionRepository.save(tqQuestion);
     }
 
     @Transactional
@@ -100,6 +104,7 @@ public class TemplateQuestionnaireQuestionService {
                 .orElseThrow(() -> new NotFoundException("Questão do template não encontrada!"));
 
         Long templateId = existingQuestion.getTemplateQuestionnaire().getId();
+
         if (questionnaireResponseRepository.existsByTemplateQuestionnaireId(templateId)) {
             throw new InvalidInputException(
                     "Não é possível modificar esta questão pois existem questionários respondidos usando este template. "
@@ -145,9 +150,7 @@ public class TemplateQuestionnaireQuestionService {
             }
 
             existingQuestion.setOrderIndex(tqQuestion.getOrderIndex());
-            TemplateQuestionnaireQuestionEntity saved = tqQuestionRepository.save(existingQuestion);
-
-            return saved;
+            return tqQuestionRepository.save(existingQuestion);
         } else {
             throw new InvalidInputException(
                     "Apenas o índice de ordem pode ser atualizado. Nenhuma alteração foi detectada ou solicitada."
@@ -155,11 +158,13 @@ public class TemplateQuestionnaireQuestionService {
         }
     }
 
+    @Transactional(readOnly = true)
     public TemplateQuestionnaireQuestionEntity findById(Long id) {
         return tqQuestionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Questão do template não encontrada!"));
     }
 
+    @Transactional(readOnly = true)
     public List<TemplateQuestionnaireQuestionEntity> findAll() {
         return tqQuestionRepository.findAll();
     }
@@ -167,6 +172,7 @@ public class TemplateQuestionnaireQuestionService {
     @Transactional
     public List<TemplateQuestionnaireQuestionEntity> reorderQuestions(QuestionReorderDTO reorderDTO) {
         Long templateId = reorderDTO.getTemplateQuestionnaireId();
+
         if (!templateQuestionnaireRepository.existsById(templateId)) {
             throw new NotFoundException("Template de questionário não encontrado com ID: " + templateId);
         }
@@ -195,15 +201,13 @@ public class TemplateQuestionnaireQuestionService {
         if (!existingQuestionIds.containsAll(requestQuestionIds)) {
             Set<Long> invalidIds = new HashSet<>(requestQuestionIds);
             invalidIds.removeAll(existingQuestionIds);
-            throw new InvalidInputException(
-                    "As seguintes questões não pertencem a este template: " + invalidIds);
+            throw new InvalidInputException("As seguintes questões não pertencem a este template: " + invalidIds);
         }
 
         if (!requestQuestionIds.containsAll(existingQuestionIds)) {
             Set<Long> missingIds = new HashSet<>(existingQuestionIds);
             missingIds.removeAll(requestQuestionIds);
-            throw new InvalidInputException(
-                    "As seguintes questões do template não foram incluídas: " + missingIds);
+            throw new InvalidInputException("As seguintes questões do template não foram incluídas: " + missingIds);
         }
 
         Set<Integer> requestIndices = reorderDTO.getQuestions().stream()
@@ -215,11 +219,8 @@ public class TemplateQuestionnaireQuestionService {
         }
 
         int maxIndex = requestIndices.stream().max(Integer::compare).orElse(0);
-        int expectedSize = maxIndex;
-
-        if (requestIndices.size() != expectedSize) {
-            throw new InvalidInputException(
-                    "A sequência de índices não é contínua. Deve começar em 1 e não ter lacunas.");
+        if (requestIndices.size() != maxIndex) {
+            throw new InvalidInputException("A sequência de índices não é contínua. Deve começar em 1 e não ter lacunas.");
         }
 
         Map<Long, Integer> reorderMap = reorderDTO.getQuestions().stream()
@@ -232,11 +233,10 @@ public class TemplateQuestionnaireQuestionService {
             question.setOrderIndex(reorderMap.get(question.getId()));
         }
 
-        List<TemplateQuestionnaireQuestionEntity> saved = tqQuestionRepository.saveAll(existingQuestions);
-
-        return saved;
+        return tqQuestionRepository.saveAll(existingQuestions);
     }
 
+    @Transactional(readOnly = true)
     public List<TemplateQuestionnaireQuestionEntity> findAllByTemplateIdOrdered(Long templateId) {
         return tqQuestionRepository.findByTemplateQuestionnaireIdOrderByOrderIndex(templateId);
     }

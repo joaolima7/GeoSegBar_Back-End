@@ -4,12 +4,13 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
-import org.hibernate.Hibernate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.common.email.EmailService;
 import com.geosegbar.common.enums.RoleEnum;
@@ -22,7 +23,6 @@ import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.DamPermissionEntity;
 import com.geosegbar.entities.RoleEntity;
-import com.geosegbar.entities.SexEntity;
 import com.geosegbar.entities.StatusEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.entities.VerificationCodeEntity;
@@ -59,7 +59,6 @@ import com.geosegbar.infra.verification_code.dto.VerifyCodeRequestDTO;
 import com.geosegbar.infra.verification_code.persistence.jpa.VerificationCodeRepository;
 
 import jakarta.annotation.PostConstruct;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -90,45 +89,30 @@ public class UserService {
         String systemUserName = "SISTEMA";
 
         try {
-
-            Optional<UserEntity> existingUser = userRepository.findByEmail(systemUserEmail);
-
-            if (existingUser.isPresent()) {
-                log.info("Usuário do sistema já existe com ID: {}", existingUser.get().getId());
+            if (userRepository.existsByEmail(systemUserEmail)) {
+                log.info("Usuário do sistema já existe.");
                 return;
             }
 
-            boolean systemNameExists = userRepository.existsByName(systemUserName);
-
-            if (systemNameExists) {
-                log.warn("Já existe um usuário com o nome SISTEMA. Não será criado o usuário do sistema.");
+            if (userRepository.existsByName(systemUserName)) {
+                log.warn("Já existe um usuário com o nome SISTEMA.");
                 return;
             }
 
             UserEntity systemUser = new UserEntity();
             systemUser.setName(systemUserName);
             systemUser.setEmail(systemUserEmail);
-
             systemUser.setPassword(passwordEncoder.encode("admingeom"));
 
-            StatusEntity activeStatus = statusRepository.findByStatus(StatusEnum.ACTIVE)
-                    .orElseThrow(() -> new NotFoundException("Status ACTIVE não encontrado no sistema!"));
-            systemUser.setStatus(activeStatus);
+            systemUser.setStatus(statusRepository.findByStatus(StatusEnum.ACTIVE).orElseThrow());
+            systemUser.setRole(roleRepository.findByName(RoleEnum.ADMIN).orElseThrow());
+            systemUser.setSex(sexRepository.findAll().stream().findFirst().orElseThrow());
 
-            RoleEntity adminRole = roleRepository.findByName(RoleEnum.ADMIN)
-                    .orElseThrow(() -> new NotFoundException("Role ADMIN não encontrada no sistema!"));
-            systemUser.setRole(adminRole);
-
-            SexEntity maleOrFirstSex = sexRepository.findAll().stream()
-                    .findFirst()
-                    .orElseThrow(() -> new NotFoundException("Nenhum sexo encontrado no sistema!"));
-            systemUser.setSex(maleOrFirstSex);
-
-            UserEntity savedUser = userRepository.save(systemUser);
-            log.info("Usuário do sistema criado com ID: {}", savedUser.getId());
+            userRepository.save(systemUser);
+            log.info("Usuário do sistema criado.");
 
         } catch (Exception e) {
-            log.error("Erro ao criar usuário do sistema: {}", e.getMessage(), e);
+            log.error("Erro ao criar usuário do sistema: {}", e.getMessage());
         }
     }
 
@@ -153,13 +137,11 @@ public class UserService {
         if (status.getStatus() == StatusEnum.ACTIVE
                 && (user.getStatus() == null || user.getStatus().getStatus() == StatusEnum.DISABLED)) {
 
-            Hibernate.initialize(user.getClients());
-
             for (ClientEntity client : user.getClients()) {
                 if (client.getStatus() != null && client.getStatus().getStatus() == StatusEnum.DISABLED) {
                     throw new BusinessRuleException(
                             "Não é possível ativar o usuário pois ele está associado ao cliente '"
-                            + client.getName() + "' que está desativado. Remova a associação com clientes desativados antes de ativar o usuário."
+                            + client.getName() + "' que está desativado."
                     );
                 }
             }
@@ -178,16 +160,18 @@ public class UserService {
             }
         }
 
-        UserEntity user = userRepository.findById(id)
+        UserEntity user = userRepository.findByIdWithAllDetails(id)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado para exclusão!"));
 
         if (isSystemUser(user)) {
             throw new InvalidInputException("O usuário do sistema não pode ser excluído.");
         }
 
-        if (!user.getCreatedUsers().isEmpty() || !user.getReadings().isEmpty() || !user.getPsbFoldersCreated().isEmpty() || !user.getPsbFilesUploaded().isEmpty() || !user.getSharedFolders().isEmpty()) {
+        if (!user.getCreatedUsers().isEmpty() || !user.getReadings().isEmpty()
+                || !user.getPsbFoldersCreated().isEmpty() || !user.getPsbFilesUploaded().isEmpty()
+                || !user.getSharedFolders().isEmpty()) {
             throw new BusinessRuleException(
-                    "Não é possível excluir o usuário, pois existem registros associados a ele, desative o usuário se necessário.");
+                    "Não é possível excluir o usuário, pois existem registros associados a ele. Desative o usuário se necessário.");
         }
 
         documentationPermissionService.deleteByUserSafely(user.getId());
@@ -195,45 +179,33 @@ public class UserService {
         instrumentationPermissionService.deleteByUserSafely(user.getId());
         routineInspectionPermissionService.deleteByUserSafely(user.getId());
 
-        List<DamPermissionEntity> damPermissions = damPermissionRepository.findByUser(user);
-        if (!damPermissions.isEmpty()) {
-            damPermissionRepository.deleteAll(damPermissions);
-        }
+        damPermissionRepository.deleteByUserId(user.getId());
 
         userRepository.deleteById(id);
     }
 
-    @Transactional()
+    @Transactional(readOnly = true)
     public List<UserEntity> findByCreatedBy(Long createdById) {
-        userRepository.findById(createdById)
-                .orElseThrow(() -> new NotFoundException("Usuário criador não encontrado com ID: " + createdById));
-
-        List<UserEntity> result = userRepository.findByCreatedByIdWithDetails(createdById);
-
-        return result;
+        if (!userRepository.existsById(createdById)) {
+            throw new NotFoundException("Usuário criador não encontrado com ID: " + createdById);
+        }
+        return userRepository.findByCreatedById(createdById);
     }
 
-    @Transactional()
+    @Transactional(readOnly = true)
     public List<UserEntity> findByFilters(Long roleId, Long clientId, Long statusId, Boolean isManagement, Boolean withoutClient) {
-        if (isManagement != null && isManagement) {
-
+        if (Boolean.TRUE.equals(isManagement)) {
             return userRepository.findByClientIncludingUnassignedCollaborators(clientId, statusId);
         }
 
-        Boolean includeWithoutClient = withoutClient != null ? withoutClient : false;
-
-        List<UserEntity> result = userRepository.findByRoleAndClientWithDetails(
+        return userRepository.findByRoleAndClientWithDetails(
                 roleId,
                 clientId,
                 statusId,
-                includeWithoutClient
-        );
-
-        return result.stream()
+                Boolean.TRUE.equals(withoutClient)
+        ).stream()
                 .filter(user -> !isSystemUser(user))
-                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new))
-                .stream()
-                .collect(java.util.stream.Collectors.toList());
+                .collect(Collectors.toList());
     }
 
     @Transactional
@@ -267,53 +239,34 @@ public class UserService {
             throw new DuplicateResourceException("Já existe um usuário com o telefone informado!");
         }
 
-        if (userEntity.getSex() == null || userEntity.getSex().getId() == null) {
-            throw new InvalidInputException("Sexo é obrigatório!");
-        }
-
         sexRepository.findById(userEntity.getSex().getId())
                 .orElseThrow(() -> new NotFoundException("Sexo não encontrado com ID: " + userEntity.getSex().getId()));
 
-        if (userEntity.getStatus() == null) {
-            StatusEntity activeStatus = statusRepository.findByStatus(StatusEnum.ACTIVE)
-                    .orElseThrow(() -> new NotFoundException("Status ACTIVE não encontrado no sistema!"));
-            userEntity.setStatus(activeStatus);
-        } else if (userEntity.getStatus().getId() != null) {
-            StatusEntity status = statusRepository.findById(userEntity.getStatus().getId())
-                    .orElseThrow(() -> new NotFoundException("Status não encontrado com ID: " + userEntity.getStatus().getId()));
-            userEntity.setStatus(status);
-        }
-
-        if (userEntity.getRole() == null) {
-            RoleEntity defaultRole = roleRepository.findByName(RoleEnum.COLLABORATOR)
-                    .orElseThrow(() -> new NotFoundException("Role COLLABORATOR não encontrada no sistema!"));
-            userEntity.setRole(defaultRole);
-        } else if (userEntity.getRole().getId() != null) {
-            RoleEntity role = roleRepository.findById(userEntity.getRole().getId())
-                    .orElseThrow(() -> new NotFoundException("Role não encontrada com ID: " + userEntity.getRole().getId()));
-            userEntity.setRole(role);
-        }
-
-        if (userEntity.getRole() != null && userEntity.getRole().getName() == RoleEnum.ADMIN) {
-            userEntity.setClients(new HashSet<>());
+        if (userEntity.getStatus() == null || userEntity.getStatus().getId() == null) {
+            userEntity.setStatus(statusRepository.findByStatus(StatusEnum.ACTIVE).orElseThrow());
         } else {
-            if (userDTO.getClients() != null && !userDTO.getClients().isEmpty()) {
+            userEntity.setStatus(statusRepository.findById(userEntity.getStatus().getId()).orElseThrow());
+        }
 
-                for (ClientEntity client : userDTO.getClients()) {
-                    ClientEntity fullClient = clientRepository.findById(client.getId())
-                            .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + client.getId()));
+        if (userEntity.getRole() == null || userEntity.getRole().getId() == null) {
+            userEntity.setRole(roleRepository.findByName(RoleEnum.COLLABORATOR).orElseThrow());
+        } else {
+            userEntity.setRole(roleRepository.findById(userEntity.getRole().getId()).orElseThrow());
+        }
 
-                    if (fullClient.getStatus() != null && fullClient.getStatus().getStatus() == StatusEnum.DISABLED) {
-                        throw new BusinessRuleException(
-                                "Não é possível associar o usuário ao cliente '" + fullClient.getName()
-                                + "' pois este cliente está desativado."
-                        );
-                    }
+        if (userEntity.getRole().getName() == RoleEnum.ADMIN) {
+            userEntity.setClients(new HashSet<>());
+        } else if (userDTO.getClients() != null && !userDTO.getClients().isEmpty()) {
+            for (ClientEntity client : userDTO.getClients()) {
+                ClientEntity fullClient = clientRepository.findById(client.getId())
+                        .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + client.getId()));
+                if (fullClient.getStatus().getStatus() == StatusEnum.DISABLED) {
+                    throw new BusinessRuleException("Não é possível associar a cliente desativado: " + fullClient.getName());
                 }
-                userEntity.setClients(userDTO.getClients());
-            } else {
-                userEntity.setClients(new HashSet<>());
             }
+            userEntity.setClients(userDTO.getClients());
+        } else {
+            userEntity.setClients(new HashSet<>());
         }
 
         String generatedPassword = GenerateRandomPassword.execute();
@@ -331,7 +284,6 @@ public class UserService {
                 if (!savedUser.getClients().isEmpty()) {
                     createDefaultDamPermissions(savedUser);
                 }
-
                 documentationPermissionService.createDefaultPermission(savedUser);
                 attributionsPermissionService.createDefaultPermission(savedUser);
                 instrumentationPermissionService.createDefaultPermission(savedUser);
@@ -352,18 +304,12 @@ public class UserService {
 
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-
-            if (userLogged.getRole() != null
-                    && userLogged.getRole().getName() == RoleEnum.COLLABORATOR
-                    && existingUser.getRole() != null
+            if (userLogged.getRole().getName() == RoleEnum.COLLABORATOR
                     && existingUser.getRole().getName() == RoleEnum.ADMIN) {
                 throw new UnauthorizedException("Colaborador não pode editar usuário administrador.");
             }
-
-            if (userLogged.getId() != id.longValue()) {
-                if (!userLogged.getAttributionsPermission().getEditUser()) {
-                    throw new UnauthorizedException("Usuário não tem permissão para editar usuários que não sejam ele mesmo!");
-                }
+            if (!userLogged.getId().equals(id) && !userLogged.getAttributionsPermission().getEditUser()) {
+                throw new UnauthorizedException("Usuário não tem permissão para editar usuários que não sejam ele mesmo!");
             }
         }
 
@@ -377,10 +323,6 @@ public class UserService {
             }
         }
 
-        if (userDTO.getSex() == null || userDTO.getSex().getId() == null) {
-            throw new InvalidInputException("Sexo é obrigatório!");
-        }
-
         sexRepository.findById(userDTO.getSex().getId())
                 .orElseThrow(() -> new NotFoundException("Sexo não encontrado com ID: " + userDTO.getSex().getId()));
 
@@ -390,19 +332,12 @@ public class UserService {
 
             if (status.getStatus() == StatusEnum.ACTIVE
                     && (existingUser.getStatus() == null || existingUser.getStatus().getStatus() == StatusEnum.DISABLED)) {
-
-                Hibernate.initialize(existingUser.getClients());
-
                 for (ClientEntity client : existingUser.getClients()) {
-                    if (client.getStatus() != null && client.getStatus().getStatus() == StatusEnum.DISABLED) {
-                        throw new BusinessRuleException(
-                                "Não é possível ativar o usuário pois ele está associado ao cliente '"
-                                + client.getName() + "' que está desativado. Remova a associação com clientes desativados antes de ativar o usuário."
-                        );
+                    if (client.getStatus().getStatus() == StatusEnum.DISABLED) {
+                        throw new BusinessRuleException("Usuário possui associação com cliente desativado: " + client.getName());
                     }
                 }
             }
-
             existingUser.setStatus(status);
         }
 
@@ -418,7 +353,6 @@ public class UserService {
                 roleChanged = true;
                 newRole = role.getName();
             }
-
             existingUser.setRole(role);
         }
 
@@ -440,14 +374,13 @@ public class UserService {
     public UserEntity updatePassword(Long id, UserPasswordUpdateDTO passwordDTO) {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (userLogged.getId() != id.longValue()) {
-                if (!userLogged.getAttributionsPermission().getEditUser()) {
-                    throw new UnauthorizedException("Usuário não tem permissão para atualizar a senha de outros usuários!");
-                }
+            if (!userLogged.getId().equals(id) && !userLogged.getAttributionsPermission().getEditUser()) {
+                throw new UnauthorizedException("Usuário não tem permissão para atualizar a senha de outros usuários!");
             }
         }
 
-        UserEntity existingUser = findEntityByIdWithAllDetails(id);
+        UserEntity existingUser = userRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
 
         if (!passwordEncoder.matches(passwordDTO.getCurrentPassword(), existingUser.getPassword())) {
             throw new InvalidInputException("Senha atual incorreta!");
@@ -458,14 +391,11 @@ public class UserService {
         }
 
         existingUser.setPassword(passwordEncoder.encode(passwordDTO.getNewPassword()));
-
         if (existingUser.getIsFirstAccess()) {
             existingUser.setIsFirstAccess(false);
         }
 
-        UserEntity savedUser = userRepository.save(existingUser);
-
-        return savedUser;
+        return userRepository.save(existingUser);
     }
 
     @Transactional
@@ -473,173 +403,138 @@ public class UserService {
         AuthenticatedUserUtil.checkAdminPermission();
         UserEntity user = findEntityByIdWithAllDetails(userId);
 
-        if (user.getRole() != null && user.getRole().getName() == RoleEnum.ADMIN) {
-
+        if (user.getRole().getName() == RoleEnum.ADMIN) {
             return user;
         }
 
         Set<ClientEntity> oldClients = new HashSet<>(user.getClients());
-
         Set<ClientEntity> newClients = new HashSet<>();
 
         for (Long clientId : clientAssociationDTO.getClientIds()) {
             ClientEntity client = clientRepository.findById(clientId)
                     .orElseThrow(() -> new NotFoundException("Cliente com ID " + clientId + " não encontrado!"));
 
-            if (client.getStatus() != null && client.getStatus().getStatus() == StatusEnum.DISABLED) {
-                if (user.getStatus() != null && user.getStatus().getStatus() == StatusEnum.ACTIVE) {
-                    throw new BusinessRuleException(
-                            "Não é possível associar o cliente '" + client.getName()
-                            + "' ao usuário pois este cliente está desativado. Desative o usuário primeiro ou escolha um cliente ativo."
-                    );
-                }
+            if (client.getStatus().getStatus() == StatusEnum.DISABLED
+                    && user.getStatus().getStatus() == StatusEnum.ACTIVE) {
+                throw new BusinessRuleException("Não é possível associar o cliente '" + client.getName() + "' ao usuário pois este cliente está desativado.");
             }
-
             newClients.add(client);
         }
 
         user.setClients(newClients);
 
-        if (user.getRole() != null && user.getRole().getName() == RoleEnum.COLLABORATOR) {
+        if (user.getRole().getName() == RoleEnum.COLLABORATOR) {
             Set<ClientEntity> addedClients = new HashSet<>(newClients);
             addedClients.removeAll(oldClients);
-
             if (!addedClients.isEmpty()) {
                 createDamPermissionsForSpecificClients(user, addedClients);
             }
 
             Set<ClientEntity> removedClients = new HashSet<>(oldClients);
             removedClients.removeAll(newClients);
-
             if (!removedClients.isEmpty()) {
                 deleteDamPermissionsForSpecificClients(user, removedClients);
             }
         }
 
-        UserEntity savedUser = userRepository.save(user);
-
-        return savedUser;
+        return userRepository.save(user);
     }
 
-    @Transactional()
+    @Transactional(readOnly = true)
     public UserEntity findById(Long id) {
-        UserEntity user = findEntityByIdWithAllDetails(id);
-        return user;
+        return findEntityByIdWithAllDetails(id);
     }
 
-    @Transactional()
+    @Transactional(readOnly = true)
     public UserEntity findByEmail(String email) {
-        UserEntity user = userRepository.findByEmailWithBasicDetails(email)
+        return userRepository.findByEmailWithAllPermissions(email)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com email: " + email));
-
-        return user;
     }
 
-    @Transactional()
+    @Transactional(readOnly = true)
     public List<UserEntity> findAll() {
-        List<UserEntity> users = userRepository.findAllWithBasicDetails();
-
-        users.forEach(user -> {
-            if (!Hibernate.isInitialized(user.getClients())) {
-                user.getClients().size();
-            }
-        });
-        return users;
+        return userRepository.findAllWithBasicDetails();
     }
 
-    @Transactional()
+    @Transactional(readOnly = true)
     public boolean existsByEmail(String email) {
         return userRepository.existsByEmail(email);
     }
 
-    @Transactional()
+    @Transactional(readOnly = true)
     public boolean existsByEmailAndIdNot(String email, Long id) {
         return userRepository.existsByEmailAndIdNot(email, id);
     }
 
     private UserEntity findEntityByIdWithAllDetails(Long id) {
-        UserEntity user = userRepository.findByIdWithAllDetails(id)
+        return userRepository.findByIdWithAllDetails(id)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
-
-        if (!Hibernate.isInitialized(user.getClients())) {
-            user.getClients().size();
-        }
-
-        return user;
     }
 
     @Transactional
     public Object initiateLogin(LoginRequestDTO userDTO) {
-        UserEntity user = userRepository.findByEmailWithClientsAndDetails(userDTO.email())
+        // 1. Busca LEVE (apenas dados básicos para autenticar)
+        UserEntity authUser = userRepository.findByEmailWithBasicDetails(userDTO.email())
                 .orElseThrow(() -> new NotFoundException("Credenciais incorretas!"));
 
-        if (user.getStatus().getStatus() == StatusEnum.DISABLED) {
+        if (authUser.getStatus().getStatus() == StatusEnum.DISABLED) {
             throw new UnauthorizedException("Usuário não tem acesso ao sistema!");
         }
 
-        if (!passwordEncoder.matches(userDTO.password(), user.getPassword())) {
+        if (!passwordEncoder.matches(userDTO.password(), authUser.getPassword())) {
             throw new InvalidInputException("Credenciais incorretas!");
         }
 
-        if (user.getLastToken() != null && user.getTokenExpiryDate() != null
-                && LocalDateTime.now().isBefore(user.getTokenExpiryDate())
-                && tokenService.isTokenValid(user.getLastToken())) {
+        // Verifica validade do token atual (opcional, evita nova geração)
+        if (authUser.getLastToken() != null && authUser.getTokenExpiryDate() != null
+                && LocalDateTime.now().isBefore(authUser.getTokenExpiryDate())
+                && tokenService.isTokenValid(authUser.getLastToken())) {
 
-            List<ClientEntity> clients = new ArrayList<>(user.getClients());
+            // Agora sim, busca PESADA para montar o DTO de retorno
+            UserEntity fullUser = userRepository.findByEmailWithAllPermissions(userDTO.email())
+                    .orElseThrow(() -> new NotFoundException("Erro ao carregar perfil do usuário"));
 
             return new LoginResponseDTO(
-                    user.getId(),
-                    user.getName(),
-                    user.getEmail(),
-                    user.getPhone(),
-                    user.getSex(),
-                    user.getRole().getName(),
-                    user.getIsFirstAccess(),
-                    user.getLastToken(),
-                    clients
+                    fullUser.getId(), fullUser.getName(), fullUser.getEmail(), fullUser.getPhone(),
+                    fullUser.getSex(), fullUser.getRole().getName(), fullUser.getIsFirstAccess(),
+                    fullUser.getLastToken(), new ArrayList<>(fullUser.getClients())
             );
         }
 
-        if (isSystemUser(user)) {
-            String token = tokenService.generateToken(user);
+        // Fluxo para Usuário do Sistema (Login direto)
+        if (isSystemUser(authUser)) {
+            // Busca completa necessária para o DTO
+            UserEntity fullUser = userRepository.findByEmailWithAllPermissions(userDTO.email())
+                    .orElseThrow(() -> new NotFoundException("Erro ao carregar perfil do usuário"));
 
-            user.setLastToken(token);
-            user.setTokenExpiryDate(LocalDateTime.now().plusHours(12));
-            userRepository.save(user);
+            String token = tokenService.generateToken(fullUser);
 
-            List<ClientEntity> clients = new ArrayList<>(user.getClients());
+            // ✅ OTIMIZAÇÃO: Atualiza o banco em outra thread para não travar o retorno
+            updateLastLoginAsync(fullUser.getId(), token);
 
             return new LoginResponseDTO(
-                    user.getId(),
-                    user.getName(),
-                    user.getEmail(),
-                    user.getPhone(),
-                    user.getSex(),
-                    user.getRole().getName(),
-                    user.getIsFirstAccess(),
-                    token,
-                    clients
+                    fullUser.getId(), fullUser.getName(), fullUser.getEmail(), fullUser.getPhone(),
+                    fullUser.getSex(), fullUser.getRole().getName(), fullUser.getIsFirstAccess(),
+                    token, new ArrayList<>(fullUser.getClients())
             );
         }
 
+        // Fluxo para Usuário Comum (Código de Verificação)
         String verificationCode = GenerateRandomCode.generateRandomCode();
 
-        VerificationCodeEntity codeEntity = new VerificationCodeEntity();
-        codeEntity.setCode(verificationCode);
-        codeEntity.setUser(user);
-        codeEntity.setUsed(false);
-        codeEntity.setExpiryDate(LocalDateTime.now().plusMinutes(10));
+        // Salva o código (transação síncrona pois é mandatório)
+        saveVerificationCode(authUser, verificationCode);
 
-        verificationCodeRepository.save(codeEntity);
-
-        emailService.sendVerificationCode(user.getEmail(), verificationCode);
+        // Envio de e-mail (deve ser @Async na EmailService)
+        emailService.sendVerificationCode(authUser.getEmail(), verificationCode);
 
         return null;
     }
 
     @Transactional
     public LoginResponseDTO verifyCodeAndLogin(VerifyCodeRequestDTO verifyRequest) {
-        UserEntity user = userRepository.findByEmailWithClientsAndDetails(verifyRequest.getEmail())
+        // Busca completa necessária para gerar o token e retornar permissões
+        UserEntity user = userRepository.findByEmailWithAllPermissions(verifyRequest.getEmail())
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
 
         VerificationCodeEntity codeEntity = verificationCodeRepository
@@ -654,26 +549,37 @@ public class UserService {
             throw new InvalidInputException("Código de verificação expirado!");
         }
 
+        // Invalida o código
         codeEntity.setUsed(true);
         verificationCodeRepository.save(codeEntity);
 
+        // Gera token
         String token = tokenService.generateToken(user);
 
-        userRepository.save(user);
-
-        List<ClientEntity> clients = new ArrayList<>(user.getClients());
+        // ✅ OTIMIZAÇÃO: Atualiza o banco em outra thread
+        updateLastLoginAsync(user.getId(), token);
 
         return new LoginResponseDTO(
-                user.getId(),
-                user.getName(),
-                user.getEmail(),
-                user.getPhone(),
-                user.getSex(),
-                user.getRole().getName(),
-                user.getIsFirstAccess(),
-                token,
-                clients
+                user.getId(), user.getName(), user.getEmail(), user.getPhone(),
+                user.getSex(), user.getRole().getName(), user.getIsFirstAccess(),
+                token, new ArrayList<>(user.getClients())
         );
+    }
+
+    @Async
+    @Transactional
+    public void updateLastLoginAsync(Long userId, String token) {
+        try {
+            // Recarrega apenas para atualizar (ou usa query update direta se preferir)
+            userRepository.findById(userId).ifPresent(user -> {
+                user.setLastToken(token);
+                user.setTokenExpiryDate(LocalDateTime.now().plusHours(12));
+                userRepository.save(user);
+            });
+        } catch (Exception e) {
+            log.error("Erro ao atualizar lastToken assincronamente para user {}: {}", userId, e.getMessage());
+            // Falha silenciosa aceitável aqui, não impede o login
+        }
     }
 
     @Transactional
@@ -690,13 +596,11 @@ public class UserService {
         }
 
         String verificationCode = GenerateRandomCode.generateRandomCode();
-
         VerificationCodeEntity codeEntity = new VerificationCodeEntity();
         codeEntity.setCode(verificationCode);
         codeEntity.setUser(user);
         codeEntity.setUsed(false);
         codeEntity.setExpiryDate(LocalDateTime.now().plusMinutes(10));
-
         verificationCodeRepository.save(codeEntity);
 
         emailService.sendPasswordResetCode(user.getEmail(), verificationCode);
@@ -748,11 +652,9 @@ public class UserService {
 
     private void handleRoleChange(UserEntity user, RoleEnum oldRole, RoleEnum newRole) {
         if (oldRole == RoleEnum.ADMIN && newRole == RoleEnum.COLLABORATOR) {
-
             if (!user.getClients().isEmpty()) {
                 createDefaultDamPermissions(user);
             }
-
             documentationPermissionService.createDefaultPermission(user);
             attributionsPermissionService.createDefaultPermission(user);
             instrumentationPermissionService.createDefaultPermission(user);
@@ -760,9 +662,7 @@ public class UserService {
         }
 
         if (oldRole == RoleEnum.COLLABORATOR && newRole == RoleEnum.ADMIN) {
-
-            deleteAllDamPermissions(user);
-
+            damPermissionRepository.deleteByUserId(user.getId());
             documentationPermissionService.deleteByUserSafely(user.getId());
             attributionsPermissionService.deleteByUserSafely(user.getId());
             instrumentationPermissionService.deleteByUserSafely(user.getId());
@@ -776,61 +676,41 @@ public class UserService {
     }
 
     private void createDefaultDamPermissions(UserEntity user) {
-
         for (ClientEntity client : user.getClients()) {
             List<DamEntity> dams = damRepository.findByClient(client);
-
             for (DamEntity dam : dams) {
-                if (damPermissionRepository.existsByUserAndDamAndClient(user, dam, client)) {
-                    continue;
+                if (!damPermissionRepository.existsByUserAndDamAndClient(user, dam, client)) {
+                    DamPermissionEntity permission = new DamPermissionEntity();
+                    permission.setUser(user);
+                    permission.setDam(dam);
+                    permission.setClient(client);
+                    permission.setHasAccess(false);
+                    permission.setCreatedAt(LocalDateTime.now());
+                    damPermissionRepository.save(permission);
                 }
-
-                DamPermissionEntity permission = new DamPermissionEntity();
-                permission.setUser(user);
-                permission.setDam(dam);
-                permission.setClient(client);
-                permission.setHasAccess(false);
-                permission.setCreatedAt(LocalDateTime.now());
-
-                damPermissionRepository.save(permission);
-            }
-        }
-    }
-
-    private void deleteAllDamPermissions(UserEntity user) {
-        List<DamPermissionEntity> permissions = damPermissionRepository.findByUser(user);
-
-        if (!permissions.isEmpty()) {
-            damPermissionRepository.deleteAll(permissions);
-        }
-    }
-
-    private void createDamPermissionsForSpecificClients(UserEntity user, Set<ClientEntity> clients) {
-        for (ClientEntity client : clients) {
-            List<DamEntity> dams = damRepository.findByClient(client);
-
-            for (DamEntity dam : dams) {
-                if (damPermissionRepository.existsByUserAndDamAndClient(user, dam, client)) {
-                    continue;
-                }
-
-                DamPermissionEntity permission = new DamPermissionEntity();
-                permission.setUser(user);
-                permission.setDam(dam);
-                permission.setClient(client);
-                permission.setHasAccess(false);
-                permission.setCreatedAt(LocalDateTime.now());
-
-                damPermissionRepository.save(permission);
             }
         }
     }
 
     private void deleteDamPermissionsForSpecificClients(UserEntity user, Set<ClientEntity> clients) {
         for (ClientEntity client : clients) {
-            List<DamPermissionEntity> permissions = damPermissionRepository.findByUserAndClient(user, client);
-            if (!permissions.isEmpty()) {
-                damPermissionRepository.deleteAll(permissions);
+            damPermissionRepository.deleteByUserIdAndClientId(user.getId(), client.getId());
+        }
+    }
+
+    private void createDamPermissionsForSpecificClients(UserEntity user, Set<ClientEntity> clients) {
+        for (ClientEntity client : clients) {
+            List<DamEntity> dams = damRepository.findByClient(client);
+            for (DamEntity dam : dams) {
+                if (!damPermissionRepository.existsByUserAndDamAndClient(user, dam, client)) {
+                    DamPermissionEntity permission = new DamPermissionEntity();
+                    permission.setUser(user);
+                    permission.setDam(dam);
+                    permission.setClient(client);
+                    permission.setHasAccess(false);
+                    permission.setCreatedAt(LocalDateTime.now());
+                    damPermissionRepository.save(permission);
+                }
             }
         }
     }
@@ -879,7 +759,6 @@ public class UserService {
             instrPermissionDTO.setEditRead(sourceInstrPermission.getEditRead());
             instrPermissionDTO.setViewSections(sourceInstrPermission.getViewSections());
             instrPermissionDTO.setEditSections(sourceInstrPermission.getEditSections());
-
             instrPermissionDTO.setViewInstruments(sourceInstrPermission.getViewInstruments());
             instrPermissionDTO.setEditInstruments(sourceInstrPermission.getEditInstruments());
             instrumentationPermissionService.createOrUpdate(instrPermissionDTO);
@@ -909,9 +788,6 @@ public class UserService {
                 && "noreply@geometrisa-prod.com.br".equals(user.getEmail());
     }
 
-    /**
-     * Verifica se o ID pertence ao usuário do sistema.
-     */
     public boolean isSystemUser(Long userId) {
         try {
             UserEntity user = findById(userId);
@@ -921,19 +797,11 @@ public class UserService {
         }
     }
 
-    /**
-     * Retorna o ID do usuário do sistema.
-     */
     public Long getSystemUserId() {
-        String systemUserEmail = "noreply@geometrisa-prod.com.br";
-        UserEntity systemUser = userRepository.findByEmail(systemUserEmail)
+        return userRepository.findSystemUserId()
                 .orElseThrow(() -> new NotFoundException("Usuário do sistema não encontrado!"));
-        return systemUser.getId();
     }
 
-    /**
-     * Retorna o usuário do sistema.
-     */
     public UserEntity getSystemUser() {
         String systemUserEmail = "noreply@geometrisa-prod.com.br";
         return userRepository.findByEmail(systemUserEmail)
@@ -948,14 +816,11 @@ public class UserService {
         List<UserEntity> collaborators = userRepository.findByClientIdAndRole(clientId, RoleEnum.COLLABORATOR);
 
         for (UserEntity collaborator : collaborators) {
-
             deleteDamPermissionsForSpecificClients(collaborator, Set.of(client));
-
             createDamPermissionsForSpecificClients(collaborator, Set.of(client));
         }
 
-        log.info("DamPermissions recriadas para {} colaboradores do cliente ID: {}",
-                collaborators.size(), clientId);
+        log.info("DamPermissions recriadas para {} colaboradores do cliente ID: {}", collaborators.size(), clientId);
     }
 
     @Transactional
@@ -969,7 +834,6 @@ public class UserService {
         List<UserEntity> collaborators = userRepository.findByClientIdAndRole(clientId, RoleEnum.COLLABORATOR);
 
         for (UserEntity collaborator : collaborators) {
-
             damPermissionRepository.deleteByUserAndDamAndClient(collaborator, dam, client);
         }
 
@@ -988,7 +852,6 @@ public class UserService {
         List<UserEntity> collaborators = userRepository.findByClientIdAndRole(clientId, RoleEnum.COLLABORATOR);
 
         for (UserEntity collaborator : collaborators) {
-
             if (damPermissionRepository.existsByUserAndDamAndClient(collaborator, dam, client)) {
                 continue;
             }
@@ -1007,14 +870,7 @@ public class UserService {
                 damId, collaborators.size(), clientId);
     }
 
-    /**
-     * Desativa todos os usuários associados a um cliente de forma assíncrona.
-     * Executa em batch para melhor performance.
-     *
-     * @param clientId ID do cliente
-     * @param disabledStatusId ID do status "Desativado"
-     */
-    @org.springframework.scheduling.annotation.Async
+    @Async
     @Transactional
     public void deactivateClientUsersAsync(Long clientId, Long disabledStatusId) {
         try {
@@ -1035,7 +891,15 @@ public class UserService {
         } catch (Exception e) {
             log.error("❌ Erro ao desativar usuários do cliente {} de forma assíncrona: {}",
                     clientId, e.getMessage(), e);
-
         }
+    }
+
+    private void saveVerificationCode(UserEntity user, String code) {
+        VerificationCodeEntity codeEntity = new VerificationCodeEntity();
+        codeEntity.setCode(code);
+        codeEntity.setUser(user);
+        codeEntity.setUsed(false);
+        codeEntity.setExpiryDate(LocalDateTime.now().plusMinutes(10));
+        verificationCodeRepository.save(codeEntity);
     }
 }

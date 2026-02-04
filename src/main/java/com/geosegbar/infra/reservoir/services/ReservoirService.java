@@ -18,51 +18,58 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class ReservoirService {
-    
+
     private final ReservoirRepository reservoirRepository;
     private final DamRepository damRepository;
     private final LevelRepository levelRepository;
-    
+
+    @Transactional(readOnly = true)
     public List<ReservoirEntity> findByDamId(Long damId) {
+
+        if (!damRepository.existsById(damId)) {
+            throw new NotFoundException("Barragem não encontrada!");
+        }
         return reservoirRepository.findByDamIdOrderByCreatedAtDesc(damId);
     }
-    
+
+    @Transactional(readOnly = true)
     public ReservoirEntity findById(Long id) {
         return reservoirRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Reservatório não encontrado!"));
     }
-    
+
     @Transactional
     public ReservoirEntity save(ReservoirEntity reservoir, Long damId, Long levelId) {
         DamEntity dam = damRepository.findById(damId)
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
-                
+
         LevelEntity level = levelRepository.findById(levelId)
                 .orElseThrow(() -> new NotFoundException("Nível não encontrado!"));
-                
+
         reservoir.setDam(dam);
         reservoir.setLevel(level);
-        
+
         return reservoirRepository.save(reservoir);
     }
-    
+
     @Transactional
     public ReservoirEntity update(ReservoirEntity reservoir, Long id, Long levelId) {
         ReservoirEntity existingReservoir = reservoirRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Reservatório não encontrado para atualização!"));
-                
+
         LevelEntity level = levelRepository.findById(levelId)
                 .orElseThrow(() -> new NotFoundException("Nível não encontrado!"));
-                
+
         existingReservoir.setLevel(level);
-        
+
         return reservoirRepository.save(existingReservoir);
     }
-    
+
     @Transactional
     public void deleteById(Long id) {
-        reservoirRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Reservatório não encontrado para exclusão!"));
+        if (!reservoirRepository.existsById(id)) {
+            throw new NotFoundException("Reservatório não encontrado para exclusão!");
+        }
         reservoirRepository.deleteById(id);
     }
 }

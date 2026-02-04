@@ -1,11 +1,14 @@
 package com.geosegbar.infra.permissions.permissions_main.services;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.common.enums.RoleEnum;
 import com.geosegbar.entities.AttributionsPermissionEntity;
@@ -33,7 +36,6 @@ import com.geosegbar.infra.permissions.permissions_main.dtos.UserPermissionsUpda
 import com.geosegbar.infra.permissions.routine_inspection_permission.persistence.RoutineInspectionPermissionRepository;
 import com.geosegbar.infra.user.persistence.jpa.UserRepository;
 
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -52,26 +54,18 @@ public class UserPermissionsService {
     private final ClientRepository clientRepository;
     private final ChecklistService checklistService;
 
+    @Transactional(readOnly = true)
     public UserPermissionsDTO getAllPermissionsForUser(Long userId) {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
 
         UserPermissionsDTO permissionsDTO = new UserPermissionsDTO();
 
-        Optional<DocumentationPermissionEntity> docPermission = documentationPermissionRepository.findByUser(user);
-        permissionsDTO.setDocumentationPermission(docPermission.orElse(null));
-
-        Optional<AttributionsPermissionEntity> attrPermission = attributionsPermissionRepository.findByUser(user);
-        permissionsDTO.setAttributionsPermission(attrPermission.orElse(null));
-
-        Optional<InstrumentationPermissionEntity> instrPermission = instrumentationPermissionRepository.findByUser(user);
-        permissionsDTO.setInstrumentationPermission(instrPermission.orElse(null));
-
-        Optional<RoutineInspectionPermissionEntity> routinePermission = routineInspectionPermissionRepository.findByUser(user);
-        permissionsDTO.setRoutineInspectionPermission(routinePermission.orElse(null));
-
-        List<DamPermissionEntity> damPermissions = damPermissionRepository.findByUser(user);
-        permissionsDTO.setDamPermissions(damPermissions);
+        permissionsDTO.setDocumentationPermission(documentationPermissionRepository.findByUser(user).orElse(null));
+        permissionsDTO.setAttributionsPermission(attributionsPermissionRepository.findByUser(user).orElse(null));
+        permissionsDTO.setInstrumentationPermission(instrumentationPermissionRepository.findByUser(user).orElse(null));
+        permissionsDTO.setRoutineInspectionPermission(routineInspectionPermissionRepository.findByUser(user).orElse(null));
+        permissionsDTO.setDamPermissions(damPermissionRepository.findByUser(user));
 
         return permissionsDTO;
     }
@@ -105,15 +99,12 @@ public class UserPermissionsService {
     }
 
     private void updateDocumentationPermission(UserEntity user, DocumentationPermissionUpdateDTO updateDTO) {
-        DocumentationPermissionEntity permission;
-        Optional<DocumentationPermissionEntity> existingPermission = documentationPermissionRepository.findByUser(user);
-
-        if (existingPermission.isPresent()) {
-            permission = existingPermission.get();
-        } else {
-            permission = new DocumentationPermissionEntity();
-            permission.setUser(user);
-        }
+        DocumentationPermissionEntity permission = documentationPermissionRepository.findByUser(user)
+                .orElseGet(() -> {
+                    DocumentationPermissionEntity newPerm = new DocumentationPermissionEntity();
+                    newPerm.setUser(user);
+                    return newPerm;
+                });
 
         if (updateDTO.getViewPSB() != null) {
             permission.setViewPSB(updateDTO.getViewPSB());
@@ -129,24 +120,19 @@ public class UserPermissionsService {
     }
 
     private void updateAttributionsPermission(UserEntity user, AttributionsPermissionUpdateDTO updateDTO) {
-        AttributionsPermissionEntity permission;
-        Optional<AttributionsPermissionEntity> existingPermission = attributionsPermissionRepository.findByUser(user);
-
-        if (existingPermission.isPresent()) {
-            permission = existingPermission.get();
-        } else {
-            permission = new AttributionsPermissionEntity();
-            permission.setUser(user);
-        }
+        AttributionsPermissionEntity permission = attributionsPermissionRepository.findByUser(user)
+                .orElseGet(() -> {
+                    AttributionsPermissionEntity newPerm = new AttributionsPermissionEntity();
+                    newPerm.setUser(user);
+                    return newPerm;
+                });
 
         if (updateDTO.getEditUser() != null) {
             permission.setEditUser(updateDTO.getEditUser());
         }
-
         if (updateDTO.getEditDam() != null) {
             permission.setEditDam(updateDTO.getEditDam());
         }
-
         if (updateDTO.getEditGeralData() != null) {
             permission.setEditGeralData(updateDTO.getEditGeralData());
         }
@@ -155,48 +141,37 @@ public class UserPermissionsService {
     }
 
     private void updateInstrumentationPermission(UserEntity user, InstrumentationPermissionUpdateDTO updateDTO) {
-        InstrumentationPermissionEntity permission;
-        Optional<InstrumentationPermissionEntity> existingPermission = instrumentationPermissionRepository.findByUser(user);
-
-        if (existingPermission.isPresent()) {
-            permission = existingPermission.get();
-        } else {
-            permission = new InstrumentationPermissionEntity();
-            permission.setUser(user);
-        }
+        InstrumentationPermissionEntity permission = instrumentationPermissionRepository.findByUser(user)
+                .orElseGet(() -> {
+                    InstrumentationPermissionEntity newPerm = new InstrumentationPermissionEntity();
+                    newPerm.setUser(user);
+                    return newPerm;
+                });
 
         if (updateDTO.getViewGraphs() != null) {
             permission.setViewGraphs(updateDTO.getViewGraphs());
         }
-
         if (updateDTO.getEditGraphsLocal() != null) {
             permission.setEditGraphsLocal(updateDTO.getEditGraphsLocal());
         }
-
         if (updateDTO.getEditGraphsDefault() != null) {
             permission.setEditGraphsDefault(updateDTO.getEditGraphsDefault());
         }
-
         if (updateDTO.getViewRead() != null) {
             permission.setViewRead(updateDTO.getViewRead());
         }
-
         if (updateDTO.getEditRead() != null) {
             permission.setEditRead(updateDTO.getEditRead());
         }
-
         if (updateDTO.getViewSections() != null) {
             permission.setViewSections(updateDTO.getViewSections());
         }
-
         if (updateDTO.getEditSections() != null) {
             permission.setEditSections(updateDTO.getEditSections());
         }
-
         if (updateDTO.getViewInstruments() != null) {
             permission.setViewInstruments(updateDTO.getViewInstruments());
         }
-
         if (updateDTO.getEditInstruments() != null) {
             permission.setEditInstruments(updateDTO.getEditInstruments());
         }
@@ -206,20 +181,16 @@ public class UserPermissionsService {
     }
 
     private void updateRoutineInspectionPermission(UserEntity user, RoutineInspectionPermissionUpdateDTO updateDTO) {
-        RoutineInspectionPermissionEntity permission;
-        Optional<RoutineInspectionPermissionEntity> existingPermission = routineInspectionPermissionRepository.findByUser(user);
-
-        if (existingPermission.isPresent()) {
-            permission = existingPermission.get();
-        } else {
-            permission = new RoutineInspectionPermissionEntity();
-            permission.setUser(user);
-        }
+        RoutineInspectionPermissionEntity permission = routineInspectionPermissionRepository.findByUser(user)
+                .orElseGet(() -> {
+                    RoutineInspectionPermissionEntity newPerm = new RoutineInspectionPermissionEntity();
+                    newPerm.setUser(user);
+                    return newPerm;
+                });
 
         if (updateDTO.getIsFillWeb() != null) {
             permission.setIsFillWeb(updateDTO.getIsFillWeb());
         }
-
         if (updateDTO.getIsFillMobile() != null) {
             permission.setIsFillMobile(updateDTO.getIsFillMobile());
         }
@@ -229,7 +200,9 @@ public class UserPermissionsService {
 
     private void updateDamPermissions(UserEntity user, List<Long> damIds) {
         try {
+
             List<DamPermissionEntity> existingPermissions = damPermissionRepository.findByUser(user);
+            List<DamPermissionEntity> permissionsToUpdate = new ArrayList<>();
 
             for (DamPermissionEntity existing : existingPermissions) {
                 boolean shouldHaveAccess = damIds.contains(existing.getDam().getId());
@@ -237,34 +210,45 @@ public class UserPermissionsService {
                 if (existing.getHasAccess() != shouldHaveAccess) {
                     existing.setHasAccess(shouldHaveAccess);
                     existing.setUpdatedAt(LocalDateTime.now());
-                    damPermissionRepository.save(existing);
+                    permissionsToUpdate.add(existing);
                 }
             }
 
             Set<Long> existingDamIds = existingPermissions.stream()
                     .map(perm -> perm.getDam().getId())
-                    .collect(java.util.stream.Collectors.toSet());
+                    .collect(Collectors.toSet());
 
-            for (Long damId : damIds) {
-                if (existingDamIds.contains(damId)) {
-                    continue;
+            List<Long> newDamIds = damIds.stream()
+                    .filter(id -> !existingDamIds.contains(id))
+                    .collect(Collectors.toList());
+
+            if (!newDamIds.isEmpty()) {
+
+                List<DamEntity> dams = damRepository.findAllById(newDamIds);
+
+                if (dams.size() != newDamIds.size()) {
+                    throw new NotFoundException("Algumas barragens não foram encontradas na lista fornecida.");
                 }
 
-                DamEntity dam = damRepository.findById(damId)
-                        .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + damId));
+                for (DamEntity dam : dams) {
 
-                if (dam.getClient() == null) {
-                    throw new NotFoundException("Barragem não está associada a nenhum cliente: " + damId);
+                    if (dam.getClient() == null) {
+                        throw new NotFoundException("Barragem não está associada a nenhum cliente: " + dam.getId());
+                    }
+
+                    DamPermissionEntity permission = new DamPermissionEntity();
+                    permission.setUser(user);
+                    permission.setDam(dam);
+                    permission.setClient(dam.getClient());
+                    permission.setHasAccess(true);
+                    permission.setCreatedAt(LocalDateTime.now());
+
+                    permissionsToUpdate.add(permission);
                 }
+            }
 
-                DamPermissionEntity permission = new DamPermissionEntity();
-                permission.setUser(user);
-                permission.setDam(dam);
-                permission.setClient(dam.getClient());
-                permission.setHasAccess(true);
-                permission.setCreatedAt(LocalDateTime.now());
-
-                damPermissionRepository.save(permission);
+            if (!permissionsToUpdate.isEmpty()) {
+                damPermissionRepository.saveAll(permissionsToUpdate);
             }
 
             log.info("Updated dam permissions for user {}, dams with access: {}", user.getId(), damIds.size());
@@ -274,16 +258,15 @@ public class UserPermissionsService {
         }
     }
 
+    @Transactional(readOnly = true)
     public String verifyChecklistPermission(Long userId, Long clientId, Long damId, Long checklistId, boolean isMobile) {
 
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
 
-        ClientEntity client = clientRepository.findById(clientId)
-                .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + clientId));
-
-        DamEntity dam = damRepository.findById(damId)
-                .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + damId));
+        if (user.getRole() != null && user.getRole().getName() == RoleEnum.ADMIN) {
+            return "authorized";
+        }
 
         boolean isUserAssociatedWithClient = user.getClients().stream()
                 .anyMatch(c -> c.getId().equals(clientId));
@@ -292,9 +275,11 @@ public class UserPermissionsService {
             return "O usuário não está associado ao cliente especificado";
         }
 
-        if (user.getRole() != null && user.getRole().getName() == RoleEnum.ADMIN) {
-            return "authorized";
-        }
+        ClientEntity client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + clientId));
+
+        DamEntity dam = damRepository.findById(damId)
+                .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + damId));
 
         Optional<DamPermissionEntity> damPermission = damPermissionRepository.findByUserAndDamAndClient(user, dam, client);
 

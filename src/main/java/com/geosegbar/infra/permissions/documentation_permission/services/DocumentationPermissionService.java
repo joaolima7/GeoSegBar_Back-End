@@ -23,15 +23,18 @@ public class DocumentationPermissionService {
     private final DocumentationPermissionRepository docPermissionRepository;
     private final UserRepository userRepository;
 
+    @Transactional(readOnly = true)
     public List<DocumentationPermissionEntity> findAll() {
         return docPermissionRepository.findAll();
     }
 
+    @Transactional(readOnly = true)
     public DocumentationPermissionEntity findById(Long id) {
         return docPermissionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Permissão de documentação não encontrada com ID: " + id));
     }
 
+    @Transactional(readOnly = true)
     public DocumentationPermissionEntity findByUser(Long userId) {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
@@ -45,16 +48,12 @@ public class DocumentationPermissionService {
         UserEntity user = userRepository.findById(permissionDTO.getUserId())
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + permissionDTO.getUserId()));
 
-        DocumentationPermissionEntity permission;
-
-        var existingPermission = docPermissionRepository.findByUser(user);
-
-        if (existingPermission.isPresent()) {
-            permission = existingPermission.get();
-        } else {
-            permission = new DocumentationPermissionEntity();
-            permission.setUser(user);
-        }
+        DocumentationPermissionEntity permission = docPermissionRepository.findByUser(user)
+                .orElseGet(() -> {
+                    DocumentationPermissionEntity newPerm = new DocumentationPermissionEntity();
+                    newPerm.setUser(user);
+                    return newPerm;
+                });
 
         permission.setViewPSB(permissionDTO.getViewPSB());
         permission.setEditPSB(permissionDTO.getEditPSB());
@@ -89,17 +88,13 @@ public class DocumentationPermissionService {
             UserEntity user = userRepository.findById(userId)
                     .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
 
-            if (docPermissionRepository.existsByUser(user)) {
-                DocumentationPermissionEntity permission = docPermissionRepository.findByUser(user).get();
-
+            docPermissionRepository.findByUser(user).ifPresent(permission -> {
                 user.setDocumentationPermission(null);
                 permission.setUser(null);
 
                 userRepository.save(user);
-                docPermissionRepository.save(permission);
-
                 docPermissionRepository.delete(permission);
-            }
+            });
         } catch (Exception e) {
             log.warn("Error while trying to delete documentation permission for user {}: {}", userId, e.getMessage());
         }
@@ -107,18 +102,15 @@ public class DocumentationPermissionService {
 
     @Transactional
     public DocumentationPermissionEntity createDefaultPermission(UserEntity user) {
-        if (docPermissionRepository.existsByUser(user)) {
-            log.info("Documentation permission already exists for user {}", user.getId());
-            return docPermissionRepository.findByUser(user).get();
-        }
-
-        DocumentationPermissionEntity permission = new DocumentationPermissionEntity();
-        permission.setUser(user);
-        permission.setViewPSB(false);
-        permission.setEditPSB(false);
-        permission.setSharePSB(false);
-
-        DocumentationPermissionEntity savedPermission = docPermissionRepository.save(permission);
-        return savedPermission;
+        return docPermissionRepository.findByUser(user)
+                .orElseGet(() -> {
+                    log.info("Creating default documentation permission for user {}", user.getId());
+                    DocumentationPermissionEntity permission = new DocumentationPermissionEntity();
+                    permission.setUser(user);
+                    permission.setViewPSB(false);
+                    permission.setEditPSB(false);
+                    permission.setSharePSB(false);
+                    return docPermissionRepository.save(permission);
+                });
     }
 }

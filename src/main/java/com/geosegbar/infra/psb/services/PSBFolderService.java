@@ -35,15 +35,19 @@ public class PSBFolderService {
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
 
+    @Transactional(readOnly = true)
     public List<PSBFolderEntity> findAllByDamId(Long damId) {
         validateViewPermission();
         return psbFolderRepository.findByDamIdAndParentFolderIsNullOrderByFolderIndexAsc(damId);
     }
 
+    @Transactional(readOnly = true)
     public List<PSBFolderEntity> findSubfolders(Long parentFolderId) {
         validateViewPermission();
-        psbFolderRepository.findById(parentFolderId)
-                .orElseThrow(() -> new NotFoundException("Pasta pai não encontrada"));
+
+        if (!psbFolderRepository.existsById(parentFolderId)) {
+            throw new NotFoundException("Pasta pai não encontrada");
+        }
         return psbFolderRepository.findByParentFolderIdOrderByFolderIndexAsc(parentFolderId);
     }
 
@@ -51,8 +55,9 @@ public class PSBFolderService {
     public List<PSBFolderEntity> findCompleteHierarchyByDamId(Long damId) {
         validateViewPermission();
 
-        damRepository.findById(damId)
-                .orElseThrow(() -> new NotFoundException("Barragem não encontrada"));
+        if (!damRepository.existsById(damId)) {
+            throw new NotFoundException("Barragem não encontrada");
+        }
 
         List<PSBFolderEntity> rootFolders = psbFolderRepository.findCompleteHierarchyByDamId(damId);
 
@@ -199,22 +204,22 @@ public class PSBFolderService {
         reindexSiblingsAfterDelete(damId, parentFolder, deletedFolderIndex);
     }
 
-    /**
-     * Deleta recursivamente todos os arquivos físicos do S3 associados à pasta
-     * e subpastas.
-     */
     private void deleteS3ContentRecursively(PSBFolderEntity folder) {
 
-        for (PSBFileEntity file : folder.getFiles()) {
-            try {
-                fileStorageService.deleteFile(file.getDownloadUrl());
-            } catch (Exception e) {
-                log.error("Erro ao deletar arquivo S3 {}: {}", file.getFilename(), e.getMessage());
+        if (folder.getFiles() != null) {
+            for (PSBFileEntity file : folder.getFiles()) {
+                try {
+                    fileStorageService.deleteFile(file.getDownloadUrl());
+                } catch (Exception e) {
+                    log.error("Erro ao deletar arquivo S3 {}: {}", file.getFilename(), e.getMessage());
+                }
             }
         }
 
-        for (PSBFolderEntity subfolder : folder.getSubfolders()) {
-            deleteS3ContentRecursively(subfolder);
+        if (folder.getSubfolders() != null) {
+            for (PSBFolderEntity subfolder : folder.getSubfolders()) {
+                deleteS3ContentRecursively(subfolder);
+            }
         }
     }
 
@@ -243,7 +248,9 @@ public class PSBFolderService {
             updateSubfoldersPath(folder);
         }
 
-        psbFolderRepository.saveAll(foldersToReindex);
+        if (!foldersToReindex.isEmpty()) {
+            psbFolderRepository.saveAll(foldersToReindex);
+        }
     }
 
     @Transactional
@@ -277,11 +284,6 @@ public class PSBFolderService {
         return createdFolders;
     }
 
-    /**
-     * Gera o caminho hierárquico LÓGICO para o S3. Exemplo:
-     * dam-1/001-geral/002-docs/ Substitui o File.separator por "/" para
-     * garantir compatibilidade S3/Linux/Windows.
-     */
     private String createHierarchicalFolderPath(Long damId, PSBFolderEntity parentFolder,
             Integer folderIndex, String folderName) {
         String normalizedName = folderName.trim()
@@ -347,7 +349,6 @@ public class PSBFolderService {
         for (PSBFolderEntity existingFolder : existingRootFolders) {
             if (!sentFolderIds.contains(existingFolder.getId())) {
                 log.info("Deletando pasta raiz não enviada: {}", existingFolder.getName());
-
                 delete(existingFolder.getId());
             }
         }
@@ -365,7 +366,8 @@ public class PSBFolderService {
 
     private void validateViewPermission() {
         if (!AuthenticatedUserUtil.isAdmin()) {
-            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getViewPSB()) {
+            UserEntity user = AuthenticatedUserUtil.getCurrentUser();
+            if (user.getDocumentationPermission() == null || !Boolean.TRUE.equals(user.getDocumentationPermission().getViewPSB())) {
                 throw new NotFoundException("Usuário não tem permissão para acessar as pastas PSB");
             }
         }
@@ -373,7 +375,8 @@ public class PSBFolderService {
 
     private void validateEditPermission() {
         if (!AuthenticatedUserUtil.isAdmin()) {
-            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getEditPSB()) {
+            UserEntity user = AuthenticatedUserUtil.getCurrentUser();
+            if (user.getDocumentationPermission() == null || !Boolean.TRUE.equals(user.getDocumentationPermission().getEditPSB())) {
                 throw new NotFoundException("Usuário não tem permissão para editar pastas PSB!");
             }
         }

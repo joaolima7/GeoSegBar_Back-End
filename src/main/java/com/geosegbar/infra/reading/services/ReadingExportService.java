@@ -64,7 +64,7 @@ public class ReadingExportService {
 
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getViewRead()) {
+            if (userLogged.getInstrumentationPermission() == null || !userLogged.getInstrumentationPermission().getViewRead()) {
                 throw new UnauthorizedException("Usuário não tem permissão para exportar leituras!");
             }
         }
@@ -104,7 +104,7 @@ public class ReadingExportService {
     private void processInstrument(Workbook workbook, Long instrumentId, LocalDate startDate,
             LocalDate endDate, Map<String, CellStyle> styles) {
 
-        InstrumentEntity instrument = instrumentRepository.findWithCompleteDetailsById(instrumentId)
+        InstrumentEntity instrument = instrumentRepository.findByIdWithFullDetails(instrumentId)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + instrumentId));
 
         log.info("Processando instrumento: {} (ID: {})", instrument.getName(), instrumentId);
@@ -116,7 +116,7 @@ public class ReadingExportService {
 
         Map<String, GroupedReadingData> groupedReadings = groupReadingsByDateTime(readings);
 
-        List<InputMetadata> uniqueInputs = collectUniqueInputs(readings);
+        List<InputMetadata> uniqueInputs = collectUniqueInputs(readings, instrument);
 
         List<OutputEntity> uniqueOutputs = readings.stream()
                 .map(ReadingEntity::getOutput)
@@ -173,7 +173,7 @@ public class ReadingExportService {
         return grouped;
     }
 
-    private List<InputMetadata> collectUniqueInputs(List<ReadingEntity> readings) {
+    private List<InputMetadata> collectUniqueInputs(List<ReadingEntity> readings, InstrumentEntity instrument) {
         Set<InputMetadata> uniqueInputsSet = new LinkedHashSet<>();
 
         for (ReadingEntity reading : readings) {
@@ -182,7 +182,7 @@ public class ReadingExportService {
                 metadata.setAcronym(inputValue.getInputAcronym());
                 metadata.setName(inputValue.getInputName());
 
-                metadata.setUnit(getInputUnit(reading.getInstrument(), inputValue.getInputAcronym()));
+                metadata.setUnit(getInputUnit(instrument, inputValue.getInputAcronym()));
                 uniqueInputsSet.add(metadata);
             }
         }
@@ -191,6 +191,10 @@ public class ReadingExportService {
     }
 
     private String getInputUnit(InstrumentEntity instrument, String acronym) {
+        if (instrument.getInputs() == null) {
+            return "";
+        }
+
         return instrument.getInputs().stream()
                 .filter(input -> input.getAcronym().equals(acronym))
                 .findFirst()
@@ -216,6 +220,7 @@ public class ReadingExportService {
 
         for (OutputEntity output : outputs) {
             String outputHeader = output.getAcronym() + " (Output)";
+
             if (output.getMeasurementUnit() != null) {
                 outputHeader += "\n" + output.getMeasurementUnit().getAcronym();
             }
@@ -259,13 +264,13 @@ public class ReadingExportService {
             }
 
             Map<Long, ReadingEntity> outputReadingMap = group.getReadings().stream()
-                    .collect(Collectors.toMap(r -> r.getOutput().getId(), r -> r));
+                    .collect(Collectors.toMap(r -> r.getOutput().getId(), r -> r, (r1, r2) -> r1));
 
             for (OutputEntity output : outputs) {
                 ReadingEntity reading = outputReadingMap.get(output.getId());
 
                 Cell valueCell = row.createCell(colIndex++);
-                if (reading != null) {
+                if (reading != null && reading.getCalculatedValue() != null) {
                     valueCell.setCellValue(reading.getCalculatedValue().doubleValue());
                     valueCell.setCellStyle(styles.get("number"));
                 } else {

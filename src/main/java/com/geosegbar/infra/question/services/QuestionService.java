@@ -2,8 +2,10 @@ package com.geosegbar.infra.question.services;
 
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.common.enums.TypeQuestionEnum;
 import com.geosegbar.entities.QuestionEntity;
@@ -15,7 +17,6 @@ import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
 import com.geosegbar.infra.template_questionnaire_question.persistence.jpa.TemplateQuestionnaireQuestionRepository;
 
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -50,7 +51,6 @@ public class QuestionService {
                 = templateQuestionnaireQuestionRepository.findByQuestionId(id);
 
         if (!templateQuestions.isEmpty()) {
-
             log.info("Questão {} está em {} template(s). Removendo relacionamentos.",
                     id, templateQuestions.size());
 
@@ -69,7 +69,6 @@ public class QuestionService {
 
     @Transactional
     public QuestionEntity save(QuestionEntity question) {
-
         if (question.getClient() == null || question.getClient().getId() == null) {
             throw new InvalidInputException("Questão deve estar associada a um cliente!");
         }
@@ -82,7 +81,6 @@ public class QuestionService {
         QuestionEntity saved = questionRepository.save(question);
 
         log.info("Questão {} criada.", saved.getId());
-
         return saved;
     }
 
@@ -102,7 +100,6 @@ public class QuestionService {
         boolean hasChanges = hasSignificantChanges(existingQuestion, question);
 
         if (hasChanges) {
-
             List<com.geosegbar.entities.AnswerEntity> answers = answerRepository.findByQuestionIdWithDetails(question.getId());
 
             if (!answers.isEmpty()) {
@@ -117,7 +114,6 @@ public class QuestionService {
         QuestionEntity saved = questionRepository.save(question);
 
         log.info("Questão {} atualizada.", question.getId());
-
         return saved;
     }
 
@@ -157,20 +153,10 @@ public class QuestionService {
         QuestionEntity saved = questionRepository.save(question);
 
         log.info("Questão {} atualizada COM CONFIRMAÇÃO.", question.getId());
-
         return saved;
     }
 
-    /**
-     * Verifica se há mudanças significativas entre a questão existente e a
-     * nova. Mudanças significativas são: texto, tipo ou opções.
-     *
-     * @param existing Questão existente no banco
-     * @param updated Questão com novos dados
-     * @return true se houver mudanças significativas, false caso contrário
-     */
     private boolean hasSignificantChanges(QuestionEntity existing, QuestionEntity updated) {
-
         if (!existing.getQuestionText().equals(updated.getQuestionText())) {
             log.info("Mudança detectada no texto da questão {}: '{}' -> '{}'",
                     existing.getId(), existing.getQuestionText(), updated.getQuestionText());
@@ -186,11 +172,11 @@ public class QuestionService {
         if (TypeQuestionEnum.CHECKBOX.equals(existing.getType())) {
             Set<Long> existingOptionIds = existing.getOptions().stream()
                     .map(com.geosegbar.entities.OptionEntity::getId)
-                    .collect(java.util.stream.Collectors.toSet());
+                    .collect(Collectors.toSet());
 
             Set<Long> updatedOptionIds = updated.getOptions().stream()
                     .map(com.geosegbar.entities.OptionEntity::getId)
-                    .collect(java.util.stream.Collectors.toSet());
+                    .collect(Collectors.toSet());
 
             if (!existingOptionIds.equals(updatedOptionIds)) {
                 log.info("Mudança detectada nas opções da questão {}: {} -> {}",
@@ -203,15 +189,19 @@ public class QuestionService {
         return false;
     }
 
+    @Transactional(readOnly = true)
     public QuestionEntity findById(Long id) {
+
         return questionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Questão não encontrada!"));
     }
 
+    @Transactional(readOnly = true)
     public List<QuestionEntity> findAll() {
         return questionRepository.findAll();
     }
 
+    @Transactional(readOnly = true)
     public List<QuestionEntity> findByClientIdOrderedByText(Long clientId) {
         if (!clientRepository.existsById(clientId)) {
             throw new NotFoundException("Cliente não encontrado com ID: " + clientId);

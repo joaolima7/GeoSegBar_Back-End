@@ -3,6 +3,7 @@ package com.geosegbar.infra.security_level.services;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.entities.SecurityLevelEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
@@ -10,7 +11,6 @@ import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.security_level.persistence.SecurityLevelRepository;
 
 import jakarta.annotation.PostConstruct;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -38,9 +38,10 @@ public class SecurityLevelService {
 
     @Transactional
     public void deleteById(Long id) {
-        securityLevelRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Nível de segurança não encontrado para exclusão!"));
 
+        if (!securityLevelRepository.existsById(id)) {
+            throw new NotFoundException("Nível de segurança não encontrado para exclusão!");
+        }
         securityLevelRepository.deleteById(id);
     }
 
@@ -55,8 +56,9 @@ public class SecurityLevelService {
 
     @Transactional
     public SecurityLevelEntity update(SecurityLevelEntity securityLevelEntity) {
-        securityLevelRepository.findById(securityLevelEntity.getId())
-                .orElseThrow(() -> new NotFoundException("Nível de segurança não encontrado para atualização!"));
+        if (!securityLevelRepository.existsById(securityLevelEntity.getId())) {
+            throw new NotFoundException("Nível de segurança não encontrado para atualização!");
+        }
 
         if (securityLevelRepository.existsByLevelAndIdNot(securityLevelEntity.getLevel(), securityLevelEntity.getId())) {
             throw new DuplicateResourceException("Já existe um nível de segurança com este nome!");
@@ -65,11 +67,13 @@ public class SecurityLevelService {
         return securityLevelRepository.save(securityLevelEntity);
     }
 
+    @Transactional(readOnly = true)
     public SecurityLevelEntity findById(Long id) {
         return securityLevelRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Nível de segurança não encontrado!"));
     }
 
+    @Transactional(readOnly = true)
     public List<SecurityLevelEntity> findAll() {
         return securityLevelRepository.findAllByOrderByIdAsc();
     }

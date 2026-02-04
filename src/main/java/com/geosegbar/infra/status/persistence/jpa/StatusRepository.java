@@ -10,5 +10,6 @@ import com.geosegbar.entities.StatusEntity;
 
 @Repository
 public interface StatusRepository extends JpaRepository<StatusEntity, Long> {
+
     Optional<StatusEntity> findByStatus(StatusEnum status);
 }

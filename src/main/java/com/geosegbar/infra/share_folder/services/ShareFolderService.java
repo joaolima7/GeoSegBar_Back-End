@@ -15,6 +15,7 @@ import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.exceptions.ShareFolderException;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.psb.persistence.PSBFolderRepository;
+import com.geosegbar.infra.psb.services.PSBFolderService;
 import com.geosegbar.infra.share_folder.dtos.CreateShareFolderRequest;
 import com.geosegbar.infra.share_folder.persistence.ShareFolderRepository;
 import com.geosegbar.infra.user.persistence.jpa.UserRepository;
@@ -27,6 +28,7 @@ public class ShareFolderService {
 
     private final ShareFolderRepository shareFolderRepository;
     private final PSBFolderRepository psbFolderRepository;
+    private final PSBFolderService psbFolderService;
     private final UserRepository userRepository;
     private final DamRepository damRepository;
     private final EmailService emailService;
@@ -41,8 +43,12 @@ public class ShareFolderService {
 
     @Transactional(readOnly = true)
     public List<ShareFolderEntity> findAllByFolder(Long folderId) {
-        PSBFolderEntity folder = psbFolderRepository.findById(folderId)
-                .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada!"));
+
+        if (!psbFolderRepository.existsById(folderId)) {
+            throw new NotFoundException("Pasta PSB não encontrada!");
+        }
+
+        PSBFolderEntity folder = psbFolderRepository.findById(folderId).orElseThrow();
         return shareFolderRepository.findByPsbFolder(folder);
     }
 
@@ -108,12 +114,7 @@ public class ShareFolderService {
         shareFolder.incrementAccessCount();
         shareFolderRepository.save(shareFolder);
 
-        PSBFolderEntity folder = psbFolderRepository.findById(shareFolder.getPsbFolder().getId())
-                .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada!"));
-
-        initializeFolderHierarchy(folder);
-
-        return folder;
+        return psbFolderService.findById(shareFolder.getPsbFolder().getId());
     }
 
     @Transactional
@@ -124,10 +125,10 @@ public class ShareFolderService {
             }
         }
 
-        ShareFolderEntity shareFolder = shareFolderRepository.findById(shareId)
-                .orElseThrow(() -> new NotFoundException("Link de compartilhamento não encontrado!"));
-
-        shareFolderRepository.delete(shareFolder);
+        if (!shareFolderRepository.existsById(shareId)) {
+            throw new NotFoundException("Link de compartilhamento não encontrado!");
+        }
+        shareFolderRepository.deleteById(shareId);
     }
 
     @Transactional(readOnly = true)
@@ -135,7 +136,6 @@ public class ShareFolderService {
         if (!damRepository.existsById(damId)) {
             throw new NotFoundException("Barragem não encontrada!");
         }
-
         return shareFolderRepository.findByPsbFolderDamIdOrderByCreatedAtDesc(damId);
     }
 
@@ -152,27 +152,8 @@ public class ShareFolderService {
         shareFolder.incrementAccessCount();
         shareFolderRepository.save(shareFolder);
 
-        PSBFolderEntity folder = psbFolderRepository.findById(shareFolder.getPsbFolder().getId())
-                .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada!"));
-
-        initializeFolderHierarchy(folder);
+        PSBFolderEntity folder = psbFolderService.findById(shareFolder.getPsbFolder().getId());
 
         return zipService.createZipFromFolder(folder);
-    }
-
-    /**
-     * Inicializa recursivamente todas as subpastas e arquivos (força
-     * carregamento lazy)
-     */
-    private void initializeFolderHierarchy(PSBFolderEntity folder) {
-
-        folder.getFiles().size();
-
-        if (folder.getSubfolders() != null && !folder.getSubfolders().isEmpty()) {
-            folder.getSubfolders().forEach(subfolder -> {
-                subfolder.getFiles().size();
-                initializeFolderHierarchy(subfolder);
-            });
-        }
     }
 }

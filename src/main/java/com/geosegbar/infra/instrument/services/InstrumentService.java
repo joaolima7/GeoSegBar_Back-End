@@ -106,7 +106,7 @@ public class InstrumentService {
     @Transactional(readOnly = true)
     public InstrumentEntity findById(Long id) {
 
-        return instrumentRepository.findByIdWithBasicRelations(id)
+        return instrumentRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
     }
 
@@ -131,7 +131,8 @@ public class InstrumentService {
             }
         }
 
-        return mapToResponseDTOList(instrumentRepository.findByClientIdOptimized(clientId, active));
+        List<InstrumentEntity> instruments = instrumentRepository.findByFiltersOptimized(null, null, null, active, clientId);
+        return mapToResponseDTOList(instruments);
     }
 
     @Transactional
@@ -449,13 +450,13 @@ public class InstrumentService {
             }
         }
 
-        InstrumentEntity oldInstrument = instrumentRepository.findWithIOCById(id)
+        InstrumentEntity oldInstrument = instrumentRepository.findByIdWithFullDetails(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
 
         Long oldLinimetricCode = oldInstrument.getLinimetricRulerCode();
 
         if (!oldInstrument.getIsLinimetricRuler().equals(request.getIsLinimetricRuler())) {
-            throw new InvalidInputException("Não é permitido alterar o tipo de instrumento. Uma vez criado como régua linimétrica ou instrumento normal, este atributo não pode ser modificado.");
+            throw new InvalidInputException("Não é permitido alterar o tipo de instrumento (Régua <-> Normal).");
         }
 
         if (instrumentRepository.existsByNameAndDamIdAndIdNot(request.getName(), request.getDamId(), id)) {
@@ -463,27 +464,23 @@ public class InstrumentService {
         }
 
         Map<String, InputEntity> existingInputsByAcronym = oldInstrument.getInputs().stream()
-                .collect(Collectors.toMap(InputEntity::getAcronym, input -> input, (existing, replacement) -> existing));
-
+                .collect(Collectors.toMap(InputEntity::getAcronym, input -> input, (e, r) -> e));
         Map<String, ConstantEntity> existingConstantsByAcronym = oldInstrument.getConstants().stream()
-                .collect(Collectors.toMap(ConstantEntity::getAcronym, constant -> constant, (existing, replacement) -> existing));
-
+                .collect(Collectors.toMap(ConstantEntity::getAcronym, c -> c, (e, r) -> e));
         Map<String, OutputEntity> existingOutputsByAcronym = oldInstrument.getOutputs().stream()
                 .filter(OutputEntity::getActive)
-                .collect(Collectors.toMap(OutputEntity::getAcronym, output -> output, (existing, replacement) -> existing));
+                .collect(Collectors.toMap(OutputEntity::getAcronym, o -> o, (e, r) -> e));
 
         updateInstrumentBasicFields(oldInstrument, request);
 
         if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
             if (request.getLinimetricRulerCode() != null
                     && instrumentRepository.existsByLinimetricRulerCodeAndIdNot(request.getLinimetricRulerCode(), id)) {
-                throw new DuplicateResourceException("Já existe uma régua linimétrica com o código " + request.getLinimetricRulerCode());
+                throw new DuplicateResourceException("Código de régua linimétrica já existe: " + request.getLinimetricRulerCode());
             }
-
             if (request.getOutputs() == null || request.getOutputs().isEmpty()) {
-                throw new InvalidInputException("Para réguas linimétricas, é obrigatório informar pelo menos um output.");
+                throw new InvalidInputException("Régua linimétrica deve ter output.");
             }
-
             processInputsForLinimetricRulerUpdate(oldInstrument, request.getInputs(), existingInputsByAcronym);
             processOutputsForUpdate(oldInstrument, request.getOutputs(), existingOutputsByAcronym);
             deleteUnusedComponents(existingInputsByAcronym, existingConstantsByAcronym);
@@ -497,11 +494,7 @@ public class InstrumentService {
                     : new HashSet<>();
 
             for (OutputDTO outputDTO : request.getOutputs()) {
-                try {
-                    validateEquation(outputDTO.getEquation(), newInputAcronyms, newConstantAcronyms);
-                } catch (InvalidInputException e) {
-                    throw new InvalidInputException("Erro na equação do output '" + outputDTO.getName() + "': " + e.getMessage());
-                }
+                validateEquation(outputDTO.getEquation(), newInputAcronyms, newConstantAcronyms);
             }
 
             processInputsForUpdate(oldInstrument, request.getInputs(), existingInputsByAcronym);
@@ -509,7 +502,6 @@ public class InstrumentService {
                 processConstantsForUpdate(oldInstrument, request.getConstants(), existingConstantsByAcronym);
             }
             processOutputsForUpdate(oldInstrument, request.getOutputs(), existingOutputsByAcronym);
-
             deleteUnusedComponents(existingInputsByAcronym, existingConstantsByAcronym);
         }
 
@@ -525,8 +517,7 @@ public class InstrumentService {
 
             if (codeChanged && newLinimetricCode != null) {
                 eventPublisher.publishEvent(new LinimetricRulerCreatedEvent(this, updatedInstrument));
-                log.info("Evento de coleta hidrotelemetrica disparado após atualização do instrumento: {} (código alterado de {} para {})",
-                        updatedInstrument.getName(), oldLinimetricCode, newLinimetricCode);
+                log.info("Evento de coleta disparado: {} (código {} -> {})", updatedInstrument.getName(), oldLinimetricCode, newLinimetricCode);
             }
         }
 
@@ -687,7 +678,7 @@ public class InstrumentService {
             }
         }
 
-        InstrumentEntity instrument = instrumentRepository.findWithIOCById(id)
+        InstrumentEntity instrument = instrumentRepository.findByIdWithFullDetails(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
 
         for (OutputEntity output : instrument.getOutputs()) {

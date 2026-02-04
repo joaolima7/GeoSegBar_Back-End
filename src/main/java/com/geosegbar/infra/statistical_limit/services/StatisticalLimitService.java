@@ -26,14 +26,17 @@ public class StatisticalLimitService {
     private final StatisticalLimitRepository statisticalLimitRepository;
     private final OutputRepository outputRepository;
 
+    @Transactional(readOnly = true)
     public Optional<StatisticalLimitEntity> findByOutputId(Long outputId) {
         return statisticalLimitRepository.findByOutputId(outputId);
     }
 
+    @Transactional(readOnly = true)
     public List<Long> findStatisticalLimitIdsByOutputInstrumentDamId(Long damId) {
         return statisticalLimitRepository.findLimitIdsByOutputInstrumentDamId(damId);
     }
 
+    @Transactional(readOnly = true)
     public StatisticalLimitEntity findById(Long id) {
         return statisticalLimitRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Limite estatístico não encontrado com ID: " + id));
@@ -41,23 +44,17 @@ public class StatisticalLimitService {
 
     @Transactional
     @Caching(evict = {
-        @CacheEvict(
-                value = "graphProperties",
-                allEntries = true,
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-        @CacheEvict(
-                value = {"graphPatternById", "folderWithPatterns", "damFoldersWithPatterns"},
-                allEntries = true,
-                cacheManager = "instrumentGraphCacheManager"
-        )
+        @CacheEvict(value = "graphProperties", allEntries = true, cacheManager = "instrumentGraphCacheManager"),
+        @CacheEvict(value = {"graphPatternById", "folderWithPatterns", "damFoldersWithPatterns"}, allEntries = true, cacheManager = "instrumentGraphCacheManager")
     })
     public StatisticalLimitEntity createOrUpdate(Long outputId, StatisticalLimitEntity limit) {
+
         OutputEntity output = outputRepository.findById(outputId)
                 .orElseThrow(() -> new NotFoundException("Output não encontrado com ID: " + outputId));
 
         InstrumentEntity instrument = output.getInstrument();
         if (instrument == null) {
+
             throw new IllegalStateException("Output sem instrumento associado");
         }
 
@@ -79,24 +76,18 @@ public class StatisticalLimitService {
         } else {
             limit.setOutput(output);
             StatisticalLimitEntity savedLimit = statisticalLimitRepository.save(limit);
+
             output.setStatisticalLimit(savedLimit);
             outputRepository.save(output);
+
             return savedLimit;
         }
     }
 
     @Transactional
     @Caching(evict = {
-        @CacheEvict(
-                value = "graphProperties",
-                allEntries = true,
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-        @CacheEvict(
-                value = {"graphPatternById", "folderWithPatterns", "damFoldersWithPatterns"},
-                allEntries = true,
-                cacheManager = "instrumentGraphCacheManager"
-        )
+        @CacheEvict(value = "graphProperties", allEntries = true, cacheManager = "instrumentGraphCacheManager"),
+        @CacheEvict(value = {"graphPatternById", "folderWithPatterns", "damFoldersWithPatterns"}, allEntries = true, cacheManager = "instrumentGraphCacheManager")
     })
     public void deleteById(Long id) {
         StatisticalLimitEntity limit = findById(id);

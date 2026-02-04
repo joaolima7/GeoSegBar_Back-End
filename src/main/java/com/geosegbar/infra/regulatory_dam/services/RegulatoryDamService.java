@@ -37,16 +37,21 @@ public class RegulatoryDamService {
     private final PotentialDamageRepository potentialDamageRepository;
     private final ClassificationDamRepository classificationDamRepository;
 
+    @Transactional(readOnly = true)
     public RegulatoryDamEntity findById(Long id) {
+
         return regulatoryDamRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Informação regulatória da barragem não encontrada com ID: " + id));
     }
 
+    @Transactional(readOnly = true)
     public RegulatoryDamEntity findByDamId(Long damId) {
+
         return regulatoryDamRepository.findByDamId(damId)
                 .orElseThrow(() -> new NotFoundException("Informação regulatória não encontrada para a barragem com ID: " + damId));
     }
 
+    @Transactional(readOnly = true)
     public List<RegulatoryDamEntity> findAll() {
         return regulatoryDamRepository.findAll();
     }
@@ -59,6 +64,7 @@ public class RegulatoryDamService {
         RegulatoryDamEntity regulatoryDam;
 
         if (regulatoryDamDTO.getId() != null) {
+
             regulatoryDam = regulatoryDamRepository.findById(regulatoryDamDTO.getId())
                     .orElseThrow(() -> new NotFoundException("Informação regulatória da barragem não encontrada com ID: " + regulatoryDamDTO.getId()));
 
@@ -72,6 +78,7 @@ public class RegulatoryDamService {
 
             regulatoryDam = new RegulatoryDamEntity();
             regulatoryDam.setDam(dam);
+
             dam.setRegulatoryDam(regulatoryDam);
         }
 
@@ -118,6 +125,7 @@ public class RegulatoryDamService {
         }
 
         RegulatoryDamEntity savedRegulatoryDam = regulatoryDamRepository.save(regulatoryDam);
+
         log.info("Informação regulatória {} para a barragem {}",
                 regulatoryDamDTO.getId() == null ? "criada" : "atualizada",
                 dam.getName());
@@ -127,6 +135,7 @@ public class RegulatoryDamService {
 
     @Transactional
     public void delete(Long id) {
+
         RegulatoryDamEntity regulatoryDam = regulatoryDamRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Informação regulatória da barragem não encontrada com ID: " + id));
 
@@ -137,6 +146,7 @@ public class RegulatoryDamService {
         }
 
         regulatoryDamRepository.delete(regulatoryDam);
+
         log.info("Informação regulatória excluída para a barragem {}",
                 dam != null ? dam.getName() : "desconhecida");
     }

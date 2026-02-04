@@ -14,27 +14,35 @@ import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.JWTException;
 
+import jakarta.annotation.PostConstruct;
+
 @Service
 public class TokenService {
 
     @Value("${api.security.token.secret}")
     private String secret;
 
+    private Algorithm algorithm;
+
+    private static final String ISSUER = "GeoSegBar";
+    private static final ZoneOffset ZONE_OFFSET = ZoneOffset.of("-3");
+
+    @PostConstruct
+    public void init() {
+
+        this.algorithm = Algorithm.HMAC256(secret);
+    }
+
     public String generateToken(UserEntity user) {
         try {
-            Algorithm algorithm = Algorithm.HMAC256(secret);
-            LocalDateTime expiryDate = LocalDateTime.now().plusHours(12);
 
-            String token = JWT.create()
-                    .withIssuer("GeoSegBar")
+            return JWT.create()
+                    .withIssuer(ISSUER)
                     .withSubject(user.getEmail())
-                    .withExpiresAt(this.generateExpirationDate())
+                    .withClaim("id", user.getId())
+                    .withClaim("role", user.getRole().getName().toString())
+                    .withExpiresAt(generateExpirationDate())
                     .sign(algorithm);
-
-            user.setLastToken(token);
-            user.setTokenExpiryDate(expiryDate);
-
-            return token;
         } catch (JWTCreationException exception) {
             throw new JWTException("Erro ao gerar token!");
         }
@@ -42,9 +50,8 @@ public class TokenService {
 
     public String validateToken(String token) {
         try {
-            Algorithm algorithm = Algorithm.HMAC256(secret);
             return JWT.require(algorithm)
-                    .withIssuer("GeoSegBar")
+                    .withIssuer(ISSUER)
                     .build()
                     .verify(token)
                     .getSubject();
@@ -57,11 +64,9 @@ public class TokenService {
         if (token == null) {
             return false;
         }
-
         try {
-            Algorithm algorithm = Algorithm.HMAC256(secret);
             JWT.require(algorithm)
-                    .withIssuer("GeoSegBar")
+                    .withIssuer(ISSUER)
                     .build()
                     .verify(token);
             return true;
@@ -71,7 +76,7 @@ public class TokenService {
     }
 
     private Instant generateExpirationDate() {
-        return LocalDateTime.now().plusHours(12).toInstant(ZoneOffset.of("-3"));
-    }
 
+        return LocalDateTime.now().plusHours(12).toInstant(ZONE_OFFSET);
+    }
 }

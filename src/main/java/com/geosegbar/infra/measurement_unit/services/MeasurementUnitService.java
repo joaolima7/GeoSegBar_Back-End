@@ -27,17 +27,17 @@ public class MeasurementUnitService {
     @Transactional
     public void initDefaultUnits() {
         if (measurementUnitRepository.count() == 0) {
-            createDefaultUnit("Metros", "M");
-            createDefaultUnit("Centímetros", "CM");
-            createDefaultUnit("Milímetros", "MM");
-            createDefaultUnit("Metros cúbicos", "M³");
-            createDefaultUnit("Metros cúbicos por segundo", "M³/S");
-            createDefaultUnit("Litros por segundo", "L/S");
-            createDefaultUnit("Quilopascal", "KPA");
-            createDefaultUnit("Megapascal", "MPA");
+            createDefaultUnit("Metros", "m");
+            createDefaultUnit("Centímetros", "cm");
+            createDefaultUnit("Milímetros", "mm");
+            createDefaultUnit("Metros cúbicos", "m³");
+            createDefaultUnit("Metros cúbicos por segundo", "m³/s");
+            createDefaultUnit("Litros por segundo", "l/s");
+            createDefaultUnit("Quilopascal", "kPa");
+            createDefaultUnit("Megapascal", "MPa");
             createDefaultUnit("Graus Celsius", "°C");
             createDefaultUnit("Percentual", "%");
-            createDefaultUnit("Metros por segundo", "M/S");
+            createDefaultUnit("Metros por segundo", "m/s");
             createDefaultUnit("Graus", "°");
         }
     }

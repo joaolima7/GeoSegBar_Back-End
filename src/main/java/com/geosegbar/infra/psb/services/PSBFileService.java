@@ -38,15 +38,19 @@ public class PSBFileService {
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
 
+    @Transactional(readOnly = true)
     public List<PSBFileEntity> findByFolderId(Long folderId) {
         if (!AuthenticatedUserUtil.isAdmin()) {
+
             if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getViewPSB()) {
                 throw new NotFoundException("Usuário não tem permissão para acessar as pastas PSB");
             }
         }
+
         return psbFileRepository.findByPsbFolderIdOrderByUploadedAtDesc(folderId);
     }
 
+    @Transactional(readOnly = true)
     public PSBFileEntity findById(Long id) {
         return psbFileRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Arquivo PSB não encontrado"));
@@ -67,13 +71,9 @@ public class PSBFileService {
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
 
         try {
-
             String s3Directory = sanitizeFolderPath(folder.getServerPath());
-
             String downloadUrl = fileStorageService.storeFile(file, s3Directory);
-
             String filename = extractFilenameFromUrl(downloadUrl);
-
             String s3Key = s3Directory + "/" + filename;
 
             PSBFileEntity psbFile = new PSBFileEntity();
@@ -83,7 +83,6 @@ public class PSBFileService {
             psbFile.setSize(file.getSize());
             psbFile.setPsbFolder(folder);
             psbFile.setUploadedBy(uploader);
-
             psbFile.setFilePath(s3Key);
             psbFile.setDownloadUrl(downloadUrl);
 
@@ -97,6 +96,7 @@ public class PSBFileService {
         }
     }
 
+    @Transactional(readOnly = true)
     public Resource downloadFile(Long fileId) {
         try {
             PSBFileEntity file = psbFileRepository.findById(fileId)

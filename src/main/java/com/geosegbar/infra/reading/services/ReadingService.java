@@ -27,7 +27,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.common.enums.LimitStatusEnum;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
-import com.geosegbar.common.utils.DateFormatter;
 import com.geosegbar.entities.DeterministicLimitEntity;
 import com.geosegbar.entities.InputEntity;
 import com.geosegbar.entities.InstrumentEntity;
@@ -89,7 +88,6 @@ public class ReadingService {
     @Transactional(readOnly = true)
     public List<ReadingResponseDTO> findByInstrumentId(Long instrumentId) {
         validateViewPermission();
-
         return readingRepository.findByInstrumentIdWithAllRelations(instrumentId)
                 .stream()
                 .map(this::mapToResponseDTO)
@@ -130,19 +128,14 @@ public class ReadingService {
         return buildInstrumentLimitStatusDTO(instrument, mostCritical, latestDate + " " + latestHour);
     }
 
-    /**
-     * ⭐ SUPER OTIMIZADO: Query única com Window Function
-     */
     @Transactional(readOnly = true)
     public List<InstrumentLimitStatusDTO> getAllInstrumentLimitStatusesByClientId(Long clientId, int limit) {
-        clientRepository.findById(clientId)
-                .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + clientId));
+        if (!clientRepository.existsById(clientId)) {
+            throw new NotFoundException("Cliente não encontrado com ID: " + clientId);
+        }
 
-        List<InstrumentLimitStatusProjection> projections
-                = readingRepository.findLatestLimitStatusByClientId(clientId, limit);
-
-        List<InstrumentEntity> allActiveInstruments
-                = instrumentRepository.findByFiltersOptimized(null, null, null, true, clientId);
+        List<InstrumentLimitStatusProjection> projections = readingRepository.findLatestLimitStatusByClientId(clientId, limit);
+        List<InstrumentEntity> allActiveInstruments = instrumentRepository.findByFiltersOptimized(null, null, null, true, clientId);
 
         if (projections.isEmpty()) {
             return allActiveInstruments.stream()
@@ -188,7 +181,6 @@ public class ReadingService {
         try {
             return LimitStatusEnum.valueOf(status);
         } catch (IllegalArgumentException e) {
-            log.warn("LimitStatus inválido: {}", status);
             return LimitStatusEnum.NORMAL;
         }
     }
@@ -196,7 +188,6 @@ public class ReadingService {
     @Transactional(readOnly = true)
     public List<ReadingResponseDTO> findByOutputId(Long outputId) {
         validateViewPermission();
-
         return readingRepository.findByOutputIdWithAllRelations(outputId)
                 .stream()
                 .map(this::mapToResponseDTO)
@@ -206,7 +197,6 @@ public class ReadingService {
     @Transactional(readOnly = true)
     public ReadingEntity findById(Long id) {
         validateViewPermission();
-
         return readingRepository.findByIdWithAllRelations(id)
                 .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
     }
@@ -239,7 +229,6 @@ public class ReadingService {
 
         for (ReadingEntity reading : rawReadings) {
             String key = reading.getDate().toString() + "_" + reading.getHour().toString();
-
             readingsMap.computeIfAbsent(key, k -> new ArrayList<>())
                     .add(mapToResponseDTO(reading));
         }
@@ -254,7 +243,6 @@ public class ReadingService {
             List<ReadingResponseDTO> groupReadings = readingsMap.get(key);
 
             if (groupReadings != null && !groupReadings.isEmpty()) {
-
                 groupedResult.add(new ReadingGroupDTO(targetDate, targetHour, groupReadings));
             }
         }
@@ -262,9 +250,6 @@ public class ReadingService {
         return createPagedResponse(groupedResult, dateHourPage);
     }
 
-    /**
-     * ⭐ SUPER OTIMIZADO: Mínimas queries possíveis
-     */
     @Transactional(readOnly = true)
     public List<InstrumentGroupedReadingsDTO> findLatestGroupedReadingsByClientId(Long clientId, int limit) {
         List<Object[]> latestDateHours = readingRepository.findLatestDistinctDateHoursByClientId(clientId, limit);
@@ -356,19 +341,15 @@ public class ReadingService {
         LocalDateTime now = LocalDateTime.now();
 
         if (readingDateTime.truncatedTo(ChronoUnit.MINUTES).isAfter(now.truncatedTo(ChronoUnit.MINUTES))) {
-            throw new InvalidInputException("Não é possível criar leituras com data e hora futura. "
-                    + "Data/hora informada: " + DateFormatter.formatDateTime(readingDateTime)
-                    + ", Data/hora atual: " + DateFormatter.formatDateTime(now));
+            throw new InvalidInputException("Não é possível criar leituras com data e hora futura.");
         }
 
         if (readingRepository.existsByInstrumentIdAndDateAndHourAndActive(
                 instrumentId, request.getDate(), truncatedHour, true)) {
-            throw new InvalidInputException("Já existe leitura registrada para este instrumento na mesma data e hora ("
-                    + request.getDate() + " " + truncatedHour + ")");
+            throw new InvalidInputException("Já existe leitura registrada para este instrumento na mesma data e hora.");
         }
 
         request.setHour(truncatedHour);
-
         UserEntity currentUser = resolveCurrentUser(skipPermissionCheck);
 
         InstrumentEntity instrument = instrumentRepository.findWithActiveOutputsById(instrumentId)
@@ -518,18 +499,16 @@ public class ReadingService {
     @Transactional
     public void delete(Long id) {
         validateEditPermission();
-
-        ReadingEntity reading = readingRepository.findByIdWithAllRelations(id)
-                .orElseThrow(() -> new NotFoundException("Leitura não encontrada com ID: " + id));
-
-        readingRepository.delete(reading);
+        if (!readingRepository.existsById(id)) {
+            throw new NotFoundException("Leitura não encontrada com ID: " + id);
+        }
+        readingRepository.deleteById(id);
         log.info("Leitura excluída: ID {}", id);
     }
 
     @Transactional(readOnly = true)
     public PagedReadingResponseDTO<ReadingResponseDTO> findByInstrumentId(Long instrumentId, Pageable pageable) {
         pageable = ensureDefaultSort(pageable);
-
         Page<ReadingEntity> readings = readingRepository.findByInstrumentIdWithAllRelations(instrumentId, pageable);
         return createPagedResponse(readings.map(this::mapToResponseDTO));
     }
@@ -658,7 +637,7 @@ public class ReadingService {
     private void validateViewPermission() {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity user = AuthenticatedUserUtil.getCurrentUser();
-            if (!user.getInstrumentationPermission().getViewRead()) {
+            if (user == null || user.getInstrumentationPermission() == null || !user.getInstrumentationPermission().getViewRead()) {
                 throw new UnauthorizedException("Usuário não tem permissão para visualizar leituras!");
             }
         }
@@ -667,7 +646,7 @@ public class ReadingService {
     private void validateEditPermission() {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity user = AuthenticatedUserUtil.getCurrentUser();
-            if (!user.getInstrumentationPermission().getEditRead()) {
+            if (user == null || user.getInstrumentationPermission() == null || !user.getInstrumentationPermission().getEditRead()) {
                 throw new UnauthorizedException("Usuário não autorizado a modificar leituras!");
             }
         }
@@ -678,9 +657,8 @@ public class ReadingService {
             return userRepository.findByEmail("noreply@geometrisa-prod.com.br")
                     .orElseThrow(() -> new NotFoundException("Usuário do sistema não encontrado!"));
         }
-
         UserEntity currentUser = AuthenticatedUserUtil.getCurrentUser();
-        if (!AuthenticatedUserUtil.isAdmin() && !currentUser.getInstrumentationPermission().getEditRead()) {
+        if (!AuthenticatedUserUtil.isAdmin() && (currentUser.getInstrumentationPermission() == null || !currentUser.getInstrumentationPermission().getEditRead())) {
             throw new UnauthorizedException("Usuário não autorizado a criar leituras!");
         }
         return currentUser;
@@ -691,10 +669,8 @@ public class ReadingService {
         if (newDateTime.truncatedTo(ChronoUnit.MINUTES).isAfter(LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES))) {
             throw new InvalidInputException("Não é possível atualizar leituras para data e hora futura.");
         }
-
         if (readingRepository.existsByInstrumentIdAndDateAndHourExcludingId(instrumentId, newDate, newHour, excludeId)) {
-            throw new InvalidInputException("Já existe leitura registrada para este instrumento na mesma data e hora ("
-                    + newDate + " " + newHour + ")");
+            throw new InvalidInputException("Já existe leitura registrada para este instrumento na mesma data e hora.");
         }
     }
 
@@ -702,17 +678,12 @@ public class ReadingService {
         if (inputValues == null || inputValues.isEmpty()) {
             throw new InvalidInputException("É necessário fornecer valores para os inputs");
         }
-
-        Set<String> requiredInputs = instrument.getInputs().stream()
-                .map(InputEntity::getAcronym)
-                .collect(Collectors.toSet());
-
+        Set<String> requiredInputs = instrument.getInputs().stream().map(InputEntity::getAcronym).collect(Collectors.toSet());
         for (String inputAcronym : requiredInputs) {
             if (!inputValues.containsKey(inputAcronym)) {
                 throw new InvalidInputException("Valor não fornecido para o input '" + inputAcronym + "'");
             }
         }
-
         for (String providedInput : inputValues.keySet()) {
             if (!requiredInputs.contains(providedInput)) {
                 throw new InvalidInputException("Input '" + providedInput + "' não existe neste instrumento");
@@ -720,22 +691,16 @@ public class ReadingService {
         }
     }
 
-    private void updateInputValuesForGroup(Long instrumentId, LocalDate date, LocalTime hour,
-            Map<String, Double> newInputValues, InstrumentEntity instrument) {
-
-        List<ReadingEntity> groupReadings = readingRepository.findAllReadingsInGroupWithRelations(
-                instrumentId, date, hour);
-
+    private void updateInputValuesForGroup(Long instrumentId, LocalDate date, LocalTime hour, Map<String, Double> newInputValues, InstrumentEntity instrument) {
+        List<ReadingEntity> groupReadings = readingRepository.findAllReadingsInGroupWithRelations(instrumentId, date, hour);
         if (groupReadings.isEmpty()) {
             throw new NotFoundException("Não foram encontradas leituras para este grupo");
         }
 
-        Map<String, InputEntity> instrumentInputs = instrument.getInputs().stream()
-                .collect(Collectors.toMap(InputEntity::getAcronym, Function.identity()));
-
+        Map<String, InputEntity> instrumentInputs = instrument.getInputs().stream().collect(Collectors.toMap(InputEntity::getAcronym, Function.identity()));
         for (String inputAcronym : newInputValues.keySet()) {
             if (!instrumentInputs.containsKey(inputAcronym)) {
-                throw new InvalidInputException("Input com acrônimo '" + inputAcronym + "' não encontrado no instrumento");
+                throw new InvalidInputException("Input com acrônimo '" + inputAcronym + "' não encontrado");
             }
         }
 
@@ -757,30 +722,24 @@ public class ReadingService {
 
         if (inputsChanged) {
             for (ReadingEntity reading : groupReadings) {
-
                 for (ReadingInputValueEntity riv : reading.getInputValues()) {
                     Double newValue = newInputValues.get(riv.getInputAcronym());
                     if (newValue != null) {
                         riv.setValue(BigDecimal.valueOf(newValue));
                     }
                 }
-
                 OutputEntity output = reading.getOutput();
                 BigDecimal newCalculatedValue = outputCalculationService.calculateOutput(output, null, calculationInputs);
                 reading.setCalculatedValue(newCalculatedValue);
                 reading.setLimitStatus(determineLimitStatus(instrument, newCalculatedValue, output));
             }
-
             readingRepository.saveAll(groupReadings);
         }
     }
 
-    private boolean updateGroupReadings(List<ReadingEntity> groupReadings, UpdateReadingRequestDTO request,
-            LocalDate newDate, LocalTime newHour, UserEntity newUser, boolean isDateTimeChanged) {
-
+    private boolean updateGroupReadings(List<ReadingEntity> groupReadings, UpdateReadingRequestDTO request, LocalDate newDate, LocalTime newHour, UserEntity newUser, boolean isDateTimeChanged) {
         boolean hasChanges = false;
         boolean isUpdatingComment = request.getComment() != null;
-
         for (ReadingEntity groupReading : groupReadings) {
             if (isDateTimeChanged) {
                 groupReading.setDate(newDate);
@@ -796,7 +755,6 @@ public class ReadingService {
                 hasChanges = true;
             }
         }
-
         return hasChanges;
     }
 
@@ -804,7 +762,6 @@ public class ReadingService {
         if (Boolean.TRUE.equals(instrument.getNoLimit()) || value == null) {
             return LimitStatusEnum.NORMAL;
         }
-
         StatisticalLimitEntity statisticalLimit = output.getStatisticalLimit();
         if (statisticalLimit != null) {
             if (statisticalLimit.getLowerValue() != null && value.compareTo(statisticalLimit.getLowerValue()) < 0) {
@@ -815,7 +772,6 @@ public class ReadingService {
             }
             return LimitStatusEnum.NORMAL;
         }
-
         DeterministicLimitEntity deterministicLimit = output.getDeterministicLimit();
         if (deterministicLimit != null) {
             if (deterministicLimit.getEmergencyValue() != null && value.compareTo(deterministicLimit.getEmergencyValue()) >= 0) {
@@ -829,7 +785,6 @@ public class ReadingService {
             }
             return LimitStatusEnum.NORMAL;
         }
-
         return LimitStatusEnum.NORMAL;
     }
 
@@ -847,18 +802,10 @@ public class ReadingService {
         dto.setOutputAcronym(reading.getOutput().getAcronym());
         dto.setComment(reading.getComment());
         dto.setActive(reading.getActive());
-
         if (reading.getUser() != null) {
-            dto.setCreatedBy(new UserInfoDTO(
-                    reading.getUser().getId(),
-                    reading.getUser().getName(),
-                    reading.getUser().getEmail()));
+            dto.setCreatedBy(new UserInfoDTO(reading.getUser().getId(), reading.getUser().getName(), reading.getUser().getEmail()));
         }
-
-        dto.setInputValues(reading.getInputValues().stream()
-                .map(this::mapToInputValueDTO)
-                .collect(Collectors.toList()));
-
+        dto.setInputValues(reading.getInputValues().stream().map(this::mapToInputValueDTO).collect(Collectors.toList()));
         return dto;
     }
 
@@ -870,9 +817,7 @@ public class ReadingService {
         return dto;
     }
 
-    private InstrumentLimitStatusDTO buildInstrumentLimitStatusDTO(
-            InstrumentEntity instrument, LimitStatusEnum status, String lastReadingDate) {
-
+    private InstrumentLimitStatusDTO buildInstrumentLimitStatusDTO(InstrumentEntity instrument, LimitStatusEnum status, String lastReadingDate) {
         InstrumentLimitStatusDTO dto = new InstrumentLimitStatusDTO();
         dto.setInstrumentId(instrument.getId());
         dto.setInstrumentName(instrument.getName());
@@ -887,9 +832,7 @@ public class ReadingService {
         return dto;
     }
 
-    private InstrumentLimitStatusDTO buildInstrumentLimitStatusDTOFromProjection(
-            InstrumentLimitStatusProjection projection, LimitStatusEnum status, String lastReadingDate) {
-
+    private InstrumentLimitStatusDTO buildInstrumentLimitStatusDTOFromProjection(InstrumentLimitStatusProjection projection, LimitStatusEnum status, String lastReadingDate) {
         InstrumentLimitStatusDTO dto = new InstrumentLimitStatusDTO();
         dto.setInstrumentId(projection.getInstrumentId());
         dto.setInstrumentName(projection.getInstrumentName());
@@ -912,42 +855,18 @@ public class ReadingService {
     }
 
     private <T> PagedReadingResponseDTO<T> createPagedResponse(Page<T> page) {
-        return new PagedReadingResponseDTO<>(
-                page.getContent(),
-                page.getNumber(),
-                page.getSize(),
-                page.getTotalElements(),
-                page.getTotalPages(),
-                page.isLast(),
-                page.isFirst());
+        return new PagedReadingResponseDTO<>(page.getContent(), page.getNumber(), page.getSize(), page.getTotalElements(), page.getTotalPages(), page.isLast(), page.isFirst());
     }
 
     private <T> PagedReadingResponseDTO<T> createPagedResponse(List<T> content, Page<?> page) {
-        return new PagedReadingResponseDTO<>(
-                content,
-                page.getNumber(),
-                page.getSize(),
-                page.getTotalElements(),
-                page.getTotalPages(),
-                page.isLast(),
-                page.isFirst());
+        return new PagedReadingResponseDTO<>(content, page.getNumber(), page.getSize(), page.getTotalElements(), page.getTotalPages(), page.isLast(), page.isFirst());
     }
 
     private <T> PagedReadingResponseDTO<T> createEmptyPagedResponse(Page<?> page) {
-        return new PagedReadingResponseDTO<>(
-                List.of(),
-                page.getNumber(),
-                page.getSize(),
-                page.getTotalElements(),
-                page.getTotalPages(),
-                page.isLast(),
-                page.isFirst());
+        return new PagedReadingResponseDTO<>(List.of(), page.getNumber(), page.getSize(), page.getTotalElements(), page.getTotalPages(), page.isLast(), page.isFirst());
     }
 
-    private BulkToggleActiveResponseDTO buildBulkToggleResponse(
-            int totalProcessed, List<Long> successfulIds,
-            List<BulkToggleActiveResponseDTO.FailedOperation> failedOperations) {
-
+    private BulkToggleActiveResponseDTO buildBulkToggleResponse(int totalProcessed, List<Long> successfulIds, List<BulkToggleActiveResponseDTO.FailedOperation> failedOperations) {
         BulkToggleActiveResponseDTO response = new BulkToggleActiveResponseDTO();
         response.setSuccessfulIds(successfulIds);
         response.setFailedOperations(failedOperations);
@@ -961,8 +880,7 @@ public class ReadingService {
         if (value == null || precision == null) {
             return value != null ? BigDecimal.valueOf(value) : null;
         }
-        return BigDecimal.valueOf(value)
-                .setScale(precision, RoundingMode.HALF_UP);
+        return BigDecimal.valueOf(value).setScale(precision, RoundingMode.HALF_UP);
     }
 
     private record DateTimePair(LocalDate date, LocalTime hour) {

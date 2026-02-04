@@ -7,9 +7,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,30 +46,6 @@ public class InstrumentTabulatePatternService {
     private final InstrumentTabulatePatternMapper mapper;
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(
-                value = "tabulatePatternsByDam",
-                key = "#request.damId",
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-        @CacheEvict(
-                value = "damTabulateFoldersWithPatterns",
-                key = "#request.damId",
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-        @CacheEvict(
-                value = "tabulatePatternsByFolder",
-                key = "#request.folderId",
-                condition = "#request.folderId != null",
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-        @CacheEvict(
-                value = "tabulateFolderWithPatterns",
-                key = "#request.folderId",
-                condition = "#request.folderId != null",
-                cacheManager = "instrumentTabulateCacheManager"
-        )
-    })
     public TabulatePatternResponseDTO create(CreateTabulatePatternRequestDTO request) {
 
         if (patternRepository.existsByNameAndDamId(request.getName(), request.getDamId())) {
@@ -114,33 +87,6 @@ public class InstrumentTabulatePatternService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(
-                value = "tabulatePatterns",
-                key = "#patternId",
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-        @CacheEvict(
-                value = "tabulatePatternsByDam",
-                key = "#result.damId",
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-        @CacheEvict(
-                value = "damTabulateFoldersWithPatterns",
-                allEntries = true,
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-        @CacheEvict(
-                value = "tabulatePatternsByFolder",
-                allEntries = true,
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-        @CacheEvict(
-                value = "tabulateFolderWithPatterns",
-                allEntries = true,
-                cacheManager = "instrumentTabulateCacheManager"
-        )
-    })
     public void delete(Long patternId) {
 
         InstrumentTabulatePatternEntity pattern = patternRepository.findByIdWithBasicDetails(patternId)
@@ -157,13 +103,6 @@ public class InstrumentTabulatePatternService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(value = "tabulatePatterns", key = "#patternId", cacheManager = "instrumentTabulateCacheManager"),
-        @CacheEvict(value = "tabulatePatternsByDam", allEntries = true, cacheManager = "instrumentTabulateCacheManager"),
-        @CacheEvict(value = "damTabulateFoldersWithPatterns", allEntries = true, cacheManager = "instrumentTabulateCacheManager"),
-        @CacheEvict(value = "tabulatePatternsByFolder", allEntries = true, cacheManager = "instrumentTabulateCacheManager"),
-        @CacheEvict(value = "tabulateFolderWithPatterns", allEntries = true, cacheManager = "instrumentTabulateCacheManager")
-    })
     public TabulatePatternResponseDTO update(Long patternId, UpdateTabulatePatternRequestDTO request) {
 
         InstrumentTabulatePatternEntity pattern = findEntityByIdWithAllDetails(patternId);
@@ -208,14 +147,12 @@ public class InstrumentTabulatePatternService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "tabulatePatterns", key = "#patternId", cacheManager = "instrumentTabulateCacheManager")
     public TabulatePatternResponseDTO findById(Long patternId) {
         InstrumentTabulatePatternEntity pattern = findEntityByIdWithAllDetails(patternId);
         return mapper.mapToResponseDTO(pattern);
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "tabulatePatternsByDam", key = "#damId", cacheManager = "instrumentTabulateCacheManager")
     public List<TabulatePatternResponseDTO> findByDamId(Long damId) {
         damService.findById(damId);
 
@@ -226,7 +163,6 @@ public class InstrumentTabulatePatternService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "tabulatePatternsByFolder", key = "#folderId", cacheManager = "instrumentTabulateCacheManager")
     public List<TabulatePatternResponseDTO> findByFolderId(Long folderId) {
         folderService.findById(folderId);
 

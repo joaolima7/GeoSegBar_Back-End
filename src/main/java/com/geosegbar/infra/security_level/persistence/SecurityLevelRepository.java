@@ -9,7 +9,10 @@ import com.geosegbar.entities.SecurityLevelEntity;
 
 @Repository
 public interface SecurityLevelRepository extends JpaRepository<SecurityLevelEntity, Long> {
+
     List<SecurityLevelEntity> findAllByOrderByIdAsc();
+
     boolean existsByLevel(String level);
+
     boolean existsByLevelAndIdNot(String level, Long id);
 }

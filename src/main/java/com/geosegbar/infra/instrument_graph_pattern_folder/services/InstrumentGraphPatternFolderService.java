@@ -5,9 +5,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,11 +39,7 @@ public class InstrumentGraphPatternFolderService {
     private final InstrumentGraphPatternService patternService;
 
     @Transactional
-    @CacheEvict(
-            value = {"folderWithPatterns", "damFoldersWithPatterns", "graphPatternsByDam"},
-            allEntries = true,
-            cacheManager = "instrumentGraphCacheManager"
-    )
+
     public FolderResponseDTO create(CreateFolderRequestDTO request) {
         if (folderRepository.existsByNameAndDamId(request.getName(), request.getDamId())) {
             throw new DuplicateResourceException(
@@ -68,18 +61,6 @@ public class InstrumentGraphPatternFolderService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(
-                value = "folderWithPatterns",
-                key = "#folderId",
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-        @CacheEvict(
-                value = {"damFoldersWithPatterns", "graphPatternsByDam"},
-                allEntries = true,
-                cacheManager = "instrumentGraphCacheManager"
-        )
-    })
     public FolderResponseDTO update(Long folderId, UpdateFolderRequestDTO request) {
         InstrumentGraphPatternFolder folder = findById(folderId);
 
@@ -176,18 +157,7 @@ public class InstrumentGraphPatternFolderService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(
-                value = "folderWithPatterns",
-                key = "#folderId",
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-        @CacheEvict(
-                value = {"damFoldersWithPatterns", "graphPatternsByDam"},
-                allEntries = true,
-                cacheManager = "instrumentGraphCacheManager"
-        )
-    })
+
     public void delete(Long folderId) {
         InstrumentGraphPatternFolder folder = findById(folderId);
 
@@ -227,7 +197,6 @@ public class InstrumentGraphPatternFolderService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "folderWithPatterns", key = "#folderId", cacheManager = "instrumentGraphCacheManager")
     public FolderWithPatternsDetailResponseDTO findByIdWithPatternsDetails(Long folderId) {
         InstrumentGraphPatternFolder folder = folderRepository.findByIdWithDam(folderId)
                 .orElseThrow(() -> new NotFoundException("Pasta não encontrada com ID: " + folderId));
@@ -257,7 +226,6 @@ public class InstrumentGraphPatternFolderService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "damFoldersWithPatterns", key = "#damId", cacheManager = "instrumentGraphCacheManager")
     public DamFoldersWithPatternsDetailResponseDTO findFoldersWithPatternsDetailsByDam(Long damId) {
         DamEntity dam = damService.findById(damId);
 

@@ -3,6 +3,7 @@ package com.geosegbar.infra.sex.services;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.entities.SexEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
@@ -10,7 +11,6 @@ import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.sex.persistence.jpa.SexRepository;
 
 import jakarta.annotation.PostConstruct;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -36,9 +36,9 @@ public class SexService {
 
     @Transactional
     public void deleteById(Long id) {
-        sexRepository.findById(id).
-                orElseThrow(() -> new NotFoundException("Sexo não encontrado para exclusão!"));
-
+        if (!sexRepository.existsById(id)) {
+            throw new NotFoundException("Sexo não encontrado para exclusão!");
+        }
         sexRepository.deleteById(id);
     }
 
@@ -52,8 +52,9 @@ public class SexService {
 
     @Transactional
     public SexEntity update(SexEntity sexEntity) {
-        sexRepository.findById(sexEntity.getId()).
-                orElseThrow(() -> new NotFoundException("Sexo não encontrado para atualização!"));
+        if (!sexRepository.existsById(sexEntity.getId())) {
+            throw new NotFoundException("Sexo não encontrado para atualização!");
+        }
 
         if (sexRepository.existsByNameAndIdNot(sexEntity.getName(), sexEntity.getId())) {
             throw new DuplicateResourceException("Já existe um sexo com este nome!");
@@ -62,21 +63,24 @@ public class SexService {
         return sexRepository.save(sexEntity);
     }
 
+    @Transactional(readOnly = true)
     public SexEntity findById(Long id) {
         return sexRepository.findById(id).
                 orElseThrow(() -> new NotFoundException("Sexo não encontrado!"));
     }
 
+    @Transactional(readOnly = true)
     public List<SexEntity> findAll() {
         return sexRepository.findAllByOrderByIdAsc();
     }
 
+    @Transactional(readOnly = true)
     public boolean existsByName(String name) {
         return sexRepository.existsByName(name);
     }
 
+    @Transactional(readOnly = true)
     public boolean existsByNameAndIdNot(String name, Long id) {
         return sexRepository.existsByNameAndIdNot(name, id);
     }
-
 }

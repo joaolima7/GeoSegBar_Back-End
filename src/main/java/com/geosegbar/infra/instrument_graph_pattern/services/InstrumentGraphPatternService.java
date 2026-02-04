@@ -4,9 +4,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.hibernate.Hibernate;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,7 +38,6 @@ public class InstrumentGraphPatternService {
     private final DamService damService;
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "graphPatternsByInstrument", key = "#instrumentId", cacheManager = "instrumentGraphCacheManager")
     public List<GraphPatternResponseDTO> findByInstrument(Long instrumentId) {
         return patternRepository.findByInstrumentId(instrumentId)
                 .stream()
@@ -50,7 +46,6 @@ public class InstrumentGraphPatternService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "graphPatternsByInstrument", key = "'details-' + #instrumentId", cacheManager = "instrumentGraphCacheManager")
     public List<GraphPatternDetailResponseDTO> findByInstrumentWithDetails(Long instrumentId) {
 
         return patternRepository.findByInstrumentIdWithAllDetails(instrumentId)
@@ -66,7 +61,6 @@ public class InstrumentGraphPatternService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "graphPatternsByDam", key = "#damId", cacheManager = "instrumentGraphCacheManager")
     public List<GraphPatternDetailResponseDTO> findAllPatternsByDam(Long damId) {
         damService.findById(damId);
 
@@ -78,19 +72,7 @@ public class InstrumentGraphPatternService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(
-                value = "graphPatternById",
-                key = "#id",
-                cacheManager = "instrumentGraphCacheManager"
-        ),
-        @CacheEvict(
-                value = {"graphPatternsByInstrument", "graphPatternsByDam",
-                    "folderWithPatterns", "damFoldersWithPatterns"},
-                allEntries = true,
-                cacheManager = "instrumentGraphCacheManager"
-        )
-    })
+
     public GraphPatternDetailResponseDTO updateNameGraphPattern(Long id, String newName) {
         InstrumentGraphPatternEntity pattern = findById(id);
         if (patternRepository.existsByNameAndInstrumentId(newName, pattern.getInstrument().getId())) {
@@ -104,7 +86,6 @@ public class InstrumentGraphPatternService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "graphPatternById", key = "#id", cacheManager = "instrumentGraphCacheManager")
     public GraphPatternDetailResponseDTO findByIdWithDetails(Long id) {
         InstrumentGraphPatternEntity pattern = patternRepository.findByIdWithAllDetails(id)
                 .orElseThrow(() -> new NotFoundException("Padrão de Gráfico não encontrado com ID: " + id + "."));
@@ -113,11 +94,7 @@ public class InstrumentGraphPatternService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(value = "graphPatternById", key = "#patternId", cacheManager = "instrumentGraphCacheManager"),
-        @CacheEvict(value = {"graphAxes", "graphProperties"}, key = "#patternId", cacheManager = "instrumentGraphCacheManager"),
-        @CacheEvict(value = {"graphPatternsByInstrument", "graphPatternsByDam", "folderWithPatterns", "damFoldersWithPatterns"}, allEntries = true, cacheManager = "instrumentGraphCacheManager")
-    })
+
     public void deleteById(Long patternId) {
         findById(patternId);
         patternRepository.deleteById(patternId);
@@ -125,12 +102,7 @@ public class InstrumentGraphPatternService {
     }
 
     @Transactional
-    @CacheEvict(
-            value = {"graphPatternsByInstrument", "graphPatternsByDam",
-                "folderWithPatterns", "damFoldersWithPatterns"},
-            allEntries = true,
-            cacheManager = "instrumentGraphCacheManager"
-    )
+
     public GraphPatternResponseDTO create(CreateGraphPatternRequest request) {
         if (patternRepository.existsByNameAndInstrumentId(request.getName(), request.getInstrumentId())) {
             throw new DuplicateResourceException(

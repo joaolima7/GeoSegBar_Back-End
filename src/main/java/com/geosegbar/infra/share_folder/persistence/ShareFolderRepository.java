@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,18 +17,23 @@ import com.geosegbar.entities.UserEntity;
 @Repository
 public interface ShareFolderRepository extends JpaRepository<ShareFolderEntity, Long> {
 
+    @EntityGraph(attributePaths = {"psbFolder", "sharedBy"})
     List<ShareFolderEntity> findBySharedBy(UserEntity sharedBy);
 
+    @EntityGraph(attributePaths = {"psbFolder", "sharedBy", "psbFolder.dam"})
     List<ShareFolderEntity> findBySharedWithEmailOrderByCreatedAtDesc(String email);
 
+    @EntityGraph(attributePaths = {"sharedBy"})
     List<ShareFolderEntity> findByPsbFolder(PSBFolderEntity psbFolder);
 
+    @EntityGraph(attributePaths = {"psbFolder", "psbFolder.dam", "sharedBy"})
     Optional<ShareFolderEntity> findByToken(String token);
 
     List<ShareFolderEntity> findByPsbFolderIdAndSharedWithEmail(Long psbFolderId, String email);
 
     boolean existsByPsbFolderIdAndSharedWithEmail(Long psbFolderId, String email);
 
+    @EntityGraph(attributePaths = {"psbFolder", "sharedBy"})
     @Query("SELECT s FROM ShareFolderEntity s WHERE s.psbFolder.dam.id = :damId ORDER BY s.createdAt DESC")
     List<ShareFolderEntity> findByPsbFolderDamIdOrderByCreatedAtDesc(@Param("damId") Long damId);
 

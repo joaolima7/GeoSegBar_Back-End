@@ -23,15 +23,18 @@ public class RoutineInspectionPermissionService {
     private final RoutineInspectionPermissionRepository routinePermissionRepository;
     private final UserRepository userRepository;
 
+    @Transactional(readOnly = true)
     public List<RoutineInspectionPermissionEntity> findAll() {
         return routinePermissionRepository.findAll();
     }
 
+    @Transactional(readOnly = true)
     public RoutineInspectionPermissionEntity findById(Long id) {
         return routinePermissionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Permissão de inspeção de rotina não encontrada com ID: " + id));
     }
 
+    @Transactional(readOnly = true)
     public RoutineInspectionPermissionEntity findByUser(Long userId) {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
@@ -45,16 +48,12 @@ public class RoutineInspectionPermissionService {
         UserEntity user = userRepository.findById(permissionDTO.getUserId())
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + permissionDTO.getUserId()));
 
-        RoutineInspectionPermissionEntity permission;
-
-        var existingPermission = routinePermissionRepository.findByUser(user);
-
-        if (existingPermission.isPresent()) {
-            permission = existingPermission.get();
-        } else {
-            permission = new RoutineInspectionPermissionEntity();
-            permission.setUser(user);
-        }
+        RoutineInspectionPermissionEntity permission = routinePermissionRepository.findByUser(user)
+                .orElseGet(() -> {
+                    RoutineInspectionPermissionEntity newPerm = new RoutineInspectionPermissionEntity();
+                    newPerm.setUser(user);
+                    return newPerm;
+                });
 
         permission.setIsFillWeb(permissionDTO.getIsFillWeb());
         permission.setIsFillMobile(permissionDTO.getIsFillMobile());
@@ -79,9 +78,7 @@ public class RoutineInspectionPermissionService {
             throw new NotFoundException("Permissão de inspeção de rotina não encontrada para o usuário");
         }
 
-        RoutineInspectionPermissionEntity permission = routinePermissionRepository.findByUser(user).get();
-        permission.setUser(null);
-        routinePermissionRepository.delete(permission);
+        routinePermissionRepository.deleteByUser(user);
     }
 
     @Transactional
@@ -90,19 +87,17 @@ public class RoutineInspectionPermissionService {
             UserEntity user = userRepository.findById(userId)
                     .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
 
-            if (routinePermissionRepository.existsByUser(user)) {
-                RoutineInspectionPermissionEntity permission = routinePermissionRepository.findByUser(user).get();
-
+            routinePermissionRepository.findByUser(user).ifPresentOrElse(permission -> {
                 user.setRoutineInspectionPermission(null);
                 permission.setUser(null);
 
                 userRepository.save(user);
+
                 routinePermissionRepository.save(permission);
 
                 routinePermissionRepository.delete(permission);
-            } else {
-                log.info("No routine inspection permission found for user {}", userId);
-            }
+            }, () -> log.info("No routine inspection permission found for user {}", userId));
+
         } catch (Exception e) {
             log.error("Error while trying to delete routine inspection permission for user {}: {}",
                     userId, e.getMessage(), e);
@@ -111,6 +106,7 @@ public class RoutineInspectionPermissionService {
 
     @Transactional
     public RoutineInspectionPermissionEntity createDefaultPermission(UserEntity user) {
+
         if (routinePermissionRepository.existsByUser(user)) {
             return routinePermissionRepository.findByUser(user).get();
         }
@@ -120,7 +116,6 @@ public class RoutineInspectionPermissionService {
         permission.setIsFillWeb(false);
         permission.setIsFillMobile(false);
 
-        RoutineInspectionPermissionEntity savedPermission = routinePermissionRepository.save(permission);
-        return savedPermission;
+        return routinePermissionRepository.save(permission);
     }
 }

@@ -18,6 +18,7 @@ public interface QuestionnaireResponseRepository extends JpaRepository<Questionn
     @EntityGraph(attributePaths = {"templateQuestionnaire", "answers"})
     List<QuestionnaireResponseEntity> findByDamId(Long damId);
 
+    @EntityGraph(attributePaths = {"templateQuestionnaire", "answers", "answers.question"})
     List<QuestionnaireResponseEntity> findByChecklistResponseId(Long checklistResponseId);
 
     @EntityGraph(attributePaths = {"templateQuestionnaire", "answers"})
@@ -57,4 +58,12 @@ public interface QuestionnaireResponseRepository extends JpaRepository<Questionn
     @EntityGraph(attributePaths = {"answers", "answers.selectedOptions", "answers.question"})
     Optional<QuestionnaireResponseEntity> findLatestByDamIdAndTemplateId(
             @Param("damId") Long damId, @Param("templateId") Long templateId);
+
+    @Override
+    @EntityGraph(attributePaths = {"templateQuestionnaire", "answers", "answers.selectedOptions", "answers.question", "answers.photos"})
+    List<QuestionnaireResponseEntity> findAll();
+
+    @Override
+    @EntityGraph(attributePaths = {"templateQuestionnaire", "answers", "answers.selectedOptions", "answers.question", "answers.photos"})
+    Optional<QuestionnaireResponseEntity> findById(Long id);
 }

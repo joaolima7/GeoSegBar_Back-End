@@ -424,6 +424,7 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             SELECT DISTINCT r FROM ReadingEntity r
             LEFT JOIN FETCH r.instrument i
             LEFT JOIN FETCH r.output o
+            LEFT JOIN FETCH o.measurementUnit mu  
             LEFT JOIN FETCH r.user u
             LEFT JOIN FETCH r.inputValues
             WHERE r.instrument.id = :instrumentId

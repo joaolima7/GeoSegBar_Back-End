@@ -117,7 +117,9 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
         "attributionsPermission",
         "documentationPermission",
         "instrumentationPermission",
-        "routineInspectionPermission"
+        "routineInspectionPermission",
+        "damPermissions",
+        "damPermissions.dam"
     })
     @Query("SELECT u FROM UserEntity u WHERE u.email = :email")
     Optional<UserEntity> findByEmailWithAllPermissions(@Param("email") String email);

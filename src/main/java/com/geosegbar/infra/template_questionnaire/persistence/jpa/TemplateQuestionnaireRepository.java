@@ -62,7 +62,11 @@ public interface TemplateQuestionnaireRepository extends JpaRepository<TemplateQ
     boolean existsByNameAndDamIdAndIdNot(String name, Long damId, Long id);
 
     @Override
-    @EntityGraph(attributePaths = {"dam"})
+    @EntityGraph(attributePaths = {
+        "dam",
+        "templateQuestions",
+        "templateQuestions.question"
+    })
     List<TemplateQuestionnaireEntity> findAll();
 
     @Override

@@ -10,7 +10,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.StatusEntity;
 
@@ -21,15 +20,8 @@ public interface DamRepository extends JpaRepository<DamEntity, Long> {
     @EntityGraph(attributePaths = {"client", "status"})
     Optional<DamEntity> findById(Long id);
 
-    @Override
-    @EntityGraph(attributePaths = {"client", "status"})
-    List<DamEntity> findAllById(Iterable<Long> ids);
-
     @EntityGraph(attributePaths = {"client", "status"})
     List<DamEntity> findAllByOrderByIdAsc();
-
-    @EntityGraph(attributePaths = {"client", "status"})
-    List<DamEntity> findByClient(ClientEntity client);
 
     @EntityGraph(attributePaths = {"client", "status"})
     List<DamEntity> findByClientId(Long clientId);
@@ -42,107 +34,50 @@ public interface DamRepository extends JpaRepository<DamEntity, Long> {
 
     boolean existsByNameAndClientIdAndIdNot(String name, Long clientId, Long id);
 
-    @Query("SELECT DISTINCT d FROM DamEntity d "
-            + "LEFT JOIN FETCH d.client "
-            + "LEFT JOIN FETCH d.sections "
-            + "WHERE d.id = :id")
-    Optional<DamEntity> findByIdWithSections(@Param("id") Long id);
-
-    @Query("SELECT DISTINCT d FROM DamEntity d "
-            + "LEFT JOIN FETCH d.client "
-            + "LEFT JOIN FETCH d.sections "
-            + "ORDER BY d.id ASC")
-    List<DamEntity> findAllWithSections();
-
-    @Query("SELECT DISTINCT d FROM DamEntity d "
-            + "LEFT JOIN FETCH d.client "
-            + "LEFT JOIN FETCH d.sections "
-            + "WHERE d.client.id = :clientId "
-            + "ORDER BY d.id ASC")
-    List<DamEntity> findByClientIdWithSections(@Param("clientId") Long clientId);
-
-    @Query("SELECT DISTINCT d FROM DamEntity d "
-            + "LEFT JOIN FETCH d.client "
-            + "LEFT JOIN FETCH d.sections "
-            + "WHERE d.client.id = :clientId AND d.status.id = :statusId")
-    List<DamEntity> findByClientAndStatusWithSections(@Param("clientId") Long clientId, @Param("statusId") Long statusId);
-
-    @EntityGraph(attributePaths = {"psbFolders", "client", "status"})
-    Optional<DamEntity> findWithPsbFoldersById(Long id);
-
     @Modifying
     @Query("UPDATE DamEntity d SET d.status = :status WHERE d.client.id = :clientId")
     int updateStatusByClientId(@Param("clientId") Long clientId, @Param("status") StatusEntity status);
 
     @Query("SELECT DISTINCT d FROM DamEntity d "
-            + "LEFT JOIN FETCH d.client "
-            + "LEFT JOIN FETCH d.reservoirs r "
-            + "LEFT JOIN FETCH r.level "
+            + "LEFT JOIN FETCH d.client c "
+            + "LEFT JOIN FETCH c.status "
+            + "LEFT JOIN FETCH d.status "
+            + "LEFT JOIN FETCH d.regulatoryDam rd "
+            + "LEFT JOIN FETCH rd.securityLevel "
+            + "LEFT JOIN FETCH rd.riskCategory "
+            + "LEFT JOIN FETCH rd.potentialDamage "
+            + "LEFT JOIN FETCH rd.classificationDam "
+            + "LEFT JOIN FETCH d.documentationDam "
+            + "ORDER BY d.id ASC")
+    List<DamEntity> findAllComplete();
+
+    @Query("SELECT DISTINCT d FROM DamEntity d "
+            + "LEFT JOIN FETCH d.client c "
+            + "LEFT JOIN FETCH c.status "
+            + "LEFT JOIN FETCH d.status "
+            + "LEFT JOIN FETCH d.regulatoryDam rd "
+            + "LEFT JOIN FETCH rd.securityLevel "
+            + "LEFT JOIN FETCH rd.riskCategory "
+            + "LEFT JOIN FETCH rd.potentialDamage "
+            + "LEFT JOIN FETCH rd.classificationDam "
+            + "LEFT JOIN FETCH d.documentationDam "
+            + "WHERE (:clientId IS NULL OR d.client.id = :clientId) "
+            + "AND (:statusId IS NULL OR d.status.id = :statusId) "
+            + "ORDER BY d.id ASC")
+    List<DamEntity> findByClientAndStatusComplete(
+            @Param("clientId") Long clientId,
+            @Param("statusId") Long statusId);
+
+    @Query("SELECT DISTINCT d FROM DamEntity d "
+            + "LEFT JOIN FETCH d.client c "
+            + "LEFT JOIN FETCH c.status "
+            + "LEFT JOIN FETCH d.status "
+            + "LEFT JOIN FETCH d.regulatoryDam rd "
+            + "LEFT JOIN FETCH rd.securityLevel "
+            + "LEFT JOIN FETCH rd.riskCategory "
+            + "LEFT JOIN FETCH rd.potentialDamage "
+            + "LEFT JOIN FETCH rd.classificationDam "
+            + "LEFT JOIN FETCH d.documentationDam "
             + "WHERE d.id = :id")
-    Optional<DamEntity> findWithReservoirsById(@Param("id") Long id);
-
-    @EntityGraph(attributePaths = {"psbFolders", "client", "status"})
-    List<DamEntity> findWithPsbFoldersByClientId(Long clientId);
-
-    @Query("SELECT DISTINCT d FROM DamEntity d "
-            + "LEFT JOIN FETCH d.client "
-            + "LEFT JOIN FETCH d.reservoirs r "
-            + "LEFT JOIN FETCH r.level "
-            + "WHERE d.client.id = :clientId")
-    List<DamEntity> findWithReservoirsByClientId(@Param("clientId") Long clientId);
-
-    @Query("SELECT DISTINCT d FROM DamEntity d "
-            + "LEFT JOIN FETCH d.client "
-            + "LEFT JOIN FETCH d.status "
-            + "WHERE (:clientId IS NULL OR d.client.id = :clientId) "
-            + "AND (:statusId IS NULL OR d.status.id = :statusId)")
-    List<DamEntity> findByClientAndStatus(
-            @Param("clientId") Long clientId,
-            @Param("statusId") Long statusId);
-
-    @Query("SELECT DISTINCT d FROM DamEntity d "
-            + "LEFT JOIN FETCH d.client "
-            + "LEFT JOIN FETCH d.status "
-            + "LEFT JOIN FETCH d.psbFolders "
-            + "LEFT JOIN FETCH d.reservoirs r "
-            + "LEFT JOIN FETCH r.level "
-            + "WHERE (:clientId IS NULL OR d.client.id = :clientId) "
-            + "AND (:statusId IS NULL OR d.status.id = :statusId)")
-    List<DamEntity> findWithDetailsByClientAndStatus(
-            @Param("clientId") Long clientId,
-            @Param("statusId") Long statusId);
-
-    @Query("""
-        SELECT DISTINCT d FROM DamEntity d
-        LEFT JOIN FETCH d.client c
-        LEFT JOIN FETCH c.status
-        LEFT JOIN FETCH d.status
-        LEFT JOIN FETCH d.reservoirs r
-        LEFT JOIN FETCH r.level
-        LEFT JOIN FETCH d.regulatoryDam rd
-        LEFT JOIN FETCH rd.securityLevel
-        LEFT JOIN FETCH rd.riskCategory
-        LEFT JOIN FETCH rd.potentialDamage
-        LEFT JOIN FETCH rd.classificationDam
-        LEFT JOIN FETCH d.documentationDam
-        WHERE d.client.id = :clientId
-    """)
-    List<DamEntity> findByClientIdWithDetails(@Param("clientId") Long clientId);
-
-    @Query("""
-        SELECT DISTINCT d FROM DamEntity d
-        LEFT JOIN FETCH d.client c
-        LEFT JOIN FETCH c.status
-        LEFT JOIN FETCH d.status
-        LEFT JOIN FETCH d.reservoirs r
-        LEFT JOIN FETCH r.level
-        LEFT JOIN FETCH d.regulatoryDam rd
-        LEFT JOIN FETCH rd.securityLevel
-        LEFT JOIN FETCH rd.riskCategory
-        LEFT JOIN FETCH rd.potentialDamage
-        LEFT JOIN FETCH rd.classificationDam
-        LEFT JOIN FETCH d.documentationDam
-        WHERE d.id = :id
-    """)
-    Optional<DamEntity> findByIdWithFullDetails(@Param("id") Long id);
+    Optional<DamEntity> findByIdComplete(@Param("id") Long id);
 }

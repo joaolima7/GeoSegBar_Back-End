@@ -46,15 +46,18 @@ public class ChecklistResponseService {
     private final DamService damService;
     private final ClientRepository clientRepository;
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<ChecklistResponseEntity> findAll() {
         return checklistResponseRepository.findAll();
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public ChecklistResponseEntity findById(Long id) {
         return checklistResponseRepository.findByIdWithBasicInfo(id)
                 .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para id: " + id));
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<ChecklistResponseEntity> findByDamId(Long damId) {
         damService.findById(damId);
         return checklistResponseRepository.findByDamId(damId);
@@ -101,14 +104,18 @@ public class ChecklistResponseService {
         checklistResponseRepository.deleteById(id);
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByDamId(Long damId) {
         damService.findById(damId);
-        List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByDamId(damId);
+
+        List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByDamIdWithFullDetails(damId);
+
         return checklistResponses.stream()
                 .map(this::convertToDetailDto)
                 .collect(Collectors.toList());
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByClientIdPaged(
             Long clientId, Pageable pageable) {
 
@@ -116,6 +123,7 @@ public class ChecklistResponseService {
         return convertPageToResponse(page);
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public ChecklistResponseDetailDTO findChecklistResponseById(Long checklistResponseId) {
 
         ChecklistResponseEntity checklistResponse = findById(checklistResponseId);
@@ -213,35 +221,41 @@ public class ChecklistResponseService {
         return dto;
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByUserId(Long userId) {
         return checklistResponseRepository.findByUserId(userId).stream()
                 .map(this::convertToDetailDto)
                 .collect(Collectors.toList());
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByDateRange(LocalDateTime startDate, LocalDateTime endDate) {
         return checklistResponseRepository.findByCreatedAtBetween(startDate, endDate).stream()
                 .map(this::convertToDetailDto)
                 .collect(Collectors.toList());
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByDamIdPaged(Long damId, Pageable pageable) {
         damService.findById(damId);
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdOptimized(damId, pageable);
         return convertPageToResponse(page);
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByUserIdPaged(Long userId, Pageable pageable) {
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByUserId(userId, pageable);
         return convertPageToResponse(page);
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByDateRangePaged(
             LocalDateTime startDate, LocalDateTime endDate, Pageable pageable) {
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByCreatedAtBetween(startDate, endDate, pageable);
         return convertPageToResponse(page);
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findAllChecklistResponsesPaged(Pageable pageable) {
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findAll(pageable);
         return convertPageToResponse(page);
@@ -263,6 +277,7 @@ public class ChecklistResponseService {
         );
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<DamLastChecklistDTO> getLastChecklistDateByClient(Long clientId) {
         List<DamEntity> dams = damService.findDamsByClientId(clientId);
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -285,9 +300,7 @@ public class ChecklistResponseService {
         return result;
     }
 
-    /**
-     * ⭐ MÉTODO OTIMIZADO: Evita carregar entidade pesada sem necessidade
-     */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public ClientDetailedChecklistResponsesDTO findLatestDetailedChecklistResponsesByClientId(Long clientId, int limit) {
 
         ClientEntity client = clientRepository.findById(clientId)

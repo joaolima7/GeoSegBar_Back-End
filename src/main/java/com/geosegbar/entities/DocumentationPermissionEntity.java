@@ -1,5 +1,6 @@
 package com.geosegbar.entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.Column;
@@ -21,10 +22,10 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "documentation_permissions", 
-    uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"user_id"})
-    }
+@Table(name = "documentation_permissions",
+        uniqueConstraints = {
+            @UniqueConstraint(columnNames = {"user_id"})
+        }
 )
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class DocumentationPermissionEntity {
@@ -32,17 +33,18 @@ public class DocumentationPermissionEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
+
     @OneToOne
     @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnore
     private UserEntity user;
-    
+
     @Column(name = "view_psb", nullable = false)
     private Boolean viewPSB = false;
-    
+
     @Column(name = "edit_psb", nullable = false)
     private Boolean editPSB = false;
-    
+
     @Column(name = "share_psb", nullable = false)
     private Boolean sharePSB = false;
 }

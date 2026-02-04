@@ -1,5 +1,6 @@
 package com.geosegbar.entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.Column;
@@ -35,6 +36,7 @@ public class InstrumentationPermissionEntity {
 
     @OneToOne
     @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnore
     private UserEntity user;
 
     @Column(name = "view_graphs", nullable = false)

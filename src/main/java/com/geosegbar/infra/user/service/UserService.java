@@ -473,7 +473,7 @@ public class UserService {
 
     @Transactional
     public Object initiateLogin(LoginRequestDTO userDTO) {
-        // 1. Busca LEVE (apenas dados básicos para autenticar)
+
         UserEntity authUser = userRepository.findByEmailWithBasicDetails(userDTO.email())
                 .orElseThrow(() -> new NotFoundException("Credenciais incorretas!"));
 
@@ -485,12 +485,10 @@ public class UserService {
             throw new InvalidInputException("Credenciais incorretas!");
         }
 
-        // Verifica validade do token atual (opcional, evita nova geração)
         if (authUser.getLastToken() != null && authUser.getTokenExpiryDate() != null
                 && LocalDateTime.now().isBefore(authUser.getTokenExpiryDate())
                 && tokenService.isTokenValid(authUser.getLastToken())) {
 
-            // Agora sim, busca PESADA para montar o DTO de retorno
             UserEntity fullUser = userRepository.findByEmailWithAllPermissions(userDTO.email())
                     .orElseThrow(() -> new NotFoundException("Erro ao carregar perfil do usuário"));
 
@@ -501,15 +499,13 @@ public class UserService {
             );
         }
 
-        // Fluxo para Usuário do Sistema (Login direto)
         if (isSystemUser(authUser)) {
-            // Busca completa necessária para o DTO
+
             UserEntity fullUser = userRepository.findByEmailWithAllPermissions(userDTO.email())
                     .orElseThrow(() -> new NotFoundException("Erro ao carregar perfil do usuário"));
 
             String token = tokenService.generateToken(fullUser);
 
-            // ✅ OTIMIZAÇÃO: Atualiza o banco em outra thread para não travar o retorno
             updateLastLoginAsync(fullUser.getId(), token);
 
             return new LoginResponseDTO(
@@ -519,13 +515,10 @@ public class UserService {
             );
         }
 
-        // Fluxo para Usuário Comum (Código de Verificação)
         String verificationCode = GenerateRandomCode.generateRandomCode();
 
-        // Salva o código (transação síncrona pois é mandatório)
         saveVerificationCode(authUser, verificationCode);
 
-        // Envio de e-mail (deve ser @Async na EmailService)
         emailService.sendVerificationCode(authUser.getEmail(), verificationCode);
 
         return null;
@@ -533,7 +526,7 @@ public class UserService {
 
     @Transactional
     public LoginResponseDTO verifyCodeAndLogin(VerifyCodeRequestDTO verifyRequest) {
-        // Busca completa necessária para gerar o token e retornar permissões
+
         UserEntity user = userRepository.findByEmailWithAllPermissions(verifyRequest.getEmail())
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
 
@@ -549,14 +542,11 @@ public class UserService {
             throw new InvalidInputException("Código de verificação expirado!");
         }
 
-        // Invalida o código
         codeEntity.setUsed(true);
         verificationCodeRepository.save(codeEntity);
 
-        // Gera token
         String token = tokenService.generateToken(user);
 
-        // ✅ OTIMIZAÇÃO: Atualiza o banco em outra thread
         updateLastLoginAsync(user.getId(), token);
 
         return new LoginResponseDTO(
@@ -570,7 +560,7 @@ public class UserService {
     @Transactional
     public void updateLastLoginAsync(Long userId, String token) {
         try {
-            // Recarrega apenas para atualizar (ou usa query update direta se preferir)
+
             userRepository.findById(userId).ifPresent(user -> {
                 user.setLastToken(token);
                 user.setTokenExpiryDate(LocalDateTime.now().plusHours(12));
@@ -578,7 +568,7 @@ public class UserService {
             });
         } catch (Exception e) {
             log.error("Erro ao atualizar lastToken assincronamente para user {}: {}", userId, e.getMessage());
-            // Falha silenciosa aceitável aqui, não impede o login
+
         }
     }
 
@@ -676,8 +666,15 @@ public class UserService {
     }
 
     private void createDefaultDamPermissions(UserEntity user) {
+
+        if (user.getClients() == null) {
+            return;
+        }
+
         for (ClientEntity client : user.getClients()) {
-            List<DamEntity> dams = damRepository.findByClient(client);
+
+            List<DamEntity> dams = damRepository.findByClientId(client.getId());
+
             for (DamEntity dam : dams) {
                 if (!damPermissionRepository.existsByUserAndDamAndClient(user, dam, client)) {
                     DamPermissionEntity permission = new DamPermissionEntity();
@@ -700,8 +697,11 @@ public class UserService {
 
     private void createDamPermissionsForSpecificClients(UserEntity user, Set<ClientEntity> clients) {
         for (ClientEntity client : clients) {
-            List<DamEntity> dams = damRepository.findByClient(client);
+
+            List<DamEntity> dams = damRepository.findByClientId(client.getId());
+
             for (DamEntity dam : dams) {
+
                 if (!damPermissionRepository.existsByUserAndDamAndClient(user, dam, client)) {
                     DamPermissionEntity permission = new DamPermissionEntity();
                     permission.setUser(user);

@@ -47,7 +47,8 @@ public class DamPermissionService {
      */
     @Transactional
     public List<DamPermissionEntity> findAllDamPermissionsForUserClients(Long userId) {
-        UserEntity user = userRepository.findById(userId)
+
+        UserEntity user = userRepository.findByIdWithClients(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
 
         Set<ClientEntity> userClients = user.getClients();
@@ -65,13 +66,12 @@ public class DamPermissionService {
 
         for (ClientEntity client : userClients) {
 
-            List<DamEntity> clientDams = damRepository.findByClient(client);
+            List<DamEntity> clientDams = damRepository.findByClientId(client.getId());
 
             for (DamEntity dam : clientDams) {
                 if (permissionsMap.containsKey(dam.getId())) {
                     allPermissions.add(permissionsMap.get(dam.getId()));
                 } else {
-
                     DamPermissionEntity newPermission = new DamPermissionEntity();
                     newPermission.setUser(user);
                     newPermission.setDam(dam);

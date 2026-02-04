@@ -1,5 +1,6 @@
 package com.geosegbar.entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.Column;
@@ -21,10 +22,10 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "routine_inspection_permissions", 
-    uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"user_id"})
-    }
+@Table(name = "routine_inspection_permissions",
+        uniqueConstraints = {
+            @UniqueConstraint(columnNames = {"user_id"})
+        }
 )
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class RoutineInspectionPermissionEntity {
@@ -32,14 +33,15 @@ public class RoutineInspectionPermissionEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
+
     @OneToOne
     @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnore
     private UserEntity user;
-    
+
     @Column(name = "is_fill_web", nullable = false)
     private Boolean isFillWeb = false;
-    
+
     @Column(name = "is_fill_mobile", nullable = false)
     private Boolean isFillMobile = false;
 }

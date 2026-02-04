@@ -1,7 +1,6 @@
 package com.geosegbar.infra.checklist_response.persistence.jpa;
 
 import java.time.LocalDateTime;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -17,6 +16,20 @@ import com.geosegbar.entities.ChecklistResponseEntity;
 
 @Repository
 public interface ChecklistResponseRepository extends JpaRepository<ChecklistResponseEntity, Long> {
+
+    @EntityGraph(attributePaths = {
+        "user",
+        "dam",
+        "questionnaireResponses",
+        "questionnaireResponses.templateQuestionnaire",
+        "questionnaireResponses.answers",
+        "questionnaireResponses.answers.question",
+        "questionnaireResponses.answers.question.options",
+        "questionnaireResponses.answers.selectedOptions",
+        "questionnaireResponses.answers.photos"
+    })
+    @Query("SELECT cr FROM ChecklistResponseEntity cr WHERE cr.dam.id = :damId ORDER BY cr.createdAt DESC")
+    List<ChecklistResponseEntity> findByDamIdWithFullDetails(@Param("damId") Long damId);
 
     @EntityGraph(attributePaths = {"user", "dam"})
     List<ChecklistResponseEntity> findByDamId(Long damId);

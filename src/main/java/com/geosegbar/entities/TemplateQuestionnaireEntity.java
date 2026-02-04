@@ -50,7 +50,7 @@ public class TemplateQuestionnaireEntity {
     @JoinColumn(name = "dam_id", nullable = false)
     private DamEntity dam;
 
-    @OneToMany(mappedBy = "templateQuestionnaire", fetch = FetchType.EAGER,
+    @OneToMany(mappedBy = "templateQuestionnaire", fetch = FetchType.LAZY,
             cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
     private Set<TemplateQuestionnaireQuestionEntity> templateQuestions = new HashSet<>();

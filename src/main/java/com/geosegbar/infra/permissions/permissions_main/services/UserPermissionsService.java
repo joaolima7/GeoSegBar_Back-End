@@ -56,16 +56,25 @@ public class UserPermissionsService {
 
     @Transactional(readOnly = true)
     public UserPermissionsDTO getAllPermissionsForUser(Long userId) {
-        UserEntity user = userRepository.findById(userId)
+
+        UserEntity user = userRepository.findByIdWithAllDetails(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com ID: " + userId));
 
         UserPermissionsDTO permissionsDTO = new UserPermissionsDTO();
 
-        permissionsDTO.setDocumentationPermission(documentationPermissionRepository.findByUser(user).orElse(null));
-        permissionsDTO.setAttributionsPermission(attributionsPermissionRepository.findByUser(user).orElse(null));
-        permissionsDTO.setInstrumentationPermission(instrumentationPermissionRepository.findByUser(user).orElse(null));
-        permissionsDTO.setRoutineInspectionPermission(routineInspectionPermissionRepository.findByUser(user).orElse(null));
-        permissionsDTO.setDamPermissions(damPermissionRepository.findByUser(user));
+        permissionsDTO.setDocumentationPermission(user.getDocumentationPermission());
+        permissionsDTO.setAttributionsPermission(user.getAttributionsPermission());
+        permissionsDTO.setInstrumentationPermission(user.getInstrumentationPermission());
+        permissionsDTO.setRoutineInspectionPermission(user.getRoutineInspectionPermission());
+
+        permissionsDTO.setDamPermissions(new ArrayList<>(user.getDamPermissions()));
+
+        if (user.getDamPermissions() == null || user.getDamPermissions().isEmpty()) {
+
+            permissionsDTO.setDamPermissions(damPermissionRepository.findByUser(user));
+        } else {
+            permissionsDTO.setDamPermissions(new ArrayList<>(user.getDamPermissions()));
+        }
 
         return permissionsDTO;
     }

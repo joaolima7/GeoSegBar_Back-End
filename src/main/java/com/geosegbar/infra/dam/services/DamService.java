@@ -47,7 +47,6 @@ import com.geosegbar.infra.reservoir.persistence.ReservoirRepository;
 import com.geosegbar.infra.risk_category.persistence.RiskCategoryRepository;
 import com.geosegbar.infra.security_level.persistence.SecurityLevelRepository;
 import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
-import com.geosegbar.infra.user.service.UserService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -69,68 +68,79 @@ public class DamService {
     private final ReservoirRepository reservoirRepository;
     private final PSBFolderRepository psbFolderRepository;
     private final PSBFolderService psbFolderService;
-    private final UserService userService;
     private final com.geosegbar.infra.permissions.dam_permissions.services.DamPermissionService damPermissionService;
 
-    /**
-     * Busca a barragem com TODOS os detalhes para exibição completa. Inicializa
-     * coleções lazy para garantir compatibilidade com OSIV=false.
-     */
     @Transactional(readOnly = true)
     public DamEntity findById(Long id) {
-
-        DamEntity dam = damRepository.findByIdWithFullDetails(id)
+        DamEntity dam = damRepository.findByIdComplete(id)
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
 
-        Hibernate.initialize(dam.getPsbFolders());
-        Hibernate.initialize(dam.getSections());
-
+        initializeLazyCollections(dam);
         return dam;
     }
 
     @Transactional(readOnly = true)
     public DamEntity findByIdWithSections(Long id) {
-        return damRepository.findByIdWithSections(id)
-                .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
+        return findById(id);
     }
 
     @Transactional(readOnly = true)
     public List<DamEntity> findAll() {
-        List<DamEntity> dams = damRepository.findAllByOrderByIdAsc();
+        List<DamEntity> dams = damRepository.findAllComplete();
 
-        dams.forEach(d -> {
-            Hibernate.initialize(d.getClient());
-            Hibernate.initialize(d.getStatus());
-        });
+        dams.forEach(this::initializeLazyCollections);
         return dams;
     }
 
+    @Transactional(readOnly = true)
     public List<DamEntity> findAllWithSections() {
-        return damRepository.findAllWithSections();
+        return findAll();
     }
 
     @Transactional(readOnly = true)
     public List<DamEntity> findDamsByClientId(Long clientId) {
-        List<DamEntity> dams = damRepository.findByClientIdWithDetails(clientId);
-
-        dams.forEach(d -> Hibernate.initialize(d.getPsbFolders()));
-        return dams;
+        return findByClientAndStatus(clientId, null);
     }
 
+    @Transactional(readOnly = true)
     public List<DamEntity> findDamsByClientIdWithSections(Long clientId) {
-        return damRepository.findByClientIdWithSections(clientId);
+        return findDamsByClientId(clientId);
     }
 
     @Transactional(readOnly = true)
     public List<DamEntity> findByClientAndStatus(Long clientId, Long statusId) {
-        List<DamEntity> dams = damRepository.findWithDetailsByClientAndStatus(clientId, statusId);
 
-        dams.forEach(d -> Hibernate.initialize(d.getPsbFolders()));
+        List<DamEntity> dams = damRepository.findByClientAndStatusComplete(clientId, statusId);
+
+        dams.forEach(this::initializeLazyCollections);
+
         return dams;
     }
 
+    @Transactional(readOnly = true)
     public List<DamEntity> findByClientAndStatusWithSections(Long clientId, Long statusId) {
-        return damRepository.findByClientAndStatusWithSections(clientId, statusId);
+        return findByClientAndStatus(clientId, statusId);
+    }
+
+    /**
+     * 🚀 OTIMIZAÇÃO CRUCIAL Inicializa coleções Lazy dentro da transação.
+     * Sections já vem carregado pelo Repository (JOIN FETCH). Aqui carregamos o
+     * resto.
+     */
+    private void initializeLazyCollections(DamEntity dam) {
+        if (dam == null) {
+            return;
+        }
+
+        Hibernate.initialize(dam.getSections());
+
+        Hibernate.initialize(dam.getReservoirs());
+        if (dam.getReservoirs() != null) {
+            dam.getReservoirs().forEach(r -> Hibernate.initialize(r.getLevel()));
+        }
+
+        Hibernate.initialize(dam.getPsbFolders());
+
     }
 
     public boolean existsByName(String name) {

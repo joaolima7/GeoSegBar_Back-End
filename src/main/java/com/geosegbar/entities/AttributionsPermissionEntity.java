@@ -1,5 +1,6 @@
 package com.geosegbar.entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.Column;
@@ -21,10 +22,10 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "attributions_permissions", 
-    uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"user_id"})
-    }
+@Table(name = "attributions_permissions",
+        uniqueConstraints = {
+            @UniqueConstraint(columnNames = {"user_id"})
+        }
 )
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class AttributionsPermissionEntity {
@@ -32,17 +33,18 @@ public class AttributionsPermissionEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
+
     @OneToOne
     @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnore
     private UserEntity user;
-    
+
     @Column(name = "edit_user", nullable = false)
     private Boolean editUser = false;
-    
+
     @Column(name = "edit_dam", nullable = false)
     private Boolean editDam = false;
-    
+
     @Column(name = "edit_geral_data", nullable = false)
     private Boolean editGeralData = false;
 }

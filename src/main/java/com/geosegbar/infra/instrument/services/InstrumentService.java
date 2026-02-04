@@ -11,6 +11,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.hibernate.Hibernate;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -110,16 +111,30 @@ public class InstrumentService {
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
     }
 
+    private void initializeCollections(InstrumentEntity instrument) {
+        Hibernate.initialize(instrument.getInputs());
+        instrument.getInputs().forEach(i -> Hibernate.initialize(i.getMeasurementUnit()));
+
+        Hibernate.initialize(instrument.getOutputs());
+        instrument.getOutputs().forEach(o -> {
+            Hibernate.initialize(o.getMeasurementUnit());
+            Hibernate.initialize(o.getStatisticalLimit());
+            Hibernate.initialize(o.getDeterministicLimit());
+        });
+
+        Hibernate.initialize(instrument.getConstants());
+        instrument.getConstants().forEach(c -> Hibernate.initialize(c.getMeasurementUnit()));
+    }
+
     @Transactional(readOnly = true)
     public InstrumentResponseDTO findWithAllDetails(Long id) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getViewInstruments())) {
-                throw new UnauthorizedException("Usuário não tem permissão para visualizar instrumentos!");
-            }
-        }
-        return mapToResponseDTO(instrumentRepository.findWithCompleteDetailsById(id)
-                .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id)));
+
+        InstrumentEntity instrument = instrumentRepository.findByIdWithFullDetails(id)
+                .orElseThrow(() -> new NotFoundException("Instrumento não encontrado!"));
+
+        initializeCollections(instrument);
+
+        return mapToResponseDTO(instrument);
     }
 
     @Transactional(readOnly = true)

@@ -62,12 +62,6 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
             LEFT JOIN FETCH i.section
             LEFT JOIN FETCH i.dam d
             LEFT JOIN FETCH d.client
-            LEFT JOIN FETCH i.inputs inp
-            LEFT JOIN FETCH inp.measurementUnit
-            LEFT JOIN FETCH i.outputs out
-            LEFT JOIN FETCH out.measurementUnit
-            LEFT JOIN FETCH i.constants c
-            LEFT JOIN FETCH c.measurementUnit
             WHERE i.id = :id
             """)
     Optional<InstrumentEntity> findByIdWithFullDetails(@Param("id") Long id);
@@ -80,7 +74,6 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
     List<InstrumentEntity> findByClientId(@Param("clientId") Long clientId);
 
     @EntityGraph(attributePaths = {
-        "inputs", "constants", "outputs",
         "dam", "dam.client", "instrumentType"
     })
     @Query("SELECT DISTINCT i FROM InstrumentEntity i WHERE i.dam.client.id = :clientId AND (:active IS NULL OR i.active = :active)")
@@ -98,7 +91,7 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
               AND (:sectionId IS NULL OR i.section.id = :sectionId) 
               AND (:active IS NULL OR i.active = :active) 
               AND (:clientId IS NULL OR i.dam.client.id = :clientId)
-              AND (:name IS NULL OR lower(i.name) LIKE lower(concat('%', :name, '%')))
+              AND (:name IS NULL OR lower(i.name) LIKE lower(concat('%', cast(:name as string), '%')))
             ORDER BY i.name ASC
             """)
     List<InstrumentEntity> findByFiltersOptimized(
@@ -120,6 +113,6 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
 
     boolean existsByLinimetricRulerCodeAndIdNot(Long linimetricRulerCode, Long id);
 
-    @EntityGraph(attributePaths = {"dam", "section", "instrumentType", "inputs", "outputs"})
+    @EntityGraph(attributePaths = {"dam", "section", "instrumentType"})
     List<InstrumentEntity> findByIsLinimetricRulerTrue();
 }

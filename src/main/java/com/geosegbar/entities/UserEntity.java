@@ -41,21 +41,14 @@ import lombok.Setter;
 @AllArgsConstructor
 @Table(name = "users", indexes = {
     @Index(name = "idx_user_email", columnList = "email", unique = true),
-    @Index(name = "idx_user_phone", columnList = "phone"),
-    @Index(name = "idx_user_email_status", columnList = "email, status_id"),
-    @Index(name = "idx_user_role_status", columnList = "role_id, status_id"),
-    @Index(name = "idx_user_created_by", columnList = "created_by_id"),
-    @Index(name = "idx_user_status", columnList = "status_id"),
-    @Index(name = "idx_user_role", columnList = "role_id"),
-    @Index(name = "idx_user_sex", columnList = "sex_id"),
-    @Index(name = "idx_user_first_access", columnList = "is_first_access"),
-    @Index(name = "idx_user_token_expiry", columnList = "token_expiry_date"),
-    @Index(name = "idx_user_id_name", columnList = "id, name"),
+
     @Index(name = "idx_user_status_role", columnList = "status_id, role_id"),
-    @Index(name = "idx_user_created_by_status", columnList = "created_by_id, status_id"),
-    @Index(name = "idx_user_first_access_status", columnList = "is_first_access, status_id"),
-    @Index(name = "idx_user_name_id", columnList = "name, id"),
-    @Index(name = "idx_user_name_status", columnList = "name, status_id")
+    @Index(name = "idx_user_created_by", columnList = "created_by_id"),
+
+    @Index(name = "idx_user_phone", columnList = "phone"),
+
+    @Index(name = "idx_user_token_expiry", columnList = "token_expiry_date")
+
 })
 public class UserEntity {
 
@@ -110,7 +103,7 @@ public class UserEntity {
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
     private Set<ReadingEntity> readings = new HashSet<>();
 
-    @ManyToMany(fetch = FetchType.EAGER)
+    @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "user_client",
             joinColumns = @JoinColumn(name = "user_id"),

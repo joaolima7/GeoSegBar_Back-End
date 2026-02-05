@@ -1,25 +1,12 @@
 Options -Indexes
 
-# Bloqueia arquivos sensíveis
 <FilesMatch "\.(jar|war|properties|yml|xml|log|git|env|sh)$">
     Order allow,deny
     Deny from all
 </FilesMatch>
 
+# PROXY REVERSO
 <IfModule mod_rewrite.c>
     RewriteEngine On
-
-    # 1. FORÇAR HTTPS (Simples e Eficaz)
-    # Se não for HTTPS, redireciona.
-    RewriteCond %{HTTPS} !=on
-    RewriteRule ^/?(.*) https://%{SERVER_NAME}/$1 [R,L]
-
-    # 2. DEFINIR HEADERS (Vital para parar o Loop)
-    # Garante que o Java receba a info correta
-    RequestHeader set X-Forwarded-Proto "https"
-    RequestHeader set X-Forwarded-Port "443"
-
-    # 3. PROXY REVERSO
-    # Manda para o Java rodando localmente
     RewriteRule ^(.*)$ http://127.0.0.1:9090/$1 [P,L]
 </IfModule>

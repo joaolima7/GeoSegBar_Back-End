@@ -33,25 +33,11 @@ import lombok.Setter;
 
 @Entity
 @Table(name = "reading", indexes = {
-    @Index(name = "idx_reading_instrument_date_hour", columnList = "instrument_id, date DESC, hour DESC"),
     @Index(name = "idx_reading_instrument_active_date_hour", columnList = "instrument_id, active, date DESC, hour DESC"),
+
     @Index(name = "idx_reading_output_active_date_hour", columnList = "output_id, active, date DESC, hour DESC"),
-    @Index(name = "idx_reading_instrument_output_active", columnList = "instrument_id, output_id, active"),
-    @Index(name = "idx_reading_active_date_hour", columnList = "active, date DESC, hour DESC"),
-    @Index(name = "idx_reading_date_hour_status", columnList = "date DESC, hour DESC, limit_status"),
-    @Index(name = "idx_reading_user_date", columnList = "user_id, date DESC"),
-    @Index(name = "idx_reading_active", columnList = "active"),
-    @Index(name = "idx_reading_limit_status", columnList = "limit_status"),
-    @Index(name = "idx_reading_instrument_limit", columnList = "instrument_id, limit_status"),
-    @Index(name = "idx_reading_output_date", columnList = "output_id, date DESC"),
-    @Index(name = "idx_reading_user_instrument", columnList = "user_id, instrument_id"),
-    @Index(name = "idx_reading_date_time_combined", columnList = "date DESC, hour DESC"),
-    @Index(name = "idx_reading_instrument_value", columnList = "instrument_id, calculated_value"),
-    @Index(name = "idx_reading_output_value", columnList = "output_id, calculated_value"),
-    @Index(name = "idx_reading_status_date", columnList = "limit_status, date DESC"),
-    @Index(name = "idx_reading_instrument_output_date", columnList = "instrument_id, output_id, date DESC"),
-    @Index(name = "idx_reading_user_active_date", columnList = "user_id, active, date DESC"),
-    @Index(name = "idx_reading_instrument_status_date", columnList = "instrument_id, limit_status, date DESC"),})
+
+    @Index(name = "idx_reading_active_date_hour", columnList = "active, date DESC, hour DESC"),})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -103,6 +89,6 @@ public class ReadingEntity {
 
     @OneToMany(mappedBy = "reading", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JsonIgnoreProperties({"reading"})
-    @BatchSize(size = 100)
+    @BatchSize(size = 500)
     private Set<ReadingInputValueEntity> inputValues = new HashSet<>();
 }

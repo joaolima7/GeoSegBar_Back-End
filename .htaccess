@@ -5,8 +5,22 @@ Options -Indexes
     Deny from all
 </FilesMatch>
 
-# PROXY REVERSO
+# CONFIGURAÇÃO DE HTTPS E PROXY REVERSO
 <IfModule mod_rewrite.c>
     RewriteEngine On
+
+    # 1. FORÇAR HTTPS
+    # Se a conexão não for segura (HTTPS off)...
+    RewriteCond %{HTTPS} off
+    # ... Redireciona para a mesma URL, mas com https://
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # 2. DEFINIR HEADERS PARA O SPRING BOOT
+    # Avisa o Java que a requisição original veio via HTTPS
+    RequestHeader set X-Forwarded-Proto "https"
+    RequestHeader set X-Forwarded-Port "443"
+
+    # 3. PROXY REVERSO (Manda para o Java)
+    # Envia internamente para a porta 9090 (mantenha http aqui, pois é interno)
     RewriteRule ^(.*)$ http://127.0.0.1:9090/$1 [P,L]
 </IfModule>

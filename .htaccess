@@ -1,26 +1,26 @@
 Options -Indexes
 
+# Bloqueia arquivos sensíveis
 <FilesMatch "\.(jar|war|properties|yml|xml|log|git|env|sh)$">
     Order allow,deny
     Deny from all
 </FilesMatch>
 
-# CONFIGURAÇÃO DE HTTPS E PROXY REVERSO
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # 1. FORÇAR HTTPS
-    # Se a conexão não for segura (HTTPS off)...
-    RewriteCond %{HTTPS} off
-    # ... Redireciona para a mesma URL, mas com https://
+    # --- FORÇAR HTTPS (MÉTODO ROBUSTO PARA CPANEL) ---
+    # Verifica se não é HTTPS OU se o header de proxy não é https
+    RewriteCond %{HTTPS} off [OR]
+    RewriteCond %{HTTP:X-Forwarded-Proto} !https
     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
-    # 2. DEFINIR HEADERS PARA O SPRING BOOT
-    # Avisa o Java que a requisição original veio via HTTPS
+    # --- ENVIAR HEADERS PARA O JAVA ---
+    # Isso é vital para o Spring Boot saber que é seguro
     RequestHeader set X-Forwarded-Proto "https"
     RequestHeader set X-Forwarded-Port "443"
 
-    # 3. PROXY REVERSO (Manda para o Java)
-    # Envia internamente para a porta 9090 (mantenha http aqui, pois é interno)
+    # --- PROXY REVERSO ---
+    # Manda para o Java
     RewriteRule ^(.*)$ http://127.0.0.1:9090/$1 [P,L]
 </IfModule>

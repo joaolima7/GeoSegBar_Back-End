@@ -1,0 +1,31 @@
+# ----------------------------------------------------------------------
+# 1. BLOQUEIO DE LISTAGEM DE DIRETÓRIOS (SEGURANÇA BÁSICA)
+# ----------------------------------------------------------------------
+# Isso impede que alguém veja a lista de arquivos ao acessar a pasta
+Options -Indexes
+
+# ----------------------------------------------------------------------
+# 2. BLOQUEIO DE ARQUIVOS SENSÍVEIS
+# ----------------------------------------------------------------------
+# Impede o download direto do seu .jar, properties (senhas) e git
+<FilesMatch "\.(jar|war|properties|yml|xml|log|git|env|sh)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# ----------------------------------------------------------------------
+# 3. CONFIGURAÇÃO DE ROTEAMENTO (PROXY REVERSO)
+# ----------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # --- AQUI É O PULO DO GATO ---
+    # Redireciona todo o tráfego que chega no domínio para o Spring Boot
+    # SUBSTITUA '9090' PELA PORTA QUE SEU JAVA ESTÁ RODANDO NO SERVIDOR
+    
+    RewriteRule ^(.*)$ http://127.0.0.1:9090/$1 [P,L]
+    
+    # Se a linha acima der erro 500, tente esta alternativa (comente a de cima e descomente a de baixo):
+    # ProxyPass / http://127.0.0.1:9090/
+    # ProxyPassReverse / http://127.0.0.1:9090/
+</IfModule>

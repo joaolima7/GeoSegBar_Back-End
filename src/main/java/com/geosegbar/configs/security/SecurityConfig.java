@@ -31,52 +31,34 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                // ✅ ADICIONADO: Conecta a configuração de CORS ao Spring Security
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
-                // --- Endpoints de Monitoramento ---
-                // CUIDADO: Em produção, isso expõe dados do servidor. 
-                // Se possível, restrinja ou remova se não estiver usando ativamente.
-                // .requestMatchers("/actuator/health/**").permitAll()
-                // .requestMatchers("/actuator/info").permitAll()
-                // .requestMatchers("/actuator/prometheus").permitAll()
-                // .requestMatchers("/actuator/metrics/**").permitAll()
-
-                // --- Autenticação ---
                 .requestMatchers(HttpMethod.POST, "/user/login/initiate").permitAll()
                 .requestMatchers(HttpMethod.POST, "/user/login/verify").permitAll()
                 .requestMatchers(HttpMethod.POST, "/user/register").permitAll()
                 .requestMatchers(HttpMethod.POST, "/user/forgot-password").permitAll()
                 .requestMatchers(HttpMethod.POST, "/user/verify-reset-code").permitAll()
                 .requestMatchers(HttpMethod.POST, "/user/reset-password").permitAll()
-                // --- Arquivos Públicos ---
                 .requestMatchers(HttpMethod.GET, "/psb/files/download/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/share/access/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/share/download/**").permitAll()
-                // Todo o resto exige autenticação
                 .anyRequest().authenticated()
                 )
                 .addFilterBefore(securityFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 
-    // ✅ CONFIGURAÇÃO DE CORS CENTRALIZADA
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // ⚠️ ATENÇÃO: "*" permite qualquer origem. 
-        // Para maior segurança em produção, troque "*" pela URL do seu front (ex: "https://meusite.com")
         configuration.setAllowedOrigins(List.of("*"));
 
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
 
-        // Permite todos os headers (Authorization, Content-Type, etc)
         configuration.setAllowedHeaders(List.of("*"));
 
-        // Se usar "*" no allowedOrigins, allowCredentials DEVE ser false.
-        // Se colocar o domínio específico do front, pode mudar para true (se usar cookies/auth complexa).
         configuration.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -9,18 +9,17 @@ Options -Indexes
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # --- FORÇAR HTTPS (MÉTODO ROBUSTO PARA CPANEL) ---
-    # Verifica se não é HTTPS OU se o header de proxy não é https
-    RewriteCond %{HTTPS} off [OR]
-    RewriteCond %{HTTP:X-Forwarded-Proto} !https
-    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+    # 1. FORÇAR HTTPS (Simples e Eficaz)
+    # Se não for HTTPS, redireciona.
+    RewriteCond %{HTTPS} !=on
+    RewriteRule ^/?(.*) https://%{SERVER_NAME}/$1 [R,L]
 
-    # --- ENVIAR HEADERS PARA O JAVA ---
-    # Isso é vital para o Spring Boot saber que é seguro
+    # 2. DEFINIR HEADERS (Vital para parar o Loop)
+    # Garante que o Java receba a info correta
     RequestHeader set X-Forwarded-Proto "https"
     RequestHeader set X-Forwarded-Port "443"
 
-    # --- PROXY REVERSO ---
-    # Manda para o Java
+    # 3. PROXY REVERSO
+    # Manda para o Java rodando localmente
     RewriteRule ^(.*)$ http://127.0.0.1:9090/$1 [P,L]
 </IfModule>

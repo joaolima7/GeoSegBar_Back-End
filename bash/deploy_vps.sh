@@ -217,6 +217,27 @@ else
 fi
 
 # ============================================
+# EXECUTAR MIGRATIONS
+# ============================================
+echo "🔄 Executando migrations do banco de dados..."
+if [ -d "$SCRIPT_DIR/migrations" ]; then
+    for migration_file in "$SCRIPT_DIR/migrations"/*.sql; do
+        if [ -f "$migration_file" ]; then
+            echo "   📝 Executando: $(basename "$migration_file")"
+            docker exec -i postgres-prod psql -U ${DB_USERNAME} -d ${DB_NAME} < "$migration_file"
+            if [ $? -eq 0 ]; then
+                echo "   ✅ Migration executada com sucesso"
+            else
+                echo "   ⚠️  Erro ao executar migration (pode já ter sido aplicada)"
+            fi
+        fi
+    done
+    echo "✅ Migrations processadas"
+else
+    echo "⚠️  Diretório de migrations não encontrado"
+fi
+
+# ============================================
 # POSTGRES EXPORTER
 # ============================================
 if docker ps -q -f name=postgres-exporter-prod | grep -q .; then

@@ -97,9 +97,9 @@ public class ClientEntity {
     @Column(length = 100)
     private String complement;
 
-    @NotBlank(message = "O telefone é obrigatório!")
     @Pattern(regexp = "^\\d{10,11}$", message = "O telefone deve conter 10 ou 11 dígitos numéricos!")
-    @Column(nullable = false, length = 11)
+    @Size(max = 11, message = "O telefone deve conter 10 ou 11 dígitos numéricos!")
+    @Column(length = 11)
     private String phone;
 
     @Pattern(regexp = "^\\d{10,11}$", message = "O WhatsApp deve conter 10 ou 11 dígitos numéricos!")

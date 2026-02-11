@@ -53,8 +53,8 @@ public class ClientDTO {
     @Size(max = 100, message = "O complemento deve ter no máximo 100 caracteres!")
     private String complement;
 
-    @NotBlank(message = "O telefone é obrigatório!")
     @Pattern(regexp = "^\\d{10,11}$", message = "O telefone deve conter 10 ou 11 dígitos numéricos!")
+    @Size(max = 11, message = "O telefone deve conter 10 ou 11 dígitos numéricos!")
     private String phone;
 
     @Pattern(regexp = "^\\d{10,11}$", message = "O WhatsApp deve conter 10 ou 11 dígitos numéricos!")

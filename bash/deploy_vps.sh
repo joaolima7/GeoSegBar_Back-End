@@ -35,14 +35,14 @@ fi
 docker network create geosegbar-network 2>/dev/null || true
 
 # Criar diretórios necessários
-# echo "📁 Criando diretórios necessários..."
-# mkdir -p ${FILE_UPLOAD_DIR}
-# mkdir -p ${FILE_PSB_DIR}
-# mkdir -p ./logs
-# mkdir -p ./prometheus-prod
-# mkdir -p ./grafana-prod/provisioning/datasources
-# mkdir -p ./grafana-prod/provisioning/dashboards
-# mkdir -p ./grafana-prod/dashboards
+echo "📁 Criando diretórios necessários..."
+mkdir -p ${FILE_UPLOAD_DIR}
+mkdir -p ${FILE_PSB_DIR}
+mkdir -p ./logs
+mkdir -p ./prometheus-prod
+mkdir -p ./grafana-prod/provisioning/datasources
+mkdir -p ./grafana-prod/provisioning/dashboards
+mkdir -p ./grafana-prod/dashboards
 
 # ============================================
 # CONFIGURAÇÕES DO PROMETHEUS (PRODUÇÃO)
@@ -214,27 +214,6 @@ else
       
     echo "⏳ Aguardando banco de dados inicializar..."
     sleep 15
-fi
-
-# ============================================
-# EXECUTAR MIGRATIONS
-# ============================================
-echo "🔄 Executando migrations do banco de dados..."
-if [ -d "$SCRIPT_DIR/migrations" ]; then
-    for migration_file in "$SCRIPT_DIR/migrations"/*.sql; do
-        if [ -f "$migration_file" ]; then
-            echo "   📝 Executando: $(basename "$migration_file")"
-            docker exec -i postgres-prod psql -U ${DB_USERNAME} -d ${DB_NAME} < "$migration_file"
-            if [ $? -eq 0 ]; then
-                echo "   ✅ Migration executada com sucesso"
-            else
-                echo "   ⚠️  Erro ao executar migration (pode já ter sido aplicada)"
-            fi
-        fi
-    done
-    echo "✅ Migrations processadas"
-else
-    echo "⚠️  Diretório de migrations não encontrado"
 fi
 
 # ============================================

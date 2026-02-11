@@ -35,14 +35,14 @@ fi
 docker network create geosegbar-network 2>/dev/null || true
 
 # Criar diretórios necessários
-echo "📁 Criando diretórios necessários..."
-mkdir -p ${FILE_UPLOAD_DIR}
-mkdir -p ${FILE_PSB_DIR}
-mkdir -p ./logs
-mkdir -p ./prometheus-prod
-mkdir -p ./grafana-prod/provisioning/datasources
-mkdir -p ./grafana-prod/provisioning/dashboards
-mkdir -p ./grafana-prod/dashboards
+# echo "📁 Criando diretórios necessários..."
+# mkdir -p ${FILE_UPLOAD_DIR}
+# mkdir -p ${FILE_PSB_DIR}
+# mkdir -p ./logs
+# mkdir -p ./prometheus-prod
+# mkdir -p ./grafana-prod/provisioning/datasources
+# mkdir -p ./grafana-prod/provisioning/dashboards
+# mkdir -p ./grafana-prod/dashboards
 
 # ============================================
 # CONFIGURAÇÕES DO PROMETHEUS (PRODUÇÃO)

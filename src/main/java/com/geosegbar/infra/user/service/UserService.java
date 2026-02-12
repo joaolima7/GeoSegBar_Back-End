@@ -291,7 +291,7 @@ public class UserService {
             }
         }
 
-        return savedUser;
+        return findEntityByIdWithAllDetails(savedUser.getId());
     }
 
     @Transactional
@@ -379,8 +379,7 @@ public class UserService {
             }
         }
 
-        UserEntity existingUser = userRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+        UserEntity existingUser = findEntityByIdWithAllDetails(id);
 
         if (!passwordEncoder.matches(passwordDTO.getCurrentPassword(), existingUser.getPassword())) {
             throw new InvalidInputException("Senha atual incorreta!");
@@ -437,7 +436,8 @@ public class UserService {
             }
         }
 
-        return userRepository.save(user);
+        userRepository.save(user);
+        return findEntityByIdWithAllDetails(user.getId());
     }
 
     @Transactional(readOnly = true)

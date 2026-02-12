@@ -49,7 +49,7 @@ RUN mkdir -p /home/wwgeomprod/public_html/storage/app/public/psb && \
 COPY --from=build /app/target/geosegbar-*.jar app.jar
 
 # Definir propriedades do Java para otimização
-ENV JAVA_OPTS="-Xms512m -Xmx1024m -XX:+UseG1GC -XX:G1HeapRegionSize=16m -XX:+UseStringDeduplication"
+ENV JAVA_OPTS="-Xms512m -Xmx1280m -XX:+UseG1GC -XX:G1HeapRegionSize=16m -XX:+UseStringDeduplication"
 
 # Expor porta
 EXPOSE 9090

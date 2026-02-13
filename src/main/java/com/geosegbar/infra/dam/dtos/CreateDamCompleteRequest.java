@@ -54,6 +54,9 @@ public class CreateDamCompleteRequest {
     @Pattern(regexp = "^\\d{5}-?\\d{3}$", message = "CEP inválido!")
     private String zipCode;
 
+    @Size(max = 100, message = "O complemento deve ter no máximo 100 caracteres!")
+    private String complement;
+
     @NotNull(message = "ID do cliente é obrigatório!")
     private Long clientId;
 

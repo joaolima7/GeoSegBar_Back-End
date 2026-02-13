@@ -27,6 +27,7 @@ public class UpdateDamCompleteRequest {
     private String city;
     private String state;
     private String zipCode;
+    private String complement;
     private Long psbLinkFolderId;
     private Long legislationLinkFolderId;
 

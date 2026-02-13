@@ -99,6 +99,10 @@ public class DamEntity {
     @Column(nullable = false, length = 9)
     private String zipCode;
 
+    @Size(max = 100, message = "O complemento deve ter no máximo 100 caracteres!")
+    @Column(length = 100)
+    private String complement;
+
     @ManyToOne
     @JoinColumn(name = "client_id")
     private ClientEntity client;

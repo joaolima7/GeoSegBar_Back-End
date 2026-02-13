@@ -206,6 +206,7 @@ public class DamService {
         dam.setCity(request.getCity());
         dam.setState(request.getState());
         dam.setZipCode(request.getZipCode());
+        dam.setComplement(request.getComplement());
         dam.setClient(client);
         dam.setStatus(status);
         dam.setPsbLinkFolder(resolvePSBFolderFromRequest(request.getPsbLinkFolderId()));
@@ -389,6 +390,7 @@ public class DamService {
         existingDam.setCity(request.getCity());
         existingDam.setState(request.getState());
         existingDam.setZipCode(request.getZipCode());
+        existingDam.setComplement(request.getComplement());
         existingDam.setClient(client);
         existingDam.setStatus(status);
         existingDam.setPsbLinkFolder(resolvePSBFolderFromRequest(request.getPsbLinkFolderId()));
@@ -481,6 +483,7 @@ public class DamService {
         existingDam.setCity(request.getCity());
         existingDam.setState(request.getState());
         existingDam.setZipCode(request.getZipCode());
+        existingDam.setComplement(request.getComplement());
         existingDam.setClient(client);
         existingDam.setStatus(status);
         existingDam.setPsbLinkFolder(resolvePSBFolderFromRequest(request.getPsbLinkFolderId()));

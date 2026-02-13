@@ -95,7 +95,7 @@ public class DocumentationDamController {
      * @return DocumentationDamResponseDTO contendo apenas campos da
      * documentação + damId
      */
-    @GetMapping("/dam/{damId}/lightweight")
+    @GetMapping("/dam/{damId}/light")
     public ResponseEntity<WebResponseEntity<DocumentationDamResponseDTO>> getDocumentationByDamIdLightweight(@PathVariable Long damId) {
         DocumentationDamResponseDTO documentation = documentationDamService.findByDamIdLightweight(damId);
         WebResponseEntity<DocumentationDamResponseDTO> response

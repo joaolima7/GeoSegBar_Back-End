@@ -40,29 +40,20 @@ public class PSBFileService {
 
     @Transactional(readOnly = true)
     public List<PSBFileEntity> findByFolderId(Long folderId) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-
-            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getViewPSB()) {
-                throw new NotFoundException("Usuário não tem permissão para acessar as pastas PSB");
-            }
-        }
-
+        validateViewPermission();
         return psbFileRepository.findByPsbFolderIdOrderByUploadedAtDesc(folderId);
     }
 
     @Transactional(readOnly = true)
     public PSBFileEntity findById(Long id) {
+        validateViewPermission();
         return psbFileRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Arquivo PSB não encontrado"));
     }
 
     @Transactional
     public PSBFileEntity uploadFile(Long folderId, MultipartFile file, Long uploadedById) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getEditPSB()) {
-                throw new NotFoundException("Usuário não tem permissão para enviar arquivos PSB");
-            }
-        }
+        validateEditPermission();
 
         PSBFolderEntity folder = psbFolderRepository.findById(folderId)
                 .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
@@ -98,6 +89,7 @@ public class PSBFileService {
 
     @Transactional(readOnly = true)
     public Resource downloadFile(Long fileId) {
+        validateViewPermission();
         try {
             PSBFileEntity file = psbFileRepository.findById(fileId)
                     .orElseThrow(() -> new NotFoundException("Arquivo PSB não encontrado"));
@@ -117,11 +109,7 @@ public class PSBFileService {
 
     @Transactional
     public void deleteFile(Long fileId) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getEditPSB()) {
-                throw new NotFoundException("Usuário não tem permissão para excluir arquivos PSB");
-            }
-        }
+        validateEditPermission();
 
         PSBFileEntity file = psbFileRepository.findById(fileId)
                 .orElseThrow(() -> new NotFoundException("Arquivo PSB não encontrado"));
@@ -161,5 +149,31 @@ public class PSBFileService {
             return url.substring(lastSlashIndex + 1);
         }
         return url;
+    }
+
+    /**
+     * Valida se o usuário atual tem permissão de visualização de PSB.
+     * Administradores têm permissão automática.
+     */
+    private void validateViewPermission() {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity user = AuthenticatedUserUtil.getCurrentUser();
+            if (user.getDocumentationPermission() == null || !Boolean.TRUE.equals(user.getDocumentationPermission().getViewPSB())) {
+                throw new NotFoundException("Usuário não tem permissão para visualizar arquivos PSB!");
+            }
+        }
+    }
+
+    /**
+     * Valida se o usuário atual tem permissão de edição de PSB. Administradores
+     * têm permissão automática.
+     */
+    private void validateEditPermission() {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity user = AuthenticatedUserUtil.getCurrentUser();
+            if (user.getDocumentationPermission() == null || !Boolean.TRUE.equals(user.getDocumentationPermission().getEditPSB())) {
+                throw new NotFoundException("Usuário não tem permissão para editar arquivos PSB!");
+            }
+        }
     }
 }

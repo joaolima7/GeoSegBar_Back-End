@@ -36,6 +36,7 @@ public class ShareFolderService {
 
     @Transactional(readOnly = true)
     public List<ShareFolderEntity> findAllByUser(Long userId) {
+        validateViewPermission();
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
         return shareFolderRepository.findBySharedBy(user);
@@ -43,6 +44,7 @@ public class ShareFolderService {
 
     @Transactional(readOnly = true)
     public List<ShareFolderEntity> findAllByFolder(Long folderId) {
+        validateViewPermission();
 
         if (!psbFolderRepository.existsById(folderId)) {
             throw new NotFoundException("Pasta PSB não encontrada!");
@@ -60,11 +62,7 @@ public class ShareFolderService {
 
     @Transactional
     public ShareFolderEntity create(CreateShareFolderRequest request) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getSharePSB()) {
-                throw new NotFoundException("Usuário não tem permissão para compartilhar pastas PSB!");
-            }
-        }
+        validateSharePermission();
 
         PSBFolderEntity folder = psbFolderRepository.findById(request.getPsbFolderId())
                 .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada!"));
@@ -119,11 +117,7 @@ public class ShareFolderService {
 
     @Transactional
     public void deleteShare(Long shareId) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            if (!AuthenticatedUserUtil.getCurrentUser().getDocumentationPermission().getSharePSB()) {
-                throw new NotFoundException("Usuário não tem permissão para excluir compartilhamentos de pastas PSB!");
-            }
-        }
+        validateSharePermission();
 
         if (!shareFolderRepository.existsById(shareId)) {
             throw new NotFoundException("Link de compartilhamento não encontrado!");
@@ -133,6 +127,7 @@ public class ShareFolderService {
 
     @Transactional(readOnly = true)
     public List<ShareFolderEntity> findAllByDamId(Long damId) {
+        validateViewPermission();
         if (!damRepository.existsById(damId)) {
             throw new NotFoundException("Barragem não encontrada!");
         }
@@ -155,5 +150,31 @@ public class ShareFolderService {
         PSBFolderEntity folder = psbFolderService.findById(shareFolder.getPsbFolder().getId());
 
         return zipService.createZipFromFolder(folder);
+    }
+
+    /**
+     * Valida se o usuário atual tem permissão de visualização de PSB.
+     * Administradores têm permissão automática.
+     */
+    private void validateViewPermission() {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity user = AuthenticatedUserUtil.getCurrentUser();
+            if (user.getDocumentationPermission() == null || !Boolean.TRUE.equals(user.getDocumentationPermission().getViewPSB())) {
+                throw new NotFoundException("Usuário não tem permissão para visualizar informações de PSB!");
+            }
+        }
+    }
+
+    /**
+     * Valida se o usuário atual tem permissão de compartilhamento de PSB.
+     * Administradores têm permissão automática.
+     */
+    private void validateSharePermission() {
+        if (!AuthenticatedUserUtil.isAdmin()) {
+            UserEntity user = AuthenticatedUserUtil.getCurrentUser();
+            if (user.getDocumentationPermission() == null || !Boolean.TRUE.equals(user.getDocumentationPermission().getSharePSB())) {
+                throw new NotFoundException("Usuário não tem permissão para compartilhar pastas PSB!");
+            }
+        }
     }
 }

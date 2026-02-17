@@ -263,10 +263,10 @@ public class ClientService {
             String contentType = "image/png";
             if (imageBytes.length > 2) {
                 if (imageBytes[0] == (byte) 0xFF && imageBytes[1] == (byte) 0xD8) {
-                    contentType = "image/jpeg"; 
-                }else if (imageBytes[0] == (byte) 0x89 && imageBytes[1] == (byte) 0x50) {
-                    contentType = "image/png"; 
-                }else if (imageBytes[0] == (byte) 0x47 && imageBytes[1] == (byte) 0x49) {
+                    contentType = "image/jpeg";
+                } else if (imageBytes[0] == (byte) 0x89 && imageBytes[1] == (byte) 0x50) {
+                    contentType = "image/png";
+                } else if (imageBytes[0] == (byte) 0x47 && imageBytes[1] == (byte) 0x49) {
                     contentType = "image/gif";
                 }
             }
@@ -326,8 +326,8 @@ public class ClientService {
         entity.setState(clientDTO.getState());
         entity.setZipCode(clientDTO.getZipCode());
         entity.setComplement(clientDTO.getComplement());
-        entity.setPhone(clientDTO.getPhone());
-        entity.setWhatsappPhone(clientDTO.getWhatsappPhone());
+        entity.setPhone(clientDTO.getPhone() != null && !clientDTO.getPhone().isBlank() ? clientDTO.getPhone() : null);
+        entity.setWhatsappPhone(clientDTO.getWhatsappPhone() != null && !clientDTO.getWhatsappPhone().isBlank() ? clientDTO.getWhatsappPhone() : null);
         entity.setEmailContact(clientDTO.getEmailContact());
 
     }
@@ -335,8 +335,8 @@ public class ClientService {
     private void processLogoUpdate(ClientEntity clientEntity, String logoBase64, ClientEntity existingClient) {
         if (logoBase64 == null) {
             if (existingClient != null) {
-                clientEntity.setLogoPath(existingClient.getLogoPath()); 
-            }else {
+                clientEntity.setLogoPath(existingClient.getLogoPath());
+            } else {
                 clientEntity.setLogoPath(null);
             }
             return;

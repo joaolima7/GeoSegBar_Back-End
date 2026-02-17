@@ -17,6 +17,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import com.geosegbar.common.email.EmailService;
 import com.geosegbar.common.response.WebResponseEntity;
@@ -133,6 +134,14 @@ public class RestExceptionHandler {
     public ResponseEntity<WebResponseEntity<String>> handleShareFolderException(ShareFolderException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(WebResponseEntity.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<WebResponseEntity<String>> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException ex) {
+        long maxSizeMB = ex.getMaxUploadSize() > 0 ? ex.getMaxUploadSize() / (1024 * 1024) : 500;
+        logger.warn("Upload rejeitado: tamanho excede o limite de {}MB", maxSizeMB);
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(WebResponseEntity.error("O arquivo enviado excede o tamanho máximo permitido de " + maxSizeMB + "MB."));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

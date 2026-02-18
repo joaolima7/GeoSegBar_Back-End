@@ -231,6 +231,21 @@ public class PSBFolderService {
                 .executeUpdate();
         log.debug("[PSB-DELETE-DB] {} share link(s) deletado(s) da pasta {}", linksDeleted, folderId);
 
+        // Nullifica referências FK na tabela dam que apontam para esta pasta
+        // (dam.psb_link_folder_id e dam.legislation_link_folder_id)
+        int psbLinkNulled = entityManager
+                .createQuery("UPDATE DamEntity d SET d.psbLinkFolder = null WHERE d.psbLinkFolder.id = :folderId")
+                .setParameter("folderId", folderId)
+                .executeUpdate();
+        int legLinkNulled = entityManager
+                .createQuery("UPDATE DamEntity d SET d.legislationLinkFolder = null WHERE d.legislationLinkFolder.id = :folderId")
+                .setParameter("folderId", folderId)
+                .executeUpdate();
+        if (psbLinkNulled > 0 || legLinkNulled > 0) {
+            log.debug("[PSB-DELETE-DB] Referências FK em dam nullificadas para pasta {}: psbLink={}, legLink={}",
+                    folderId, psbLinkNulled, legLinkNulled);
+        }
+
         // Deleta a própria pasta (JPQL bulk, sem cascade)
         int deleted = entityManager
                 .createQuery("DELETE FROM PSBFolderEntity f WHERE f.id = :id")

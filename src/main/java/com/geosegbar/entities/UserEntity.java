@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.hibernate.Hibernate;
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -103,6 +105,7 @@ public class UserEntity {
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
     private Set<ReadingEntity> readings = new HashSet<>();
 
+    @JsonIgnore
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "user_client",
@@ -153,7 +156,7 @@ public class UserEntity {
 
     @JsonProperty("createdBy")
     public Object getCreatedByInfo() {
-        if (this.createdBy == null) {
+        if (this.createdBy == null || !Hibernate.isInitialized(this.createdBy)) {
             return null;
         }
         return new UserCreatorInfo(createdBy.getId(), createdBy.getName(), createdBy.getEmail());

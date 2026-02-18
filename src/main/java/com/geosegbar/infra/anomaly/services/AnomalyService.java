@@ -64,15 +64,18 @@ public class AnomalyService {
         }
     }
 
+    @Transactional(readOnly = true)
     public List<AnomalyEntity> findAll() {
         return anomalyRepository.findAll();
     }
 
+    @Transactional(readOnly = true)
     public AnomalyEntity findById(Long id) {
         return anomalyRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Anomalia não encontrada!"));
     }
 
+    @Transactional(readOnly = true)
     public List<AnomalyEntity> findByDamId(Long damId) {
         return anomalyRepository.findByDamId(damId);
     }

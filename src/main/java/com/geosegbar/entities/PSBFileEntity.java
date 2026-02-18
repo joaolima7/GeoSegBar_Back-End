@@ -65,7 +65,7 @@ public class PSBFileEntity {
 
     @ManyToOne
     @JoinColumn(name = "uploaded_by_id")
-    @JsonIgnoreProperties({"psbFoldersCreated", "psbFilesUploaded"})
+    @JsonIgnoreProperties({"psbFoldersCreated", "psbFilesUploaded", "createdBy"})
     private UserEntity uploadedBy;
 
     @Column(name = "uploaded_at")

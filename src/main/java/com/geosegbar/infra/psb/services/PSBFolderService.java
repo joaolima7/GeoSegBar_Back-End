@@ -161,6 +161,7 @@ public class PSBFolderService {
 
         deleteS3ContentRecursively(folderToDelete);
         psbFolderRepository.delete(folderToDelete);
+        psbFolderRepository.flush();
 
         reindexSiblingsAfterDelete(damId, parentFolder, deletedFolderIndex);
     }

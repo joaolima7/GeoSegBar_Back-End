@@ -97,7 +97,7 @@ public class PSBFolderEntity {
 
     @ManyToOne
     @JoinColumn(name = "created_by")
-    @JsonIgnoreProperties({"psbFoldersCreated", "psbFilesUploaded"})
+    @JsonIgnoreProperties({"psbFoldersCreated", "psbFilesUploaded", "createdBy"})
     private UserEntity createdBy;
 
     @OneToMany(mappedBy = "psbFolder", cascade = CascadeType.ALL,

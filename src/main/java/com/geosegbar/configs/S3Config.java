@@ -1,10 +1,14 @@
 package com.geosegbar.configs;
 
+import java.time.Duration;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.http.apache.ApacheHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 
@@ -26,6 +30,20 @@ public class S3Config {
                 .region(Region.of(region))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(accessKey, secretKey)))
+                .httpClientBuilder(ApacheHttpClient.builder()
+                        // Pool de conexões: suporta multipart upload paralelo (4 threads)
+                        .maxConnections(20)
+                        // Timeout para estabelecer conexão TCP com S3
+                        .connectionTimeout(Duration.ofSeconds(5))
+                        // Timeout de socket (tempo máximo entre pacotes)
+                        // Generoso para uploads grandes em redes lentas
+                        .socketTimeout(Duration.ofMinutes(5))
+                        // Reutilizar conexões com keep-alive
+                        .connectionMaxIdleTime(Duration.ofSeconds(60))
+                        // Espera máxima por conexão do pool
+                        .connectionAcquisitionTimeout(Duration.ofSeconds(10))
+                        // TCP keep-alive detecta conexões mortas
+                        .tcpKeepAlive(true))
                 .build();
     }
 }

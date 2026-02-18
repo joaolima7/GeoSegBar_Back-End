@@ -8,7 +8,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
@@ -37,6 +39,7 @@ public class PSBFileService {
     private final PSBFolderRepository psbFolderRepository;
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
+    private final PlatformTransactionManager transactionManager;
 
     @Transactional(readOnly = true)
     public List<PSBFileEntity> findByFolderId(Long folderId) {
@@ -51,7 +54,18 @@ public class PSBFileService {
                 .orElseThrow(() -> new NotFoundException("Arquivo PSB não encontrado"));
     }
 
-    @Transactional
+    /**
+     * Upload de arquivo PSB.
+     *
+     * IMPORTANTE: Este método NÃO é @Transactional porque o upload S3 pode
+     * levar dezenas de segundos. Manter uma transação/conexão DB aberta durante
+     * todo esse tempo causa: 1) transaction timeout
+     * (spring.transaction.default-timeout=30) 2) Connection leak detection
+     * (hikari.leak-detection-threshold=30000) 3) Desperdício de conexões do
+     * pool
+     *
+     * Solução: 3 fases com transações curtas e independentes.
+     */
     public PSBFileEntity uploadFile(Long folderId, MultipartFile file, Long uploadedById) {
         validateEditPermission();
 
@@ -60,15 +74,30 @@ public class PSBFileService {
         log.info("[PSB UPLOAD] Iniciando upload: arquivo='{}', tamanho={} bytes ({} MB), pasta={}, usuario={}",
                 file.getOriginalFilename(), fileSizeBytes, String.format("%.2f", fileSizeMB), folderId, uploadedById);
 
-        PSBFolderEntity folder = psbFolderRepository.findById(folderId)
-                .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
+        // ============================================================
+        // FASE 1: Carregar dados e validar (transação curta, read-only)
+        // ============================================================
+        TransactionTemplate readTx = new TransactionTemplate(transactionManager);
+        readTx.setReadOnly(true);
 
-        UserEntity uploader = userRepository.findById(uploadedById)
-                .orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
+        String s3Directory = readTx.execute(status -> {
+            // Query enxuta: busca APENAS serverPath (1 SELECT simples)
+            // Evita o EntityGraph do findById que carrega dam → checklists → documentation_dam (N+1)
+            String serverPath = psbFolderRepository.findServerPathById(folderId)
+                    .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
 
+            if (!userRepository.existsById(uploadedById)) {
+                throw new NotFoundException("Usuário não encontrado");
+            }
+
+            return sanitizeFolderPath(serverPath);
+        });
+
+        // ============================================================
+        // FASE 2: Upload para S3 (SEM transação, SEM conexão DB)
+        // Pode levar segundos ou minutos — não segura recurso do pool
+        // ============================================================
         try {
-            String s3Directory = sanitizeFolderPath(folder.getServerPath());
-
             long s3Start = System.currentTimeMillis();
             String downloadUrl = fileStorageService.storeFile(file, s3Directory);
             long s3Elapsed = System.currentTimeMillis() - s3Start;
@@ -76,21 +105,32 @@ public class PSBFileService {
             String filename = extractFilenameFromUrl(downloadUrl);
             String s3Key = s3Directory + "/" + filename;
 
-            PSBFileEntity psbFile = new PSBFileEntity();
-            psbFile.setFilename(filename);
-            psbFile.setOriginalFilename(file.getOriginalFilename());
-            psbFile.setContentType(file.getContentType());
-            psbFile.setSize(file.getSize());
-            psbFile.setPsbFolder(folder);
-            psbFile.setUploadedBy(uploader);
-            psbFile.setFilePath(s3Key);
-            psbFile.setDownloadUrl(downloadUrl);
-
             log.info("[PSB UPLOAD] Arquivo enviado ao S3 com sucesso: s3Key='{}', tempo_s3={}ms ({} MB/s)",
                     s3Key, s3Elapsed,
                     s3Elapsed > 0 ? String.format("%.2f", fileSizeMB / (s3Elapsed / 1000.0)) : "N/A");
 
-            return psbFileRepository.save(psbFile);
+            // ============================================================
+            // FASE 3: Salvar entidade no banco (transação curta, write)
+            // Usa getReferenceById para evitar SELECT extra — só precisa do ID
+            // para setar a FK no INSERT
+            // ============================================================
+            TransactionTemplate writeTx = new TransactionTemplate(transactionManager);
+            return writeTx.execute(status -> {
+                PSBFolderEntity folderRef = psbFolderRepository.getReferenceById(folderId);
+                UserEntity uploaderRef = userRepository.getReferenceById(uploadedById);
+
+                PSBFileEntity psbFile = new PSBFileEntity();
+                psbFile.setFilename(filename);
+                psbFile.setOriginalFilename(file.getOriginalFilename());
+                psbFile.setContentType(file.getContentType());
+                psbFile.setSize(file.getSize());
+                psbFile.setPsbFolder(folderRef);
+                psbFile.setUploadedBy(uploaderRef);
+                psbFile.setFilePath(s3Key);
+                psbFile.setDownloadUrl(downloadUrl);
+
+                return psbFileRepository.save(psbFile);
+            });
 
         } catch (Exception ex) {
             log.error("[PSB UPLOAD] Erro no upload PSB: arquivo='{}', tamanho={} MB, pasta={}: {}",

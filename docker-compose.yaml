@@ -35,13 +35,13 @@ services:
       - AWS_BUCKET_NAME=${AWS_BUCKET_NAME}
     env_file:
       - .env
-    ports:
-      - "${SERVER_PORT}:9090"
+    # Porta exposta apenas internamente (nginx faz o proxy)
+    expose:
+      - "9090"
     networks:
       - geosegbar-network
     restart: unless-stopped
     volumes:
-      # ⭐ CORRIGIDO: Path absoluto no container
       - ./storage/uploads:/app/uploads
       - ./logs:/app/logs
     healthcheck:
@@ -57,6 +57,35 @@ services:
       interval: 30s
       timeout: 10s
       start_period: 60s
+      retries: 3
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-dev
+    restart: unless-stopped
+    ports:
+      - "${SERVER_PORT}:80"
+    environment:
+      - UPSTREAM_SERVER=geosegbar-api:9090
+    volumes:
+      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+    networks:
+      - geosegbar-network
+    depends_on:
+      - geosegbar-api
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:80/nginx-health",
+        ]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
       retries: 3
 
   prometheus:

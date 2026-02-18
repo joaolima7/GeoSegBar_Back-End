@@ -15,7 +15,7 @@ read
 echo -e "${BLUE}🛑 Parando e removendo containers...${NC}"
 
 # Lista de containers para remover
-CONTAINERS=("geosegbar-api-prod" "postgres-prod" "postgres-exporter-prod" "redis-prod" "prometheus-prod" "grafana-prod")
+CONTAINERS=("nginx-prod" "geosegbar-api-prod" "postgres-prod" "postgres-exporter-prod" "redis-prod" "prometheus-prod" "grafana-prod")
 
 for container in "${CONTAINERS[@]}"; do
     if docker ps -a --format '{{.Names}}' | grep -q "^${container}$"; then

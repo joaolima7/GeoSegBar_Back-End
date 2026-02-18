@@ -57,4 +57,15 @@ public interface PSBFolderRepository extends JpaRepository<PSBFolderEntity, Long
     @Override
     @EntityGraph(attributePaths = {"dam", "parentFolder"})
     Optional<PSBFolderEntity> findById(Long id);
+
+    /**
+     * Query enxuta: retorna APENAS o serverPath, sem carregar a entidade
+     * inteira nem o EntityGraph (dam, parentFolder, etc.). Usado pelo upload
+     * para evitar N+1 queries desnecessárias.
+     */
+    @Query("SELECT f.serverPath FROM PSBFolderEntity f WHERE f.id = :folderId")
+    Optional<String> findServerPathById(@Param("folderId") Long folderId);
+
+    @Query("SELECT CASE WHEN COUNT(f) > 0 THEN true ELSE false END FROM PSBFolderEntity f WHERE f.id = :folderId")
+    boolean existsFolderById(@Param("folderId") Long folderId);
 }

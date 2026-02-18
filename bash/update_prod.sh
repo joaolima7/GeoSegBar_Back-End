@@ -30,8 +30,8 @@ git pull origin main
 echo -e "${BLUE}🔨 Construindo nova imagem Docker...${NC}"
 docker-compose -f docker-compose.prod.yml build geosegbar-api
 
-echo -e "${BLUE}🚀 Atualizando container da API...${NC}"
-docker-compose -f docker-compose.prod.yml up -d geosegbar-api
+echo -e "${BLUE}🚀 Atualizando container da API e nginx...${NC}"
+docker-compose -f docker-compose.prod.yml up -d geosegbar-api nginx
 
 echo -e "${BLUE}⏳ Aguardando API reinicializar...${NC}"
 sleep 15

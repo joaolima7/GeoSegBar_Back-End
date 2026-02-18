@@ -283,7 +283,7 @@ docker run -d \
   --name geosegbar-api-prod \
   --restart unless-stopped \
   --network geosegbar-network \
-  -p ${SERVER_PORT}:9090 \
+  --expose 9090 \
   -e SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE}" \
   -e JAVA_OPTS="${JAVA_OPTS}" \
   -e DB_HOST="${DB_HOST}" \
@@ -325,6 +325,27 @@ docker run -d \
 
 echo "⏳ Aguardando aplicação inicializar..."
 sleep 30
+
+# ============================================
+# NGINX REVERSE PROXY
+# ============================================
+echo "🛑 Parando container nginx atual..."
+docker stop nginx-prod 2>/dev/null || echo "   Nginx não estava rodando"
+docker rm nginx-prod 2>/dev/null || echo "   Nginx não existia"
+
+echo "🚀 Subindo nginx reverse proxy..."
+docker run -d \
+  --name nginx-prod \
+  --restart unless-stopped \
+  --network geosegbar-network \
+  -p ${SERVER_PORT}:80 \
+  -e UPSTREAM_SERVER=geosegbar-api-prod:9090 \
+  -v $SCRIPT_DIR/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro \
+  nginx:alpine
+
+echo "⏳ Aguardando nginx inicializar..."
+sleep 5
+echo "✅ Nginx reverse proxy iniciado"
 
 # ============================================
 # PROMETHEUS
@@ -391,13 +412,13 @@ sleep 10
 # ============================================
 # VERIFICAÇÃO
 # ============================================
-echo "🔍 Verificando status da aplicação..."
+echo "🔍 Verificando status da aplicação (via nginx)..."
 if curl -f http://localhost:${SERVER_PORT}/actuator/health > /dev/null 2>&1; then
     echo "✅ Deploy em PRODUÇÃO realizado com sucesso!"
     echo ""
     echo "📡 SERVIÇOS DISPONÍVEIS:"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "🌐 API:           http://localhost:${SERVER_PORT}"
+    echo "🌐 API (nginx):   http://localhost:${SERVER_PORT}"
     echo "📊 Prometheus:    http://localhost:9091"
     echo "📈 Grafana:       http://localhost:3001 (admin / ${GRAFANA_PASSWORD})"
     echo "🗄️  PostgreSQL:    localhost:${DB_PORT}"
@@ -405,7 +426,7 @@ if curl -f http://localhost:${SERVER_PORT}/actuator/health > /dev/null 2>&1; the
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "📊 Status dos containers:"
-    docker ps --filter "name=geosegbar" --filter "name=postgres-prod" --filter "name=prometheus-prod" --filter "name=grafana-prod"
+    docker ps --filter "name=geosegbar" --filter "name=postgres-prod" --filter "name=nginx-prod" --filter "name=prometheus-prod" --filter "name=grafana-prod"
     
     echo ""
     echo "🧹 Limpando imagens não utilizadas..."

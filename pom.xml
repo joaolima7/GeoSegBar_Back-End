@@ -205,6 +205,11 @@
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>s3</artifactId>
         </dependency>
+        <!-- HTTP client explícito para S3 — suporta connection pool e uploads paralelos -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>apache-client</artifactId>
+        </dependency>
     </dependencies>
 
     <dependencyManagement>

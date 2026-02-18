@@ -18,6 +18,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.geosegbar.common.email.EmailService;
 import com.geosegbar.common.response.WebResponseEntity;
@@ -142,6 +143,13 @@ public class RestExceptionHandler {
         logger.warn("Upload rejeitado: tamanho excede o limite de {}MB", maxSizeMB);
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
                 .body(WebResponseEntity.error("O arquivo enviado excede o tamanho máximo permitido de " + maxSizeMB + "MB."));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<WebResponseEntity<String>> handleNoResourceFoundException(NoResourceFoundException ex, HttpServletRequest request) {
+        logger.warn("Endpoint não encontrado: {} {}", request.getMethod(), request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(WebResponseEntity.error("Endpoint não encontrado: " + request.getMethod() + " " + request.getRequestURI()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

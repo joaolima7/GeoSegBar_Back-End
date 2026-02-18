@@ -24,6 +24,8 @@ import com.geosegbar.infra.psb.dtos.PSBFolderCreationDTO;
 import com.geosegbar.infra.psb.persistence.PSBFolderRepository;
 import com.geosegbar.infra.user.persistence.jpa.UserRepository;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -31,6 +33,9 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @Slf4j
 public class PSBFolderService {
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     private final PSBFolderRepository psbFolderRepository;
     private final DamRepository damRepository;
@@ -157,11 +162,25 @@ public class PSBFolderService {
 
         Long damId = folderToDelete.getDam().getId();
         Integer deletedFolderIndex = folderToDelete.getFolderIndex();
-        PSBFolderEntity parentFolder = folderToDelete.getParentFolder();
+        Long parentFolderId = folderToDelete.getParentFolder() != null ? folderToDelete.getParentFolder().getId() : null;
 
+        // Faz o cleanup do S3 recursivamente (carrega subfolders/files na sessão)
         deleteS3ContentRecursively(folderToDelete);
-        psbFolderRepository.delete(folderToDelete);
+
+        // Limpa o contexto de persistência para evitar referências cruzadas
+        // entre entidades gerenciadas durante o cascade delete
+        entityManager.clear();
+
+        // Re-busca e deleta em sessão limpa
+        PSBFolderEntity toRemove = psbFolderRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
+        psbFolderRepository.delete(toRemove);
         psbFolderRepository.flush();
+
+        // Re-busca o parentFolder por ID após o clear
+        PSBFolderEntity parentFolder = parentFolderId != null
+                ? psbFolderRepository.findById(parentFolderId).orElse(null)
+                : null;
 
         reindexSiblingsAfterDelete(damId, parentFolder, deletedFolderIndex);
     }

@@ -114,13 +114,6 @@ public class UserEntity {
     )
     private Set<ClientEntity> clients = new HashSet<>();
 
-    // @JsonProperty("clients")
-    // public Set<ClientEntity> getClientsForJson() {
-    //     if (this.clients == null || !Hibernate.isInitialized(this.clients)) {
-    //         return null;
-    //     }
-    //     return this.clients;
-    // }
     @JsonIgnore
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
     private Set<DamPermissionEntity> damPermissions = new HashSet<>();

@@ -42,17 +42,26 @@ public class FileStorageService {
 
             String s3Key = subDirectory + "/" + safeFileName;
 
+            long fileSizeBytes = file.getSize();
+            log.info("[S3 UPLOAD] Iniciando PUT: bucket='{}', key='{}', tamanho={} bytes",
+                    bucketName, s3Key, fileSizeBytes);
+            long start = System.currentTimeMillis();
+
             PutObjectRequest putOb = PutObjectRequest.builder()
                     .bucket(bucketName)
                     .key(s3Key)
                     .contentType(file.getContentType())
                     .build();
 
-            s3Client.putObject(putOb, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+            s3Client.putObject(putOb, RequestBody.fromInputStream(file.getInputStream(), fileSizeBytes));
+
+            long elapsed = System.currentTimeMillis() - start;
+            log.info("[S3 UPLOAD] PUT concluido: key='{}', tempo={}ms", s3Key, elapsed);
 
             return getS3Url(s3Key);
 
         } catch (IOException ex) {
+            log.error("[S3 UPLOAD] IOException ao enviar para S3: {} | arquivo='{}'", ex.getMessage(), file.getOriginalFilename());
             throw new FileStorageException("Erro ao enviar arquivo para o S3.", ex);
         }
     }

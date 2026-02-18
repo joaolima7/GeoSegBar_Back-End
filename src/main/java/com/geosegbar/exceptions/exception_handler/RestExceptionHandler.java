@@ -18,6 +18,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.geosegbar.common.email.EmailService;
@@ -143,6 +144,48 @@ public class RestExceptionHandler {
         logger.warn("Upload rejeitado: tamanho excede o limite de {}MB", maxSizeMB);
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
                 .body(WebResponseEntity.error("O arquivo enviado excede o tamanho máximo permitido de " + maxSizeMB + "MB."));
+    }
+
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<WebResponseEntity<String>> handleMultipartException(
+            MultipartException ex, HttpServletRequest request) {
+        Throwable cause = ex.getCause();
+        Throwable rootCause = cause != null ? cause.getCause() : null;
+
+        boolean isClientAbort = isClientAbortException(ex);
+
+        if (isClientAbort) {
+            // Conexão encerrada pelo cliente durante o upload (timeout de proxy/cliente)
+            logger.warn("Upload interrompido: cliente encerrou a conexão durante o envio. "
+                    + "Endpoint: {} {} | Causa: {}",
+                    request.getMethod(), request.getRequestURI(),
+                    rootCause != null ? rootCause.getMessage() : (cause != null ? cause.getMessage() : ex.getMessage()));
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(WebResponseEntity.error(
+                            "O envio do arquivo foi interrompido. Verifique sua conexão e tente novamente."));
+        }
+
+        logger.warn("Falha ao processar multipart: {} | Endpoint: {} {}",
+                ex.getMessage(), request.getMethod(), request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(WebResponseEntity.error("Falha ao processar o arquivo enviado: " + ex.getMessage()));
+    }
+
+    private boolean isClientAbortException(Throwable ex) {
+        Throwable current = ex;
+        int depth = 0;
+        while (current != null && depth < 10) {
+            String className = current.getClass().getName();
+            String message = current.getMessage();
+            if (className.contains("ClientAbortException")
+                    || current instanceof java.io.EOFException
+                    || (message != null && message.contains("EOFException"))) {
+                return true;
+            }
+            current = current.getCause();
+            depth++;
+        }
+        return false;
     }
 
     @ExceptionHandler(NoResourceFoundException.class)

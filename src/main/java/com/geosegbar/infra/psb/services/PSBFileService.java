@@ -55,6 +55,11 @@ public class PSBFileService {
     public PSBFileEntity uploadFile(Long folderId, MultipartFile file, Long uploadedById) {
         validateEditPermission();
 
+        long fileSizeBytes = file.getSize();
+        double fileSizeMB = fileSizeBytes / (1024.0 * 1024.0);
+        log.info("[PSB UPLOAD] Iniciando upload: arquivo='{}', tamanho={} bytes ({} MB), pasta={}, usuario={}",
+                file.getOriginalFilename(), fileSizeBytes, String.format("%.2f", fileSizeMB), folderId, uploadedById);
+
         PSBFolderEntity folder = psbFolderRepository.findById(folderId)
                 .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
 
@@ -63,7 +68,11 @@ public class PSBFileService {
 
         try {
             String s3Directory = sanitizeFolderPath(folder.getServerPath());
+
+            long s3Start = System.currentTimeMillis();
             String downloadUrl = fileStorageService.storeFile(file, s3Directory);
+            long s3Elapsed = System.currentTimeMillis() - s3Start;
+
             String filename = extractFilenameFromUrl(downloadUrl);
             String s3Key = s3Directory + "/" + filename;
 
@@ -77,12 +86,15 @@ public class PSBFileService {
             psbFile.setFilePath(s3Key);
             psbFile.setDownloadUrl(downloadUrl);
 
-            log.info("Arquivo PSB enviado para S3: {}", s3Key);
+            log.info("[PSB UPLOAD] Arquivo enviado ao S3 com sucesso: s3Key='{}', tempo_s3={}ms ({} MB/s)",
+                    s3Key, s3Elapsed,
+                    s3Elapsed > 0 ? String.format("%.2f", fileSizeMB / (s3Elapsed / 1000.0)) : "N/A");
 
             return psbFileRepository.save(psbFile);
 
         } catch (Exception ex) {
-            log.error("Erro no upload PSB: {}", ex.getMessage());
+            log.error("[PSB UPLOAD] Erro no upload PSB: arquivo='{}', tamanho={} MB, pasta={}: {}",
+                    file.getOriginalFilename(), String.format("%.2f", fileSizeMB), folderId, ex.getMessage());
             throw new FileStorageException("Não foi possível armazenar o arquivo no S3.", ex);
         }
     }

@@ -97,13 +97,13 @@ public class ClientEntity {
     @Column(length = 100)
     private String complement;
 
-    @Pattern(regexp = "^\\d{10,11}$", message = "O telefone deve conter 10 ou 11 dígitos numéricos!")
-    @Size(max = 11, message = "O telefone deve conter 10 ou 11 dígitos numéricos!")
+    @Pattern(regexp = "^$|^\\d{10,11}$", message = "O telefone deve conter 10 ou 11 dígitos numéricos ou estar vazio!")
+    @Size(max = 11, message = "O telefone deve conter no máximo 11 dígitos!")
     @Column(length = 11)
     private String phone;
 
-    @Pattern(regexp = "^\\d{10,11}$", message = "O WhatsApp deve conter 10 ou 11 dígitos numéricos!")
-    @Size(max = 11, message = "O WhatsApp deve conter 10 ou 11 dígitos numéricos!")
+    @Pattern(regexp = "^$|^\\d{10,11}$", message = "O WhatsApp deve conter 10 ou 11 dígitos numéricos ou estar vazio!")
+    @Size(max = 11, message = "O WhatsApp deve conter no máximo 11 dígitos!")
     @Column(length = 11)
     private String whatsappPhone;
 

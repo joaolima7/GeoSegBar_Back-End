@@ -105,7 +105,7 @@ public class UserEntity {
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
     private Set<ReadingEntity> readings = new HashSet<>();
 
-    @JsonIgnore
+    // @JsonIgnore
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "user_client",
@@ -114,6 +114,13 @@ public class UserEntity {
     )
     private Set<ClientEntity> clients = new HashSet<>();
 
+    // @JsonProperty("clients")
+    // public Set<ClientEntity> getClientsForJson() {
+    //     if (this.clients == null || !Hibernate.isInitialized(this.clients)) {
+    //         return null;
+    //     }
+    //     return this.clients;
+    // }
     @JsonIgnore
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
     private Set<DamPermissionEntity> damPermissions = new HashSet<>();

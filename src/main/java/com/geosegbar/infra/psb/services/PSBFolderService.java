@@ -177,12 +177,13 @@ public class PSBFolderService {
         psbFolderRepository.delete(toRemove);
         psbFolderRepository.flush();
 
-        // Re-busca o parentFolder por ID após o clear
-        PSBFolderEntity parentFolder = parentFolderId != null
-                ? psbFolderRepository.findById(parentFolderId).orElse(null)
-                : null;
+        // CRÍTICO: Limpa novamente após o flush para remover a entidade REMOVED
+        // do contexto de persistência. Isso evita TransientObjectException quando
+        // reindexSiblingsAfterDelete faz queries que disparam auto-flush.
+        entityManager.clear();
 
-        reindexSiblingsAfterDelete(damId, parentFolder, deletedFolderIndex);
+        // Agora podemos reindexar com segurança (sem entidades REMOVED no contexto)
+        reindexSiblingsAfterDelete(damId, parentFolderId, deletedFolderIndex);
     }
 
     /**
@@ -343,10 +344,10 @@ public class PSBFolderService {
         }
     }
 
-    private void reindexSiblingsAfterDelete(Long damId, PSBFolderEntity parentFolder, Integer deletedFolderIndex) {
+    private void reindexSiblingsAfterDelete(Long damId, Long parentFolderId, Integer deletedFolderIndex) {
         List<PSBFolderEntity> foldersToReindex;
-        if (parentFolder != null) {
-            foldersToReindex = psbFolderRepository.findByParentFolderIdAndFolderIndexGreaterThanOrderByFolderIndexAsc(parentFolder.getId(), deletedFolderIndex);
+        if (parentFolderId != null) {
+            foldersToReindex = psbFolderRepository.findByParentFolderIdAndFolderIndexGreaterThanOrderByFolderIndexAsc(parentFolderId, deletedFolderIndex);
         } else {
             foldersToReindex = psbFolderRepository.findByDamIdAndParentFolderIsNullAndFolderIndexGreaterThanOrderByFolderIndexAsc(damId, deletedFolderIndex);
         }

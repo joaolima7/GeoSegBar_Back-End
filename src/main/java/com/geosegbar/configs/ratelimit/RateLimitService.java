@@ -50,7 +50,7 @@ public class RateLimitService {
      * temporariamente o rate limiting por CIRCUIT_BREAKER_COOLDOWN_MS para
      * evitar flood de logs e overhead desnecessário.
      */
-    private static final long CIRCUIT_BREAKER_COOLDOWN_MS = 60_000; // 60 segundos
+    private static final long CIRCUIT_BREAKER_COOLDOWN_MS = 300_000; // 5 minutos
     private volatile long circuitOpenUntil = 0;
     private final AtomicLong circuitBreakerTrips = new AtomicLong(0);
 

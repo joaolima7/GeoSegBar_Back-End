@@ -256,9 +256,8 @@ else
       --restart unless-stopped \
       --network geosegbar-network \
       -p 6379:6379 \
-      -v redis-prod-data:/data \
       redis:7-alpine \
-      redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --stop-writes-on-bgsave-error no
+      redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
       
     echo "⏳ Aguardando Redis inicializar..."
     sleep 5

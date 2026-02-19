@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -29,13 +31,37 @@ public class HistoricalDataJobScheduler {
     private final HistoricalDataJobService jobService;
     private final HistoricalDataJobProcessor jobProcessor;
 
+    /**
+     * Executado após o contexto Spring estar completamente inicializado.
+     * Recupera jobs QUEUED/PAUSED que perderam sua entrada no Redis (ex: Redis
+     * reiniciado sem persistência).
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void recoverOrphanedJobsOnStartup() {
+        try {
+            int recovered = jobService.recoverOrphanedJobs();
+            if (recovered > 0) {
+                log.info("🔄 Startup recovery: {} job(s) re-enfileirado(s) no Redis", recovered);
+            } else {
+                log.debug("Startup recovery: nenhum job órfão encontrado");
+            }
+        } catch (Exception e) {
+            log.error("Erro no recovery de jobs na inicialização: {}", e.getMessage(), e);
+        }
+    }
+
     @Scheduled(fixedDelay = 30000, initialDelay = 120000)
     public void processQueue() {
         try {
 
             Long queueSize = jobService.getQueueSize();
             if (queueSize == 0) {
-                return;
+                // Fila Redis vazia — verifica se há jobs no banco (proteção contra Redis restart)
+                int recovered = jobService.recoverOrphanedJobs();
+                if (recovered == 0) {
+                    return;
+                }
+                log.info("🔄 Recovery: {} job(s) re-enfileirado(s) ao detectar fila Redis vazia", recovered);
             }
 
             log.debug("Fila de jobs históricos: {} jobs pendentes", queueSize);

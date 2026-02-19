@@ -221,4 +221,39 @@ public class HistoricalDataJobService {
         Long size = redisTemplate.opsForList().size(REDIS_QUEUE_KEY);
         return size != null ? size : 0L;
     }
+
+    /**
+     * Recupera jobs QUEUED/PAUSED do banco que perderam sua entrada na fila
+     * Redis. Chamado no startup e quando a fila Redis está vazia como proteção
+     * contra reinicializações do Redis (sem persistência).
+     *
+     * @return número de jobs re-enfileirados
+     */
+    @Transactional(readOnly = true)
+    public int recoverOrphanedJobs() {
+        List<HistoricalDataJobEntity> queuedJobs
+                = jobRepository.findByStatusOrderByCreatedAtAsc(JobStatus.QUEUED);
+        List<HistoricalDataJobEntity> pausedJobs
+                = jobRepository.findByStatusOrderByCreatedAtAsc(JobStatus.PAUSED);
+
+        int recovered = 0;
+
+        for (HistoricalDataJobEntity job : queuedJobs) {
+            pushToRedisQueue(job.getId());
+            recovered++;
+            log.info("🔄 Job {} (QUEUED) re-enfileirado na fila Redis (recovery)", job.getId());
+        }
+
+        // Paused jobs com retry disponível também voltam para fila
+        for (HistoricalDataJobEntity job : pausedJobs) {
+            if (job.getRetryCount() < MAX_RETRY_ATTEMPTS) {
+                pushToRedisQueue(job.getId());
+                recovered++;
+                log.info("🔄 Job {} (PAUSED, retry {}/{}) re-enfileirado na fila Redis (recovery)",
+                        job.getId(), job.getRetryCount(), MAX_RETRY_ATTEMPTS);
+            }
+        }
+
+        return recovered;
+    }
 }

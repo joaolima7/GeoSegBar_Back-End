@@ -11,6 +11,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.http.apache.ApacheHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 @Configuration
 public class S3Config {
@@ -28,8 +29,7 @@ public class S3Config {
     public S3Client s3Client() {
         return S3Client.builder()
                 .region(Region.of(region))
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(accessKey, secretKey)))
+                .credentialsProvider(credentialsProvider())
                 .httpClientBuilder(ApacheHttpClient.builder()
                         // Pool de conexões: suporta multipart upload paralelo (4 threads)
                         .maxConnections(20)
@@ -45,5 +45,22 @@ public class S3Config {
                         // TCP keep-alive detecta conexões mortas
                         .tcpKeepAlive(true))
                 .build();
+    }
+
+    /**
+     * S3Presigner para gerar URLs pré-assinadas (PUT/GET). Usado pelo fluxo de
+     * upload direto Laravel→S3 para PSB.
+     */
+    @Bean
+    public S3Presigner s3Presigner() {
+        return S3Presigner.builder()
+                .region(Region.of(region))
+                .credentialsProvider(credentialsProvider())
+                .build();
+    }
+
+    private StaticCredentialsProvider credentialsProvider() {
+        return StaticCredentialsProvider.create(
+                AwsBasicCredentials.create(accessKey, secretKey));
     }
 }

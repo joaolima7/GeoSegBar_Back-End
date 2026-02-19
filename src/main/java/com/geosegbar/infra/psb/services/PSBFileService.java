@@ -1,7 +1,6 @@
 package com.geosegbar.infra.psb.services;
 
-import java.net.MalformedURLException;
-import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -20,6 +19,9 @@ import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.FileStorageException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.file_storage.FileStorageService;
+import com.geosegbar.infra.psb.dtos.PresignedUploadCompleteRequest;
+import com.geosegbar.infra.psb.dtos.PresignedUploadInitRequest;
+import com.geosegbar.infra.psb.dtos.PresignedUploadInitResponse;
 import com.geosegbar.infra.psb.persistence.PSBFileRepository;
 import com.geosegbar.infra.psb.persistence.PSBFolderRepository;
 import com.geosegbar.infra.user.persistence.jpa.UserRepository;
@@ -39,6 +41,7 @@ public class PSBFileService {
     private final PSBFolderRepository psbFolderRepository;
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
+    private final PresignedUploadService presignedUploadService;
     private final PlatformTransactionManager transactionManager;
 
     @Transactional(readOnly = true)
@@ -139,6 +142,135 @@ public class PSBFileService {
         }
     }
 
+    // =========================================================================
+    // PRESIGNED URL UPLOAD — Laravel envia direto ao S3 (SEMPRE multipart)
+    // =========================================================================
+    /**
+     * FASE 1: Inicializa upload via URL pré-assinada.
+     *
+     * Valida permissões, pasta e usuário, gera S3 key e retorna URLs
+     * pré-assinadas para multipart upload. Laravel usa as URLs para enviar o
+     * arquivo diretamente ao S3 (sem passar pelo Spring).
+     *
+     * TODOS os arquivos usam multipart — sem exceção. Part sizing dinâmico
+     * conforme tamanho do arquivo.
+     */
+    public PresignedUploadInitResponse initPresignedUpload(Long folderId, PresignedUploadInitRequest request) {
+        validateEditPermission();
+
+        log.info("[PSB PRESIGNED] Iniciando: arquivo='{}', tamanho={}MB, pasta={}, usuario={}",
+                request.getFilename(),
+                String.format("%.1f", request.getFileSize() / (1024.0 * 1024.0)),
+                folderId, request.getUploadedById());
+
+        // Valida pasta e usuário (transação curta, read-only)
+        TransactionTemplate readTx = new TransactionTemplate(transactionManager);
+        readTx.setReadOnly(true);
+
+        String s3Directory = readTx.execute(status -> {
+            String serverPath = psbFolderRepository.findServerPathById(folderId)
+                    .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
+
+            if (!userRepository.existsById(request.getUploadedById())) {
+                throw new NotFoundException("Usuário não encontrado");
+            }
+
+            return sanitizeFolderPath(serverPath);
+        });
+
+        // Gera nome único para o arquivo no S3
+        String originalFilename = request.getFilename();
+        String fileExtension = "";
+        if (originalFilename != null && originalFilename.contains(".")) {
+            fileExtension = originalFilename.substring(originalFilename.lastIndexOf("."));
+        }
+        String timestamp = String.valueOf(Instant.now().getEpochSecond());
+        String safeFileName = timestamp + "_" + (originalFilename != null
+                ? originalFilename.replaceAll("[^a-zA-Z0-9.-]", "_") : "file" + fileExtension);
+        String s3Key = s3Directory + "/" + safeFileName;
+
+        // Delega ao PresignedUploadService para gerar URLs
+        return presignedUploadService.initUpload(
+                s3Key, request.getFileSize(), request.getContentType(),
+                folderId, request.getUploadedById()
+        );
+    }
+
+    /**
+     * FASE 2: Confirma que o upload direto ao S3 foi concluído.
+     *
+     * Verifica o arquivo no S3 (ou completa multipart), depois cria a entidade
+     * PSBFileEntity no banco em uma transação curta.
+     *
+     * Garante consistência: se falhar ao salvar no banco, o arquivo fica no S3
+     * como órfão (cleanup pode ser feito depois) — melhor do que perder dados.
+     */
+    public PSBFileEntity completePresignedUpload(Long folderId, PresignedUploadCompleteRequest request) {
+        validateEditPermission();
+
+        // Confirma upload no S3 (verifica existência ou completa multipart)
+        PresignedUploadService.CompleteResult result
+                = presignedUploadService.completeUpload(request.getUploadId(), request.getCompletedParts());
+
+        // Extrai filename da s3Key
+        String filename = extractFilenameFromUrl(result.s3Key());
+
+        log.info("[PSB PRESIGNED] Confirmado, salvando no banco: s3Key='{}', tamanho={}MB, pasta={}",
+                result.s3Key(),
+                String.format("%.1f", result.fileSize() / (1024.0 * 1024.0)),
+                folderId);
+
+        // Salva no banco (transação curta)
+        TransactionTemplate writeTx = new TransactionTemplate(transactionManager);
+        return writeTx.execute(status -> {
+            PSBFolderEntity folderRef = psbFolderRepository.getReferenceById(folderId);
+            UserEntity uploaderRef = userRepository.getReferenceById(result.uploadedById());
+
+            PSBFileEntity psbFile = new PSBFileEntity();
+            psbFile.setFilename(filename);
+            psbFile.setOriginalFilename(extractOriginalName(filename));
+            psbFile.setContentType(result.contentType());
+            psbFile.setSize(result.fileSize());
+            psbFile.setPsbFolder(folderRef);
+            psbFile.setUploadedBy(uploaderRef);
+            psbFile.setFilePath(result.s3Key());
+            psbFile.setDownloadUrl(result.downloadUrl());
+
+            PSBFileEntity saved = psbFileRepository.save(psbFile);
+            log.info("[PSB PRESIGNED] Arquivo salvo no banco: id={}, filename='{}'", saved.getId(), filename);
+            return saved;
+        });
+    }
+
+    /**
+     * Cancela um upload pré-assinado em andamento. Se multipart, aborta o
+     * upload no S3 para liberar fragmentos.
+     */
+    public void abortPresignedUpload(String uploadId) {
+        validateEditPermission();
+        presignedUploadService.abortUpload(uploadId);
+        log.info("[PSB PRESIGNED] Upload cancelado: uploadId={}", uploadId);
+    }
+
+    /**
+     * Extrai o nome original removendo o timestamp prefix. Ex:
+     * "1708300000_relatorio_mensal.pdf" → "relatorio_mensal.pdf"
+     */
+    private String extractOriginalName(String filename) {
+        if (filename == null) {
+            return null;
+        }
+        int underscoreIdx = filename.indexOf('_');
+        if (underscoreIdx > 0 && underscoreIdx < filename.length() - 1) {
+            // Verifica se o prefixo parece um timestamp (só dígitos)
+            String prefix = filename.substring(0, underscoreIdx);
+            if (prefix.matches("\\d+")) {
+                return filename.substring(underscoreIdx + 1);
+            }
+        }
+        return filename;
+    }
+
     @Transactional(readOnly = true)
     public Resource downloadFile(Long fileId) {
         validateViewPermission();
@@ -146,7 +278,7 @@ public class PSBFileService {
             PSBFileEntity file = psbFileRepository.findById(fileId)
                     .orElseThrow(() -> new NotFoundException("Arquivo PSB não encontrado"));
 
-            Resource resource = new UrlResource(URI.create(file.getDownloadUrl()));
+            Resource resource = new UrlResource(java.net.URI.create(file.getDownloadUrl()));
 
             if (resource.exists() || resource.isReadable()) {
                 return resource;
@@ -154,7 +286,7 @@ public class PSBFileService {
                 throw new FileStorageException("Não foi possível ler o arquivo do S3");
             }
 
-        } catch (MalformedURLException ex) {
+        } catch (java.net.MalformedURLException ex) {
             throw new FileStorageException("URL do arquivo inválida: " + ex.getMessage(), ex);
         }
     }

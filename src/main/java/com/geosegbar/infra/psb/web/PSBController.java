@@ -22,6 +22,9 @@ import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.PSBFileEntity;
 import com.geosegbar.entities.PSBFolderEntity;
 import com.geosegbar.infra.psb.dtos.CreatePSBFolderRequest;
+import com.geosegbar.infra.psb.dtos.PresignedUploadCompleteRequest;
+import com.geosegbar.infra.psb.dtos.PresignedUploadInitRequest;
+import com.geosegbar.infra.psb.dtos.PresignedUploadInitResponse;
 import com.geosegbar.infra.psb.services.PSBFileService;
 import com.geosegbar.infra.psb.services.PSBFolderService;
 
@@ -131,5 +134,48 @@ public class PSBController {
         WebResponseEntity<Void> response = WebResponseEntity.success(
                 null, "Arquivo PSB excluído com sucesso!");
         return ResponseEntity.ok(response);
+    }
+
+    // =========================================================================
+    // PRESIGNED URL UPLOAD — Upload direto ao S3 sem passar pelo Spring
+    // =========================================================================
+    /**
+     * FASE 1: Inicializa upload pré-assinado multipart. Retorna URLs para o
+     * cliente enviar cada parte diretamente ao S3. TODOS os uploads usam
+     * multipart — sem exceção.
+     */
+    @PostMapping("/files/presigned/init/{folderId}")
+    public ResponseEntity<WebResponseEntity<PresignedUploadInitResponse>> initPresignedUpload(
+            @PathVariable Long folderId,
+            @Valid @RequestBody PresignedUploadInitRequest request) {
+        PresignedUploadInitResponse response = psbFileService.initPresignedUpload(folderId, request);
+        WebResponseEntity<PresignedUploadInitResponse> webResponse = WebResponseEntity.success(
+                response, "Upload pré-assinado inicializado com sucesso!");
+        return new ResponseEntity<>(webResponse, HttpStatus.CREATED);
+    }
+
+    /**
+     * FASE 2: Confirma que o upload ao S3 foi concluído. Verifica o arquivo no
+     * S3 e salva o registro no banco.
+     */
+    @PostMapping("/files/presigned/complete/{folderId}")
+    public ResponseEntity<WebResponseEntity<PSBFileEntity>> completePresignedUpload(
+            @PathVariable Long folderId,
+            @Valid @RequestBody PresignedUploadCompleteRequest request) {
+        PSBFileEntity psbFile = psbFileService.completePresignedUpload(folderId, request);
+        WebResponseEntity<PSBFileEntity> webResponse = WebResponseEntity.success(
+                psbFile, "Upload pré-assinado confirmado com sucesso!");
+        return new ResponseEntity<>(webResponse, HttpStatus.CREATED);
+    }
+
+    /**
+     * Cancela um upload pré-assinado em andamento.
+     */
+    @PostMapping("/files/presigned/abort/{uploadId}")
+    public ResponseEntity<WebResponseEntity<Void>> abortPresignedUpload(@PathVariable String uploadId) {
+        psbFileService.abortPresignedUpload(uploadId);
+        WebResponseEntity<Void> webResponse = WebResponseEntity.success(
+                null, "Upload pré-assinado cancelado com sucesso!");
+        return ResponseEntity.ok(webResponse);
     }
 }

@@ -170,28 +170,20 @@ public class PSBFolderService {
         log.info("[PSB-DELETE] Pasta: '{}', damId={}, index={}, parentId={}",
                 folderToDelete.getName(), damId, deletedFolderIndex, parentFolderId);
 
-        // Passo 1: Limpa S3 recursivamente (antes de qualquer operação no banco)
         log.info("[PSB-DELETE] Iniciando limpeza S3 recursiva...");
         deleteS3ContentRecursively(folderToDelete);
         log.info("[PSB-DELETE] S3 limpo com sucesso.");
 
-        // Passo 2: Limpa a sessão JPA para remover todas as entidades carregadas
-        // durante o S3 cleanup (evita que entidades gerenciadas entrem em conflito)
         entityManager.clear();
         log.info("[PSB-DELETE] Contexto JPA limpo após S3.");
 
-        // Passo 3: Deleta do banco usando JPQL bulk DELETE recursivo (bottom-up).
-        // Isso NUNCA aciona o cascade do JPA, eliminando completamente o
-        // TransientObjectException causado por CascadeType.ALL + orphanRemoval.
         log.info("[PSB-DELETE] Iniciando exclusão recursiva no banco (JPQL bulk delete)...");
         deleteFolderRecursivelyFromDB(id);
         log.info("[PSB-DELETE] Exclusão no banco concluída.");
 
-        // Passo 4: Limpa novamente para garantir stato limpo antes da reindexação
         entityManager.clear();
         log.info("[PSB-DELETE] Contexto JPA limpo. Iniciando reindexação de irmãos...");
 
-        // Passo 5: Reindexação segura (sessão completamente limpa)
         reindexSiblingsAfterDelete(damId, parentFolderId, deletedFolderIndex);
         log.info("[PSB-DELETE] Exclusão e reindexação concluídas com sucesso para pasta ID: {}", id);
     }
@@ -204,7 +196,6 @@ public class PSBFolderService {
     private void deleteFolderRecursivelyFromDB(Long folderId) {
         log.debug("[PSB-DELETE-DB] Processando pasta ID: {}", folderId);
 
-        // Busca IDs dos filhos diretos sem carregar entidades no contexto
         List<Long> subfolderIds = entityManager
                 .createQuery("SELECT f.id FROM PSBFolderEntity f WHERE f.parentFolder.id = :pid", Long.class)
                 .setParameter("pid", folderId)
@@ -212,27 +203,22 @@ public class PSBFolderService {
 
         log.debug("[PSB-DELETE-DB] Pasta {} tem {} subpasta(s): {}", folderId, subfolderIds.size(), subfolderIds);
 
-        // Recursa nos filhos primeiro (bottom-up: filhos antes dos pais)
         for (Long subId : subfolderIds) {
             deleteFolderRecursivelyFromDB(subId);
         }
 
-        // Deleta arquivos da pasta (JPQL bulk, sem cascade)
         int filesDeleted = entityManager
                 .createQuery("DELETE FROM PSBFileEntity f WHERE f.psbFolder.id = :folderId")
                 .setParameter("folderId", folderId)
                 .executeUpdate();
         log.debug("[PSB-DELETE-DB] {} arquivo(s) deletado(s) da pasta {}", filesDeleted, folderId);
 
-        // Deleta share links da pasta (JPQL bulk, sem cascade)
         int linksDeleted = entityManager
                 .createQuery("DELETE FROM ShareFolderEntity sl WHERE sl.psbFolder.id = :folderId")
                 .setParameter("folderId", folderId)
                 .executeUpdate();
         log.debug("[PSB-DELETE-DB] {} share link(s) deletado(s) da pasta {}", linksDeleted, folderId);
 
-        // Nullifica referências FK na tabela dam que apontam para esta pasta
-        // (dam.psb_link_folder_id e dam.legislation_link_folder_id)
         int psbLinkNulled = entityManager
                 .createQuery("UPDATE DamEntity d SET d.psbLinkFolder = null WHERE d.psbLinkFolder.id = :folderId")
                 .setParameter("folderId", folderId)
@@ -246,7 +232,6 @@ public class PSBFolderService {
                     folderId, psbLinkNulled, legLinkNulled);
         }
 
-        // Deleta a própria pasta (JPQL bulk, sem cascade)
         int deleted = entityManager
                 .createQuery("DELETE FROM PSBFolderEntity f WHERE f.id = :id")
                 .setParameter("id", folderId)

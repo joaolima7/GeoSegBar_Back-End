@@ -9,8 +9,8 @@ import lombok.NoArgsConstructor;
 
 /**
  * Resposta contendo URLs pré-assinadas para upload multipart direto ao S3.
- * TODOS os uploads usam multipart — mesmo arquivos pequenos. Partes de 5MB
- * (mínimo S3) a 50MB conforme tamanho do arquivo.
+ * TODOS os uploads usam multipart — mesmo arquivos pequenos. Partes de 5MB (mín
+ * mo S3) a 50MB conforme tamanho do arquivo.
  */
 @Data
 @Builder

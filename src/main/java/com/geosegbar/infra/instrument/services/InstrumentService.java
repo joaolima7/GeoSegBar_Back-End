@@ -724,10 +724,12 @@ public class InstrumentService {
 
         InstrumentEntity instrument = findById(id);
         instrument.setActive(active);
-        InstrumentEntity saved = instrumentRepository.save(instrument);
+        instrumentRepository.save(instrument);
         log.info("Status do instrumento {} alterado para {}.", id, active);
 
-        return saved;
+        // ✅ Refetch com coleções carregadas (OSIV=false)
+        return instrumentRepository.findByIdWithAllDetails(id)
+                .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após atualização"));
     }
 
     @Transactional(readOnly = true)
@@ -1152,9 +1154,11 @@ public class InstrumentService {
 
         InstrumentEntity instrument = findById(id);
         instrument.setActiveForSection(active);
-        InstrumentEntity saved = instrumentRepository.save(instrument);
+        instrumentRepository.save(instrument);
 
-        return saved;
+        // ✅ Refetch com coleções carregadas (OSIV=false)
+        return instrumentRepository.findByIdWithAllDetails(id)
+                .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após atualização"));
     }
 
     public InstrumentResponseDTO mapToResponseDTO(InstrumentEntity instrument) {

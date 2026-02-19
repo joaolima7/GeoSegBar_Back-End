@@ -77,15 +77,11 @@ public class PSBFileService {
         log.info("[PSB UPLOAD] Iniciando upload: arquivo='{}', tamanho={} bytes ({} MB), pasta={}, usuario={}",
                 file.getOriginalFilename(), fileSizeBytes, String.format("%.2f", fileSizeMB), folderId, uploadedById);
 
-        // ============================================================
-        // FASE 1: Carregar dados e validar (transação curta, read-only)
-        // ============================================================
         TransactionTemplate readTx = new TransactionTemplate(transactionManager);
         readTx.setReadOnly(true);
 
         String s3Directory = readTx.execute(status -> {
-            // Query enxuta: busca APENAS serverPath (1 SELECT simples)
-            // Evita o EntityGraph do findById que carrega dam → checklists → documentation_dam (N+1)
+
             String serverPath = psbFolderRepository.findServerPathById(folderId)
                     .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
 
@@ -96,10 +92,6 @@ public class PSBFileService {
             return sanitizeFolderPath(serverPath);
         });
 
-        // ============================================================
-        // FASE 2: Upload para S3 (SEM transação, SEM conexão DB)
-        // Pode levar segundos ou minutos — não segura recurso do pool
-        // ============================================================
         try {
             long s3Start = System.currentTimeMillis();
             String downloadUrl = fileStorageService.storeFile(file, s3Directory);
@@ -112,11 +104,6 @@ public class PSBFileService {
                     s3Key, s3Elapsed,
                     s3Elapsed > 0 ? String.format("%.2f", fileSizeMB / (s3Elapsed / 1000.0)) : "N/A");
 
-            // ============================================================
-            // FASE 3: Salvar entidade no banco (transação curta, write)
-            // Usa getReferenceById para evitar SELECT extra — só precisa do ID
-            // para setar a FK no INSERT
-            // ============================================================
             TransactionTemplate writeTx = new TransactionTemplate(transactionManager);
             return writeTx.execute(status -> {
                 PSBFolderEntity folderRef = psbFolderRepository.getReferenceById(folderId);
@@ -142,9 +129,6 @@ public class PSBFileService {
         }
     }
 
-    // =========================================================================
-    // PRESIGNED URL UPLOAD — Laravel envia direto ao S3 (SEMPRE multipart)
-    // =========================================================================
     /**
      * FASE 1: Inicializa upload via URL pré-assinada.
      *
@@ -163,7 +147,6 @@ public class PSBFileService {
                 String.format("%.1f", request.getFileSize() / (1024.0 * 1024.0)),
                 folderId, request.getUploadedById());
 
-        // Valida pasta e usuário (transação curta, read-only)
         TransactionTemplate readTx = new TransactionTemplate(transactionManager);
         readTx.setReadOnly(true);
 
@@ -178,7 +161,6 @@ public class PSBFileService {
             return sanitizeFolderPath(serverPath);
         });
 
-        // Gera nome único para o arquivo no S3
         String originalFilename = request.getFilename();
         String fileExtension = "";
         if (originalFilename != null && originalFilename.contains(".")) {
@@ -189,7 +171,6 @@ public class PSBFileService {
                 ? originalFilename.replaceAll("[^a-zA-Z0-9.-]", "_") : "file" + fileExtension);
         String s3Key = s3Directory + "/" + safeFileName;
 
-        // Delega ao PresignedUploadService para gerar URLs
         return presignedUploadService.initUpload(
                 s3Key, request.getFileSize(), request.getContentType(),
                 folderId, request.getUploadedById()
@@ -208,11 +189,9 @@ public class PSBFileService {
     public PSBFileEntity completePresignedUpload(Long folderId, PresignedUploadCompleteRequest request) {
         validateEditPermission();
 
-        // Confirma upload no S3 (verifica existência ou completa multipart)
         PresignedUploadService.CompleteResult result
                 = presignedUploadService.completeUpload(request.getUploadId(), request.getCompletedParts());
 
-        // Extrai filename da s3Key
         String filename = extractFilenameFromUrl(result.s3Key());
 
         log.info("[PSB PRESIGNED] Confirmado, salvando no banco: s3Key='{}', tamanho={}MB, pasta={}",
@@ -220,7 +199,6 @@ public class PSBFileService {
                 String.format("%.1f", result.fileSize() / (1024.0 * 1024.0)),
                 folderId);
 
-        // Salva no banco (transação curta)
         TransactionTemplate writeTx = new TransactionTemplate(transactionManager);
         return writeTx.execute(status -> {
             PSBFolderEntity folderRef = psbFolderRepository.getReferenceById(folderId);
@@ -262,7 +240,7 @@ public class PSBFileService {
         }
         int underscoreIdx = filename.indexOf('_');
         if (underscoreIdx > 0 && underscoreIdx < filename.length() - 1) {
-            // Verifica se o prefixo parece um timestamp (só dígitos)
+
             String prefix = filename.substring(0, underscoreIdx);
             if (prefix.matches("\\d+")) {
                 return filename.substring(underscoreIdx + 1);

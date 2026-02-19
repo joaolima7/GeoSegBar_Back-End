@@ -115,4 +115,21 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
 
     @EntityGraph(attributePaths = {"dam", "section", "instrumentType"})
     List<InstrumentEntity> findByIsLinimetricRulerTrue();
+
+    @EntityGraph(attributePaths = {
+        "dam",
+        "dam.client",
+        "section",
+        "instrumentType",
+        "inputs",
+        "inputs.measurementUnit",
+        "constants",
+        "constants.measurementUnit",
+        "outputs",
+        "outputs.measurementUnit",
+        "outputs.statisticalLimit",
+        "outputs.deterministicLimit"
+    })
+    @Query("SELECT i FROM InstrumentEntity i WHERE i.id = :id")
+    Optional<InstrumentEntity> findByIdWithAllDetails(@Param("id") Long id);
 }

@@ -15,6 +15,7 @@ import io.github.bucket4j.Refill;
 import io.github.bucket4j.distributed.proxy.ProxyManager;
 import io.github.bucket4j.redis.lettuce.cas.LettuceBasedProxyManager;
 import io.lettuce.core.RedisClient;
+import io.lettuce.core.RedisReadOnlyException;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.codec.ByteArrayCodec;
 import io.lettuce.core.codec.RedisCodec;
@@ -31,19 +32,27 @@ public class RateLimitService {
 
     private final RateLimitProperties properties;
 
-    // Injetamos as propriedades do Redis diretamente do Spring Boot
     @Value("${spring.data.redis.host}")
     private String redisHost;
 
     @Value("${spring.data.redis.port}")
     private int redisPort;
 
-    @Value("${spring.data.redis.password:}") // Padrão vazio se não tiver senha
+    @Value("${spring.data.redis.password:}")
     private String redisPassword;
 
     private final Map<String, ProxyManager<String>> proxyManagerCache = new ConcurrentHashMap<>();
     private final AtomicLong allowedRequests = new AtomicLong(0);
     private final AtomicLong blockedRequests = new AtomicLong(0);
+
+    /**
+     * Circuit breaker: quando Redis entra em READONLY ou falha, desabilita
+     * temporariamente o rate limiting por CIRCUIT_BREAKER_COOLDOWN_MS para
+     * evitar flood de logs e overhead desnecessário.
+     */
+    private static final long CIRCUIT_BREAKER_COOLDOWN_MS = 60_000; // 60 segundos
+    private volatile long circuitOpenUntil = 0;
+    private final AtomicLong circuitBreakerTrips = new AtomicLong(0);
 
     private RedisClient redisClient;
     private StatefulRedisConnection<String, byte[]> redisConnection;
@@ -106,7 +115,11 @@ public class RateLimitService {
 
     public RateLimitInfo tryConsume(String identifier, RateLimitType type) {
         if (!properties.isEnabled() || redisConnection == null || !redisConnection.isOpen()) {
-            // Fail-open: Se desabilitado ou Redis fora do ar, permite tudo
+            return new RateLimitInfo(true, Long.MAX_VALUE, 0, Long.MAX_VALUE);
+        }
+
+        // Circuit breaker: se Redis falhou recentemente, skip silencioso
+        if (isCircuitOpen()) {
             return new RateLimitInfo(true, Long.MAX_VALUE, 0, Long.MAX_VALUE);
         }
 
@@ -131,11 +144,37 @@ public class RateLimitService {
                 log.warn("🚫 Rate limit BLOCKED - Type: {}, ID: {}, Retry in: {}s", identifier, type, secondsUntilRefill);
                 return new RateLimitInfo(false, 0, secondsUntilRefill, config.getCapacity());
             }
+        } catch (RedisReadOnlyException e) {
+            // Redis em modo READONLY (bgsave falhou) — abre circuit breaker
+            openCircuitBreaker("Redis READONLY - bgsave provavelmente falhou. Rate limiting desabilitado temporariamente por {}s");
+            return new RateLimitInfo(true, Long.MAX_VALUE, 0, Long.MAX_VALUE);
         } catch (Exception e) {
-            log.error("Erro ao processar rate limit para identifier: {}", identifier, e);
-            // Fail-open em caso de erro no Redis durante a execução
+            // Qualquer outro erro Redis — abre circuit breaker
+            openCircuitBreaker("Erro Redis no rate limiting: " + e.getClass().getSimpleName() + " - desabilitado temporariamente por {}s");
             return new RateLimitInfo(true, Long.MAX_VALUE, 0, Long.MAX_VALUE);
         }
+    }
+
+    /**
+     * Verifica se o circuit breaker está aberto (Redis indisponível
+     * recentemente).
+     */
+    private boolean isCircuitOpen() {
+        return System.currentTimeMillis() < circuitOpenUntil;
+    }
+
+    /**
+     * Abre o circuit breaker — loga WARNING uma única vez e desabilita rate
+     * limiting por CIRCUIT_BREAKER_COOLDOWN_MS milissegundos.
+     */
+    private void openCircuitBreaker(String reason) {
+        long now = System.currentTimeMillis();
+        // Só loga se o circuit não estava já aberto (evita flood de logs)
+        if (now >= circuitOpenUntil) {
+            circuitBreakerTrips.incrementAndGet();
+            log.warn("⚠️  CIRCUIT BREAKER ABERTO - " + reason, CIRCUIT_BREAKER_COOLDOWN_MS / 1000);
+        }
+        circuitOpenUntil = now + CIRCUIT_BREAKER_COOLDOWN_MS;
     }
 
     private Bucket resolveBucket(String identifier, RateLimitType type) {
@@ -178,7 +217,9 @@ public class RateLimitService {
                 ? String.format("%.2f%%", (blockedRequests.get() * 100.0) / (allowedRequests.get() + blockedRequests.get()))
                 : "0.00%",
                 "publicLimit", properties.getPublicConfig().getCapacity() + " req/" + properties.getPublicConfig().getRefillDurationMinutes() + "min",
-                "authenticatedLimit", properties.getAuthenticated().getCapacity() + " req/" + properties.getAuthenticated().getRefillDurationMinutes() + "min"
+                "authenticatedLimit", properties.getAuthenticated().getCapacity() + " req/" + properties.getAuthenticated().getRefillDurationMinutes() + "min",
+                "circuitBreakerOpen", isCircuitOpen(),
+                "circuitBreakerTrips", circuitBreakerTrips.get()
         );
     }
 }

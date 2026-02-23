@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org"
+    th:replace="~{emails/email-base :: layout(emailTitle='Solicitação de Suporte', statusText='Suporte Técnico')}">
+
+<body>
+    <div th:fragment="emailContent">
+        <h2>🛠️ Nova Solicitação de Suporte</h2>
+        <p>Uma nova solicitação de suporte foi recebida pelo sistema GeoSegBar.</p>
+
+        <div class="info-grid">
+            <div class="info-card">
+                <div class="info-card-label">Solicitante</div>
+                <div class="info-card-value" th:text="${senderName}">Nome</div>
+            </div>
+            <div class="info-card" th:if="${clientName != null and !#strings.isEmpty(clientName)}">
+                <div class="info-card-label">Cliente</div>
+                <div class="info-card-value" th:text="${clientName}">—</div>
+            </div>
+            <div class="info-card">
+                <div class="info-card-label">Email</div>
+                <div class="info-card-value" th:text="${senderEmail}">email@email.com</div>
+            </div>
+            <div class="info-card" th:if="${phone != null and !#strings.isEmpty(phone)}">
+                <div class="info-card-label">Telefone</div>
+                <div class="info-card-value" th:text="${phone}">—</div>
+            </div>
+        </div>
+
+        <div class="highlight-box" style="text-align: left;">
+            <strong>Mensagem</strong>
+            <p style="font-size: 15px; color: #1e293b; margin-top: 10px; white-space: pre-wrap; letter-spacing: 0;"
+                th:text="${message}">Conteúdo da mensagem...</p>
+        </div>
+
+        <div th:if="${attachmentCount != null and attachmentCount > 0}" class="alert">
+            <span class="alert-icon">📎</span>
+            <strong>Anexos:</strong> Esta solicitação possui
+            <strong th:text="${attachmentCount}">0</strong>
+            arquivo(s) anexado(s).
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="info-grid" style="grid-template-columns: 1fr;">
+            <div class="info-card">
+                <div class="info-card-label">Data e Hora da Solicitação</div>
+                <div class="info-card-value" th:text="${timestamp}">01/01/2025 00:00:00</div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

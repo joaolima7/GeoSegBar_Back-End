@@ -13,6 +13,7 @@ import org.springframework.stereotype.Repository;
 
 import com.geosegbar.common.enums.RoleEnum;
 import com.geosegbar.entities.UserEntity;
+import com.geosegbar.infra.user.dto.UserSupportInfoProjection;
 
 @Repository
 public interface UserRepository extends JpaRepository<UserEntity, Long> {
@@ -147,4 +148,10 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
 
     @Query("SELECT u.id FROM UserEntity u WHERE u.email = 'noreply@geometrisa-prod.com.br'")
     Optional<Long> findSystemUserId();
+
+    @Query("SELECT u.name AS name, u.email AS email, u.phone AS phone, MIN(c.name) AS clientName "
+            + "FROM UserEntity u LEFT JOIN u.clients c "
+            + "WHERE u.id = :id "
+            + "GROUP BY u.name, u.email, u.phone")
+    Optional<UserSupportInfoProjection> findSupportInfoById(@Param("id") Long id);
 }

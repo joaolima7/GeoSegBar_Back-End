@@ -57,6 +57,8 @@ public class EmailService {
     @Value("${application.admin-email:joaocaetanodev@gmail.com}")
     private String adminEmail;
 
+    private String supportEmail = "support@geometrisa-prod.com.br";
+
     @Value("${application.frontend-url:https://geometrisa-prod.com.br}")
     private String frontendUrl;
 
@@ -224,7 +226,7 @@ public class EmailService {
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, hasAttachments, "UTF-8");
 
             helper.setFrom(fromEmail);
-            helper.setTo(adminEmail);
+            helper.setTo(supportEmail);
             helper.setSubject("📋 [Suporte] " + senderName + " - " + senderEmail);
             helper.setText(htmlContent, true);
 

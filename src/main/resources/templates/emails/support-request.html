@@ -2,6 +2,37 @@
 <html lang="pt-BR" xmlns:th="http://www.thymeleaf.org"
     th:replace="~{emails/email-base :: layout(emailTitle='Solicitação de Suporte', statusText='Suporte Técnico')}">
 
+<head>
+    <style>
+        .message-box {
+            background: #ffffff;
+            border: 2px solid #1e3a8a;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 25px 0;
+            box-shadow: 0 4px 12px rgba(30, 58, 138, 0.15);
+        }
+
+        .message-box strong {
+            color: #1e3a8a;
+            font-size: 16px;
+            display: block;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .message-box p {
+            font-size: 16px;
+            color: #1e293b;
+            line-height: 1.7;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin: 0;
+        }
+    </style>
+</head>
+
 <body>
     <div th:fragment="emailContent">
         <h2>🛠️ Nova Solicitação de Suporte</h2>
@@ -26,10 +57,9 @@
             </div>
         </div>
 
-        <div class="highlight-box" style="text-align: left;">
-            <strong>Mensagem</strong>
-            <p style="font-size: 15px; color: #1e293b; margin-top: 10px; white-space: pre-wrap; letter-spacing: 0;"
-                th:text="${message}">Conteúdo da mensagem...</p>
+        <div class="message-box">
+            <strong>💬 Mensagem do Solicitante</strong>
+            <p th:text="${message}">Conteúdo da mensagem...</p>
         </div>
 
         <div th:if="${attachmentCount != null and attachmentCount > 0}" class="alert">

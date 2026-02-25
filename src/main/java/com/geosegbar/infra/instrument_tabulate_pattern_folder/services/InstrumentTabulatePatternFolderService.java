@@ -4,9 +4,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,18 +36,6 @@ public class InstrumentTabulatePatternFolderService {
     private final InstrumentTabulatePatternMapper mapper;
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(
-                value = "damTabulateFoldersWithPatterns",
-                key = "#request.damId",
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-        @CacheEvict(
-                value = "tabulateFoldersByDam",
-                key = "#request.damId",
-                cacheManager = "instrumentTabulateCacheManager"
-        )
-    })
     public TabulateFolderResponseDTO create(CreateTabulateFolderRequestDTO request) {
 
         if (folderRepository.existsByNameAndDamId(request.getName(), request.getDamId())) {
@@ -73,7 +58,6 @@ public class InstrumentTabulatePatternFolderService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "damTabulateFoldersWithPatterns", key = "#damId", cacheManager = "instrumentTabulateCacheManager")
     public DamTabulateFoldersWithPatternsDetailResponseDTO findFoldersWithPatternsDetailsByDam(Long damId) {
 
         DamEntity dam = damService.findById(damId);
@@ -133,28 +117,6 @@ public class InstrumentTabulatePatternFolderService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(
-                value = "tabulateFolderWithPatterns",
-                key = "#folderId",
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-        @CacheEvict(
-                value = "tabulatePatternsByFolder",
-                key = "#folderId",
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-        @CacheEvict(
-                value = "damTabulateFoldersWithPatterns",
-                key = "#result.damId",
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-        @CacheEvict(
-                value = "tabulatePatternsByDam",
-                key = "#result.damId",
-                cacheManager = "instrumentTabulateCacheManager"
-        )
-    })
     public InstrumentTabulatePatternFolder delete(Long folderId) {
 
         InstrumentTabulatePatternFolder folder = findById(folderId);
@@ -186,23 +148,6 @@ public class InstrumentTabulatePatternFolderService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(
-                value = "tabulateFolderWithPatterns",
-                key = "#folderId",
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-        @CacheEvict(
-                value = "damTabulateFoldersWithPatterns",
-                key = "#result.dam.id",
-                cacheManager = "instrumentTabulateCacheManager"
-        ),
-        @CacheEvict(
-                value = "tabulateFoldersByDam",
-                key = "#result.dam.id",
-                cacheManager = "instrumentTabulateCacheManager"
-        )
-    })
     public TabulateFolderResponseDTO updateFolderName(Long folderId, String newName) {
         InstrumentTabulatePatternFolder folder = findById(folderId);
 
@@ -225,7 +170,6 @@ public class InstrumentTabulatePatternFolderService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "tabulateFoldersByDam", key = "#damId", cacheManager = "instrumentTabulateCacheManager")
     public List<TabulateFolderResponseDTO> findByDamId(Long damId) {
         damService.findById(damId);
 

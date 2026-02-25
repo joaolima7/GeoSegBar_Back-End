@@ -1,6 +1,5 @@
 package com.geosegbar.infra.instrument_graph_axes.services;
 
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,7 +48,6 @@ public class InstrumentGraphAxesService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "graphAxes", key = "#patternId", cacheManager = "instrumentGraphCacheManager")
     public InstrumentGraphAxesEntity findByPatternId(Long patternId) {
 
         return axesRepository.findByPatternId(patternId)

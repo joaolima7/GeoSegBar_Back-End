@@ -3,8 +3,6 @@ package com.geosegbar.infra.statistical_limit.services;
 import java.util.List;
 import java.util.Optional;
 
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,10 +41,6 @@ public class StatisticalLimitService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(value = "graphProperties", allEntries = true, cacheManager = "instrumentGraphCacheManager"),
-        @CacheEvict(value = {"graphPatternById", "folderWithPatterns", "damFoldersWithPatterns"}, allEntries = true, cacheManager = "instrumentGraphCacheManager")
-    })
     public StatisticalLimitEntity createOrUpdate(Long outputId, StatisticalLimitEntity limit) {
 
         OutputEntity output = outputRepository.findById(outputId)
@@ -85,10 +79,6 @@ public class StatisticalLimitService {
     }
 
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(value = "graphProperties", allEntries = true, cacheManager = "instrumentGraphCacheManager"),
-        @CacheEvict(value = {"graphPatternById", "folderWithPatterns", "damFoldersWithPatterns"}, allEntries = true, cacheManager = "instrumentGraphCacheManager")
-    })
     public void deleteById(Long id) {
         StatisticalLimitEntity limit = findById(id);
         OutputEntity output = limit.getOutput();

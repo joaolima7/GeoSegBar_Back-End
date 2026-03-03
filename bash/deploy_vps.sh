@@ -206,7 +206,17 @@ else
       -e POSTGRES_PASSWORD=${DB_PASSWORD} \
       -e TZ=${TZ} \
       -v postgres-prod-data:/var/lib/postgresql/data \
-      postgres:16-alpine
+      --memory=4g \
+      --cpus="2" \
+      postgres:16-alpine \
+      postgres -c shared_buffers=2GB \
+              -c effective_cache_size=7GB \
+              -c work_mem=16MB \
+              -c maintenance_work_mem=512MB \
+              -c max_connections=100 \
+              -c checkpoint_completion_target=0.7 \
+              -c max_wal_size=1GB \
+              -c min_wal_size=80MB
       
     echo "⏳ Aguardando banco de dados inicializar..."
     sleep 15

@@ -8,8 +8,11 @@ services:
       POSTGRES_USER: ${DB_USERNAME}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       TZ: ${TZ}
+    # Se quiser expor externamente (não recomendado), deixe: - "${DB_PORT}:5432"
+    # Melhor: só expor para localhost:
+    # - "127.0.0.1:${DB_PORT}:5432"
     ports:
-      - "${DB_PORT}:5433"
+      - "${DB_PORT}:5432"
     volumes:
       - postgres-prod-data:/var/lib/postgresql/data
     networks:
@@ -19,21 +22,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: "2"
-        reservations:
-          memory: 512M
-          cpus: "0.5"
 
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.15.0
     container_name: postgres-exporter-prod
     restart: always
     environment:
-      DATA_SOURCE_NAME: "postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres-prod:5433/${DB_NAME}?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres-prod:5432/${DB_NAME}?sslmode=disable"
     ports:
       - "9187:9187"
     networks:
@@ -125,28 +120,6 @@ services:
       - geosegbar-network
     depends_on:
       - geosegbar-api
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "wget",
-          "--no-verbose",
-          "--tries=1",
-          "--spider",
-          "http://localhost:80/nginx-health",
-        ]
-      interval: 15s
-      timeout: 5s
-      start_period: 10s
-      retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: "0.5"
-        reservations:
-          memory: 64M
-          cpus: "0.1"
 
   prometheus:
     image: prom/prometheus:v2.48.0

@@ -35,14 +35,11 @@ fi
 docker network create geosegbar-network 2>/dev/null || true
 
 # Criar diretórios necessários
-# echo "📁 Criando diretórios necessários..."
-# mkdir -p ${FILE_UPLOAD_DIR}
-# mkdir -p ${FILE_PSB_DIR}
-# mkdir -p ./logs
-# mkdir -p ./prometheus-prod
-# mkdir -p ./grafana-prod/provisioning/datasources
-# mkdir -p ./grafana-prod/provisioning/dashboards
-# mkdir -p ./grafana-prod/dashboards
+mkdir -p ./logs
+mkdir -p ./prometheus-prod
+mkdir -p ./grafana-prod/provisioning/datasources
+mkdir -p ./grafana-prod/provisioning/dashboards
+mkdir -p ./grafana-prod/dashboards
 
 # ============================================
 # CONFIGURAÇÕES DO PROMETHEUS (PRODUÇÃO)
@@ -68,7 +65,7 @@ rule_files:
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:
-      - targets: ['localhost:9090']
+      - targets: ['prometheus-prod:9090']
 
   - job_name: 'geosegbar-api'
     metrics_path: '/actuator/prometheus'
@@ -299,9 +296,7 @@ docker run -d \
   -e AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
   -e AWS_REGION="${AWS_REGION}" \
   -e AWS_BUCKET_NAME="${AWS_BUCKET_NAME}" \
-  -e FILE_UPLOAD_DIR="${FILE_UPLOAD_DIR}" \
   -e FILE_BASE_URL="${FILE_BASE_URL}" \
-  -e FILE_PSB_DIR="${FILE_PSB_DIR}" \
   -e FRONTEND_URL="${FRONTEND_URL}" \
   -e ANA_API_IDENTIFIER="${ANA_API_IDENTIFIER}" \
   -e ANA_API_PASSWORD="${ANA_API_PASSWORD}" \
@@ -318,7 +313,6 @@ docker run -d \
   -e RATE_LIMIT_AUTH_REFILL_TOKENS="${RATE_LIMIT_AUTH_REFILL_TOKENS}" \
   -e RATE_LIMIT_AUTH_REFILL_DURATION="${RATE_LIMIT_AUTH_REFILL_DURATION}" \
   -e TZ="${TZ}" \
-  -v ${FILE_UPLOAD_DIR}:${FILE_UPLOAD_DIR} \
   -v $SCRIPT_DIR/logs:/app/logs \
   geosegbar-prod:latest
 

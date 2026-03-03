@@ -44,9 +44,6 @@ fi
 echo -e "${GREEN}✅ Docker está operacional${NC}"
 
 # Criar diretórios necessários
-echo -e "${BLUE}📁 Criando diretórios necessários...${NC}"
-mkdir -p ${FILE_UPLOAD_DIR}
-mkdir -p ${FILE_PSB_DIR}
 mkdir -p ./logs
 mkdir -p ./prometheus-prod
 mkdir -p ./grafana-prod/provisioning/datasources

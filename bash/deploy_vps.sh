@@ -287,6 +287,8 @@ docker run -d \
   --name geosegbar-api-prod \
   --restart unless-stopped \
   --network geosegbar-network \
+  --memory=2g \
+  --cpus="1.5" \
   --expose 9090 \
   -e SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE}" \
   -e JAVA_OPTS="${JAVA_OPTS}" \

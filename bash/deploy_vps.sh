@@ -201,7 +201,6 @@ else
       --name postgres-prod \
       --restart unless-stopped \
       --network geosegbar-network \
-      -p 5433:5432 \
       -e POSTGRES_DB=${DB_NAME} \
       -e POSTGRES_USER=${DB_USERNAME} \
       -e POSTGRES_PASSWORD=${DB_PASSWORD} \
@@ -252,7 +251,6 @@ else
       --name redis-prod \
       --restart unless-stopped \
       --network geosegbar-network \
-      -p 6379:6379 \
       redis:7-alpine \
       redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
       
@@ -358,7 +356,6 @@ docker run -d \
   --name prometheus-prod \
   --restart unless-stopped \
   --network geosegbar-network \
-  -p 9091:9090 \
   -v $SCRIPT_DIR/prometheus-prod/prometheus.yml:/etc/prometheus/prometheus.yml:ro \
   -v $SCRIPT_DIR/prometheus-prod/alerts.yml:/etc/prometheus/alerts.yml:ro \
   -v prometheus-prod-data:/prometheus \
@@ -388,7 +385,6 @@ docker run -d \
   --name grafana-prod \
   --restart unless-stopped \
   --network geosegbar-network \
-  -p 3001:3000 \
   -e GF_SECURITY_ADMIN_USER=admin \
   -e GF_SECURITY_ADMIN_PASSWORD="${GRAFANA_PASSWORD}" \
   -e GF_INSTALL_PLUGINS=redis-datasource \

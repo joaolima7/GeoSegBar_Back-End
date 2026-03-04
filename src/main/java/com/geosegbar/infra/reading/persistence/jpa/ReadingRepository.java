@@ -16,10 +16,61 @@ import org.springframework.stereotype.Repository;
 
 import com.geosegbar.common.enums.LimitStatusEnum;
 import com.geosegbar.entities.ReadingEntity;
+import com.geosegbar.infra.dashboard.projections.InstrumentStatusDistributionProjection;
 import com.geosegbar.infra.reading.projections.InstrumentLimitStatusProjection;
 
 @Repository
 public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
+
+    @Query(value = """
+            WITH latest_per_instrument AS (
+                SELECT DISTINCT ON (r.instrument_id)
+                    r.instrument_id, r.date, r.hour
+                FROM reading r
+                INNER JOIN instrument i ON r.instrument_id = i.id
+                WHERE r.active = true
+                  AND i.active = true
+                  AND i.dam_id IN (:damIds)
+                  AND r.date >= :startDate
+                  AND r.date <= :endDate
+                ORDER BY r.instrument_id, r.date DESC, r.hour DESC
+            ),
+            critical_status AS (
+                SELECT DISTINCT ON (r.instrument_id)
+                    r.instrument_id,
+                    r.limit_status
+                FROM reading r
+                INNER JOIN latest_per_instrument lpi
+                    ON r.instrument_id = lpi.instrument_id
+                    AND r.date = lpi.date
+                    AND r.hour = lpi.hour
+                WHERE r.active = true
+                ORDER BY r.instrument_id,
+                    CASE r.limit_status
+                        WHEN 'EMERGENCIA' THEN 1
+                        WHEN 'ALERTA' THEN 2
+                        WHEN 'ATENCAO' THEN 3
+                        WHEN 'SUPERIOR' THEN 4
+                        WHEN 'INFERIOR' THEN 4
+                        WHEN 'NORMAL' THEN 5
+                    END,
+                    r.limit_status
+            )
+            SELECT
+                it.id as typeId,
+                it.name as typeName,
+                cs.limit_status as limitStatus,
+                CAST(COUNT(*) AS BIGINT) as total
+            FROM critical_status cs
+            INNER JOIN instrument i ON cs.instrument_id = i.id
+            INNER JOIN instrument_type it ON i.instrument_type_id = it.id
+            GROUP BY it.id, it.name, cs.limit_status
+            ORDER BY it.name
+            """, nativeQuery = true)
+    List<InstrumentStatusDistributionProjection> findInstrumentStatusDistributionByType(
+            @Param("damIds") List<Long> damIds,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
 
     boolean existsByInstrumentIdAndDate(Long instrumentId, LocalDate date);
 

@@ -5,6 +5,8 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -16,18 +18,27 @@ import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
 import com.geosegbar.infra.dashboard.dtos.CategoryCountDTO;
 import com.geosegbar.infra.dashboard.dtos.DashboardCategorySummaryDTO;
+import com.geosegbar.infra.dashboard.dtos.InstrumentDashboardSummaryDTO;
+import com.geosegbar.infra.dashboard.dtos.InstrumentTypeDashboardDTO;
 import com.geosegbar.infra.dashboard.projections.CategoryCountProjection;
+import com.geosegbar.infra.dashboard.projections.InstrumentStatusDistributionProjection;
+import com.geosegbar.infra.dashboard.projections.InstrumentTypeCountProjection;
+import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.permissions.dam_permissions.persistence.DamPermissionRepository;
+import com.geosegbar.infra.reading.persistence.jpa.ReadingRepository;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class DashboardService {
 
+    private static final List<String> STATUS_ORDER
+            = List.of("NORMAL", "ATENCAO", "ALERTA", "EMERGENCIA", "SUPERIOR", "INFERIOR");
+
     private final AnomalyRepository anomalyRepository;
+    private final InstrumentRepository instrumentRepository;
+    private final ReadingRepository readingRepository;
     private final DamPermissionRepository damPermissionRepository;
 
     public void validateDamAccess(List<Long> damIds) {
@@ -46,6 +57,7 @@ public class DashboardService {
         }
     }
 
+    // ======================== ANOMALY ENDPOINTS ========================
     @Transactional(readOnly = true)
     @Cacheable(value = "dashboard-danger-level-summary",
             key = "#damIds.toString() + ':' + #startDate + ':' + #endDate")
@@ -58,7 +70,7 @@ public class DashboardService {
         List<CategoryCountProjection> counts
                 = anomalyRepository.countByDangerLevelGrouped(damIds, start, end);
 
-        return buildSummary(counts);
+        return buildCategorySummary(counts);
     }
 
     @Transactional(readOnly = true)
@@ -73,10 +85,28 @@ public class DashboardService {
         List<CategoryCountProjection> counts
                 = anomalyRepository.countByStatusGrouped(damIds, start, end);
 
-        return buildSummary(counts);
+        return buildCategorySummary(counts);
     }
 
-    private DashboardCategorySummaryDTO buildSummary(List<CategoryCountProjection> counts) {
+    // ======================== INSTRUMENT ENDPOINT ========================
+    @Transactional(readOnly = true)
+    @Cacheable(value = "dashboard-instrument-summary",
+            key = "#damIds.toString() + ':' + #startDate + ':' + #endDate")
+    public InstrumentDashboardSummaryDTO getInstrumentSummary(
+            List<Long> damIds, LocalDate startDate, LocalDate endDate) {
+
+        List<InstrumentTypeCountProjection> typeCounts
+                = instrumentRepository.countActiveByTypeForDams(damIds);
+
+        List<InstrumentStatusDistributionProjection> statusDist
+                = readingRepository.findInstrumentStatusDistributionByType(
+                        damIds, startDate, endDate);
+
+        return buildInstrumentSummary(typeCounts, statusDist);
+    }
+
+    // ======================== BUILDERS ========================
+    private DashboardCategorySummaryDTO buildCategorySummary(List<CategoryCountProjection> counts) {
         long total = counts.stream()
                 .mapToLong(CategoryCountProjection::getCount)
                 .sum();
@@ -93,5 +123,66 @@ public class DashboardService {
                 .toList();
 
         return new DashboardCategorySummaryDTO(total, categories);
+    }
+
+    private InstrumentDashboardSummaryDTO buildInstrumentSummary(
+            List<InstrumentTypeCountProjection> typeCounts,
+            List<InstrumentStatusDistributionProjection> statusDist) {
+
+        long totalInstruments = typeCounts.stream()
+                .mapToLong(InstrumentTypeCountProjection::getTotal)
+                .sum();
+        int totalTypes = typeCounts.size();
+
+        Map<Long, List<InstrumentStatusDistributionProjection>> statusByType = statusDist.stream()
+                .collect(Collectors.groupingBy(InstrumentStatusDistributionProjection::getTypeId));
+
+        Map<String, Long> overallStatusMap = statusDist.stream()
+                .collect(Collectors.groupingBy(
+                        InstrumentStatusDistributionProjection::getLimitStatus,
+                        Collectors.summingLong(InstrumentStatusDistributionProjection::getTotal)));
+
+        long totalWithStatus = overallStatusMap.values().stream()
+                .mapToLong(Long::longValue).sum();
+
+        List<CategoryCountDTO> overallStatusSummary
+                = buildStatusCategories(overallStatusMap, totalWithStatus);
+
+        List<InstrumentTypeDashboardDTO> byType = typeCounts.stream()
+                .map(tc -> {
+                    Map<String, Long> typeStatusMap = statusByType
+                            .getOrDefault(tc.getTypeId(), List.of()).stream()
+                            .collect(Collectors.toMap(
+                                    InstrumentStatusDistributionProjection::getLimitStatus,
+                                    InstrumentStatusDistributionProjection::getTotal));
+
+                    long typeStatusTotal = typeStatusMap.values().stream()
+                            .mapToLong(Long::longValue).sum();
+
+                    return new InstrumentTypeDashboardDTO(
+                            tc.getTypeId(),
+                            tc.getTypeName(),
+                            tc.getTotal(),
+                            buildStatusCategories(typeStatusMap, typeStatusTotal));
+                })
+                .toList();
+
+        return new InstrumentDashboardSummaryDTO(
+                totalInstruments, totalTypes, overallStatusSummary, byType);
+    }
+
+    private List<CategoryCountDTO> buildStatusCategories(Map<String, Long> statusMap, long total) {
+        if (total == 0) {
+            return Collections.emptyList();
+        }
+
+        return STATUS_ORDER.stream()
+                .filter(statusMap::containsKey)
+                .map(status -> {
+                    long count = statusMap.get(status);
+                    return new CategoryCountDTO(status, count,
+                            Math.round(count * 1000.0 / total) / 10.0);
+                })
+                .toList();
     }
 }

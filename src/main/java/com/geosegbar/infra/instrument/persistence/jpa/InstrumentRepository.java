@@ -12,9 +12,16 @@ import org.springframework.stereotype.Repository;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.entities.SectionEntity;
+import com.geosegbar.infra.dashboard.projections.InstrumentTypeCountProjection;
 
 @Repository
 public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Long> {
+
+    @Query("SELECT it.id as typeId, it.name as typeName, COUNT(i) as total "
+            + "FROM InstrumentEntity i JOIN i.instrumentType it "
+            + "WHERE i.dam.id IN :damIds AND i.active = true "
+            + "GROUP BY it.id, it.name ORDER BY it.name")
+    List<InstrumentTypeCountProjection> countActiveByTypeForDams(@Param("damIds") List<Long> damIds);
 
     @Override
     @EntityGraph(attributePaths = {"dam", "dam.client", "section", "instrumentType"})

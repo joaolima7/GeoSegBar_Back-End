@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.infra.dashboard.dtos.DashboardCategorySummaryDTO;
+import com.geosegbar.infra.dashboard.dtos.InstrumentDashboardSummaryDTO;
 import com.geosegbar.infra.dashboard.services.DashboardService;
 
 import lombok.RequiredArgsConstructor;
@@ -61,5 +62,24 @@ public class DashboardController {
 
         return ResponseEntity.ok(
                 WebResponseEntity.success(summary, "Resumo de status de anomalias obtido com sucesso"));
+    }
+
+    @GetMapping("/instruments/summary")
+    public ResponseEntity<WebResponseEntity<InstrumentDashboardSummaryDTO>> getInstrumentSummary(
+            @RequestParam List<Long> damIds,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
+        List<Long> sortedDamIds = damIds.stream().sorted().toList();
+        LocalDate resolvedStart = startDate != null ? startDate : LocalDate.now().minusDays(DEFAULT_DAYS_RANGE);
+        LocalDate resolvedEnd = endDate != null ? endDate : LocalDate.now();
+
+        dashboardService.validateDamAccess(sortedDamIds);
+
+        InstrumentDashboardSummaryDTO summary
+                = dashboardService.getInstrumentSummary(sortedDamIds, resolvedStart, resolvedEnd);
+
+        return ResponseEntity.ok(
+                WebResponseEntity.success(summary, "Resumo de instrumentos obtido com sucesso"));
     }
 }

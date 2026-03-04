@@ -20,7 +20,8 @@ public class CacheConfig {
                 "dashboard-danger-level-summary",
                 "dashboard-anomaly-status-summary",
                 "dashboard-instrument-summary",
-                "dashboard-recent-anomalies"
+                "dashboard-recent-anomalies",
+                "dashboard-checklist-summary"
         );
         cacheManager.setCaffeine(Caffeine.newBuilder()
                 .maximumSize(500)

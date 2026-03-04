@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
+import com.geosegbar.infra.dashboard.dtos.ChecklistDashboardSummaryDTO;
 import com.geosegbar.infra.dashboard.dtos.DashboardCategorySummaryDTO;
 import com.geosegbar.infra.dashboard.dtos.InstrumentDashboardSummaryDTO;
 import com.geosegbar.infra.dashboard.dtos.RecentAnomalyDTO;
@@ -103,5 +104,24 @@ public class DashboardController {
 
         return ResponseEntity.ok(
                 WebResponseEntity.success(recent, "Anomalias recentes obtidas com sucesso"));
+    }
+
+    @GetMapping("/checklists/summary")
+    public ResponseEntity<WebResponseEntity<ChecklistDashboardSummaryDTO>> getChecklistSummary(
+            @RequestParam List<Long> damIds,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
+        List<Long> sortedDamIds = damIds.stream().sorted().toList();
+        LocalDate resolvedStart = startDate != null ? startDate : LocalDate.now().minusDays(DEFAULT_DAYS_RANGE);
+        LocalDate resolvedEnd = endDate != null ? endDate : LocalDate.now();
+
+        dashboardService.validateDamAccess(sortedDamIds);
+
+        ChecklistDashboardSummaryDTO summary
+                = dashboardService.getChecklistSummary(sortedDamIds, resolvedStart, resolvedEnd);
+
+        return ResponseEntity.ok(
+                WebResponseEntity.success(summary, "Resumo de checklists obtido com sucesso"));
     }
 }

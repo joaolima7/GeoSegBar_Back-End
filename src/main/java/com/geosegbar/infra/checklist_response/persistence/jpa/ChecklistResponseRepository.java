@@ -13,6 +13,9 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.geosegbar.entities.ChecklistResponseEntity;
+import com.geosegbar.infra.dashboard.projections.CategoryCountProjection;
+import com.geosegbar.infra.dashboard.projections.ChecklistResponseCountProjection;
+import com.geosegbar.infra.dashboard.projections.DamResponseCountProjection;
 
 @Repository
 public interface ChecklistResponseRepository extends JpaRepository<ChecklistResponseEntity, Long> {
@@ -94,4 +97,59 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
     List<Long> findLatestChecklistResponseIdsByClientIdAndLimit(
             @Param("clientId") Long clientId,
             @Param("limit") int limit);
+
+    // ===================== Dashboard Queries =====================
+    @Query("SELECT COUNT(cr) FROM ChecklistResponseEntity cr "
+            + "WHERE cr.dam.id IN :damIds "
+            + "AND cr.createdAt >= :startDate "
+            + "AND cr.createdAt <= :endDate")
+    long countByDamIdsAndDateRange(
+            @Param("damIds") List<Long> damIds,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
+
+    @Query("SELECT COUNT(DISTINCT cr.user.id) FROM ChecklistResponseEntity cr "
+            + "WHERE cr.dam.id IN :damIds "
+            + "AND cr.createdAt >= :startDate "
+            + "AND cr.createdAt <= :endDate")
+    long countDistinctRespondents(
+            @Param("damIds") List<Long> damIds,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
+
+    @Query("SELECT cr.checklistId as checklistId, cr.checklistName as checklistName, COUNT(cr) as total "
+            + "FROM ChecklistResponseEntity cr "
+            + "WHERE cr.dam.id IN :damIds "
+            + "AND cr.createdAt >= :startDate "
+            + "AND cr.createdAt <= :endDate "
+            + "GROUP BY cr.checklistId, cr.checklistName "
+            + "ORDER BY total DESC")
+    List<ChecklistResponseCountProjection> countByChecklistGrouped(
+            @Param("damIds") List<Long> damIds,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
+
+    @Query("SELECT CAST(cr.weatherCondition AS string) as name, COUNT(cr) as count "
+            + "FROM ChecklistResponseEntity cr "
+            + "WHERE cr.dam.id IN :damIds "
+            + "AND cr.createdAt >= :startDate "
+            + "AND cr.createdAt <= :endDate "
+            + "AND cr.weatherCondition IS NOT NULL "
+            + "GROUP BY cr.weatherCondition")
+    List<CategoryCountProjection> countByWeatherConditionGrouped(
+            @Param("damIds") List<Long> damIds,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
+
+    @Query("SELECT cr.dam.id as damId, cr.dam.name as damName, COUNT(cr) as total "
+            + "FROM ChecklistResponseEntity cr "
+            + "WHERE cr.dam.id IN :damIds "
+            + "AND cr.createdAt >= :startDate "
+            + "AND cr.createdAt <= :endDate "
+            + "GROUP BY cr.dam.id, cr.dam.name "
+            + "ORDER BY total DESC")
+    List<DamResponseCountProjection> countByDamGrouped(
+            @Param("damIds") List<Long> damIds,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
 }

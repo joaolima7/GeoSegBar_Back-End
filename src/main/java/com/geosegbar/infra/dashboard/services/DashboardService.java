@@ -3,6 +3,7 @@ package com.geosegbar.infra.dashboard.services;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -12,12 +13,18 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.geosegbar.common.enums.WeatherConditionEnum;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
 import com.geosegbar.infra.anomaly_photo.persistence.jpa.AnomalyPhotoRepository;
+import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
+import com.geosegbar.infra.checklist_response.persistence.jpa.ChecklistResponseRepository;
 import com.geosegbar.infra.dashboard.dtos.CategoryCountDTO;
+import com.geosegbar.infra.dashboard.dtos.ChecklistDashboardSummaryDTO;
+import com.geosegbar.infra.dashboard.dtos.ChecklistResponseSummaryDTO;
+import com.geosegbar.infra.dashboard.dtos.DamResponseSummaryDTO;
 import com.geosegbar.infra.dashboard.dtos.DashboardCategorySummaryDTO;
 import com.geosegbar.infra.dashboard.dtos.InstrumentDashboardSummaryDTO;
 import com.geosegbar.infra.dashboard.dtos.InstrumentTypeDashboardDTO;
@@ -44,6 +51,8 @@ public class DashboardService {
     private final AnomalyPhotoRepository anomalyPhotoRepository;
     private final InstrumentRepository instrumentRepository;
     private final ReadingRepository readingRepository;
+    private final ChecklistRepository checklistRepository;
+    private final ChecklistResponseRepository checklistResponseRepository;
     private final DamPermissionRepository damPermissionRepository;
 
     public void validateDamAccess(List<Long> damIds) {
@@ -154,6 +163,47 @@ public class DashboardService {
                 .toList();
     }
 
+    // ======================== CHECKLIST ENDPOINT ========================
+    @Transactional(readOnly = true)
+    @Cacheable(value = "dashboard-checklist-summary",
+            key = "#damIds.toString() + ':' + #startDate + ':' + #endDate")
+    public ChecklistDashboardSummaryDTO getChecklistSummary(
+            List<Long> damIds, LocalDate startDate, LocalDate endDate) {
+
+        LocalDateTime start = startDate.atStartOfDay();
+        LocalDateTime end = endDate.atTime(LocalTime.MAX);
+
+        long totalChecklists = checklistRepository.countByDamIds(damIds);
+
+        long totalResponses = checklistResponseRepository
+                .countByDamIdsAndDateRange(damIds, start, end);
+
+        long totalRespondents = checklistResponseRepository
+                .countDistinctRespondents(damIds, start, end);
+
+        List<ChecklistResponseSummaryDTO> responsesByChecklist
+                = checklistResponseRepository.countByChecklistGrouped(damIds, start, end)
+                        .stream()
+                        .map(p -> new ChecklistResponseSummaryDTO(
+                        p.getChecklistId(), p.getChecklistName(), p.getTotal()))
+                        .toList();
+
+        List<CategoryCountDTO> weatherDistribution
+                = buildWeatherDistribution(
+                        checklistResponseRepository.countByWeatherConditionGrouped(damIds, start, end));
+
+        List<DamResponseSummaryDTO> responsesByDam
+                = checklistResponseRepository.countByDamGrouped(damIds, start, end)
+                        .stream()
+                        .map(p -> new DamResponseSummaryDTO(
+                        p.getDamId(), p.getDamName(), p.getTotal()))
+                        .toList();
+
+        return new ChecklistDashboardSummaryDTO(
+                totalChecklists, totalResponses, totalRespondents,
+                responsesByChecklist, weatherDistribution, responsesByDam);
+    }
+
     // ======================== BUILDERS ========================
     private DashboardCategorySummaryDTO buildCategorySummary(List<CategoryCountProjection> counts) {
         long total = counts.stream()
@@ -226,6 +276,21 @@ public class DashboardService {
                     long count = statusMap.getOrDefault(status, 0L);
                     double percentage = total > 0 ? Math.round(count * 1000.0 / total) / 10.0 : 0.0;
                     return new CategoryCountDTO(status, count, percentage);
+                })
+                .toList();
+    }
+
+    private List<CategoryCountDTO> buildWeatherDistribution(List<CategoryCountProjection> counts) {
+        Map<String, Long> weatherMap = counts.stream()
+                .collect(Collectors.toMap(CategoryCountProjection::getName, CategoryCountProjection::getCount));
+
+        long total = weatherMap.values().stream().mapToLong(Long::longValue).sum();
+
+        return Arrays.stream(WeatherConditionEnum.values())
+                .map(wc -> {
+                    long count = weatherMap.getOrDefault(wc.name(), 0L);
+                    double percentage = total > 0 ? Math.round(count * 1000.0 / total) / 10.0 : 0.0;
+                    return new CategoryCountDTO(wc.name(), count, percentage);
                 })
                 .toList();
     }

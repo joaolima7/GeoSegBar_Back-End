@@ -66,4 +66,7 @@ public interface ChecklistRepository extends JpaRepository<ChecklistEntity, Long
     @Query(value = "SELECT c FROM ChecklistEntity c JOIN FETCH c.dam",
             countQuery = "SELECT count(c) FROM ChecklistEntity c")
     Page<ChecklistEntity> findAllWithDams(Pageable pageable);
+
+    @Query("SELECT COUNT(c) FROM ChecklistEntity c WHERE c.dam.id IN :damIds")
+    long countByDamIds(@Param("damIds") List<Long> damIds);
 }

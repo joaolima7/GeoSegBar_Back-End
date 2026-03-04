@@ -172,16 +172,11 @@ public class DashboardService {
     }
 
     private List<CategoryCountDTO> buildStatusCategories(Map<String, Long> statusMap, long total) {
-        if (total == 0) {
-            return Collections.emptyList();
-        }
-
         return STATUS_ORDER.stream()
-                .filter(statusMap::containsKey)
                 .map(status -> {
-                    long count = statusMap.get(status);
-                    return new CategoryCountDTO(status, count,
-                            Math.round(count * 1000.0 / total) / 10.0);
+                    long count = statusMap.getOrDefault(status, 0L);
+                    double percentage = total > 0 ? Math.round(count * 1000.0 / total) / 10.0 : 0.0;
+                    return new CategoryCountDTO(status, count, percentage);
                 })
                 .toList();
     }

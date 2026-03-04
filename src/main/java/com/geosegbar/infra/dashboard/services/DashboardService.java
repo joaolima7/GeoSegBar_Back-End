@@ -16,13 +16,17 @@ import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
+import com.geosegbar.infra.anomaly_photo.persistence.jpa.AnomalyPhotoRepository;
 import com.geosegbar.infra.dashboard.dtos.CategoryCountDTO;
 import com.geosegbar.infra.dashboard.dtos.DashboardCategorySummaryDTO;
 import com.geosegbar.infra.dashboard.dtos.InstrumentDashboardSummaryDTO;
 import com.geosegbar.infra.dashboard.dtos.InstrumentTypeDashboardDTO;
+import com.geosegbar.infra.dashboard.dtos.RecentAnomalyDTO;
+import com.geosegbar.infra.dashboard.projections.AnomalyPhotoPathProjection;
 import com.geosegbar.infra.dashboard.projections.CategoryCountProjection;
 import com.geosegbar.infra.dashboard.projections.InstrumentStatusDistributionProjection;
 import com.geosegbar.infra.dashboard.projections.InstrumentTypeCountProjection;
+import com.geosegbar.infra.dashboard.projections.RecentAnomalyProjection;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.permissions.dam_permissions.persistence.DamPermissionRepository;
 import com.geosegbar.infra.reading.persistence.jpa.ReadingRepository;
@@ -37,6 +41,7 @@ public class DashboardService {
             = List.of("NORMAL", "ATENCAO", "ALERTA", "EMERGENCIA", "SUPERIOR", "INFERIOR");
 
     private final AnomalyRepository anomalyRepository;
+    private final AnomalyPhotoRepository anomalyPhotoRepository;
     private final InstrumentRepository instrumentRepository;
     private final ReadingRepository readingRepository;
     private final DamPermissionRepository damPermissionRepository;
@@ -103,6 +108,50 @@ public class DashboardService {
                         damIds, startDate, endDate);
 
         return buildInstrumentSummary(typeCounts, statusDist);
+    }
+
+    // ======================== RECENT ANOMALIES ENDPOINT ========================
+    @Transactional(readOnly = true)
+    @Cacheable(value = "dashboard-recent-anomalies",
+            key = "#damIds.toString() + ':' + #limit")
+    public List<RecentAnomalyDTO> getRecentAnomalies(List<Long> damIds, int limit) {
+
+        List<RecentAnomalyProjection> anomalies
+                = anomalyRepository.findRecentByDamIds(damIds, limit);
+
+        if (anomalies.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Long> anomalyIds = anomalies.stream()
+                .map(RecentAnomalyProjection::getId)
+                .toList();
+
+        Map<Long, List<String>> photosByAnomalyId
+                = anomalyPhotoRepository.findPathsByAnomalyIds(anomalyIds).stream()
+                        .collect(Collectors.groupingBy(
+                                AnomalyPhotoPathProjection::getAnomalyId,
+                                Collectors.mapping(
+                                        AnomalyPhotoPathProjection::getImagePath,
+                                        Collectors.toList())));
+
+        return anomalies.stream()
+                .map(a -> new RecentAnomalyDTO(
+                a.getId(),
+                a.getUserId(),
+                a.getUserName(),
+                a.getDamId(),
+                a.getDamName(),
+                a.getCreatedAt(),
+                a.getLatitude(),
+                a.getLongitude(),
+                a.getOrigin(),
+                a.getObservation(),
+                a.getRecommendation(),
+                a.getDangerLevelName(),
+                a.getStatusName(),
+                photosByAnomalyId.getOrDefault(a.getId(), Collections.emptyList())))
+                .toList();
     }
 
     // ======================== BUILDERS ========================

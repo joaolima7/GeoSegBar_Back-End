@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 
 import com.geosegbar.entities.AnomalyEntity;
 import com.geosegbar.infra.dashboard.projections.CategoryCountProjection;
+import com.geosegbar.infra.dashboard.projections.RecentAnomalyProjection;
 
 @Repository
 public interface AnomalyRepository extends JpaRepository<AnomalyEntity, Long> {
@@ -55,4 +56,32 @@ public interface AnomalyRepository extends JpaRepository<AnomalyEntity, Long> {
             @Param("damIds") List<Long> damIds,
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate);
+
+    @Query(value = """
+            SELECT
+                a.id as id,
+                u.id as userId,
+                u.name as userName,
+                d.id as damId,
+                d.name as damName,
+                a.created_at as createdAt,
+                a.latitude as latitude,
+                a.longitude as longitude,
+                a.origin as origin,
+                a.observation as observation,
+                a.recommendation as recommendation,
+                dl.name as dangerLevelName,
+                ast.name as statusName
+            FROM anomalies a
+            INNER JOIN users u ON a.user_id = u.id
+            INNER JOIN dam d ON a.dam_id = d.id
+            INNER JOIN danger_levels dl ON a.danger_level_id = dl.id
+            INNER JOIN anomaly_status ast ON a.status_id = ast.id
+            WHERE a.dam_id IN (:damIds)
+            ORDER BY a.created_at DESC
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<RecentAnomalyProjection> findRecentByDamIds(
+            @Param("damIds") List<Long> damIds,
+            @Param("limit") int limit);
 }

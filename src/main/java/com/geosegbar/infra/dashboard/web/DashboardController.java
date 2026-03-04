@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.infra.dashboard.dtos.DashboardCategorySummaryDTO;
 import com.geosegbar.infra.dashboard.dtos.InstrumentDashboardSummaryDTO;
+import com.geosegbar.infra.dashboard.dtos.RecentAnomalyDTO;
 import com.geosegbar.infra.dashboard.services.DashboardService;
 
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,8 @@ import lombok.RequiredArgsConstructor;
 public class DashboardController {
 
     private static final int DEFAULT_DAYS_RANGE = 60;
+    private static final int DEFAULT_RECENT_LIMIT = 10;
+    private static final int MAX_RECENT_LIMIT = 50;
 
     private final DashboardService dashboardService;
 
@@ -81,5 +84,24 @@ public class DashboardController {
 
         return ResponseEntity.ok(
                 WebResponseEntity.success(summary, "Resumo de instrumentos obtido com sucesso"));
+    }
+
+    @GetMapping("/anomalies/recent")
+    public ResponseEntity<WebResponseEntity<List<RecentAnomalyDTO>>> getRecentAnomalies(
+            @RequestParam List<Long> damIds,
+            @RequestParam(required = false) Integer limit) {
+
+        List<Long> sortedDamIds = damIds.stream().sorted().toList();
+        int resolvedLimit = Math.min(
+                limit != null && limit > 0 ? limit : DEFAULT_RECENT_LIMIT,
+                MAX_RECENT_LIMIT);
+
+        dashboardService.validateDamAccess(sortedDamIds);
+
+        List<RecentAnomalyDTO> recent
+                = dashboardService.getRecentAnomalies(sortedDamIds, resolvedLimit);
+
+        return ResponseEntity.ok(
+                WebResponseEntity.success(recent, "Anomalias recentes obtidas com sucesso"));
     }
 }

@@ -35,4 +35,8 @@ public interface VerificationCodeRepository extends JpaRepository<VerificationCo
     @Transactional
     @Query("DELETE FROM VerificationCodeEntity v WHERE v.used = true OR v.expiryDate < :now")
     int deleteAllUsedOrExpired(@Param("now") LocalDateTime now);
+
+    @Modifying
+    @Query("DELETE FROM VerificationCodeEntity v WHERE v.user.id = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
 }

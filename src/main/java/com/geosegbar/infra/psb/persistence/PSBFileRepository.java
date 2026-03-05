@@ -13,6 +13,8 @@ import com.geosegbar.entities.PSBFolderEntity;
 @Repository
 public interface PSBFileRepository extends JpaRepository<PSBFileEntity, Long> {
 
+    boolean existsByUploadedBy_Id(Long userId);
+
     List<PSBFileEntity> findByPsbFolderOrderByUploadedAtDesc(PSBFolderEntity psbFolder);
 
     @EntityGraph(attributePaths = {"uploadedBy", "psbFolder"})

@@ -31,6 +31,8 @@ import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.exceptions.UnauthorizedException;
+import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
+import com.geosegbar.infra.checklist_response.persistence.jpa.ChecklistResponseRepository;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.permissions.atributions_permission.dtos.AttributionsPermissionDTO;
@@ -42,8 +44,12 @@ import com.geosegbar.infra.permissions.instrumentation_permission.dtos.Instrumen
 import com.geosegbar.infra.permissions.instrumentation_permission.services.InstrumentationPermissionService;
 import com.geosegbar.infra.permissions.routine_inspection_permission.dtos.RoutineInspectionPermissionDTO;
 import com.geosegbar.infra.permissions.routine_inspection_permission.services.RoutineInspectionPermissionService;
+import com.geosegbar.infra.psb.persistence.PSBFileRepository;
+import com.geosegbar.infra.psb.persistence.PSBFolderRepository;
+import com.geosegbar.infra.reading.persistence.jpa.ReadingRepository;
 import com.geosegbar.infra.roles.persistence.RoleRepository;
 import com.geosegbar.infra.sex.persistence.jpa.SexRepository;
+import com.geosegbar.infra.share_folder.persistence.ShareFolderRepository;
 import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
 import com.geosegbar.infra.user.dto.LoginRequestDTO;
 import com.geosegbar.infra.user.dto.LoginResponseDTO;
@@ -82,6 +88,12 @@ public class UserService {
     private final AttributionsPermissionService attributionsPermissionService;
     private final InstrumentationPermissionService instrumentationPermissionService;
     private final RoutineInspectionPermissionService routineInspectionPermissionService;
+    private final AnomalyRepository anomalyRepository;
+    private final ChecklistResponseRepository checklistResponseRepository;
+    private final ReadingRepository readingRepository;
+    private final PSBFolderRepository psbFolderRepository;
+    private final PSBFileRepository psbFileRepository;
+    private final ShareFolderRepository shareFolderRepository;
 
     @PostConstruct
     public void initializeSystemUser() {
@@ -167,19 +179,54 @@ public class UserService {
             throw new InvalidInputException("O usuário do sistema não pode ser excluído.");
         }
 
-        if (!user.getCreatedUsers().isEmpty() || !user.getReadings().isEmpty()
-                || !user.getPsbFoldersCreated().isEmpty() || !user.getPsbFilesUploaded().isEmpty()
-                || !user.getSharedFolders().isEmpty()) {
-            throw new BusinessRuleException(
-                    "Não é possível excluir o usuário, pois existem registros associados a ele. Desative o usuário se necessário.");
+        // Verifica se o usuário executou ações que não devem ser desfeitas
+        List<String> blockingReasons = new ArrayList<>();
+
+        if (anomalyRepository.existsByUser_Id(id)) {
+            blockingReasons.add("anomalias registradas");
+        }
+        if (checklistResponseRepository.existsByUser_Id(id)) {
+            blockingReasons.add("respostas de checklist");
+        }
+        if (readingRepository.existsByUser_Id(id)) {
+            blockingReasons.add("leituras de instrumentos");
+        }
+        if (psbFolderRepository.existsByCreatedBy_Id(id)) {
+            blockingReasons.add("pastas PSB criadas");
+        }
+        if (psbFileRepository.existsByUploadedBy_Id(id)) {
+            blockingReasons.add("arquivos PSB enviados");
+        }
+        if (shareFolderRepository.existsBySharedBy_Id(id)) {
+            blockingReasons.add("compartilhamentos de pastas");
+        }
+        if (userRepository.existsByCreatedBy_Id(id)) {
+            blockingReasons.add("usuários criados");
         }
 
-        documentationPermissionService.deleteByUserSafely(user.getId());
-        attributionsPermissionService.deleteByUserSafely(user.getId());
-        instrumentationPermissionService.deleteByUserSafely(user.getId());
-        routineInspectionPermissionService.deleteByUserSafely(user.getId());
+        if (!blockingReasons.isEmpty()) {
+            String reasons = String.join(", ", blockingReasons);
+            throw new BusinessRuleException(
+                    "Não é possível excluir o usuário, pois existem registros associados: "
+                    + reasons + ". Desative o usuário se necessário.");
+        }
 
-        damPermissionRepository.deleteByUserId(user.getId());
+        // Limpa dados auxiliares que podem ser removidos com segurança
+        verificationCodeRepository.deleteByUserId(id);
+
+        user.getClients().clear();
+        userRepository.saveAndFlush(user);
+
+        damPermissionRepository.nullifyCreatedByUserId(id);
+        damPermissionRepository.nullifyUpdatedByUserId(id);
+        damPermissionRepository.deleteByUserId(id);
+
+        userRepository.nullifyCreatedByUserId(id);
+
+        documentationPermissionService.deleteByUserSafely(id);
+        attributionsPermissionService.deleteByUserSafely(id);
+        instrumentationPermissionService.deleteByUserSafely(id);
+        routineInspectionPermissionService.deleteByUserSafely(id);
 
         userRepository.deleteById(id);
     }

@@ -17,6 +17,8 @@ import com.geosegbar.entities.UserEntity;
 @Repository
 public interface ShareFolderRepository extends JpaRepository<ShareFolderEntity, Long> {
 
+    boolean existsBySharedBy_Id(Long userId);
+
     @EntityGraph(attributePaths = {"psbFolder", "sharedBy"})
     List<ShareFolderEntity> findBySharedBy(UserEntity sharedBy);
 

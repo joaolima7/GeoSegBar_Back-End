@@ -133,6 +133,12 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
 
     boolean existsByEmail(String email);
 
+    boolean existsByCreatedBy_Id(Long userId);
+
+    @Modifying
+    @Query("UPDATE UserEntity u SET u.createdBy = null WHERE u.createdBy.id = :userId")
+    void nullifyCreatedByUserId(@Param("userId") Long userId);
+
     boolean existsByPhone(String phone);
 
     boolean existsByEmailAndIdNot(String email, Long id);

@@ -84,4 +84,6 @@ public interface AnomalyRepository extends JpaRepository<AnomalyEntity, Long> {
     List<RecentAnomalyProjection> findRecentByDamIds(
             @Param("damIds") List<Long> damIds,
             @Param("limit") int limit);
+
+    boolean existsByUser_Id(Long userId);
 }

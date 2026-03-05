@@ -23,6 +23,8 @@ public interface PSBFolderRepository extends JpaRepository<PSBFolderEntity, Long
 
     Optional<PSBFolderEntity> findByDamIdAndFolderIndex(Long damId, Integer folderIndex);
 
+    boolean existsByCreatedBy_Id(Long userId);
+
     boolean existsByDamIdAndName(Long damId, String name);
 
     boolean existsByDamIdAndFolderIndex(Long damId, Integer folderIndex);

@@ -72,6 +72,8 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate);
 
+    boolean existsByUser_Id(Long userId);
+
     boolean existsByInstrumentIdAndDate(Long instrumentId, LocalDate date);
 
     boolean existsByInstrumentIdAndDateAndHourAndActive(

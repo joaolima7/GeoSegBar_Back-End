@@ -98,6 +98,8 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
             @Param("clientId") Long clientId,
             @Param("limit") int limit);
 
+    boolean existsByUser_Id(Long userId);
+
     // ===================== Dashboard Queries =====================
     @Query("SELECT COUNT(cr) FROM ChecklistResponseEntity cr "
             + "WHERE cr.dam.id IN :damIds "

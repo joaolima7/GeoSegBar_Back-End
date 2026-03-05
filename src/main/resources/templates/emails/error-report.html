@@ -24,6 +24,10 @@
                 <div class="info-card-label">Data/Hora</div>
                 <div class="info-card-value" th:text="${timestamp}">01/01/2026 10:00</div>
             </div>
+            <div class="info-card">
+                <div class="info-card-label">Origem da Requisição</div>
+                <div class="info-card-value" th:text="${requestOrigin}">(não informado)</div>
+            </div>
         </div>
 
         <div class="highlight-box" style="background: #fef2f2; border-color: #fecaca; margin-top: 20px;">
@@ -31,6 +35,22 @@
             <div class="highlight-value" style="color: #b91c1c; font-family: monospace;" th:text="${errorMessage}">
                 NullPointerException: ...
             </div>
+        </div>
+
+        <div th:if="${requestBody != null and requestBody != '(vazio)' and requestBody != '(não disponível)'}"
+            style="margin-top: 20px;">
+            <strong style="font-size: 14px; color: #475569;">Body da Requisição:</strong>
+            <pre style="
+                background: #1e293b;
+                color: #a5f3fc;
+                padding: 15px;
+                border-radius: 8px;
+                font-size: 11px;
+                overflow-x: auto;
+                white-space: pre-wrap;
+                margin-top: 8px;
+                max-height: 300px;
+                overflow-y: auto;">[[${requestBody}]]</pre>
         </div>
 
         <div style="margin-top: 20px;">

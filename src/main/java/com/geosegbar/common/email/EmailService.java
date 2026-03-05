@@ -63,7 +63,8 @@ public class EmailService {
     private String frontendUrl;
 
     @Async
-    public void sendInternalErrorException(String errorMessage, String stackTrace, String userContext, String requestEndpoint, String requestMethod) {
+    public void sendInternalErrorException(String errorMessage, String stackTrace, String userContext,
+            String requestEndpoint, String requestMethod, String requestBody, String requestOrigin) {
         try {
             Context context = new Context();
             context.setVariable("errorMessage", errorMessage);
@@ -71,6 +72,8 @@ public class EmailService {
             context.setVariable("userContext", userContext);
             context.setVariable("requestEndpoint", requestEndpoint);
             context.setVariable("requestMethod", requestMethod);
+            context.setVariable("requestBody", requestBody);
+            context.setVariable("requestOrigin", requestOrigin);
             context.setVariable("timestamp", LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")));
 
             String htmlContent = templateEngine.process("emails/error-report", context);

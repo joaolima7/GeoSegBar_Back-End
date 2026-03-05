@@ -2,12 +2,14 @@ package com.geosegbar.exceptions.exception_handler;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.util.ContentCachingRequestWrapper;
 
 import com.geosegbar.common.email.EmailService;
 import com.geosegbar.common.response.WebResponseEntity;
@@ -50,6 +53,9 @@ public class RestExceptionHandler {
 
     @Autowired
     private EmailService emailService;
+
+    @Value("${application.frontend-url:desconhecido}")
+    private String frontendUrl;
 
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<WebResponseEntity<String>> handleNotFoundException(NotFoundException ex) {
@@ -282,12 +288,42 @@ public class RestExceptionHandler {
             endpoint += "?" + queryString;
         }
 
+        // Extrair body da requisição (disponível via ContentCachingRequestWrapper)
+        String requestBody = "(não disponível)";
+        try {
+            if (request instanceof ContentCachingRequestWrapper cachingRequest) {
+                byte[] bodyBytes = cachingRequest.getContentAsByteArray();
+                if (bodyBytes.length > 0) {
+                    String raw = new String(bodyBytes, StandardCharsets.UTF_8);
+                    requestBody = raw.length() > 2000 ? raw.substring(0, 2000) + "... [truncado]" : raw;
+                } else {
+                    requestBody = "(vazio)";
+                }
+            }
+        } catch (Exception ignored) {
+            requestBody = "(erro ao ler body)";
+        }
+
+        // Determinar a aplicação de origem
+        String origin = request.getHeader("Origin");
+        String referer = request.getHeader("Referer");
+        String requestOrigin;
+        if (origin != null && !origin.isBlank()) {
+            requestOrigin = origin;
+        } else if (referer != null && !referer.isBlank()) {
+            requestOrigin = referer;
+        } else {
+            requestOrigin = "(não informado — esperado: " + frontendUrl + ")";
+        }
+
         emailService.sendInternalErrorException(
                 ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName(),
                 stackTrace,
                 userContext,
                 endpoint,
-                method
+                method,
+                requestBody,
+                requestOrigin
         );
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

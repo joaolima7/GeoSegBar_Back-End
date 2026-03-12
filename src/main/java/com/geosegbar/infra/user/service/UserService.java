@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -95,9 +96,14 @@ public class UserService {
     private final PSBFileRepository psbFileRepository;
     private final ShareFolderRepository shareFolderRepository;
 
+    @Value("${application.system-user-email}")
+    private String systemUserEmail;
+
+    @Value("${application.system-user-password}")
+    private String systemUserPassword;
+
     @PostConstruct
     public void initializeSystemUser() {
-        String systemUserEmail = "noreply@geometrisa-prod.com.br";
         String systemUserName = "SISTEMA";
 
         try {
@@ -114,7 +120,7 @@ public class UserService {
             UserEntity systemUser = new UserEntity();
             systemUser.setName(systemUserName);
             systemUser.setEmail(systemUserEmail);
-            systemUser.setPassword(passwordEncoder.encode("admingeom"));
+            systemUser.setPassword(passwordEncoder.encode(systemUserPassword));
 
             systemUser.setStatus(statusRepository.findByStatus(StatusEnum.ACTIVE).orElseThrow());
             systemUser.setRole(roleRepository.findByName(RoleEnum.ADMIN).orElseThrow());
@@ -242,14 +248,15 @@ public class UserService {
     @Transactional(readOnly = true)
     public List<UserEntity> findByFilters(Long roleId, Long clientId, Long statusId, Boolean isManagement, Boolean withoutClient) {
         if (Boolean.TRUE.equals(isManagement)) {
-            return userRepository.findByClientIncludingUnassignedCollaborators(clientId, statusId);
+            return userRepository.findByClientIncludingUnassignedCollaborators(clientId, statusId, systemUserEmail);
         }
 
         return userRepository.findByRoleAndClientWithDetails(
                 roleId,
                 clientId,
                 statusId,
-                Boolean.TRUE.equals(withoutClient)
+                Boolean.TRUE.equals(withoutClient),
+                systemUserEmail
         ).stream()
                 .filter(user -> !isSystemUser(user))
                 .collect(Collectors.toList());
@@ -832,7 +839,7 @@ public class UserService {
     public boolean isSystemUser(UserEntity user) {
         return user != null
                 && "SISTEMA".equals(user.getName())
-                && "noreply@geometrisa-prod.com.br".equals(user.getEmail());
+                && systemUserEmail.equals(user.getEmail());
     }
 
     public boolean isSystemUser(Long userId) {
@@ -845,12 +852,11 @@ public class UserService {
     }
 
     public Long getSystemUserId() {
-        return userRepository.findSystemUserId()
+        return userRepository.findSystemUserIdByEmail(systemUserEmail)
                 .orElseThrow(() -> new NotFoundException("Usuário do sistema não encontrado!"));
     }
 
     public UserEntity getSystemUser() {
-        String systemUserEmail = "noreply@geometrisa-prod.com.br";
         return userRepository.findByEmail(systemUserEmail)
                 .orElseThrow(() -> new NotFoundException("Usuário do sistema não encontrado!"));
     }

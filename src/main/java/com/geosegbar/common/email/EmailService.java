@@ -54,12 +54,13 @@ public class EmailService {
     @Value("${spring.mail.username}")
     private String fromEmail;
 
-    @Value("${application.admin-email:joaocaetanodev@gmail.com}")
-    private String adminEmail;
+    @Value("${application.log-email}")
+    private String logEmail;
 
-    private String supportEmail = "support@geometrisa-prod.com.br";
+    @Value("${application.support-email}")
+    private String supportEmail;
 
-    @Value("${application.frontend-url:https://geometrisa-prod.com.br}")
+    @Value("${application.frontend-url}")
     private String frontendUrl;
 
     @Async
@@ -82,12 +83,12 @@ public class EmailService {
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
             helper.setFrom(fromEmail);
-            helper.setTo(adminEmail);
+            helper.setTo(logEmail);
             helper.setSubject("🚨 [GeoSegBar] Erro Interno - " + errorMessage);
             helper.setText(htmlContent, true);
 
             mailSender.send(message);
-            log.info("Relatório de erro enviado para o administrador: {}", adminEmail);
+            log.info("Relatório de erro enviado para o administrador: {}", logEmail);
         } catch (MessagingException e) {
             log.error("FALHA CRÍTICA: Não foi possível enviar o email de relatório de erro: {}", e.getMessage());
         }
@@ -146,6 +147,7 @@ public class EmailService {
             context.setVariable("password", password);
             context.setVariable("userName", userName);
             context.setVariable("userEmail", toEmail);
+            context.setVariable("frontendUrl", frontendUrl);
 
             String htmlContent = templateEngine.process("emails/first-access-password", context);
 
@@ -243,7 +245,7 @@ public class EmailService {
             }
 
             mailSender.send(mimeMessage);
-            log.info("Email de suporte enviado de {} ({}) para o administrador: {}", senderName, senderEmail, adminEmail);
+            log.info("Email de suporte enviado de {} ({}) para o administrador: {}", senderName, senderEmail, logEmail);
         } catch (MessagingException e) {
             log.error("Erro ao enviar email de suporte de {} ({}): {}", senderName, senderEmail, e.getMessage());
         }

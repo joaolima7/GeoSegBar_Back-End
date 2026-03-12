@@ -18,6 +18,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -70,6 +71,9 @@ public class ReadingService {
     private final OutputCalculationService outputCalculationService;
     private final ClientRepository clientRepository;
     private final UserRepository userRepository;
+
+    @Value("${application.system-user-email}")
+    private String systemUserEmail;
 
     private static final Map<LimitStatusEnum, Integer> STATUS_PRIORITY;
 
@@ -654,7 +658,7 @@ public class ReadingService {
 
     private UserEntity resolveCurrentUser(boolean skipPermissionCheck) {
         if (skipPermissionCheck) {
-            return userRepository.findByEmail("noreply@geometrisa-prod.com.br")
+            return userRepository.findByEmail(systemUserEmail)
                     .orElseThrow(() -> new NotFoundException("Usuário do sistema não encontrado!"));
         }
         UserEntity currentUser = AuthenticatedUserUtil.getCurrentUser();

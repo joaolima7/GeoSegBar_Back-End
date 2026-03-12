@@ -49,7 +49,7 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
     @EntityGraph(attributePaths = {"clients", "sex", "status", "role", "createdBy"})
     @Query("SELECT DISTINCT u FROM UserEntity u "
             + "WHERE u.name != 'SISTEMA' "
-            + "AND u.email != 'noreply@geometrisa-prod.com.br' "
+            + "AND u.email != :systemEmail "
             + "AND (:statusId IS NULL OR u.status.id = :statusId) "
             + "AND ("
             + "    (:clientId IS NULL) "
@@ -59,7 +59,8 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
             + "ORDER BY u.id ASC")
     List<UserEntity> findByClientIncludingUnassignedCollaborators(
             @Param("clientId") Long clientId,
-            @Param("statusId") Long statusId);
+            @Param("statusId") Long statusId,
+            @Param("systemEmail") String systemEmail);
 
     @EntityGraph(attributePaths = {
         "clients", "sex", "status", "role", "createdBy",
@@ -95,7 +96,7 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
     @EntityGraph(attributePaths = {"clients", "sex", "status", "role", "createdBy"})
     @Query("SELECT DISTINCT u FROM UserEntity u "
             + "WHERE u.name != 'SISTEMA' "
-            + "AND u.email != 'noreply@geometrisa-prod.com.br' "
+            + "AND u.email != :systemEmail "
             + "AND (:roleId IS NULL OR u.role.id = :roleId) "
             + "AND (:statusId IS NULL OR u.status.id = :statusId) "
             + "AND ("
@@ -108,7 +109,8 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
             @Param("roleId") Long roleId,
             @Param("clientId") Long clientId,
             @Param("statusId") Long statusId,
-            @Param("withoutClient") Boolean withoutClient);
+            @Param("withoutClient") Boolean withoutClient,
+            @Param("systemEmail") String systemEmail);
 
     @EntityGraph(attributePaths = {"clients", "sex", "status", "role", "createdBy"})
     List<UserEntity> findByCreatedById(Long createdById);
@@ -152,8 +154,8 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
     @Query("UPDATE UserEntity u SET u.status.id = :statusId WHERE u.id IN :userIds")
     int bulkUpdateStatusByIds(@Param("userIds") List<Long> userIds, @Param("statusId") Long statusId);
 
-    @Query("SELECT u.id FROM UserEntity u WHERE u.email = 'noreply@geometrisa-prod.com.br'")
-    Optional<Long> findSystemUserId();
+    @Query("SELECT u.id FROM UserEntity u WHERE u.email = :email")
+    Optional<Long> findSystemUserIdByEmail(@Param("email") String email);
 
     @Query("SELECT u.name AS name, u.email AS email, u.phone AS phone, MIN(c.name) AS clientName "
             + "FROM UserEntity u LEFT JOIN u.clients c "

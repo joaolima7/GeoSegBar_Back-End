@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.AnomalyEntity;
 import com.geosegbar.infra.anomaly.dtos.AnomalyDTO;
+import com.geosegbar.infra.anomaly.dtos.UpdateAnomalyRequestDTO;
 import com.geosegbar.infra.anomaly.services.AnomalyService;
 
 import jakarta.validation.Valid;
@@ -44,6 +45,15 @@ public class AnomalyController {
         return ResponseEntity.ok(response);
     }
 
+    @PutMapping("/{id}")
+    public ResponseEntity<WebResponseEntity<AnomalyEntity>> updateAnomaly(
+            @PathVariable Long id, @Valid @RequestBody UpdateAnomalyRequestDTO request) {
+        AnomalyEntity anomaly = anomalyService.update(id, request);
+        WebResponseEntity<AnomalyEntity> response = WebResponseEntity.success(
+                anomaly, "Anomalia atualizada com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/dam/{damId}")
     public ResponseEntity<WebResponseEntity<List<AnomalyEntity>>> getAnomaliesByDamId(@PathVariable Long damId) {
         List<AnomalyEntity> anomalies = anomalyService.findByDamId(damId);
@@ -58,15 +68,6 @@ public class AnomalyController {
         WebResponseEntity<AnomalyEntity> response = WebResponseEntity.success(
                 anomaly, "Anomalia criada com sucesso!");
         return new ResponseEntity<>(response, HttpStatus.CREATED);
-    }
-
-    @PutMapping("/{id}")
-    public ResponseEntity<WebResponseEntity<AnomalyEntity>> updateAnomaly(
-            @PathVariable Long id, @Valid @RequestBody AnomalyDTO request) {
-        AnomalyEntity anomaly = anomalyService.update(id, request);
-        WebResponseEntity<AnomalyEntity> response = WebResponseEntity.success(
-                anomaly, "Anomalia atualizada com sucesso!");
-        return ResponseEntity.ok(response);
     }
 
     @DeleteMapping("/{id}")

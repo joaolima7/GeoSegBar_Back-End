@@ -1,6 +1,5 @@
 package com.geosegbar.infra.anomaly.services;
 
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 
@@ -14,8 +13,10 @@ import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.DangerLevelEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.FileStorageException;
+import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.anomaly.dtos.AnomalyDTO;
+import com.geosegbar.infra.anomaly.dtos.UpdateAnomalyRequestDTO;
 import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
 import com.geosegbar.infra.anomaly_photo.persistence.jpa.AnomalyPhotoRepository;
 import com.geosegbar.infra.anomaly_status.persistence.jpa.AnomalyStatusRepository;
@@ -119,50 +120,40 @@ public class AnomalyService {
     }
 
     @Transactional
-    public AnomalyEntity update(Long id, AnomalyDTO request) {
+    public AnomalyEntity update(Long id, UpdateAnomalyRequestDTO request) {
         AnomalyEntity anomaly = findById(id);
 
-        UserEntity user = userRepository.findById(request.getUserId())
-                .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
+        boolean hasAnyField = request.getObservation() != null
+                || request.getRecommendation() != null
+                || request.getDangerLevelId() != null
+                || request.getStatusId() != null;
 
-        DamEntity dam = damRepository.findById(request.getDamId())
-                .orElseThrow(() -> new NotFoundException("Barragem não encontrada!"));
-        DangerLevelEntity dangerLevel = dangerLevelRepository.findById(request.getDangerLevelId())
-                .orElseThrow(() -> new NotFoundException("Nível de perigo não encontrado!"));
-        AnomalyStatusEntity status = statusRepository.findById(request.getStatusId())
-                .orElseThrow(() -> new NotFoundException("Status não encontrado!"));
-
-        anomaly.setUser(user);
-        anomaly.setDam(dam);
-        anomaly.setLatitude(request.getLatitude());
-        anomaly.setLongitude(request.getLongitude());
-        anomaly.setQuestionnaireId(request.getQuestionnaireId());
-        anomaly.setQuestionId(request.getQuestionId());
-        anomaly.setOrigin(request.getOrigin());
-        anomaly.setObservation(request.getObservation());
-        anomaly.setRecommendation(request.getRecommendation());
-        anomaly.setDangerLevel(dangerLevel);
-        anomaly.setStatus(status);
-
-        anomaly = anomalyRepository.save(anomaly);
-
-        if (request.getPhotos() != null && !request.getPhotos().isEmpty()) {
-
-            for (AnomalyPhotoEntity photo : new ArrayList<>(anomaly.getPhotos())) {
-                if (photo.getImagePath() != null && !photo.getImagePath().isEmpty()) {
-                    fileStorageService.deleteFile(photo.getImagePath());
-                }
-                anomalyPhotoRepository.delete(photo);
-            }
-
-            anomaly.getPhotos().clear();
-
-            for (PhotoSubmissionDTO photoDto : request.getPhotos()) {
-                saveAnomalyPhoto(photoDto, anomaly, dam.getId());
-            }
+        if (!hasAnyField) {
+            throw new InvalidInputException("Informe ao menos um campo para atualização: Observação, Recomendação, Nível de Perigo ou Status.");
         }
 
-        return findById(anomaly.getId());
+        if (request.getObservation() != null) {
+            anomaly.setObservation(request.getObservation());
+        }
+
+        if (request.getRecommendation() != null) {
+            anomaly.setRecommendation(request.getRecommendation());
+        }
+
+        if (request.getDangerLevelId() != null) {
+            DangerLevelEntity dangerLevel = dangerLevelRepository.findById(request.getDangerLevelId())
+                    .orElseThrow(() -> new NotFoundException("Nível de perigo não encontrado!"));
+            anomaly.setDangerLevel(dangerLevel);
+        }
+
+        if (request.getStatusId() != null) {
+            AnomalyStatusEntity status = statusRepository.findById(request.getStatusId())
+                    .orElseThrow(() -> new NotFoundException("Status não encontrado!"));
+            anomaly.setStatus(status);
+        }
+
+        AnomalyEntity saved = anomalyRepository.save(anomaly);
+        return findById(saved.getId());
     }
 
     @Transactional

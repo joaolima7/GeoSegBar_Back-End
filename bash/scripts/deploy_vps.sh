@@ -470,25 +470,19 @@ sleep 10
 # ============================================
 # VERIFICAÇÃO
 # ============================================
-echo "🔍 Verificando status da aplicação (via nginx)..."
+echo "🔍 Verificando status da aplicação..."
 
 HEALTH_TIMEOUT_SECONDS="${DEPLOY_HEALTH_TIMEOUT_SECONDS:-180}"
 HEALTH_CHECK_INTERVAL_SECONDS="${DEPLOY_HEALTH_CHECK_INTERVAL_SECONDS:-5}"
 HEALTH_ELAPSED=0
 HEALTH_OK=false
-HEALTH_URL="http://localhost:${SERVER_PORT}/actuator/health"
-READINESS_URL="http://localhost:${SERVER_PORT}/actuator/health/readiness"
 
 while [ "$HEALTH_ELAPSED" -lt "$HEALTH_TIMEOUT_SECONDS" ]; do
-  READINESS_BODY="$(curl -s --max-time 5 "$READINESS_URL" 2>/dev/null || true)"
-  HEALTH_BODY="$(curl -s --max-time 5 "$HEALTH_URL" 2>/dev/null || true)"
-
-  if echo "$READINESS_BODY" | grep -q '"status":"UP"'; then
-    HEALTH_OK=true
-    break
-  fi
-
-  if echo "$HEALTH_BODY" | grep -q '"status":"UP"'; then
+  # Verifica diretamente dentro do container (sem nginx, sem gzip)
+  if docker exec geosegbar-api-prod \
+      wget --no-verbose --tries=1 -O - \
+      "http://localhost:9090/actuator/health/readiness" 2>/dev/null \
+      | grep -q '"UP"'; then
     HEALTH_OK=true
     break
   fi

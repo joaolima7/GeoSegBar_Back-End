@@ -200,8 +200,10 @@ POSTGRES_EXISTS=$(docker ps -a --format '{{.Names}}' | grep -q '^postgres-prod$'
 
 if [ "$POSTGRES_RUNNING" = "yes" ]; then
     echo "✅ Banco de dados já está rodando"
+    docker network connect geosegbar-network postgres-prod 2>/dev/null || true
 elif [ "$POSTGRES_EXISTS" = "yes" ]; then
     echo "🔄 Container do banco existe mas está parado. Reiniciando..."
+    docker network connect geosegbar-network postgres-prod 2>/dev/null || true
     docker start postgres-prod
     echo "⏳ Aguardando banco de dados inicializar..."
     sleep 10
@@ -265,8 +267,10 @@ REDIS_EXISTS=$(docker ps -a --format '{{.Names}}' | grep -q '^redis-prod$' && ec
 
 if [ "$REDIS_RUNNING" = "yes" ]; then
     echo "✅ Redis já está rodando"
+    docker network connect geosegbar-network redis-prod 2>/dev/null || true
 elif [ "$REDIS_EXISTS" = "yes" ]; then
     echo "🔄 Container do Redis existe mas está parado. Reiniciando..."
+    docker network connect geosegbar-network redis-prod 2>/dev/null || true
     docker start redis-prod
     echo "✅ Redis reiniciado"
 else

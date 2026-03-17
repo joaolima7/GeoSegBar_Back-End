@@ -195,9 +195,12 @@ fi
 # ============================================
 # POSTGRESQL
 # ============================================
-if docker ps -q -f name=postgres-prod | grep -q .; then
+POSTGRES_RUNNING=$(docker ps --format '{{.Names}}' | grep -q '^postgres-prod$' && echo "yes" || echo "no")
+POSTGRES_EXISTS=$(docker ps -a --format '{{.Names}}' | grep -q '^postgres-prod$' && echo "yes" || echo "no")
+
+if [ "$POSTGRES_RUNNING" = "yes" ]; then
     echo "✅ Banco de dados já está rodando"
-elif docker ps -a -q -f name=postgres-prod | grep -q .; then
+elif [ "$POSTGRES_EXISTS" = "yes" ]; then
     echo "🔄 Container do banco existe mas está parado. Reiniciando..."
     docker start postgres-prod
     echo "⏳ Aguardando banco de dados inicializar..."
@@ -240,7 +243,7 @@ fi
 # ============================================
 # POSTGRES EXPORTER
 # ============================================
-if docker ps -q -f name=postgres-exporter-prod | grep -q .; then
+if docker ps --format '{{.Names}}' | grep -q '^postgres-exporter-prod$'; then
     echo "✅ Postgres Exporter já está rodando"
 else
     echo "🔄 Iniciando Postgres Exporter..."
@@ -257,9 +260,12 @@ fi
 # ============================================
 # REDIS
 # ============================================
-if docker ps -q -f name=redis-prod | grep -q .; then
+REDIS_RUNNING=$(docker ps --format '{{.Names}}' | grep -q '^redis-prod$' && echo "yes" || echo "no")
+REDIS_EXISTS=$(docker ps -a --format '{{.Names}}' | grep -q '^redis-prod$' && echo "yes" || echo "no")
+
+if [ "$REDIS_RUNNING" = "yes" ]; then
     echo "✅ Redis já está rodando"
-elif docker ps -a -q -f name=redis-prod | grep -q .; then
+elif [ "$REDIS_EXISTS" = "yes" ]; then
     echo "🔄 Container do Redis existe mas está parado. Reiniciando..."
     docker start redis-prod
     echo "✅ Redis reiniciado"

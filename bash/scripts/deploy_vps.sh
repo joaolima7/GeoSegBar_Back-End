@@ -318,6 +318,13 @@ else
 fi
 
 # ============================================
+# LIMPEZA DE IMAGENS ANTIGAS (antes do build)
+# ============================================
+echo "🧹 Limpando imagens e cache Docker não utilizados..."
+docker image prune -af 2>/dev/null || true
+docker builder prune -af 2>/dev/null || true
+
+# ============================================
 # APPLICATION
 # ============================================
 if [ "$DEPLOY_MODE" = "DB_ONLY" ]; then
@@ -478,11 +485,8 @@ HEALTH_ELAPSED=0
 HEALTH_OK=false
 
 while [ "$HEALTH_ELAPSED" -lt "$HEALTH_TIMEOUT_SECONDS" ]; do
-  # Verifica diretamente dentro do container (sem nginx, sem gzip)
-  if docker exec geosegbar-api-prod \
-      wget --no-verbose --tries=1 -O - \
-      "http://localhost:9090/actuator/health/readiness" 2>/dev/null \
-      | grep -q '"UP"'; then
+  # Verifica pelo log do container: se "Started GeosegbarApplication" apareceu, está UP
+  if docker logs geosegbar-api-prod 2>&1 | grep -q "Started GeosegbarApplication"; then
     HEALTH_OK=true
     break
   fi

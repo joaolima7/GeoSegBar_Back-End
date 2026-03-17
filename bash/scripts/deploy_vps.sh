@@ -438,7 +438,34 @@ sleep 10
 # VERIFICAÇÃO
 # ============================================
 echo "🔍 Verificando status da aplicação (via nginx)..."
-if curl -f http://localhost:${SERVER_PORT}/actuator/health > /dev/null 2>&1; then
+
+HEALTH_TIMEOUT_SECONDS="${DEPLOY_HEALTH_TIMEOUT_SECONDS:-180}"
+HEALTH_CHECK_INTERVAL_SECONDS="${DEPLOY_HEALTH_CHECK_INTERVAL_SECONDS:-5}"
+HEALTH_ELAPSED=0
+HEALTH_OK=false
+HEALTH_URL="http://localhost:${SERVER_PORT}/actuator/health"
+READINESS_URL="http://localhost:${SERVER_PORT}/actuator/health/readiness"
+
+while [ "$HEALTH_ELAPSED" -lt "$HEALTH_TIMEOUT_SECONDS" ]; do
+  READINESS_BODY="$(curl -s --max-time 5 "$READINESS_URL" 2>/dev/null || true)"
+  HEALTH_BODY="$(curl -s --max-time 5 "$HEALTH_URL" 2>/dev/null || true)"
+
+  if echo "$READINESS_BODY" | grep -q '"status":"UP"'; then
+    HEALTH_OK=true
+    break
+  fi
+
+  if echo "$HEALTH_BODY" | grep -q '"status":"UP"'; then
+    HEALTH_OK=true
+    break
+  fi
+
+  echo "⏳ API ainda inicializando... (${HEALTH_ELAPSED}s/${HEALTH_TIMEOUT_SECONDS}s)"
+  sleep "$HEALTH_CHECK_INTERVAL_SECONDS"
+  HEALTH_ELAPSED=$((HEALTH_ELAPSED + HEALTH_CHECK_INTERVAL_SECONDS))
+done
+
+if [ "$HEALTH_OK" = true ]; then
     echo "✅ Deploy em PRODUÇÃO realizado com sucesso!"
     echo ""
     echo "📡 SERVIÇOS DISPONÍVEIS:"

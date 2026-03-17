@@ -9,6 +9,7 @@ import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.geosegbar.common.enums.StatusEnum;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.ClassificationDamEntity;
 import com.geosegbar.entities.ClientEntity;
@@ -30,12 +31,14 @@ import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.classification_dam.persistence.ClassificationDamRepository;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.dtos.CreateDamCompleteRequest;
+import com.geosegbar.infra.dam.dtos.DamQuickAccessDTO;
 import com.geosegbar.infra.dam.dtos.DamStatusUpdateDTO;
 import com.geosegbar.infra.dam.dtos.LevelRequestDTO;
 import com.geosegbar.infra.dam.dtos.ReservoirRequestDTO;
 import com.geosegbar.infra.dam.dtos.UpdateDamCompleteRequest;
 import com.geosegbar.infra.dam.dtos.UpdateDamRequest;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
+import com.geosegbar.infra.dam.projections.DamQuickAccessProjection;
 import com.geosegbar.infra.documentation_dam.persistence.DocumentationDamRepository;
 import com.geosegbar.infra.file_storage.FileStorageService;
 import com.geosegbar.infra.level.persistence.LevelRepository;
@@ -122,11 +125,19 @@ public class DamService {
         return findByClientAndStatus(clientId, statusId);
     }
 
-    /**
-     * 🚀 OTIMIZAÇÃO CRUCIAL Inicializa coleções Lazy dentro da transação.
-     * Sections já vem carregado pelo Repository (JOIN FETCH). Aqui carregamos o
-     * resto.
-     */
+    @Transactional(readOnly = true)
+    public List<DamQuickAccessDTO> findQuickAccessByCurrentUser() {
+        UserEntity currentUser = AuthenticatedUserUtil.getCurrentUser();
+
+        List<DamQuickAccessProjection> rows = AuthenticatedUserUtil.isAdmin()
+                ? damRepository.findAllQuickAccess()
+                : damRepository.findQuickAccessByUserId(currentUser.getId());
+
+        return rows.stream()
+                .map(this::toQuickAccessDTO)
+                .toList();
+    }
+
     private void initializeLazyCollections(DamEntity dam) {
         if (dam == null) {
             return;
@@ -141,6 +152,16 @@ public class DamService {
 
         Hibernate.initialize(dam.getPsbFolders());
 
+    }
+
+    private DamQuickAccessDTO toQuickAccessDTO(DamQuickAccessProjection row) {
+        return new DamQuickAccessDTO(
+                row.getDamId(),
+                row.getDamName(),
+                StatusEnum.valueOf(row.getStatus()),
+                row.getClientId(),
+                row.getClientName()
+        );
     }
 
     public boolean existsByName(String name) {

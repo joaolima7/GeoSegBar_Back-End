@@ -2,10 +2,25 @@
 
 set -e
 
+if [ "${GEOSEGBAR_CLI_CONTEXT:-0}" != "1" ]; then
+  echo "❌ Execução direta não permitida. Use: ./bash/cli_app.sh"
+  exit 1
+fi
+
 echo "🚀 Iniciando deploy da API GeoSegBar em PRODUÇÃO com monitoramento..."
 
+DEPLOY_MODE="${DEPLOY_MODE:-FULL}"
+SKIP_GIT_PULL="${SKIP_GIT_PULL:-false}"
+
+if [ "$DEPLOY_MODE" != "FULL" ] && [ "$DEPLOY_MODE" != "DB_ONLY" ]; then
+  echo "❌ DEPLOY_MODE inválido: $DEPLOY_MODE (use FULL ou DB_ONLY)"
+  exit 1
+fi
+
+echo "🧭 Modo de deploy: ${DEPLOY_MODE}"
+
 # ✅ CORRIGIDO: Define o diretório raiz do projeto
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$SCRIPT_DIR"  # ✅ Garante que comandos executem da raiz
 
 # Verificar se o arquivo .env.prod existe
@@ -272,12 +287,21 @@ fi
 # ============================================
 # APPLICATION
 # ============================================
+if [ "$DEPLOY_MODE" = "DB_ONLY" ]; then
+  echo "✅ Modo DB_ONLY finalizado (PostgreSQL e Redis preparados)."
+  exit 0
+fi
+
 echo "🛑 Parando container atual da API..."
 docker stop geosegbar-api-prod 2>/dev/null || echo "   Container não estava rodando"
 docker rm geosegbar-api-prod 2>/dev/null || echo "   Container não existia"
 
-echo "📥 Atualizando código..."
-git pull origin main
+if [ "$SKIP_GIT_PULL" = "true" ]; then
+  echo "⏭️ Pulando git pull (SKIP_GIT_PULL=true)"
+else
+  echo "📥 Atualizando código..."
+  git pull origin main
+fi
 
 echo "🔨 Construindo nova imagem Docker..."
 docker build -t geosegbar-prod:latest .

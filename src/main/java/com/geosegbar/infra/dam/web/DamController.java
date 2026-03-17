@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.infra.dam.dtos.CreateDamCompleteRequest;
+import com.geosegbar.infra.dam.dtos.DamQuickAccessDTO;
 import com.geosegbar.infra.dam.dtos.DamStatusUpdateDTO;
 import com.geosegbar.infra.dam.dtos.UpdateDamCompleteRequest;
 import com.geosegbar.infra.dam.dtos.UpdateDamRequest;
@@ -36,6 +37,16 @@ public class DamController {
     public ResponseEntity<WebResponseEntity<List<DamEntity>>> getAllDams() {
         List<DamEntity> dams = damService.findAllWithSections();
         WebResponseEntity<List<DamEntity>> response = WebResponseEntity.success(dams, "Barragens obtidas com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/quick-access")
+    public ResponseEntity<WebResponseEntity<List<DamQuickAccessDTO>>> getQuickAccessDams() {
+        List<DamQuickAccessDTO> dams = damService.findQuickAccessByCurrentUser();
+        WebResponseEntity<List<DamQuickAccessDTO>> response = WebResponseEntity.success(
+                dams,
+                "Barragens acessíveis obtidas com sucesso!"
+        );
         return ResponseEntity.ok(response);
     }
 

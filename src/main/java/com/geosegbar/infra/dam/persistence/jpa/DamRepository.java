@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.StatusEntity;
+import com.geosegbar.infra.dam.projections.DamQuickAccessProjection;
 
 @Repository
 public interface DamRepository extends JpaRepository<DamEntity, Long> {
@@ -80,4 +81,37 @@ public interface DamRepository extends JpaRepository<DamEntity, Long> {
             + "LEFT JOIN FETCH d.documentationDam "
             + "WHERE d.id = :id")
     Optional<DamEntity> findByIdComplete(@Param("id") Long id);
+
+    @Query(value = """
+                        SELECT
+                                d.id AS damId,
+                                d.name AS damName,
+                                s.status AS status,
+                                c.id AS clientId,
+                                c.name AS clientName
+                        FROM dam d
+                        INNER JOIN status s ON s.id = d.status_id
+                        INNER JOIN client c ON c.id = d.client_id
+                        ORDER BY d.id ASC
+                        """, nativeQuery = true)
+    List<DamQuickAccessProjection> findAllQuickAccess();
+
+    @Query(value = """
+                        SELECT DISTINCT
+                                d.id AS damId,
+                                d.name AS damName,
+                                s.status AS status,
+                                c.id AS clientId,
+                                c.name AS clientName
+                        FROM dam_permissions dp
+                        INNER JOIN dam d ON d.id = dp.dam_id
+                        INNER JOIN status s ON s.id = d.status_id
+                        INNER JOIN client c ON c.id = d.client_id
+                        INNER JOIN user_client uc ON uc.client_id = c.id
+                        WHERE dp.user_id = :userId
+                          AND uc.user_id = :userId
+                          AND dp.has_access = true
+                        ORDER BY d.id ASC
+                        """, nativeQuery = true)
+    List<DamQuickAccessProjection> findQuickAccessByUserId(@Param("userId") Long userId);
 }

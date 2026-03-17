@@ -198,12 +198,18 @@ fi
 POSTGRES_RUNNING=$(docker ps --format '{{.Names}}' | grep -q '^postgres-prod$' && echo "yes" || echo "no")
 POSTGRES_EXISTS=$(docker ps -a --format '{{.Names}}' | grep -q '^postgres-prod$' && echo "yes" || echo "no")
 
+# Garante que postgres-prod está na rede correta
+if [ "$POSTGRES_EXISTS" = "yes" ]; then
+    if ! docker inspect postgres-prod --format '{{range $net, $v := .NetworkSettings.Networks}}{{$net}} {{end}}' 2>/dev/null | grep -qw 'geosegbar-network'; then
+        echo "⚠️ postgres-prod não está na geosegbar-network. Conectando..."
+        docker network connect geosegbar-network postgres-prod 2>/dev/null || true
+    fi
+fi
+
 if [ "$POSTGRES_RUNNING" = "yes" ]; then
     echo "✅ Banco de dados já está rodando"
-    docker network connect geosegbar-network postgres-prod 2>/dev/null || true
 elif [ "$POSTGRES_EXISTS" = "yes" ]; then
     echo "🔄 Container do banco existe mas está parado. Reiniciando..."
-    docker network connect geosegbar-network postgres-prod 2>/dev/null || true
     docker start postgres-prod
     echo "⏳ Aguardando banco de dados inicializar..."
     sleep 10
@@ -262,36 +268,53 @@ fi
 # ============================================
 # REDIS
 # ============================================
-REDIS_RUNNING=$(docker ps --format '{{.Names}}' | grep -q '^redis-prod$' && echo "yes" || echo "no")
-REDIS_EXISTS=$(docker ps -a --format '{{.Names}}' | grep -q '^redis-prod$' && echo "yes" || echo "no")
-
-if [ "$REDIS_RUNNING" = "yes" ]; then
-    echo "✅ Redis já está rodando"
-    docker network connect geosegbar-network redis-prod 2>/dev/null || true
-elif [ "$REDIS_EXISTS" = "yes" ]; then
-    echo "🔄 Container do Redis existe mas está parado. Reiniciando..."
-    docker network connect geosegbar-network redis-prod 2>/dev/null || true
-    docker start redis-prod
-    echo "✅ Redis reiniciado"
-else
-    echo "📦 Container do Redis não encontrado. Criando..."
-    
+_start_redis() {
     if ! docker volume ls -q -f name=redis-prod-data | grep -q .; then
-        echo "📦 Criando volume para Redis..."
         docker volume create redis-prod-data
     fi
-    
-    echo "🚀 Iniciando Redis..."
     docker run -d \
       --name redis-prod \
       --restart unless-stopped \
       --network geosegbar-network \
       redis:7-alpine \
       redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
-      
-    echo "⏳ Aguardando Redis inicializar..."
     sleep 5
+}
+
+REDIS_RUNNING=$(docker ps --format '{{.Names}}' | grep -q '^redis-prod$' && echo "yes" || echo "no")
+REDIS_EXISTS=$(docker ps -a --format '{{.Names}}' | grep -q '^redis-prod$' && echo "yes" || echo "no")
+
+if [ "$REDIS_RUNNING" = "yes" ]; then
+    echo "✅ Redis já está rodando"
+elif [ "$REDIS_EXISTS" = "yes" ]; then
+    echo "🔄 Container do Redis existe mas está parado. Reiniciando..."
+    docker network connect geosegbar-network redis-prod 2>/dev/null || true
+    docker start redis-prod
+    sleep 5
+    echo "✅ Redis reiniciado"
+else
+    echo "📦 Container do Redis não encontrado. Criando..."
+    _start_redis
     echo "✅ Redis iniciado"
+fi
+
+# Testa conectividade real do Redis na geosegbar-network
+echo "🔍 Verificando conectividade do Redis na geosegbar-network..."
+if docker run --rm --network geosegbar-network redis:7-alpine \
+    redis-cli -h redis-prod ping 2>/dev/null | grep -q "PONG"; then
+    echo "✅ Redis acessível"
+else
+    echo "⚠️ Redis não respondeu ao ping. Forçando recriação na rede correta..."
+    docker rm -f redis-prod 2>/dev/null || true
+    _start_redis
+    if docker run --rm --network geosegbar-network redis:7-alpine \
+        redis-cli -h redis-prod ping 2>/dev/null | grep -q "PONG"; then
+        echo "✅ Redis acessível após recriação"
+    else
+        echo "❌ ERRO: Redis não está acessível em geosegbar-network!"
+        echo "💡 Debug: docker network inspect geosegbar-network"
+        exit 1
+    fi
 fi
 
 # ============================================

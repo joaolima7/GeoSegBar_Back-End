@@ -19,6 +19,8 @@ import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.file_storage.FileStorageService;
 import com.geosegbar.infra.section.dtos.CreateSectionDTO;
+import com.geosegbar.infra.section.dtos.DamSummaryDTO;
+import com.geosegbar.infra.section.dtos.SectionResponseDTO;
 import com.geosegbar.infra.section.persistence.jpa.SectionRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -34,48 +36,73 @@ public class SectionService {
     private final FileStorageService fileStorageService;
 
     @Transactional(readOnly = true)
-    public List<SectionEntity> findAll() {
+    public List<SectionResponseDTO> getSectionsByFilters(Long damId, Long sectionId, boolean withDam) {
+        checkViewPermission();
+
+        List<SectionEntity> sections;
+
+        if (withDam) {
+            if (sectionId != null) {
+                // findById já usa EntityGraph com dam
+                SectionEntity section = sectionRepository.findById(sectionId)
+                        .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + sectionId));
+                sections = List.of(section);
+            } else if (damId != null) {
+                sections = sectionRepository.findByDamIdWithDam(damId);
+            } else {
+                sections = sectionRepository.findAllOrderedWithDam();
+            }
+        } else {
+            if (sectionId != null) {
+                // query sem dam — LAZY não carregada
+                SectionEntity section = sectionRepository.findByIdNoDam(sectionId)
+                        .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + sectionId));
+                sections = List.of(section);
+            } else if (damId != null) {
+                sections = sectionRepository.findByDamId(damId);
+            } else {
+                sections = sectionRepository.findAllOrdered();
+            }
+        }
+
+        return sections.stream()
+                .map(s -> toResponseDTO(s, withDam))
+                .toList();
+    }
+
+    private SectionResponseDTO toResponseDTO(SectionEntity section, boolean withDam) {
+        DamSummaryDTO damSummary = null;
+        if (withDam && section.getDam() != null) {
+            damSummary = new DamSummaryDTO(section.getDam().getId(), section.getDam().getName());
+        }
+        return new SectionResponseDTO(
+                section.getId(),
+                section.getName(),
+                section.getFilePath(),
+                section.getFirstVertexLatitude(),
+                section.getSecondVertexLatitude(),
+                section.getFirstVertexLongitude(),
+                section.getSecondVertexLongitude(),
+                damSummary);
+    }
+
+    private void checkViewPermission() {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getInstrumentationPermission().getViewSections()) {
                 throw new UnauthorizedException("Usuário não autorizado a visualizar seções!");
             }
         }
-
-        return sectionRepository.findAllByOrderByNameAsc();
     }
 
     @Transactional(readOnly = true)
     public SectionEntity findById(Long id) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getViewSections()) {
-                throw new UnauthorizedException("Usuário não autorizado a visualizar seções!");
-            }
-        }
         return sectionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + id));
     }
 
     @Transactional(readOnly = true)
-    public List<SectionEntity> findAllByDamId(Long damId) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getViewSections()) {
-                throw new UnauthorizedException("Usuário não autorizado a visualizar seções!");
-            }
-        }
-        return sectionRepository.findAllByDamId(damId);
-    }
-
-    @Transactional(readOnly = true)
     public Optional<SectionEntity> findByName(String name) {
-        if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
-            if (!userLogged.getInstrumentationPermission().getViewSections()) {
-                throw new UnauthorizedException("Usuário não autorizado a visualizar seções!");
-            }
-        }
         return sectionRepository.findByName(name);
     }
 

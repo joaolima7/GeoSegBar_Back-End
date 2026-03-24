@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -19,6 +20,7 @@ import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.SectionEntity;
 import com.geosegbar.infra.dam.services.DamService;
 import com.geosegbar.infra.section.dtos.CreateSectionDTO;
+import com.geosegbar.infra.section.dtos.SectionResponseDTO;
 import com.geosegbar.infra.section.services.SectionService;
 
 import jakarta.validation.Valid;
@@ -33,21 +35,12 @@ public class SectionController {
     private final DamService damService;
 
     @GetMapping
-    public ResponseEntity<WebResponseEntity<List<SectionEntity>>> getAllSections() {
-        List<SectionEntity> sections = sectionService.findAll();
+    public ResponseEntity<WebResponseEntity<List<SectionResponseDTO>>> getSectionsByFilters(
+            @RequestParam(required = false) Long damId,
+            @RequestParam(required = false) Long sectionId,
+            @RequestParam(defaultValue = "false") boolean withDam) {
+        List<SectionResponseDTO> sections = sectionService.getSectionsByFilters(damId, sectionId, withDam);
         return ResponseEntity.ok(WebResponseEntity.success(sections, "Seções obtidas com sucesso!"));
-    }
-
-    @GetMapping("/{id}")
-    public ResponseEntity<WebResponseEntity<SectionEntity>> getSectionById(@PathVariable Long id) {
-        SectionEntity section = sectionService.findById(id);
-        return ResponseEntity.ok(WebResponseEntity.success(section, "Seção obtida com sucesso!"));
-    }
-
-    @GetMapping("/dam/{damId}")
-    public ResponseEntity<WebResponseEntity<List<SectionEntity>>> getSectionsByDamId(@PathVariable Long damId) {
-        List<SectionEntity> sections = sectionService.findAllByDamId(damId);
-        return ResponseEntity.ok(WebResponseEntity.success(sections, "Seções da barragem obtidas com sucesso!"));
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

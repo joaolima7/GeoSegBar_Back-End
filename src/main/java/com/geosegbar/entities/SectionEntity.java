@@ -63,7 +63,7 @@ public class SectionEntity {
     @Column(nullable = false)
     private Double secondVertexLongitude;
 
-    @ManyToOne(fetch = FetchType.EAGER, optional = true)
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
     @JoinColumn(name = "dam_id", nullable = true)
     @JsonIgnoreProperties("sections")
     private DamEntity dam;

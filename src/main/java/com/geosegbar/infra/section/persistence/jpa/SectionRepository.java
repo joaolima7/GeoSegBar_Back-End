@@ -25,6 +25,11 @@ public interface SectionRepository extends JpaRepository<SectionEntity, Long> {
     @Query("SELECT s FROM SectionEntity s WHERE s.dam.id = :damId ORDER BY s.name ASC")
     List<SectionEntity> findByDamId(@Param("damId") Long damId);
 
+    // Alias mantido para compatibilidade com BulkInstrumentImportService
+    default List<SectionEntity> findAllByDamId(Long damId) {
+        return findByDamId(damId);
+    }
+
     @Query("SELECT s FROM SectionEntity s WHERE s.id = :id")
     Optional<SectionEntity> findByIdNoDam(@Param("id") Long id);
 

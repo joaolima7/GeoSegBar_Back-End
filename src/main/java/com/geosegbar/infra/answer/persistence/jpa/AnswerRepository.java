@@ -33,6 +33,13 @@ public interface AnswerRepository extends JpaRepository<AnswerEntity, Long> {
     @Query("SELECT a FROM AnswerEntity a WHERE a.question.id = :questionId")
     List<AnswerEntity> findByQuestionIdWithDetails(@Param("questionId") Long questionId);
 
+    @EntityGraph(attributePaths = {"question", "selectedOptions"})
+    @Query("SELECT a FROM AnswerEntity a WHERE a.id IN :answerIds " +
+           "AND a.questionnaireResponse.checklistResponse.id = :checklistResponseId")
+    List<AnswerEntity> findByIdsAndChecklistResponseId(
+            @Param("answerIds") List<Long> answerIds,
+            @Param("checklistResponseId") Long checklistResponseId);
+
     @Query("SELECT a FROM AnswerEntity a "
             + "LEFT JOIN FETCH a.selectedOptions o "
             + "WHERE a.questionnaireResponse.dam.id = :damId "

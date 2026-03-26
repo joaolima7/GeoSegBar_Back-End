@@ -1,26 +1,33 @@
 package com.geosegbar.infra.checklist_response.services;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-
 import com.geosegbar.entities.AnswerEntity;
 import com.geosegbar.entities.ChecklistResponseEntity;
 import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.DamEntity;
+import com.geosegbar.entities.OptionEntity;
 import com.geosegbar.entities.QuestionEntity;
 import com.geosegbar.entities.QuestionnaireResponseEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
+import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.answer.persistence.jpa.AnswerRepository;
+import com.geosegbar.infra.checklist_response.dtos.AnswerUpdateDTO;
 import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseDetailDTO;
+import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseUpdateDTO;
 import com.geosegbar.infra.checklist_response.dtos.ClientDetailedChecklistResponsesDTO;
 import com.geosegbar.infra.checklist_response.dtos.DamInfoDTO;
 import com.geosegbar.infra.checklist_response.dtos.DamLastChecklistDTO;
@@ -32,6 +39,7 @@ import com.geosegbar.infra.checklist_response.dtos.TemplateWithAnswersDTO;
 import com.geosegbar.infra.checklist_response.persistence.jpa.ChecklistResponseRepository;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.services.DamService;
+import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
 import com.geosegbar.infra.questionnaire_response.persistence.jpa.QuestionnaireResponseRepository;
 
 import jakarta.transaction.Transactional;
@@ -43,6 +51,8 @@ public class ChecklistResponseService {
 
     private final ChecklistResponseRepository checklistResponseRepository;
     private final QuestionnaireResponseRepository questionnaireResponseRepository;
+    private final AnswerRepository answerRepository;
+    private final OptionRepository optionRepository;
     private final DamService damService;
     private final ClientRepository clientRepository;
 
@@ -102,6 +112,82 @@ public class ChecklistResponseService {
             throw new NotFoundException("Resposta de Checklist não encontrada para exclusão!");
         }
         checklistResponseRepository.deleteById(id);
+    }
+
+    @Transactional
+    public void updateChecklistResponse(Long checklistResponseId, ChecklistResponseUpdateDTO dto) {
+
+        if (!checklistResponseRepository.existsById(checklistResponseId)) {
+            throw new NotFoundException("Resposta de Checklist não encontrada para id: " + checklistResponseId);
+        }
+
+        boolean hasTopLevelChanges = dto.getUpstreamLevel() != null
+                || dto.getDownstreamLevel() != null
+                || dto.getSpilledFlow() != null
+                || dto.getTurbinedFlow() != null
+                || dto.getAccumulatedRainfall() != null
+                || dto.getWeatherCondition() != null;
+
+        if (hasTopLevelChanges) {
+            checklistResponseRepository.updateTopLevelFields(
+                    checklistResponseId,
+                    formatToTwoDecimals(dto.getUpstreamLevel()),
+                    formatToTwoDecimals(dto.getDownstreamLevel()),
+                    formatToTwoDecimals(dto.getSpilledFlow()),
+                    formatToTwoDecimals(dto.getTurbinedFlow()),
+                    formatToTwoDecimals(dto.getAccumulatedRainfall()),
+                    dto.getWeatherCondition());
+        }
+
+        if (dto.getAnswers() != null && !dto.getAnswers().isEmpty()) {
+            updateAnswers(checklistResponseId, dto.getAnswers());
+        }
+    }
+
+    private void updateAnswers(Long checklistResponseId, List<AnswerUpdateDTO> answerUpdates) {
+
+        List<Long> answerIds = answerUpdates.stream()
+                .map(AnswerUpdateDTO::getAnswerId)
+                .collect(Collectors.toList());
+
+        List<AnswerEntity> answers = answerRepository.findByIdsAndChecklistResponseId(answerIds, checklistResponseId);
+
+        if (answers.size() != answerIds.size()) {
+            Set<Long> foundIds = answers.stream().map(AnswerEntity::getId).collect(Collectors.toSet());
+            List<Long> missingIds = answerIds.stream().filter(id -> !foundIds.contains(id)).collect(Collectors.toList());
+            throw new InvalidInputException(
+                    "Respostas não encontradas ou não pertencem a esta resposta de checklist: " + missingIds);
+        }
+
+        Map<Long, AnswerEntity> answerMap = answers.stream()
+                .collect(Collectors.toMap(AnswerEntity::getId, a -> a));
+
+        Set<Long> allOptionIds = answerUpdates.stream()
+                .map(AnswerUpdateDTO::getSelectedOptionId)
+                .collect(Collectors.toSet());
+
+        List<OptionEntity> options = optionRepository.findAllById(new ArrayList<>(allOptionIds));
+        Map<Long, OptionEntity> optionMap = options.stream()
+                .collect(Collectors.toMap(OptionEntity::getId, o -> o));
+
+        if (optionMap.size() != allOptionIds.size()) {
+            List<Long> missingOptionIds = allOptionIds.stream()
+                    .filter(id -> !optionMap.containsKey(id)).collect(Collectors.toList());
+            throw new NotFoundException("Opções não encontradas: " + missingOptionIds);
+        }
+
+        for (AnswerUpdateDTO updateDto : answerUpdates) {
+            AnswerEntity answer = answerMap.get(updateDto.getAnswerId());
+            OptionEntity newOption = optionMap.get(updateDto.getSelectedOptionId());
+
+            answer.getSelectedOptions().clear();
+            answer.getSelectedOptions().add(newOption);
+        }
+    }
+
+    private Double formatToTwoDecimals(Double value) {
+        if (value == null) return null;
+        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)

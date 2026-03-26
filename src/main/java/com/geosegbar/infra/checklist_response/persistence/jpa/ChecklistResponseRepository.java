@@ -8,9 +8,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+
+import com.geosegbar.common.enums.WeatherConditionEnum;
 
 import com.geosegbar.entities.ChecklistResponseEntity;
 import com.geosegbar.infra.dashboard.projections.CategoryCountProjection;
@@ -97,6 +100,24 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
     List<Long> findLatestChecklistResponseIdsByClientIdAndLimit(
             @Param("clientId") Long clientId,
             @Param("limit") int limit);
+
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE ChecklistResponseEntity cr SET " +
+           "cr.upstreamLevel = COALESCE(:upstreamLevel, cr.upstreamLevel), " +
+           "cr.downstreamLevel = COALESCE(:downstreamLevel, cr.downstreamLevel), " +
+           "cr.spilledFlow = COALESCE(:spilledFlow, cr.spilledFlow), " +
+           "cr.turbinedFlow = COALESCE(:turbinedFlow, cr.turbinedFlow), " +
+           "cr.accumulatedRainfall = COALESCE(:accumulatedRainfall, cr.accumulatedRainfall), " +
+           "cr.weatherCondition = COALESCE(:weatherCondition, cr.weatherCondition) " +
+           "WHERE cr.id = :id")
+    int updateTopLevelFields(
+            @Param("id") Long id,
+            @Param("upstreamLevel") Double upstreamLevel,
+            @Param("downstreamLevel") Double downstreamLevel,
+            @Param("spilledFlow") Double spilledFlow,
+            @Param("turbinedFlow") Double turbinedFlow,
+            @Param("accumulatedRainfall") Double accumulatedRainfall,
+            @Param("weatherCondition") WeatherConditionEnum weatherCondition);
 
     boolean existsByUser_Id(Long userId);
 

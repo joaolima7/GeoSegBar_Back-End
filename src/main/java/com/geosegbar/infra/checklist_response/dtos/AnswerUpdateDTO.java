@@ -1,5 +1,9 @@
 package com.geosegbar.infra.checklist_response.dtos;
 
+import java.util.List;
+
+import com.geosegbar.infra.checklist_submission.dtos.PhotoSubmissionDTO;
+
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.AllArgsConstructor;
@@ -18,4 +22,10 @@ public class AnswerUpdateDTO {
     @NotNull(message = "ID da opção selecionada é obrigatório!")
     @Positive(message = "ID da opção deve ser um número positivo!")
     private Long selectedOptionId;
+
+    // null = manter existente; string vazia = limpar
+    private String comment;
+
+    // null = manter fotos existentes; lista (vazia ou com itens) = substituir todas as fotos
+    private List<PhotoSubmissionDTO> photos;
 }

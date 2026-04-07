@@ -5,6 +5,8 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,7 +16,10 @@ import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+
+import com.geosegbar.common.utils.ChecklistOptionTransitionValidator;
 import com.geosegbar.entities.AnswerEntity;
+import com.geosegbar.entities.AnswerPhotoEntity;
 import com.geosegbar.entities.ChecklistResponseEntity;
 import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.DamEntity;
@@ -22,9 +27,11 @@ import com.geosegbar.entities.OptionEntity;
 import com.geosegbar.entities.QuestionEntity;
 import com.geosegbar.entities.QuestionnaireResponseEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
+import com.geosegbar.exceptions.FileStorageException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.answer.persistence.jpa.AnswerRepository;
+import com.geosegbar.infra.answer_photo.persistence.jpa.AnswerPhotoRepository;
 import com.geosegbar.infra.checklist_response.dtos.AnswerUpdateDTO;
 import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseDetailDTO;
 import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseUpdateDTO;
@@ -37,8 +44,10 @@ import com.geosegbar.infra.checklist_response.dtos.PhotoInfoDTO;
 import com.geosegbar.infra.checklist_response.dtos.QuestionWithAnswerDTO;
 import com.geosegbar.infra.checklist_response.dtos.TemplateWithAnswersDTO;
 import com.geosegbar.infra.checklist_response.persistence.jpa.ChecklistResponseRepository;
+import com.geosegbar.infra.checklist_submission.dtos.PhotoSubmissionDTO;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.services.DamService;
+import com.geosegbar.infra.file_storage.FileStorageService;
 import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
 import com.geosegbar.infra.questionnaire_response.persistence.jpa.QuestionnaireResponseRepository;
 
@@ -52,7 +61,9 @@ public class ChecklistResponseService {
     private final ChecklistResponseRepository checklistResponseRepository;
     private final QuestionnaireResponseRepository questionnaireResponseRepository;
     private final AnswerRepository answerRepository;
+    private final AnswerPhotoRepository answerPhotoRepository;
     private final OptionRepository optionRepository;
+    private final FileStorageService fileStorageService;
     private final DamService damService;
     private final ClientRepository clientRepository;
 
@@ -117,9 +128,8 @@ public class ChecklistResponseService {
     @Transactional
     public void updateChecklistResponse(Long checklistResponseId, ChecklistResponseUpdateDTO dto) {
 
-        if (!checklistResponseRepository.existsById(checklistResponseId)) {
-            throw new NotFoundException("Resposta de Checklist não encontrada para id: " + checklistResponseId);
-        }
+        ChecklistResponseEntity checklistResponse = checklistResponseRepository.findByIdWithBasicInfo(checklistResponseId)
+                .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para id: " + checklistResponseId));
 
         boolean hasTopLevelChanges = dto.getUpstreamLevel() != null
                 || dto.getDownstreamLevel() != null
@@ -140,11 +150,12 @@ public class ChecklistResponseService {
         }
 
         if (dto.getAnswers() != null && !dto.getAnswers().isEmpty()) {
-            updateAnswers(checklistResponseId, dto.getAnswers());
+            updateAnswers(checklistResponse, dto.getAnswers());
         }
     }
 
-    private void updateAnswers(Long checklistResponseId, List<AnswerUpdateDTO> answerUpdates) {
+    private void updateAnswers(ChecklistResponseEntity checklistResponse, List<AnswerUpdateDTO> answerUpdates) {
+        Long checklistResponseId = checklistResponse.getId();
 
         List<Long> answerIds = answerUpdates.stream()
                 .map(AnswerUpdateDTO::getAnswerId)
@@ -176,12 +187,88 @@ public class ChecklistResponseService {
             throw new NotFoundException("Opções não encontradas: " + missingOptionIds);
         }
 
+        List<Long> questionIds = answers.stream()
+                .map(a -> a.getQuestion().getId())
+                .collect(Collectors.toList());
+
+        Map<Long, String> previousLabels = new HashMap<>();
+        List<Object[]> prevResults = answerRepository.findPreviousOptionLabels(
+                questionIds,
+                checklistResponse.getDam().getId(),
+                checklistResponse.getChecklistId(),
+                checklistResponse.getCreatedAt());
+        for (Object[] row : prevResults) {
+            previousLabels.put((Long) row[0], (String) row[1]);
+        }
+
         for (AnswerUpdateDTO updateDto : answerUpdates) {
             AnswerEntity answer = answerMap.get(updateDto.getAnswerId());
             OptionEntity newOption = optionMap.get(updateDto.getSelectedOptionId());
+            String newLabel = newOption.getLabel();
+            String questionText = answer.getQuestion().getQuestionText();
 
+            String previousLabel = previousLabels.get(answer.getQuestion().getId());
+            ChecklistOptionTransitionValidator.validateTransition(previousLabel, newLabel, questionText);
+
+            // Determina valores efetivos pos-update para validacao de evidencia
+            String effectiveComment = updateDto.getComment() != null ? updateDto.getComment() : answer.getComment();
+            boolean effectiveHasPhotos;
+            if (updateDto.getPhotos() != null) {
+                effectiveHasPhotos = !updateDto.getPhotos().isEmpty();
+            } else {
+                effectiveHasPhotos = answer.getPhotos() != null && !answer.getPhotos().isEmpty();
+            }
+
+            ChecklistOptionTransitionValidator.validateEvidence(newLabel, effectiveComment, effectiveHasPhotos, questionText);
+
+            // Aplica opcao selecionada
             answer.getSelectedOptions().clear();
             answer.getSelectedOptions().add(newOption);
+
+            // Aplica comentario se enviado
+            if (updateDto.getComment() != null) {
+                answer.setComment(updateDto.getComment());
+            }
+
+            // Aplica fotos se enviadas: apaga antigas do S3 + DB e salva novas
+            if (updateDto.getPhotos() != null) {
+                replaceAnswerPhotos(answer, updateDto.getPhotos());
+            }
+        }
+    }
+
+    private void replaceAnswerPhotos(AnswerEntity answer, List<PhotoSubmissionDTO> newPhotos) {
+        // Apaga fotos antigas do S3 e do banco
+        List<AnswerPhotoEntity> existingPhotos = answerPhotoRepository.findByAnswerId(answer.getId());
+        for (AnswerPhotoEntity existing : existingPhotos) {
+            fileStorageService.deleteFile(existing.getImagePath());
+        }
+        answerPhotoRepository.deleteAll(existingPhotos);
+        answer.getPhotos().clear();
+
+        // Salva novas fotos
+        for (PhotoSubmissionDTO photoDto : newPhotos) {
+            try {
+                String base64Image = photoDto.getBase64Image();
+                if (base64Image != null && base64Image.contains(",")) {
+                    base64Image = base64Image.split(",")[1];
+                }
+                byte[] imageBytes = Base64.getDecoder().decode(base64Image);
+
+                String photoUrl = fileStorageService.storeFileFromBytes(
+                        imageBytes,
+                        photoDto.getFileName(),
+                        photoDto.getContentType(),
+                        "answer-photos");
+
+                AnswerPhotoEntity photo = new AnswerPhotoEntity();
+                photo.setAnswer(answer);
+                photo.setImagePath(photoUrl);
+                answerPhotoRepository.save(photo);
+                answer.getPhotos().add(photo);
+            } catch (Exception e) {
+                throw new FileStorageException("Erro ao processar imagem: " + e.getMessage());
+            }
         }
     }
 

@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.common.enums.AnomalyOriginEnum;
+import com.geosegbar.common.utils.ChecklistOptionTransitionValidator;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.AnomalyEntity;
 import com.geosegbar.entities.AnomalyPhotoEntity;
@@ -125,6 +126,8 @@ public class ChecklistResponseSubmissionService {
 
         validatePVAnswersHaveRequiredFields(submissionDto, optionsCache);
 
+        validateOptionTransitions(submissionDto, optionsCache);
+
         for (QuestionnaireResponseSubmissionDTO questionnaireDto : submissionDto.getQuestionnaireResponses()) {
             validateAllQuestionsAnswered(questionnaireDto);
 
@@ -221,6 +224,42 @@ public class ChecklistResponseSubmissionService {
                             .orElseThrow(() -> new NotFoundException("Pergunta não encontrada: " + answerDto.getQuestionId()));
 
                     pvAnswerValidator.validatePVAnswer(answerDto, question.getQuestionText(), optionsCache);
+                }
+            }
+        }
+    }
+
+    private void validateOptionTransitions(ChecklistResponseSubmissionDTO submissionDto, Map<Long, String> optionsCache) {
+        List<Long> allQuestionIds = submissionDto.getQuestionnaireResponses().stream()
+                .flatMap(q -> q.getAnswers().stream())
+                .map(AnswerSubmissionDTO::getQuestionId)
+                .collect(Collectors.toList());
+
+        List<Object[]> prevResults = answerRepository.findLatestOptionLabels(
+                allQuestionIds,
+                submissionDto.getDamId(),
+                submissionDto.getChecklistId());
+
+        Map<Long, String> previousLabels = new java.util.HashMap<>();
+        for (Object[] row : prevResults) {
+            previousLabels.put((Long) row[0], (String) row[1]);
+        }
+
+        Map<Long, String> questionTexts = questionRepository.findAllById(allQuestionIds).stream()
+                .collect(Collectors.toMap(QuestionEntity::getId, QuestionEntity::getQuestionText));
+
+        for (QuestionnaireResponseSubmissionDTO qDto : submissionDto.getQuestionnaireResponses()) {
+            for (AnswerSubmissionDTO answerDto : qDto.getAnswers()) {
+                if (answerDto.getSelectedOptionIds() != null) {
+                    String previousLabel = previousLabels.get(answerDto.getQuestionId());
+                    String questionText = questionTexts.getOrDefault(answerDto.getQuestionId(), "Desconhecida");
+
+                    for (Long optionId : answerDto.getSelectedOptionIds()) {
+                        String newLabel = optionsCache.get(optionId);
+                        if (newLabel != null) {
+                            ChecklistOptionTransitionValidator.validateTransition(previousLabel, newLabel, questionText);
+                        }
+                    }
                 }
             }
         }

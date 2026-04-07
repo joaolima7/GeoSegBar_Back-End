@@ -1,5 +1,6 @@
 package com.geosegbar.infra.answer.persistence.jpa;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -11,8 +12,6 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.geosegbar.entities.AnswerEntity;
-
-import jakarta.persistence.EntityManager;
 
 @Repository
 public interface AnswerRepository extends JpaRepository<AnswerEntity, Long> {
@@ -33,12 +32,42 @@ public interface AnswerRepository extends JpaRepository<AnswerEntity, Long> {
     @Query("SELECT a FROM AnswerEntity a WHERE a.question.id = :questionId")
     List<AnswerEntity> findByQuestionIdWithDetails(@Param("questionId") Long questionId);
 
-    @EntityGraph(attributePaths = {"question", "selectedOptions"})
+    @EntityGraph(attributePaths = {"question", "selectedOptions", "photos"})
     @Query("SELECT a FROM AnswerEntity a WHERE a.id IN :answerIds " +
            "AND a.questionnaireResponse.checklistResponse.id = :checklistResponseId")
     List<AnswerEntity> findByIdsAndChecklistResponseId(
             @Param("answerIds") List<Long> answerIds,
             @Param("checklistResponseId") Long checklistResponseId);
+
+    @Query("SELECT a.question.id, o.label FROM AnswerEntity a " +
+           "JOIN a.selectedOptions o " +
+           "WHERE a.question.id IN :questionIds " +
+           "AND a.questionnaireResponse.checklistResponse.dam.id = :damId " +
+           "AND a.questionnaireResponse.checklistResponse.checklistId = :checklistId " +
+           "AND a.questionnaireResponse.checklistResponse.createdAt = (" +
+           "  SELECT MAX(cr2.createdAt) FROM ChecklistResponseEntity cr2 " +
+           "  WHERE cr2.dam.id = :damId " +
+           "  AND cr2.checklistId = :checklistId " +
+           "  AND cr2.createdAt < :beforeDate)")
+    List<Object[]> findPreviousOptionLabels(
+            @Param("questionIds") List<Long> questionIds,
+            @Param("damId") Long damId,
+            @Param("checklistId") Long checklistId,
+            @Param("beforeDate") LocalDateTime beforeDate);
+
+    @Query("SELECT a.question.id, o.label FROM AnswerEntity a " +
+           "JOIN a.selectedOptions o " +
+           "WHERE a.question.id IN :questionIds " +
+           "AND a.questionnaireResponse.checklistResponse.dam.id = :damId " +
+           "AND a.questionnaireResponse.checklistResponse.checklistId = :checklistId " +
+           "AND a.questionnaireResponse.checklistResponse.createdAt = (" +
+           "  SELECT MAX(cr2.createdAt) FROM ChecklistResponseEntity cr2 " +
+           "  WHERE cr2.dam.id = :damId " +
+           "  AND cr2.checklistId = :checklistId)")
+    List<Object[]> findLatestOptionLabels(
+            @Param("questionIds") List<Long> questionIds,
+            @Param("damId") Long damId,
+            @Param("checklistId") Long checklistId);
 
     @Query("SELECT a FROM AnswerEntity a "
             + "LEFT JOIN FETCH a.selectedOptions o "

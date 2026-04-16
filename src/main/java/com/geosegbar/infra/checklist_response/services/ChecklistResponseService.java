@@ -6,7 +6,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -238,12 +237,12 @@ public class ChecklistResponseService {
     }
 
     private void replaceAnswerPhotos(AnswerEntity answer, List<PhotoSubmissionDTO> newPhotos) {
-        // Apaga fotos antigas do S3 e do banco
-        List<AnswerPhotoEntity> existingPhotos = answerPhotoRepository.findByAnswerId(answer.getId());
-        for (AnswerPhotoEntity existing : existingPhotos) {
+        // Usa a coleção já carregada pelo EntityGraph para deletar do S3
+        // (evita query extra via findByAnswerId)
+        for (AnswerPhotoEntity existing : new ArrayList<>(answer.getPhotos())) {
             fileStorageService.deleteFile(existing.getImagePath());
         }
-        answerPhotoRepository.deleteAll(existingPhotos);
+        // orphanRemoval=true cuida do DELETE no banco ao limpar a coleção
         answer.getPhotos().clear();
 
         // Salva novas fotos

@@ -8,9 +8,7 @@ services:
       POSTGRES_USER: ${DB_USERNAME}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       TZ: ${TZ}
-    # Se quiser expor externamente (não recomendado), deixe: - "${DB_PORT}:5432"
-    # Melhor: só expor para localhost:
-    # - "127.0.0.1:${DB_PORT}:5432"
+
     ports:
       - "${DB_PORT}:5432"
     volumes:
@@ -18,7 +16,7 @@ services:
     networks:
       - geosegbar-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,7 +26,8 @@ services:
     container_name: postgres-exporter-prod
     restart: always
     environment:
-      DATA_SOURCE_NAME: "postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres-prod:5432/${DB_NAME}?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres-prod:543\
+        2/${DB_NAME}?sslmode=disable"
     ports:
       - "9187:9187"
     networks:
@@ -41,7 +40,8 @@ services:
     image: redis:7-alpine
     container_name: geosegbar-redis-prod
     restart: always
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy
+      allkeys-lru
     ports:
       - "6379:6379"
     volumes:
@@ -49,7 +49,7 @@ services:
     networks:
       - geosegbar-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -75,7 +75,6 @@ services:
       - DB_HOST=postgres-prod
     env_file:
       - .env.prod
-    # Porta exposta apenas internamente (nginx faz o proxy)
     expose:
       - "9090"
     networks:

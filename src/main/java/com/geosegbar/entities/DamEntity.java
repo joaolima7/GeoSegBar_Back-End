@@ -145,6 +145,10 @@ public class DamEntity {
     @JsonIgnoreProperties({"dam"})
     private DocumentationDamEntity documentationDam;
 
+    @OneToOne(mappedBy = "dam", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnoreProperties({"dam"})
+    private PAEEntity pae;
+
     @OneToOne(mappedBy = "dam", fetch = FetchType.LAZY)
     @JsonIgnore
     private ChecklistEntity checklist;

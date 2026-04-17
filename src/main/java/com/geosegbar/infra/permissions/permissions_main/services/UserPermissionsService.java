@@ -145,6 +145,9 @@ public class UserPermissionsService {
         if (updateDTO.getEditGeralData() != null) {
             permission.setEditGeralData(updateDTO.getEditGeralData());
         }
+        if (updateDTO.getEditPAE() != null) {
+            permission.setEditPAE(updateDTO.getEditPAE());
+        }
 
         attributionsPermissionRepository.save(permission);
     }

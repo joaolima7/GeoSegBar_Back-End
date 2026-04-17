@@ -47,4 +47,7 @@ public class AttributionsPermissionEntity {
 
     @Column(name = "edit_geral_data", nullable = false)
     private Boolean editGeralData = false;
+
+    @Column(name = "edit_pae", nullable = false, columnDefinition = "boolean default false")
+    private Boolean editPAE = false;
 }

@@ -31,6 +31,7 @@ public class UserPermissionsUpdateDTO {
         private Boolean editUser;
         private Boolean editDam;
         private Boolean editGeralData;
+        private Boolean editPAE;
     }
 
     @Data

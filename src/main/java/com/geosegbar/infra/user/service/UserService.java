@@ -99,6 +99,15 @@ public class UserService {
     @Value("${application.system-user-email}")
     private String systemUserEmail;
 
+    @Value("${application.somosdevs-user1-email}")
+    private String somosDevsUser1Email;
+
+    @Value("${application.somosdevs-user2-email}")
+    private String somosDevsUser2Email;
+
+    @Value("${application.somosdevs-user3-email}")
+    private String somosDevsUser3Email;
+
     @Value("${application.system-user-password}")
     private String systemUserPassword;
 
@@ -109,28 +118,52 @@ public class UserService {
         try {
             if (userRepository.existsByEmail(systemUserEmail)) {
                 log.info("Usuário do sistema já existe.");
-                return;
-            }
-
-            if (userRepository.existsByName(systemUserName)) {
+            } else if (userRepository.existsByName(systemUserName)) {
                 log.warn("Já existe um usuário com o nome SISTEMA.");
-                return;
+            } else {
+                UserEntity systemUser = new UserEntity();
+                systemUser.setName(systemUserName);
+                systemUser.setEmail(systemUserEmail);
+                systemUser.setPassword(passwordEncoder.encode(systemUserPassword));
+                systemUser.setStatus(statusRepository.findByStatus(StatusEnum.ACTIVE).orElseThrow());
+                systemUser.setRole(roleRepository.findByName(RoleEnum.ADMIN).orElseThrow());
+                systemUser.setSex(sexRepository.findAll().stream().findFirst().orElseThrow());
+                userRepository.save(systemUser);
+                log.info("Usuário do sistema criado.");
             }
-
-            UserEntity systemUser = new UserEntity();
-            systemUser.setName(systemUserName);
-            systemUser.setEmail(systemUserEmail);
-            systemUser.setPassword(passwordEncoder.encode(systemUserPassword));
-
-            systemUser.setStatus(statusRepository.findByStatus(StatusEnum.ACTIVE).orElseThrow());
-            systemUser.setRole(roleRepository.findByName(RoleEnum.ADMIN).orElseThrow());
-            systemUser.setSex(sexRepository.findAll().stream().findFirst().orElseThrow());
-
-            userRepository.save(systemUser);
-            log.info("Usuário do sistema criado.");
-
         } catch (Exception e) {
             log.error("Erro ao criar usuário do sistema: {}", e.getMessage());
+        }
+
+        createAdminUserIfNotExists("João Caetano - ADM SomosDevs", somosDevsUser1Email);
+        createAdminUserIfNotExists("Gabriel Pereira - ADM SomosDevs", somosDevsUser2Email);
+        createAdminUserIfNotExists("Marcos Estremote - ADM SomosDevs", somosDevsUser3Email);
+    }
+
+    private void createAdminUserIfNotExists(String name, String email) {
+        try {
+            if (userRepository.existsByEmail(email)) {
+                log.info("Usuário admin {} já existe.", email);
+                return;
+            }
+
+            UserEntity adminUser = new UserEntity();
+            adminUser.setName(name);
+            adminUser.setEmail(email);
+            adminUser.setStatus(statusRepository.findByStatus(StatusEnum.ACTIVE).orElseThrow());
+            adminUser.setRole(roleRepository.findByName(RoleEnum.ADMIN).orElseThrow());
+            adminUser.setSex(sexRepository.findAll().stream().findFirst().orElseThrow());
+
+            String generatedPassword = GenerateRandomPassword.execute();
+            adminUser.setPassword(passwordEncoder.encode(generatedPassword));
+            adminUser.setIsFirstAccess(true);
+
+            UserEntity saved = userRepository.save(adminUser);
+            emailService.sendFirstAccessPassword(saved.getEmail(), generatedPassword, saved.getName());
+
+            log.info("Usuário admin {} criado com sucesso.", email);
+        } catch (Exception e) {
+            log.error("Erro ao criar usuário admin {}: {}", email, e.getMessage());
         }
     }
 
@@ -554,19 +587,7 @@ public class UserService {
         }
 
         if (isSystemUser(authUser)) {
-
-            UserEntity fullUser = userRepository.findByEmailWithAllPermissions(userDTO.email())
-                    .orElseThrow(() -> new NotFoundException("Erro ao carregar perfil do usuário"));
-
-            String token = tokenService.generateToken(fullUser);
-
-            updateLastLoginAsync(fullUser.getId(), token);
-
-            return new LoginResponseDTO(
-                    fullUser.getId(), fullUser.getName(), fullUser.getEmail(), fullUser.getPhone(),
-                    fullUser.getSex(), fullUser.getRole().getName(), fullUser.getIsFirstAccess(),
-                    token, new ArrayList<>(fullUser.getClients())
-            );
+            throw new InvalidInputException("Credenciais incorretas!");
         }
 
         String verificationCode = GenerateRandomCode.generateRandomCode();

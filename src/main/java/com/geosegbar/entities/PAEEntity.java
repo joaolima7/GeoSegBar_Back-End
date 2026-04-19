@@ -1,8 +1,8 @@
 package com.geosegbar.entities;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
@@ -86,9 +86,9 @@ public class PAEEntity {
 
     @OneToMany(mappedBy = "pae", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JsonIgnoreProperties("pae")
-    private List<PAEProtectionElementEntity> protectionElements = new ArrayList<>();
+    private Set<PAEProtectionElementEntity> protectionElements = new HashSet<>();
 
     @OneToMany(mappedBy = "pae", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JsonIgnoreProperties("pae")
-    private List<PAEZoneContactEntity> contacts = new ArrayList<>();
+    private Set<PAEZoneContactEntity> contacts = new HashSet<>();
 }

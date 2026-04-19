@@ -561,6 +561,10 @@ public class UserService {
     @Transactional
     public Object initiateLogin(LoginRequestDTO userDTO) {
 
+        if (systemUserEmail.equalsIgnoreCase(userDTO.email())) {
+            throw new InvalidInputException("Credenciais incorretas!");
+        }
+
         UserEntity authUser = userRepository.findByEmailWithBasicDetails(userDTO.email())
                 .orElseThrow(() -> new NotFoundException("Credenciais incorretas!"));
 

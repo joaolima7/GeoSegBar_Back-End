@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.entities.SectionEntity;
+import com.geosegbar.infra.dam.dtos.MapInstrumentDTO;
 import com.geosegbar.infra.dashboard.projections.InstrumentTypeCountProjection;
 
 @Repository
@@ -49,6 +50,13 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
 
     @Query("SELECT i.id FROM InstrumentEntity i WHERE i.dam.id = :damId")
     List<Long> findInstrumentIdsByDamId(@Param("damId") Long damId);
+
+    @Query("SELECT new com.geosegbar.infra.dam.dtos.MapInstrumentDTO(" +
+           "i.id, i.name, i.latitude, i.longitude, it.id, it.name) " +
+           "FROM InstrumentEntity i JOIN i.instrumentType it " +
+           "WHERE i.dam.id = :damId AND i.active = true " +
+           "AND i.latitude IS NOT NULL AND i.longitude IS NOT NULL")
+    List<MapInstrumentDTO> findMapDataByDamId(@Param("damId") Long damId);
 
     @EntityGraph(attributePaths = {
         "inputs",

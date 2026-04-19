@@ -86,4 +86,22 @@ public interface AnomalyRepository extends JpaRepository<AnomalyEntity, Long> {
             @Param("limit") int limit);
 
     boolean existsByUser_Id(Long userId);
+
+    @Query(value = """
+            SELECT a.id, a.latitude, a.longitude,
+                   a.question_id AS questionId,
+                   q.question_text AS questionText,
+                   a.questionnaire_id AS questionnaireId,
+                   tq.name AS questionnaireName,
+                   dl.name AS dangerLevelName,
+                   ast.name AS statusName
+            FROM anomalies a
+            LEFT JOIN questions q ON q.id = a.question_id
+            LEFT JOIN template_questionnaires tq ON tq.id = a.questionnaire_id
+            JOIN danger_levels dl ON dl.id = a.danger_level_id
+            JOIN anomaly_status ast ON ast.id = a.status_id
+            WHERE a.dam_id = :damId
+            AND ast.name != 'Concluído'
+            """, nativeQuery = true)
+    List<Object[]> findMapDataByDamId(@Param("damId") Long damId);
 }

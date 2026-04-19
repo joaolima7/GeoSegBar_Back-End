@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.geosegbar.entities.SectionEntity;
+import com.geosegbar.infra.dam.dtos.MapSectionDTO;
 
 @Repository
 public interface SectionRepository extends JpaRepository<SectionEntity, Long> {
@@ -71,6 +72,12 @@ public interface SectionRepository extends JpaRepository<SectionEntity, Long> {
     // -------------------------------------------------------
     // Consulta por coordenadas (uso específico)
     // -------------------------------------------------------
+
+    @Query("SELECT new com.geosegbar.infra.dam.dtos.MapSectionDTO(" +
+           "s.id, s.name, s.firstVertexLatitude, s.firstVertexLongitude, " +
+           "s.secondVertexLatitude, s.secondVertexLongitude) " +
+           "FROM SectionEntity s WHERE s.dam.id = :damId")
+    List<MapSectionDTO> findMapDataByDamId(@Param("damId") Long damId);
 
     @Query("SELECT s FROM SectionEntity s WHERE "
             + "s.firstVertexLatitude = :lat1 AND "

@@ -4,6 +4,7 @@ import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
@@ -31,16 +32,22 @@ import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.classification_dam.persistence.ClassificationDamRepository;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.dtos.CreateDamCompleteRequest;
+import com.geosegbar.infra.dam.dtos.DamMapDataDTO;
 import com.geosegbar.infra.dam.dtos.DamQuickAccessDTO;
 import com.geosegbar.infra.dam.dtos.DamStatusUpdateDTO;
 import com.geosegbar.infra.dam.dtos.LevelRequestDTO;
+import com.geosegbar.infra.dam.dtos.MapAnomalyDTO;
+import com.geosegbar.infra.dam.dtos.MapInstrumentDTO;
+import com.geosegbar.infra.dam.dtos.MapSectionDTO;
 import com.geosegbar.infra.dam.dtos.ReservoirRequestDTO;
 import com.geosegbar.infra.dam.dtos.UpdateDamCompleteRequest;
 import com.geosegbar.infra.dam.dtos.UpdateDamRequest;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.dam.projections.DamQuickAccessProjection;
+import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
 import com.geosegbar.infra.documentation_dam.persistence.DocumentationDamRepository;
 import com.geosegbar.infra.file_storage.FileStorageService;
+import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.level.persistence.LevelRepository;
 import com.geosegbar.infra.potential_damage.persistence.PotentialDamageRepository;
 import com.geosegbar.infra.psb.persistence.PSBFolderRepository;
@@ -48,6 +55,7 @@ import com.geosegbar.infra.psb.services.PSBFolderService;
 import com.geosegbar.infra.regulatory_dam.persistence.RegulatoryDamRepository;
 import com.geosegbar.infra.reservoir.persistence.ReservoirRepository;
 import com.geosegbar.infra.risk_category.persistence.RiskCategoryRepository;
+import com.geosegbar.infra.section.persistence.jpa.SectionRepository;
 import com.geosegbar.infra.security_level.persistence.SecurityLevelRepository;
 import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
 
@@ -72,6 +80,34 @@ public class DamService {
     private final PSBFolderRepository psbFolderRepository;
     private final PSBFolderService psbFolderService;
     private final com.geosegbar.infra.permissions.dam_permissions.services.DamPermissionService damPermissionService;
+    private final InstrumentRepository instrumentRepository;
+    private final SectionRepository sectionRepository;
+    private final AnomalyRepository anomalyRepository;
+
+    @Transactional(readOnly = true)
+    public DamMapDataDTO getMapData(Long damId) {
+        if (!damRepository.existsById(damId)) {
+            throw new NotFoundException("Barragem não encontrada com ID: " + damId);
+        }
+
+        List<MapInstrumentDTO> instruments = instrumentRepository.findMapDataByDamId(damId);
+        List<MapSectionDTO> sections = sectionRepository.findMapDataByDamId(damId);
+
+        List<Object[]> anomalyRows = anomalyRepository.findMapDataByDamId(damId);
+        List<MapAnomalyDTO> anomalies = anomalyRows.stream().map(row -> new MapAnomalyDTO(
+                row[0] != null ? ((Number) row[0]).longValue() : null,
+                row[1] != null ? ((Number) row[1]).doubleValue() : null,
+                row[2] != null ? ((Number) row[2]).doubleValue() : null,
+                row[3] != null ? ((Number) row[3]).longValue() : null,
+                (String) row[4],
+                row[5] != null ? ((Number) row[5]).longValue() : null,
+                (String) row[6],
+                (String) row[7],
+                (String) row[8]
+        )).collect(Collectors.toList());
+
+        return new DamMapDataDTO(instruments, sections, anomalies);
+    }
 
     @Transactional(readOnly = true)
     public DamEntity findById(Long id) {

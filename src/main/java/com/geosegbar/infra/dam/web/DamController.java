@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.infra.dam.dtos.CreateDamCompleteRequest;
+import com.geosegbar.infra.dam.dtos.DamMapDataDTO;
 import com.geosegbar.infra.dam.dtos.DamQuickAccessDTO;
 import com.geosegbar.infra.dam.dtos.DamStatusUpdateDTO;
 import com.geosegbar.infra.dam.dtos.UpdateDamCompleteRequest;
@@ -55,6 +56,12 @@ public class DamController {
         DamEntity dam = damService.findByIdWithSections(id);
         WebResponseEntity<DamEntity> response = WebResponseEntity.success(dam, "Barragem obtida com sucesso!");
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/map")
+    public ResponseEntity<WebResponseEntity<DamMapDataDTO>> getDamMapData(@PathVariable Long id) {
+        DamMapDataDTO mapData = damService.getMapData(id);
+        return ResponseEntity.ok(WebResponseEntity.success(mapData, "Dados do mapa obtidos com sucesso!"));
     }
 
     @GetMapping("/filter")

@@ -46,6 +46,9 @@ import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.dam.projections.DamQuickAccessProjection;
 import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
 import com.geosegbar.infra.documentation_dam.persistence.DocumentationDamRepository;
+import com.geosegbar.infra.map_kml.dtos.MapKmlFolderResponseDTO;
+import com.geosegbar.infra.map_kml.persistence.jpa.MapKmlFolderRepository;
+import com.geosegbar.infra.map_kml.services.MapKmlFolderService;
 import com.geosegbar.infra.file_storage.FileStorageService;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.level.persistence.LevelRepository;
@@ -83,6 +86,8 @@ public class DamService {
     private final InstrumentRepository instrumentRepository;
     private final SectionRepository sectionRepository;
     private final AnomalyRepository anomalyRepository;
+    private final MapKmlFolderRepository mapKmlFolderRepository;
+    private final MapKmlFolderService mapKmlFolderService;
 
     @Transactional(readOnly = true)
     public DamMapDataDTO getMapData(Long damId) {
@@ -106,7 +111,11 @@ public class DamService {
                 (String) row[8]
         )).collect(Collectors.toList());
 
-        return new DamMapDataDTO(instruments, sections, anomalies);
+        List<MapKmlFolderResponseDTO> kmlFolders = mapKmlFolderRepository.findByDamId(damId).stream()
+                .map(mapKmlFolderService::toResponseDTO)
+                .collect(Collectors.toList());
+
+        return new DamMapDataDTO(instruments, sections, anomalies, kmlFolders);
     }
 
     @Transactional(readOnly = true)

@@ -184,4 +184,8 @@ public class DamEntity {
     @OneToMany(mappedBy = "dam", fetch = FetchType.LAZY)
     @JsonIgnore
     private Set<TemplateQuestionnaireEntity> templateQuestionnaires = new HashSet<>();
+
+    @OneToMany(mappedBy = "dam", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JsonIgnore
+    private Set<MapKmlFolderEntity> mapKmlFolders = new HashSet<>();
 }

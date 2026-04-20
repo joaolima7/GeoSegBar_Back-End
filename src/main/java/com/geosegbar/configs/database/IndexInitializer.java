@@ -24,8 +24,6 @@ public class IndexInitializer {
         String[] indexCommands = {
             "CREATE INDEX IF NOT EXISTS idx_checklist_template_checklist_id ON checklist_template_questionnaire(checklist_id)",
             "CREATE INDEX IF NOT EXISTS idx_checklist_template_questionnaire_id ON checklist_template_questionnaire(template_questionnaire_id)",
-            "CREATE INDEX IF NOT EXISTS idx_checklist_dam_checklist_id ON checklist_dam(checklist_id)",
-            "CREATE INDEX IF NOT EXISTS idx_checklist_dam_dam_id ON checklist_dam(dam_id)",
             "CREATE INDEX IF NOT EXISTS idx_question_option_question_id ON question_option(question_id)",
             "CREATE INDEX IF NOT EXISTS idx_question_option_option_id ON question_option(option_id)",
             "CREATE INDEX IF NOT EXISTS idx_answer_options_answer_id ON answer_options(answer_id)",
@@ -61,7 +59,6 @@ public class IndexInitializer {
             "CREATE INDEX IF NOT EXISTS idx_output_active_with_readings ON output(id, active) WHERE active = true",
             "CREATE INDEX IF NOT EXISTS idx_instrument_with_recent_readings ON instrument(id, dam_id, active) WHERE active = true",
             "CREATE INDEX IF NOT EXISTS idx_reading_timeseries ON reading(instrument_id, output_id, date, hour, calculated_value) WHERE active = true",
-            "CREATE INDEX idx_reading_input_value_mapping_both ON reading_input_value_mapping(reading_id, input_value_id)",
             "CREATE INDEX idx_reading_instrument_active_output ON reading(instrument_id, active, output_id)",
             "CREATE INDEX idx_reading_date_hour_instrument_active ON reading(date DESC, hour DESC, instrument_id, active)",
             "CREATE INDEX IF NOT EXISTS idx_reading_composite_main "

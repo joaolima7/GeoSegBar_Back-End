@@ -124,12 +124,24 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
     @EntityGraph(attributePaths = {"dam", "section", "instrumentType"})
     List<InstrumentEntity> findByDamIdAndIsLinimetricRulerTrue(Long damId);
 
+    boolean existsByDamIdAndIsLinimetricRulerTrue(Long damId);
+
+    boolean existsByDamIdAndIsLinimetricRulerTrueAndIdNot(Long damId, Long id);
+
+    boolean existsByDamIdAndIsDownstreamTrue(Long damId);
+
+    boolean existsByDamIdAndIsDownstreamTrueAndIdNot(Long damId, Long id);
+
     Optional<InstrumentEntity> findByLinimetricRulerCode(Long linimetricRulerCode);
 
     boolean existsByLinimetricRulerCodeAndIdNot(Long linimetricRulerCode, Long id);
 
     @EntityGraph(attributePaths = {"dam", "section", "instrumentType"})
     List<InstrumentEntity> findByIsLinimetricRulerTrue();
+
+    @EntityGraph(attributePaths = {"dam", "section", "instrumentType", "inputs", "inputs.measurementUnit"})
+    @Query("SELECT i FROM InstrumentEntity i WHERE (i.isLinimetricRuler = true OR i.isDownstream = true) AND i.linimetricRulerCode IS NOT NULL")
+    List<InstrumentEntity> findAllTelemetricWithCode();
 
     @EntityGraph(attributePaths = {
         "dam",

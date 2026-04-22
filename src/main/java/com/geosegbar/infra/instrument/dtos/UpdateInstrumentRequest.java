@@ -35,6 +35,9 @@ public class UpdateInstrumentRequest {
     @NotNull(message = "Campo 'É Régua Linimétrica' é obrigatório")
     private Boolean isLinimetricRuler = false;
 
+    @NotNull(message = "Campo 'É instrumento de jusante' é obrigatório")
+    private Boolean isDownstream = false;
+
     private Long linimetricRulerCode;
 
     @NotNull(message = "ID da barragem é obrigatório")

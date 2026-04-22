@@ -74,6 +74,8 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
 
     boolean existsByUser_Id(Long userId);
 
+    boolean existsByInstrumentId(Long instrumentId);
+
     boolean existsByInstrumentIdAndDate(Long instrumentId, LocalDate date);
 
     boolean existsByInstrumentIdAndDateAndHourAndActive(

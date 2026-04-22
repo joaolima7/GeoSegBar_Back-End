@@ -90,6 +90,9 @@ public class InstrumentEntity {
     @Column(name = "is_linimetric_ruler", nullable = false)
     private Boolean isLinimetricRuler;
 
+    @Column(name = "is_downstream", nullable = false, columnDefinition = "boolean default false")
+    private Boolean isDownstream = false;
+
     @Column(name = "linimetric_ruler_code", nullable = true)
     private Long linimetricRulerCode;
 

@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -51,6 +52,7 @@ import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.instrument_type.persistence.jpa.InstrumentTypeRepository;
 import com.geosegbar.infra.measurement_unit.persistence.jpa.MeasurementUnitRepository;
 import com.geosegbar.infra.output.persistence.jpa.OutputRepository;
+import com.geosegbar.infra.reading.persistence.jpa.ReadingRepository;
 import com.geosegbar.infra.section.persistence.jpa.SectionRepository;
 import com.geosegbar.infra.statistical_limit.persistence.jpa.StatisticalLimitRepository;
 
@@ -63,6 +65,7 @@ import lombok.extern.slf4j.Slf4j;
 public class InstrumentService {
 
     private final InstrumentRepository instrumentRepository;
+    private final ReadingRepository readingRepository;
     private final DamRepository damRepository;
     private final SectionRepository sectionRepository;
     private final MeasurementUnitRepository measurementUnitRepository;
@@ -162,17 +165,36 @@ public class InstrumentService {
         if (request.getIsLinimetricRuler() == null) {
             request.setIsLinimetricRuler(false);
         }
+        if (request.getIsDownstream() == null) {
+            request.setIsDownstream(false);
+        }
 
-        if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
+        if (Boolean.TRUE.equals(request.getIsLinimetricRuler()) && Boolean.TRUE.equals(request.getIsDownstream())) {
+            throw new InvalidInputException("O instrumento não pode ser de montante e jusante simultaneamente.");
+        }
+
+        if (Boolean.TRUE.equals(request.getIsLinimetricRuler())
+                && instrumentRepository.existsByDamIdAndIsLinimetricRulerTrue(request.getDamId())) {
+            throw new DuplicateResourceException("Já existe um instrumento de montante associado a esta barragem.");
+        }
+
+        if (Boolean.TRUE.equals(request.getIsDownstream())
+                && instrumentRepository.existsByDamIdAndIsDownstreamTrue(request.getDamId())) {
+            throw new DuplicateResourceException("Já existe um instrumento de jusante associado a esta barragem.");
+        }
+
+        boolean isTelemetric = Boolean.TRUE.equals(request.getIsLinimetricRuler()) || Boolean.TRUE.equals(request.getIsDownstream());
+
+        if (isTelemetric) {
             request.setNoLimit(true);
 
             if (request.getLinimetricRulerCode() != null
                     && instrumentRepository.findByLinimetricRulerCode(request.getLinimetricRulerCode()).isPresent()) {
-                throw new DuplicateResourceException("Já existe uma régua linimétrica com o código " + request.getLinimetricRulerCode());
+                throw new DuplicateResourceException("Já existe um instrumento telemetrado com o código " + request.getLinimetricRulerCode());
             }
 
             if (request.getOutputs() == null || request.getOutputs().isEmpty()) {
-                throw new InvalidInputException("Para réguas linimétricas, é obrigatório informar pelo menos um output.");
+                throw new InvalidInputException("Para instrumentos telemetrizados, é obrigatório informar pelo menos um output.");
             }
         } else {
             validateRequest(request);
@@ -214,11 +236,12 @@ public class InstrumentService {
         instrument.setActiveForSection(request.getActiveForSection());
 
         instrument.setIsLinimetricRuler(request.getIsLinimetricRuler());
+        instrument.setIsDownstream(request.getIsDownstream());
         instrument.setLinimetricRulerCode(request.getLinimetricRulerCode());
 
         InstrumentEntity savedInstrument = instrumentRepository.save(instrument);
 
-        if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
+        if (isTelemetric) {
             processLinimetricRulerComponents(savedInstrument, request);
         } else {
             processInputs(savedInstrument, request.getInputs());
@@ -233,10 +256,9 @@ public class InstrumentService {
         savedInstrument = instrumentRepository.findWithActiveOutputsById(savedInstrument.getId())
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após criação"));
 
-        if (Boolean.FALSE.equals(savedInstrument.getIsLinimetricRuler())) {
+        if (!isTelemetric) {
             eventPublisher.publishEvent(new InstrumentCreatedEvent(savedInstrument));
-        } else if (Boolean.TRUE.equals(savedInstrument.getIsLinimetricRuler())
-                && savedInstrument.getLinimetricRulerCode() != null) {
+        } else if (savedInstrument.getLinimetricRulerCode() != null) {
             eventPublisher.publishEvent(new LinimetricRulerCreatedEvent(this, savedInstrument));
             log.info("Evento de coleta hidrotelemetrica disparado para instrumento: {}", savedInstrument.getName());
         }
@@ -470,12 +492,29 @@ public class InstrumentService {
 
         Long oldLinimetricCode = oldInstrument.getLinimetricRulerCode();
 
-        if (!oldInstrument.getIsLinimetricRuler().equals(request.getIsLinimetricRuler())) {
-            throw new InvalidInputException("Não é permitido alterar o tipo de instrumento (Régua <-> Normal).");
-        }
-
         if (instrumentRepository.existsByNameAndDamIdAndIdNot(request.getName(), request.getDamId(), id)) {
             throw new DuplicateResourceException("Já existe um instrumento com esse nome nesta barragem");
+        }
+
+        if (Boolean.TRUE.equals(request.getIsLinimetricRuler()) && Boolean.TRUE.equals(request.getIsDownstream())) {
+            throw new InvalidInputException("O instrumento não pode ser de montante e jusante simultaneamente.");
+        }
+
+        if (Boolean.TRUE.equals(request.getIsLinimetricRuler())
+                && instrumentRepository.existsByDamIdAndIsLinimetricRulerTrueAndIdNot(request.getDamId(), id)) {
+            throw new DuplicateResourceException("Já existe um instrumento de montante (régua linimétrica) associado a esta barragem.");
+        }
+
+        if (Boolean.TRUE.equals(request.getIsDownstream())
+                && instrumentRepository.existsByDamIdAndIsDownstreamTrueAndIdNot(request.getDamId(), id)) {
+            throw new DuplicateResourceException("Já existe um instrumento de jusante associado a esta barragem.");
+        }
+
+        boolean typeChanging = !oldInstrument.getIsLinimetricRuler().equals(request.getIsLinimetricRuler())
+                || !Objects.equals(oldInstrument.getIsDownstream(), request.getIsDownstream());
+
+        if (typeChanging && readingRepository.existsByInstrumentId(id)) {
+            throw new InvalidInputException("Não é possível alterar o tipo do instrumento (montante/jusante/normal) quando existem leituras registradas.");
         }
 
         Map<String, InputEntity> existingInputsByAcronym = oldInstrument.getInputs().stream()
@@ -488,13 +527,15 @@ public class InstrumentService {
 
         updateInstrumentBasicFields(oldInstrument, request);
 
-        if (Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
+        boolean isTelemetric = Boolean.TRUE.equals(request.getIsLinimetricRuler()) || Boolean.TRUE.equals(request.getIsDownstream());
+
+        if (isTelemetric) {
             if (request.getLinimetricRulerCode() != null
                     && instrumentRepository.existsByLinimetricRulerCodeAndIdNot(request.getLinimetricRulerCode(), id)) {
-                throw new DuplicateResourceException("Código de régua linimétrica já existe: " + request.getLinimetricRulerCode());
+                throw new DuplicateResourceException("Código de instrumento telemetrado já existe: " + request.getLinimetricRulerCode());
             }
             if (request.getOutputs() == null || request.getOutputs().isEmpty()) {
-                throw new InvalidInputException("Régua linimétrica deve ter output.");
+                throw new InvalidInputException("Instrumento telemetrado deve ter output.");
             }
             processInputsForLinimetricRulerUpdate(oldInstrument, request.getInputs(), existingInputsByAcronym);
             processOutputsForUpdate(oldInstrument, request.getOutputs(), existingOutputsByAcronym);
@@ -525,11 +566,11 @@ public class InstrumentService {
         InstrumentEntity updatedInstrument = instrumentRepository.findWithActiveOutputsById(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após atualização"));
 
-        if (Boolean.TRUE.equals(updatedInstrument.getIsLinimetricRuler())) {
+        boolean isTelemetricAfter = Boolean.TRUE.equals(updatedInstrument.getIsLinimetricRuler())
+                || Boolean.TRUE.equals(updatedInstrument.getIsDownstream());
+        if (isTelemetricAfter) {
             Long newLinimetricCode = updatedInstrument.getLinimetricRulerCode();
-            boolean codeChanged = (oldLinimetricCode == null && newLinimetricCode != null)
-                    || (oldLinimetricCode != null && !oldLinimetricCode.equals(newLinimetricCode));
-
+            boolean codeChanged = !Objects.equals(oldLinimetricCode, newLinimetricCode);
             if (codeChanged && newLinimetricCode != null) {
                 eventPublisher.publishEvent(new LinimetricRulerCreatedEvent(this, updatedInstrument));
                 log.info("Evento de coleta disparado: {} (código {} -> {})", updatedInstrument.getName(), oldLinimetricCode, newLinimetricCode);
@@ -679,7 +720,10 @@ public class InstrumentService {
         instrument.setSection(section);
         instrument.setActiveForSection(request.getActiveForSection());
 
-        if (Boolean.TRUE.equals(instrument.getIsLinimetricRuler())) {
+        instrument.setIsDownstream(request.getIsDownstream());
+
+        boolean isTelemetricUpdate = Boolean.TRUE.equals(request.getIsLinimetricRuler()) || Boolean.TRUE.equals(request.getIsDownstream());
+        if (isTelemetricUpdate) {
             instrument.setLinimetricRulerCode(request.getLinimetricRulerCode());
         }
     }
@@ -1172,6 +1216,7 @@ public class InstrumentService {
         dto.setNoLimit(instrument.getNoLimit());
         dto.setActive(instrument.getActive());
         dto.setIsLinimetricRuler(instrument.getIsLinimetricRuler());
+        dto.setIsDownstream(instrument.getIsDownstream());
         dto.setLinimetricRulerCode(instrument.getLinimetricRulerCode());
         dto.setLastUpdateVariablesDate(instrument.getLastUpdateVariablesDate());
 

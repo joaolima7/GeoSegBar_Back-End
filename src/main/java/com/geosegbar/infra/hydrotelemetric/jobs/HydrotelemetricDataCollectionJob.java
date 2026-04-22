@@ -31,8 +31,8 @@ public class HydrotelemetricDataCollectionJob {
         try {
             String authToken = anaApiService.getAuthToken();
 
-            List<InstrumentEntity> linimetricInstruments = instrumentRepository.findByIsLinimetricRulerTrue();
-            log.info("Encontrados {} instrumentos do tipo régua linimétrica", linimetricInstruments.size());
+            List<InstrumentEntity> linimetricInstruments = instrumentRepository.findAllTelemetricWithCode();
+            log.info("Encontrados {} instrumentos telemetrados (montante/jusante) com código ANA", linimetricInstruments.size());
 
             LocalDate today = LocalDate.now();
 

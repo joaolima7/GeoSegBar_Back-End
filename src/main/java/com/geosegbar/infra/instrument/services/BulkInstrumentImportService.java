@@ -242,6 +242,9 @@ public class BulkInstrumentImportService {
             Boolean isLinimetricRulerValue = getBoolean(r, idx, "Régua Linimétrica");
             ir.isLinimetricRuler = (isLinimetricRulerValue != null) ? isLinimetricRulerValue : false;
 
+            Boolean isDownstreamValue = getBoolean(r, idx, "Jusante");
+            ir.isDownstream = (isDownstreamValue != null) ? isDownstreamValue : false;
+
             Long code = getLong(r, idx, "Código ANA");
             if (code == null) {
                 String codeStr = getString(r, idx, "Código ANA");
@@ -483,6 +486,7 @@ public class BulkInstrumentImportService {
         String sectionName;
 
         Boolean isLinimetricRuler = false;
+        Boolean isDownstream = false;
         Long linimetricRulerCode;
 
         CreateInstrumentRequest toRequest(ImportInstrumentsRequest meta, Long resolvedSectionId) {
@@ -498,9 +502,10 @@ public class BulkInstrumentImportService {
             r.setSectionId(resolvedSectionId);
 
             r.setIsLinimetricRuler(isLinimetricRuler);
+            r.setIsDownstream(isDownstream);
             r.setLinimetricRulerCode(linimetricRulerCode);
 
-            if (Boolean.TRUE.equals(r.getIsLinimetricRuler())) {
+            if (Boolean.TRUE.equals(r.getIsLinimetricRuler()) || Boolean.TRUE.equals(r.getIsDownstream())) {
                 r.setNoLimit(true);
             }
 

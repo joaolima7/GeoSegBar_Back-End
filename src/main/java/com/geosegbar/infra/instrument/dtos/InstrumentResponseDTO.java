@@ -22,6 +22,7 @@ public class InstrumentResponseDTO {
     private Boolean active;
     private Boolean activeForSection;
     private Boolean isLinimetricRuler;
+    private Boolean isDownstream;
     private Long linimetricRulerCode;
     private Long damId;
     private String damName;

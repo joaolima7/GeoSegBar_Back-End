@@ -174,13 +174,13 @@ public class InstrumentService {
         }
 
         if (Boolean.TRUE.equals(request.getIsLinimetricRuler())
-                && instrumentRepository.existsByDamIdAndIsLinimetricRulerTrue(request.getDamId())) {
-            throw new DuplicateResourceException("Já existe um instrumento de montante associado a esta barragem.");
+                && instrumentRepository.existsByDamIdAndIsLinimetricRulerTrueAndActiveTrue(request.getDamId())) {
+            throw new DuplicateResourceException("Já existe um instrumento de montante ativo associado a esta barragem.");
         }
 
         if (Boolean.TRUE.equals(request.getIsDownstream())
-                && instrumentRepository.existsByDamIdAndIsDownstreamTrue(request.getDamId())) {
-            throw new DuplicateResourceException("Já existe um instrumento de jusante associado a esta barragem.");
+                && instrumentRepository.existsByDamIdAndIsDownstreamTrueAndActiveTrue(request.getDamId())) {
+            throw new DuplicateResourceException("Já existe um instrumento de jusante ativo associado a esta barragem.");
         }
 
         boolean isTelemetric = Boolean.TRUE.equals(request.getIsLinimetricRuler()) || Boolean.TRUE.equals(request.getIsDownstream());
@@ -501,13 +501,13 @@ public class InstrumentService {
         }
 
         if (Boolean.TRUE.equals(request.getIsLinimetricRuler())
-                && instrumentRepository.existsByDamIdAndIsLinimetricRulerTrueAndIdNot(request.getDamId(), id)) {
-            throw new DuplicateResourceException("Já existe um instrumento de montante (régua linimétrica) associado a esta barragem.");
+                && instrumentRepository.existsByDamIdAndIsLinimetricRulerTrueAndActiveTrueAndIdNot(request.getDamId(), id)) {
+            throw new DuplicateResourceException("Já existe um instrumento de montante ativo (régua linimétrica) associado a esta barragem.");
         }
 
         if (Boolean.TRUE.equals(request.getIsDownstream())
-                && instrumentRepository.existsByDamIdAndIsDownstreamTrueAndIdNot(request.getDamId(), id)) {
-            throw new DuplicateResourceException("Já existe um instrumento de jusante associado a esta barragem.");
+                && instrumentRepository.existsByDamIdAndIsDownstreamTrueAndActiveTrueAndIdNot(request.getDamId(), id)) {
+            throw new DuplicateResourceException("Já existe um instrumento de jusante ativo associado a esta barragem.");
         }
 
         boolean typeChanging = !oldInstrument.getIsLinimetricRuler().equals(request.getIsLinimetricRuler())

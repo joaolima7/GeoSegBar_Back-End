@@ -30,10 +30,8 @@ public class SectionRenderingConfigResponseDTO {
     private Boolean showDamAxis = false;
     private Boolean showLastUpstreamReading = false;
     private Boolean showLastDownstreamReading = false;
-    private Boolean showMinNormalLevel = false;
-    private Boolean showMaxNormalLevel = false;
-    private Boolean showMaxMaximorumLevel = false;
 
     private List<SectionCustomLevelDTO> customLevels = new ArrayList<>();
     private List<Long> selectedInstrumentIds = new ArrayList<>();
+    private List<Long> selectedReservoirIds = new ArrayList<>();
 }

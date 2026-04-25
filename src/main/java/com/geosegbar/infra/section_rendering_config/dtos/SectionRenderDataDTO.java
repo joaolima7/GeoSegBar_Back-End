@@ -11,7 +11,6 @@ public class SectionRenderDataDTO {
     private Long sectionId;
     private Long configId;
 
-    // Legends
     private String soilLabel;
     private String soilColor;
     private String filterLabel;
@@ -19,30 +18,26 @@ public class SectionRenderDataDTO {
     private String rockLabel;
     private String rockColor;
 
-    // Elevation colors
     private String topElevationColor;
     private String bottomElevationColor;
     private String piezometricElevationColor;
 
-    // Axis limits
     private Double axisXMin;
     private Double axisXMax;
     private Double axisYMin;
     private Double axisYMax;
 
-    // Display toggles
     private Boolean showDamAxis = false;
     private Boolean showLastUpstreamReading = false;
     private Boolean showLastDownstreamReading = false;
-    private Boolean showMinNormalLevel = false;
-    private Boolean showMaxNormalLevel = false;
-    private Boolean showMaxMaximorumLevel = false;
 
-    // Custom levels
     private List<SectionCustomLevelDTO> customLevels = new ArrayList<>();
 
     // Piezometers (Piezômetro / Indicador de Nível d'Água) of this section
     private List<SectionRenderInstrumentDTO> piezometers = new ArrayList<>();
+
+    // Reservoirs of the dam (each with isSelected flag)
+    private List<SectionRenderReservoirDTO> reservoirs = new ArrayList<>();
 
     // Upstream and downstream telemetric instruments of the dam
     private SectionRenderTelemetricInstrumentDTO upstreamInstrument;

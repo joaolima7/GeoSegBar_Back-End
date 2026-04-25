@@ -10,9 +10,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.common.enums.LimitStatusEnum;
-
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.InstrumentEntity;
+import com.geosegbar.entities.ReservoirEntity;
 import com.geosegbar.entities.SectionCustomLevelEntity;
 import com.geosegbar.entities.SectionEntity;
 import com.geosegbar.entities.SectionRenderingConfigEntity;
@@ -21,11 +21,13 @@ import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
+import com.geosegbar.infra.reservoir.persistence.ReservoirRepository;
 import com.geosegbar.infra.section.persistence.jpa.SectionRepository;
 import com.geosegbar.infra.section_rendering_config.dtos.LastReadingDTO;
 import com.geosegbar.infra.section_rendering_config.dtos.SectionCustomLevelDTO;
 import com.geosegbar.infra.section_rendering_config.dtos.SectionRenderDataDTO;
 import com.geosegbar.infra.section_rendering_config.dtos.SectionRenderInstrumentDTO;
+import com.geosegbar.infra.section_rendering_config.dtos.SectionRenderReservoirDTO;
 import com.geosegbar.infra.section_rendering_config.dtos.SectionRenderTelemetricInstrumentDTO;
 import com.geosegbar.infra.section_rendering_config.dtos.SectionRenderingConfigResponseDTO;
 import com.geosegbar.infra.section_rendering_config.dtos.UpdateSectionRenderingConfigRequest;
@@ -42,6 +44,7 @@ public class SectionRenderingConfigService {
     private final SectionRenderingConfigRepository configRepository;
     private final SectionRepository sectionRepository;
     private final InstrumentRepository instrumentRepository;
+    private final ReservoirRepository reservoirRepository;
 
     @Transactional(readOnly = true)
     public SectionRenderingConfigResponseDTO getBySectionId(Long sectionId) {
@@ -63,6 +66,8 @@ public class SectionRenderingConfigService {
         SectionEntity section = sectionRepository.findById(sectionId)
                 .orElseThrow(() -> new NotFoundException("Seção não encontrada com ID: " + sectionId));
 
+        Long damId = section.getDam() != null ? section.getDam().getId() : null;
+
         SectionRenderingConfigEntity config = configRepository.findBySectionId(sectionId)
                 .orElseGet(() -> {
                     SectionRenderingConfigEntity c = new SectionRenderingConfigEntity();
@@ -73,6 +78,7 @@ public class SectionRenderingConfigService {
         applyScalars(config, req);
         applyCustomLevels(config, req.getCustomLevels());
         applySelectedInstruments(config, sectionId, req.getSelectedInstrumentIds());
+        applySelectedReservoirs(config, damId, req.getSelectedReservoirIds());
 
         SectionRenderingConfigEntity saved = configRepository.save(config);
         return toResponseDTO(saved);
@@ -95,9 +101,6 @@ public class SectionRenderingConfigService {
         config.setShowDamAxis(Boolean.TRUE.equals(req.getShowDamAxis()));
         config.setShowLastUpstreamReading(Boolean.TRUE.equals(req.getShowLastUpstreamReading()));
         config.setShowLastDownstreamReading(Boolean.TRUE.equals(req.getShowLastDownstreamReading()));
-        config.setShowMinNormalLevel(Boolean.TRUE.equals(req.getShowMinNormalLevel()));
-        config.setShowMaxNormalLevel(Boolean.TRUE.equals(req.getShowMaxNormalLevel()));
-        config.setShowMaxMaximorumLevel(Boolean.TRUE.equals(req.getShowMaxMaximorumLevel()));
     }
 
     private void applyCustomLevels(SectionRenderingConfigEntity config, List<SectionCustomLevelDTO> incoming) {
@@ -135,6 +138,28 @@ public class SectionRenderingConfigService {
         config.getSelectedInstruments().addAll(new HashSet<>(instruments));
     }
 
+    private void applySelectedReservoirs(SectionRenderingConfigEntity config, Long damId, List<Long> ids) {
+        config.getSelectedReservoirs().clear();
+        if (ids == null || ids.isEmpty()) {
+            return;
+        }
+        if (damId == null) {
+            throw new InvalidInputException("A seção não está associada a nenhuma barragem.");
+        }
+        List<Long> distinctIds = ids.stream().distinct().toList();
+        List<ReservoirEntity> reservoirs = reservoirRepository.findAllById(distinctIds);
+        if (reservoirs.size() != distinctIds.size()) {
+            throw new InvalidInputException("Um ou mais reservatórios informados não existem.");
+        }
+        for (ReservoirEntity reservoir : reservoirs) {
+            if (reservoir.getDam() == null || !damId.equals(reservoir.getDam().getId())) {
+                throw new InvalidInputException(
+                        "Reservatório ID " + reservoir.getId() + " não pertence à barragem desta seção.");
+            }
+        }
+        config.getSelectedReservoirs().addAll(new HashSet<>(reservoirs));
+    }
+
     private SectionRenderingConfigResponseDTO toResponseDTO(SectionRenderingConfigEntity c) {
         SectionRenderingConfigResponseDTO dto = new SectionRenderingConfigResponseDTO();
         dto.setId(c.getId());
@@ -155,9 +180,6 @@ public class SectionRenderingConfigService {
         dto.setShowDamAxis(c.getShowDamAxis());
         dto.setShowLastUpstreamReading(c.getShowLastUpstreamReading());
         dto.setShowLastDownstreamReading(c.getShowLastDownstreamReading());
-        dto.setShowMinNormalLevel(c.getShowMinNormalLevel());
-        dto.setShowMaxNormalLevel(c.getShowMaxNormalLevel());
-        dto.setShowMaxMaximorumLevel(c.getShowMaxMaximorumLevel());
 
         List<SectionCustomLevelDTO> levels = c.getCustomLevels().stream()
                 .map(l -> new SectionCustomLevelDTO(
@@ -170,6 +192,11 @@ public class SectionRenderingConfigService {
                 .map(InstrumentEntity::getId)
                 .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
         dto.setSelectedInstrumentIds(new ArrayList<>(instrumentIds));
+
+        Set<Long> reservoirIds = c.getSelectedReservoirs().stream()
+                .map(ReservoirEntity::getId)
+                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+        dto.setSelectedReservoirIds(new ArrayList<>(reservoirIds));
 
         return dto;
     }
@@ -185,10 +212,14 @@ public class SectionRenderingConfigService {
 
         SectionRenderingConfigEntity config = configRepository.findBySectionId(sectionId).orElse(null);
 
-        Set<Long> selectedIds = new HashSet<>();
+        Set<Long> selectedInstrumentIds = new HashSet<>();
+        Set<Long> selectedReservoirIds = new HashSet<>();
         if (config != null) {
             for (InstrumentEntity sel : config.getSelectedInstruments()) {
-                selectedIds.add(sel.getId());
+                selectedInstrumentIds.add(sel.getId());
+            }
+            for (ReservoirEntity sel : config.getSelectedReservoirs()) {
+                selectedReservoirIds.add(sel.getId());
             }
         }
 
@@ -208,14 +239,26 @@ public class SectionRenderingConfigService {
                     }
                     return new SectionRenderInstrumentDTO(
                             p.getId(), p.getName(), p.getDistanceOffset(),
-                            selectedIds.contains(p.getId()), lr);
+                            selectedInstrumentIds.contains(p.getId()), lr);
                 })
                 .collect(Collectors.toList());
 
+        List<SectionRenderReservoirDTO> reservoirs = new ArrayList<>();
         SectionRenderTelemetricInstrumentDTO upstream = null;
         SectionRenderTelemetricInstrumentDTO downstream = null;
 
         if (damId != null) {
+            List<ReservoirEntity> damReservoirs = reservoirRepository.findByDamIdOrderByCreatedAtDesc(damId);
+            for (ReservoirEntity r : damReservoirs) {
+                reservoirs.add(new SectionRenderReservoirDTO(
+                        r.getId(),
+                        r.getLevel() != null ? r.getLevel().getId() : null,
+                        r.getLevel() != null ? r.getLevel().getName() : null,
+                        r.getLevel() != null ? r.getLevel().getValue() : null,
+                        r.getLevel() != null ? r.getLevel().getUnitLevel() : null,
+                        selectedReservoirIds.contains(r.getId())));
+            }
+
             List<TelemetricInstrumentProjection> telemetric =
                     instrumentRepository.findActiveTelemetricByDamWithLastReading(damId);
             for (TelemetricInstrumentProjection t : telemetric) {
@@ -259,18 +302,16 @@ public class SectionRenderingConfigService {
             result.setShowDamAxis(config.getShowDamAxis());
             result.setShowLastUpstreamReading(config.getShowLastUpstreamReading());
             result.setShowLastDownstreamReading(config.getShowLastDownstreamReading());
-            result.setShowMinNormalLevel(config.getShowMinNormalLevel());
-            result.setShowMaxNormalLevel(config.getShowMaxNormalLevel());
-            result.setShowMaxMaximorumLevel(config.getShowMaxMaximorumLevel());
 
-            List<SectionCustomLevelDTO> levels = config.getCustomLevels().stream()
+            List<SectionCustomLevelDTO> customLevels = config.getCustomLevels().stream()
                     .map(l -> new SectionCustomLevelDTO(l.getId(), l.getName(), l.getValue(),
                             l.getColor(), Boolean.TRUE.equals(l.getEnabled()) ? Boolean.TRUE : Boolean.FALSE))
                     .collect(Collectors.toList());
-            result.setCustomLevels(levels);
+            result.setCustomLevels(customLevels);
         }
 
         result.setPiezometers(piezometers);
+        result.setReservoirs(reservoirs);
         result.setUpstreamInstrument(upstream);
         result.setDownstreamInstrument(downstream);
 

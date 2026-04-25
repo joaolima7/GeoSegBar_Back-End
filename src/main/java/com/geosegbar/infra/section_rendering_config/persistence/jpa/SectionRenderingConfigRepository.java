@@ -11,6 +11,6 @@ import com.geosegbar.entities.SectionRenderingConfigEntity;
 @Repository
 public interface SectionRenderingConfigRepository extends JpaRepository<SectionRenderingConfigEntity, Long> {
 
-    @EntityGraph(attributePaths = {"customLevels", "selectedInstruments", "section"})
+    @EntityGraph(attributePaths = {"customLevels", "selectedInstruments", "selectedReservoirs", "section"})
     Optional<SectionRenderingConfigEntity> findBySectionId(Long sectionId);
 }

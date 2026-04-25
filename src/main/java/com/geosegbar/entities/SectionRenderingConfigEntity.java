@@ -102,15 +102,6 @@ public class SectionRenderingConfigEntity {
     @Column(name = "show_last_downstream_reading", nullable = false, columnDefinition = "boolean default false")
     private Boolean showLastDownstreamReading = false;
 
-    @Column(name = "show_min_normal_level", nullable = false, columnDefinition = "boolean default false")
-    private Boolean showMinNormalLevel = false;
-
-    @Column(name = "show_max_normal_level", nullable = false, columnDefinition = "boolean default false")
-    private Boolean showMaxNormalLevel = false;
-
-    @Column(name = "show_max_maximorum_level", nullable = false, columnDefinition = "boolean default false")
-    private Boolean showMaxMaximorumLevel = false;
-
     @OneToMany(mappedBy = "config", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JsonIgnoreProperties("config")
     private Set<SectionCustomLevelEntity> customLevels = new HashSet<>();
@@ -127,4 +118,17 @@ public class SectionRenderingConfigEntity {
     )
     @JsonIgnoreProperties({"readings", "inputs", "constants", "outputs", "dam", "section"})
     private Set<InstrumentEntity> selectedInstruments = new HashSet<>();
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "section_rendering_selected_reservoirs",
+            joinColumns = @JoinColumn(name = "config_id"),
+            inverseJoinColumns = @JoinColumn(name = "reservoir_id"),
+            indexes = {
+                @Index(name = "idx_srsr_config", columnList = "config_id"),
+                @Index(name = "idx_srsr_reservoir", columnList = "reservoir_id")
+            }
+    )
+    @JsonIgnoreProperties({"dam", "reservoirs"})
+    private Set<ReservoirEntity> selectedReservoirs = new HashSet<>();
 }

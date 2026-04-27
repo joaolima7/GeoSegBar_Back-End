@@ -40,7 +40,7 @@ public class KmlProcessingService {
 
     // ── Async processing ──────────────────────────────────────────────────────
 
-    @Async
+    @Async("kmlProcessExecutor")
     @Transactional
     public void processFileAsync(Long fileId) {
         MapKmlFileEntity file = fileRepository.findById(fileId).orElse(null);

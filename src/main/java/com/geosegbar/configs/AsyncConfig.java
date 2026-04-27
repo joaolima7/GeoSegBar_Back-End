@@ -28,11 +28,6 @@ public class AsyncConfig {
         return executor;
     }
 
-    /**
-     * Thread pool dedicado para coleta histórica (10 anos de dados) - Menor
-     * paralelismo para não sobrecarregar API externa (ANA) - Maior timeout para
-     * aguardar shutdown graceful
-     */
     @Bean(name = "historicalDataExecutor")
     public Executor historicalDataExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -43,6 +38,17 @@ public class AsyncConfig {
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(300);
         executor.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        return executor;
+    }
+
+    @Bean(name = "kmlProcessExecutor")
+    public Executor kmlProcessExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(5);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("kml-process-");
         executor.initialize();
         return executor;
     }

@@ -22,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.AbortMultipartUploadRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest;
 import software.amazon.awssdk.services.s3.model.CompletedMultipartUpload;
 import software.amazon.awssdk.services.s3.model.CompletedPart;
@@ -220,6 +221,36 @@ public class FileStorageService {
         } catch (Exception ex) {
             throw new FileStorageException("Erro ao enviar bytes para o S3.", ex);
         }
+    }
+
+    public byte[] downloadFileBytes(String fileUrl) {
+        String key = extractKeyFromUrl(fileUrl);
+        if (key == null) {
+            throw new FileStorageException("URL inválida para download: " + fileUrl);
+        }
+        GetObjectRequest getReq = GetObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .build();
+        try (var stream = s3Client.getObject(getReq)) {
+            return stream.readAllBytes();
+        } catch (Exception ex) {
+            throw new FileStorageException("Erro ao baixar arquivo do S3: " + key, ex);
+        }
+    }
+
+    public void overwriteFile(String existingUrl, byte[] newBytes, String contentType) {
+        String key = extractKeyFromUrl(existingUrl);
+        if (key == null) {
+            throw new FileStorageException("URL inválida para sobrescrever: " + existingUrl);
+        }
+        PutObjectRequest putOb = PutObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .contentType(contentType)
+                .build();
+        s3Client.putObject(putOb, RequestBody.fromBytes(newBytes));
+        log.info("[S3 OVERWRITE] Arquivo sobrescrito: key='{}'", key);
     }
 
     public void deleteFile(String fileUrl) {

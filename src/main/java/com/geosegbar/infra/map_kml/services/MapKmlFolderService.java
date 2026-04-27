@@ -5,8 +5,12 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.MapKmlFileEntity;
@@ -18,6 +22,7 @@ import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.file_storage.FileStorageService;
+import com.geosegbar.infra.map_kml.dtos.KmlFeatureDTO;
 import com.geosegbar.infra.map_kml.dtos.MapKmlFileResponseDTO;
 import com.geosegbar.infra.map_kml.dtos.MapKmlFolderCreateDTO;
 import com.geosegbar.infra.map_kml.dtos.MapKmlFolderResponseDTO;
@@ -37,6 +42,7 @@ public class MapKmlFolderService {
     private final MapKmlFileRepository fileRepository;
     private final DamRepository damRepository;
     private final FileStorageService fileStorageService;
+    private final KmlProcessingService kmlProcessingService;
 
     @Transactional(readOnly = true)
     public List<MapKmlFolderResponseDTO> findByDamId(Long damId) {
@@ -129,9 +135,18 @@ public class MapKmlFolderService {
         kmlFile.setSize(file.getSize());
         kmlFile.setFolder(folder);
 
-        fileRepository.save(kmlFile);
-        log.info("Arquivo KML '{}' enviado para pasta '{}'", file.getOriginalFilename(), folder.getName());
+        MapKmlFileEntity saved = fileRepository.save(kmlFile);
+        Long fileId = saved.getId();
 
+        // Trigger async processing after this transaction commits
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                kmlProcessingService.processFileAsync(fileId);
+            }
+        });
+
+        log.info("Arquivo KML '{}' enviado para pasta '{}'", file.getOriginalFilename(), folder.getName());
         return toResponseDTO(folderRepository.findById(folderId).orElseThrow());
     }
 
@@ -152,11 +167,17 @@ public class MapKmlFolderService {
         log.info("Arquivo KML '{}' deletado", file.getFilename());
     }
 
+    private static final TypeReference<List<KmlFeatureDTO>> FEATURES_TYPE = new TypeReference<>() {};
+    private final ObjectMapper objectMapper;
+
     public MapKmlFolderResponseDTO toResponseDTO(MapKmlFolderEntity folder) {
         List<MapKmlFileResponseDTO> files = folder.getFiles().stream()
                 .map(f -> new MapKmlFileResponseDTO(
                         f.getId(), f.getFilename(), f.getDownloadUrl(),
-                        f.getContentType(), f.getSize(), f.getUploadedAt()))
+                        f.getContentType(), f.getSize(), f.getUploadedAt(),
+                        f.getProcessStatus() != null ? f.getProcessStatus().name() : "PENDING",
+                        f.getFeatureCount() != null ? f.getFeatureCount() : 0,
+                        null))
                 .collect(Collectors.toList());
 
         return new MapKmlFolderResponseDTO(
@@ -166,6 +187,54 @@ public class MapKmlFolderService {
                 folder.getCreatedAt(),
                 files
         );
+    }
+
+    public MapKmlFolderResponseDTO toResponseDTOWithFeatures(MapKmlFolderEntity folder) {
+        List<MapKmlFileResponseDTO> files = folder.getFiles().stream()
+                .map(f -> {
+                    List<KmlFeatureDTO> features = null;
+                    if (f.getFeaturesJson() != null) {
+                        try {
+                            features = objectMapper.readValue(f.getFeaturesJson(), FEATURES_TYPE);
+                        } catch (Exception e) {
+                            log.warn("[KML] Falha ao desserializar features do arquivo {}: {}", f.getId(), e.getMessage());
+                        }
+                    }
+                    return new MapKmlFileResponseDTO(
+                            f.getId(), f.getFilename(), f.getDownloadUrl(),
+                            f.getContentType(), f.getSize(), f.getUploadedAt(),
+                            f.getProcessStatus() != null ? f.getProcessStatus().name() : "PENDING",
+                            f.getFeatureCount() != null ? f.getFeatureCount() : 0,
+                            features);
+                })
+                .collect(Collectors.toList());
+
+        return new MapKmlFolderResponseDTO(
+                folder.getId(),
+                folder.getDam().getId(),
+                folder.getName(),
+                folder.getCreatedAt(),
+                files
+        );
+    }
+
+    @Transactional
+    public MapKmlFileResponseDTO renameFile(Long fileId, String filename) {
+        checkWritePermission();
+
+        MapKmlFileEntity file = fileRepository.findById(fileId)
+                .orElseThrow(() -> new NotFoundException("Arquivo não encontrado com ID: " + fileId));
+
+        file.setFilename(filename);
+        MapKmlFileEntity saved = fileRepository.save(file);
+        log.info("Arquivo KML {} renomeado para '{}'", fileId, filename);
+
+        return new MapKmlFileResponseDTO(
+                saved.getId(), saved.getFilename(), saved.getDownloadUrl(),
+                saved.getContentType(), saved.getSize(), saved.getUploadedAt(),
+                saved.getProcessStatus() != null ? saved.getProcessStatus().name() : "PENDING",
+                saved.getFeatureCount() != null ? saved.getFeatureCount() : 0,
+                null);
     }
 
     private void checkWritePermission() {

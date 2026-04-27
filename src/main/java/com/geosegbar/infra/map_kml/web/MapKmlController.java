@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -16,9 +17,11 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.geosegbar.common.response.WebResponseEntity;
+import com.geosegbar.infra.map_kml.dtos.MapKmlFileResponseDTO;
 import com.geosegbar.infra.map_kml.dtos.MapKmlFolderCreateDTO;
 import com.geosegbar.infra.map_kml.dtos.MapKmlFolderResponseDTO;
 import com.geosegbar.infra.map_kml.dtos.MapKmlFolderUpdateDTO;
+import com.geosegbar.infra.map_kml.dtos.RenameKmlFileRequest;
 import com.geosegbar.infra.map_kml.services.MapKmlFolderService;
 
 import jakarta.validation.Valid;
@@ -71,5 +74,13 @@ public class MapKmlController {
     public ResponseEntity<WebResponseEntity<Void>> deleteFile(@PathVariable Long fileId) {
         mapKmlFolderService.deleteFile(fileId);
         return ResponseEntity.ok(WebResponseEntity.success(null, "Arquivo KML excluído com sucesso!"));
+    }
+
+    @PatchMapping("/files/{fileId}/rename")
+    public ResponseEntity<WebResponseEntity<MapKmlFileResponseDTO>> renameFile(
+            @PathVariable Long fileId,
+            @Valid @RequestBody RenameKmlFileRequest request) {
+        MapKmlFileResponseDTO dto = mapKmlFolderService.renameFile(fileId, request.getFilename());
+        return ResponseEntity.ok(WebResponseEntity.success(dto, "Arquivo KML renomeado com sucesso!"));
     }
 }

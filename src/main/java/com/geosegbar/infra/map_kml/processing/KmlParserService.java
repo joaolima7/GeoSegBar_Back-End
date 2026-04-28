@@ -3,6 +3,7 @@ package com.geosegbar.infra.map_kml.processing;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -24,6 +25,7 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+import org.xml.sax.SAXParseException;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -81,13 +83,101 @@ public class KmlParserService {
     }
 
     public Document buildDocument(byte[] kmlBytes) throws Exception {
+        try {
+            return parseDocument(kmlBytes);
+        } catch (SAXParseException e) {
+            if (!isUnboundPrefixError(e)) throw e;
+            log.warn("KML com namespace XML ausente detectado; tentando normalizar declaracoes de prefixo.");
+            return parseDocument(addMissingNamespaceDeclarations(kmlBytes));
+        }
+    }
+
+    private Document parseDocument(byte[] kmlBytes) throws Exception {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(true);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
         factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
         factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
         DocumentBuilder builder = factory.newDocumentBuilder();
         builder.setErrorHandler(null);
         return builder.parse(new ByteArrayInputStream(kmlBytes));
+    }
+
+    private boolean isUnboundPrefixError(SAXParseException e) {
+        String message = e.getMessage();
+        if (message == null) return false;
+        String normalized = message.toLowerCase();
+        return (normalized.contains("prefix") || normalized.contains("prefixo"))
+                && (normalized.contains("is not bound")
+                        || normalized.contains("unbound")
+                        || normalized.contains("não está vinculado")
+                        || normalized.contains("nao esta vinculado"));
+    }
+
+    private byte[] addMissingNamespaceDeclarations(byte[] kmlBytes) {
+        String xml = new String(kmlBytes, StandardCharsets.UTF_8);
+        int rootStart = findRootElementStart(xml);
+        if (rootStart < 0) return kmlBytes;
+
+        int rootEnd = findStartTagEnd(xml, rootStart);
+        if (rootEnd < 0) return kmlBytes;
+
+        StringBuilder declarations = new StringBuilder();
+        addNamespaceIfMissing(xml, declarations, "xsi", "http://www.w3.org/2001/XMLSchema-instance");
+        addNamespaceIfMissing(xml, declarations, "gx", "http://www.google.com/kml/ext/2.2");
+        addNamespaceIfMissing(xml, declarations, "atom", "http://www.w3.org/2005/Atom");
+        addNamespaceIfMissing(xml, declarations, "xlink", "http://www.w3.org/1999/xlink");
+
+        if (declarations.isEmpty()) return kmlBytes;
+
+        String normalized = xml.substring(0, rootEnd) + declarations + xml.substring(rootEnd);
+        return normalized.getBytes(StandardCharsets.UTF_8);
+    }
+
+    private void addNamespaceIfMissing(String xml, StringBuilder declarations, String prefix, String namespaceUri) {
+        if (xml.contains(prefix + ":") && !xml.contains("xmlns:" + prefix + "=")) {
+            declarations.append(" xmlns:").append(prefix).append("=\"").append(namespaceUri).append("\"");
+        }
+    }
+
+    private int findRootElementStart(String xml) {
+        int pos = 0;
+        while ((pos = xml.indexOf('<', pos)) >= 0) {
+            if (xml.startsWith("<?", pos)) {
+                pos = xml.indexOf("?>", pos);
+                if (pos < 0) return -1;
+                pos += 2;
+            } else if (xml.startsWith("<!--", pos)) {
+                pos = xml.indexOf("-->", pos);
+                if (pos < 0) return -1;
+                pos += 3;
+            } else if (xml.startsWith("<!", pos)) {
+                pos = xml.indexOf('>', pos);
+                if (pos < 0) return -1;
+                pos++;
+            } else {
+                return pos;
+            }
+        }
+        return -1;
+    }
+
+    private int findStartTagEnd(String xml, int start) {
+        boolean quoted = false;
+        char quote = 0;
+        for (int i = start; i < xml.length(); i++) {
+            char c = xml.charAt(i);
+            if ((c == '"' || c == '\'') && (!quoted || c == quote)) {
+                quoted = !quoted;
+                quote = quoted ? c : 0;
+            } else if (c == '>' && !quoted) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     public List<Element> collectPlacemarks(Document doc) {

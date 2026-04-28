@@ -76,6 +76,14 @@ public class MapKmlController {
         return ResponseEntity.ok(WebResponseEntity.success(null, "Arquivo KML excluído com sucesso!"));
     }
 
+    @PutMapping("/files/{fileId}/overwrite")
+    public ResponseEntity<WebResponseEntity<MapKmlFileResponseDTO>> overwriteFile(
+            @PathVariable Long fileId,
+            @RequestParam("file") MultipartFile file) {
+        MapKmlFileResponseDTO dto = mapKmlFolderService.overwriteFile(fileId, file);
+        return ResponseEntity.ok(WebResponseEntity.success(dto, "Arquivo KML sobrescrito com sucesso!"));
+    }
+
     @PatchMapping("/files/{fileId}/rename")
     public ResponseEntity<WebResponseEntity<MapKmlFileResponseDTO>> renameFile(
             @PathVariable Long fileId,

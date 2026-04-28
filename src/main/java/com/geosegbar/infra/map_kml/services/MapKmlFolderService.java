@@ -1,16 +1,13 @@
 package com.geosegbar.infra.map_kml.services;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.MapKmlFileEntity;
@@ -22,7 +19,6 @@ import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.file_storage.FileStorageService;
-import com.geosegbar.infra.map_kml.dtos.KmlFeatureDTO;
 import com.geosegbar.infra.map_kml.dtos.MapKmlFileResponseDTO;
 import com.geosegbar.infra.map_kml.dtos.MapKmlFolderCreateDTO;
 import com.geosegbar.infra.map_kml.dtos.MapKmlFolderResponseDTO;
@@ -42,7 +38,6 @@ public class MapKmlFolderService {
     private final MapKmlFileRepository fileRepository;
     private final DamRepository damRepository;
     private final FileStorageService fileStorageService;
-    private final KmlProcessingService kmlProcessingService;
 
     @Transactional(readOnly = true)
     public List<MapKmlFolderResponseDTO> findByDamId(Long damId) {
@@ -115,36 +110,20 @@ public class MapKmlFolderService {
         MapKmlFolderEntity folder = folderRepository.findById(folderId)
                 .orElseThrow(() -> new NotFoundException("Pasta não encontrada com ID: " + folderId));
 
-        String originalFilename = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
-        if (!originalFilename.endsWith(".kml") && !originalFilename.endsWith(".kmz")) {
-            throw new InvalidInputException("Apenas arquivos .kml e .kmz são permitidos.");
-        }
+        String originalFilename = validateKmlFilename(file);
 
         String subDirectory = "map-kml/" + folder.getDam().getId();
         String downloadUrl = fileStorageService.storeFile(file, subDirectory);
-
-        String contentType = originalFilename.endsWith(".kmz")
-                ? "application/vnd.google-earth.kmz"
-                : "application/vnd.google-earth.kml+xml";
 
         MapKmlFileEntity kmlFile = new MapKmlFileEntity();
         kmlFile.setFilename(file.getOriginalFilename());
         kmlFile.setFilePath(downloadUrl);
         kmlFile.setDownloadUrl(downloadUrl);
-        kmlFile.setContentType(contentType);
+        kmlFile.setContentType(resolveContentType(originalFilename));
         kmlFile.setSize(file.getSize());
         kmlFile.setFolder(folder);
 
-        MapKmlFileEntity saved = fileRepository.save(kmlFile);
-        Long fileId = saved.getId();
-
-        // Trigger async processing after this transaction commits
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                kmlProcessingService.processFileAsync(fileId);
-            }
-        });
+        fileRepository.save(kmlFile);
 
         log.info("Arquivo KML '{}' enviado para pasta '{}'", file.getOriginalFilename(), folder.getName());
         return toResponseDTO(folderRepository.findById(folderId).orElseThrow());
@@ -167,46 +146,11 @@ public class MapKmlFolderService {
         log.info("Arquivo KML '{}' deletado", file.getFilename());
     }
 
-    private static final TypeReference<List<KmlFeatureDTO>> FEATURES_TYPE = new TypeReference<>() {};
-    private final ObjectMapper objectMapper;
-
     public MapKmlFolderResponseDTO toResponseDTO(MapKmlFolderEntity folder) {
         List<MapKmlFileResponseDTO> files = folder.getFiles().stream()
                 .map(f -> new MapKmlFileResponseDTO(
                         f.getId(), f.getFilename(), f.getDownloadUrl(),
-                        f.getContentType(), f.getSize(), f.getUploadedAt(),
-                        f.getProcessStatus() != null ? f.getProcessStatus().name() : "PENDING",
-                        f.getFeatureCount() != null ? f.getFeatureCount() : 0,
-                        null))
-                .collect(Collectors.toList());
-
-        return new MapKmlFolderResponseDTO(
-                folder.getId(),
-                folder.getDam().getId(),
-                folder.getName(),
-                folder.getCreatedAt(),
-                files
-        );
-    }
-
-    public MapKmlFolderResponseDTO toResponseDTOWithFeatures(MapKmlFolderEntity folder) {
-        List<MapKmlFileResponseDTO> files = folder.getFiles().stream()
-                .map(f -> {
-                    List<KmlFeatureDTO> features = null;
-                    if (f.getFeaturesJson() != null) {
-                        try {
-                            features = objectMapper.readValue(f.getFeaturesJson(), FEATURES_TYPE);
-                        } catch (Exception e) {
-                            log.warn("[KML] Falha ao desserializar features do arquivo {}: {}", f.getId(), e.getMessage());
-                        }
-                    }
-                    return new MapKmlFileResponseDTO(
-                            f.getId(), f.getFilename(), f.getDownloadUrl(),
-                            f.getContentType(), f.getSize(), f.getUploadedAt(),
-                            f.getProcessStatus() != null ? f.getProcessStatus().name() : "PENDING",
-                            f.getFeatureCount() != null ? f.getFeatureCount() : 0,
-                            features);
-                })
+                        f.getContentType(), f.getSize(), f.getUploadedAt()))
                 .collect(Collectors.toList());
 
         return new MapKmlFolderResponseDTO(
@@ -231,10 +175,37 @@ public class MapKmlFolderService {
 
         return new MapKmlFileResponseDTO(
                 saved.getId(), saved.getFilename(), saved.getDownloadUrl(),
-                saved.getContentType(), saved.getSize(), saved.getUploadedAt(),
-                saved.getProcessStatus() != null ? saved.getProcessStatus().name() : "PENDING",
-                saved.getFeatureCount() != null ? saved.getFeatureCount() : 0,
-                null);
+                saved.getContentType(), saved.getSize(), saved.getUploadedAt());
+    }
+
+    @Transactional
+    public MapKmlFileResponseDTO overwriteFile(Long fileId, MultipartFile file) {
+        checkWritePermission();
+
+        MapKmlFileEntity kmlFile = fileRepository.findById(fileId)
+                .orElseThrow(() -> new NotFoundException("Arquivo não encontrado com ID: " + fileId));
+
+        String originalFilename = validateKmlFilename(file);
+        String contentType = resolveContentType(originalFilename);
+
+        try {
+            fileStorageService.overwriteFile(kmlFile.getDownloadUrl(), file.getBytes(), contentType);
+        } catch (IOException e) {
+            throw new RuntimeException("Falha ao ler arquivo KML/KMZ enviado.", e);
+        }
+
+        if (file.getOriginalFilename() != null && !file.getOriginalFilename().isBlank()) {
+            kmlFile.setFilename(file.getOriginalFilename());
+        }
+        kmlFile.setContentType(contentType);
+        kmlFile.setSize(file.getSize());
+
+        MapKmlFileEntity saved = fileRepository.save(kmlFile);
+        log.info("Arquivo KML '{}' sobrescrito no S3", saved.getFilename());
+
+        return new MapKmlFileResponseDTO(
+                saved.getId(), saved.getFilename(), saved.getDownloadUrl(),
+                saved.getContentType(), saved.getSize(), saved.getUploadedAt());
     }
 
     private void checkWritePermission() {
@@ -244,5 +215,22 @@ public class MapKmlFolderService {
                 throw new UnauthorizedException("Usuário não tem permissão para gerenciar camadas KML do mapa!");
             }
         }
+    }
+
+    private String validateKmlFilename(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new InvalidInputException("Arquivo KML/KMZ não informado.");
+        }
+        String originalFilename = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
+        if (!originalFilename.endsWith(".kml") && !originalFilename.endsWith(".kmz")) {
+            throw new InvalidInputException("Apenas arquivos .kml e .kmz são permitidos.");
+        }
+        return originalFilename;
+    }
+
+    private String resolveContentType(String filename) {
+        return filename.endsWith(".kmz")
+                ? "application/vnd.google-earth.kmz"
+                : "application/vnd.google-earth.kml+xml";
     }
 }

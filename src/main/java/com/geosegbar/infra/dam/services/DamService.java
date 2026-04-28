@@ -112,7 +112,7 @@ public class DamService {
         )).collect(Collectors.toList());
 
         List<MapKmlFolderResponseDTO> kmlFolders = mapKmlFolderRepository.findByDamId(damId).stream()
-                .map(mapKmlFolderService::toResponseDTOWithFeatures)
+                .map(mapKmlFolderService::toResponseDTO)
                 .collect(Collectors.toList());
 
         return new DamMapDataDTO(instruments, sections, anomalies, kmlFolders);

@@ -74,13 +74,28 @@ public class BulkInstrumentImportService {
             throw new InvalidInputException("Formato de arquivo inválido. Por favor, envie um arquivo Excel (.xlsx ou .xls).");
         }
 
-        Map<String, Long> unitMap = muRepository.findAll().stream()
-                .collect(Collectors.toMap(MeasurementUnitEntity::getAcronym, MeasurementUnitEntity::getId));
+        List<MeasurementUnitEntity> allUnits = muRepository.findAll();
+        log.info("[Import] Unidades de medida disponíveis no banco ({}): {}",
+                allUnits.size(),
+                allUnits.stream().map(u -> "'" + u.getAcronym() + "'").collect(Collectors.joining(", ")));
 
-        Map<String, InstrumentTypeEntity> instrumentTypesByName = instrumentTypeRepository.findAll().stream()
+        Map<String, Long> unitMap = allUnits.stream()
+                .collect(Collectors.toMap(
+                        u -> u.getAcronym().toUpperCase(),
+                        MeasurementUnitEntity::getId,
+                        (existing, duplicate) -> existing
+                ));
+
+        List<InstrumentTypeEntity> allTypes = instrumentTypeRepository.findAll();
+        log.info("[Import] Tipos de instrumento disponíveis no banco ({}): {}",
+                allTypes.size(),
+                allTypes.stream().map(t -> "'" + t.getName() + "'").collect(Collectors.joining(", ")));
+
+        Map<String, InstrumentTypeEntity> instrumentTypesByName = allTypes.stream()
                 .collect(Collectors.toMap(
                         type -> type.getName().toUpperCase(),
-                        type -> type
+                        type -> type,
+                        (existing, duplicate) -> existing
                 ));
 
         Map<String, SectionEntity> sectionsByName = sectionRepository
@@ -140,7 +155,9 @@ public class BulkInstrumentImportService {
 
                 InstrumentTypeEntity instrumentType = instrumentTypesByName.get(instrumentTypeName);
                 if (instrumentType == null) {
-                    throw new InvalidInputException("Tipo de instrumento não encontrado: " + ir.instrumentTypeName);
+                    log.error("[Import] Tipo de instrumento '{}' (normalizado: '{}') não encontrado. Tipos disponíveis: {}",
+                            ir.instrumentTypeName, instrumentTypeName, instrumentTypesByName.keySet());
+                    throw new InvalidInputException("Tipo de instrumento não encontrado: '" + ir.instrumentTypeName + "'. Verifique se o nome na planilha corresponde ao cadastro.");
                 }
 
                 CreateInstrumentRequest req = ir.toRequest(meta, sectionId);
@@ -292,7 +309,7 @@ public class BulkInstrumentImportService {
                 d.setAcronym(getString(row, idx, "Sigla"));
                 d.setName(getString(row, idx, "Nome"));
                 d.setPrecision(getInt(row, idx, "Precisão"));
-                d.setMeasurementUnitId(fetchUnit(getString(row, idx, "Unidade de Medida").toUpperCase(), unitMap));
+                d.setMeasurementUnitId(fetchUnit(getString(row, idx, "Unidade de Medida"), unitMap));
                 dto = (T) d;
 
             } else if (clz.equals(ConstantDTO.class)) {
@@ -301,7 +318,7 @@ public class BulkInstrumentImportService {
                 d.setName(getString(row, idx, "Nome"));
                 d.setPrecision(getInt(row, idx, "Precisão"));
                 d.setValue(getDouble(row, idx, "Valor"));
-                d.setMeasurementUnitId(fetchUnit(getString(row, idx, "Unidade de Medida").toUpperCase(), unitMap));
+                d.setMeasurementUnitId(fetchUnit(getString(row, idx, "Unidade de Medida"), unitMap));
                 dto = (T) d;
 
             } else {
@@ -310,7 +327,7 @@ public class BulkInstrumentImportService {
                 d.setName(getString(row, idx, "Nome"));
                 d.setEquation(getString(row, idx, "Equação"));
                 d.setPrecision(getInt(row, idx, "Precisão"));
-                d.setMeasurementUnitId(fetchUnit(getString(row, idx, "Unidade de Medida").toUpperCase(), unitMap));
+                d.setMeasurementUnitId(fetchUnit(getString(row, idx, "Unidade de Medida"), unitMap));
                 dto = (T) d;
             }
             map.computeIfAbsent(id, k -> new ArrayList<>()).add(dto);
@@ -458,9 +475,12 @@ public class BulkInstrumentImportService {
     }
 
     private Long fetchUnit(String acr, Map<String, Long> unitMap) {
-        Long id = unitMap.get(acr);
+        String normalizedAcr = acr != null ? acr.toUpperCase() : null;
+        Long id = unitMap.get(normalizedAcr);
         if (id == null) {
-            throw new InvalidInputException("Unidade não encontrada: " + acr);
+            log.error("[Import] Unidade '{}' (normalizado: '{}') não encontrada. Chaves disponíveis: {}",
+                    acr, normalizedAcr, unitMap.keySet());
+            throw new InvalidInputException("Unidade de medida não encontrada: '" + acr + "'. Verifique se a sigla da planilha corresponde exatamente ao cadastro (sem espaços extras).");
         }
         return id;
     }

@@ -21,10 +21,8 @@ public class UpdateInstrumentRequest {
 
     private Double distanceOffset;
 
-    @NotNull(message = "Latitude é obrigatória")
     private Double latitude;
 
-    @NotNull(message = "Longitude é obrigatória")
     private Double longitude;
 
     @NotNull(message = "Campo 'sem limites' é obrigatório")

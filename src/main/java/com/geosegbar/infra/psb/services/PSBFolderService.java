@@ -307,8 +307,11 @@ public class PSBFolderService {
         PSBFolderEntity folder = psbFolderRepository.findById(folderDTO.getId())
                 .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada: " + folderDTO.getId()));
 
-        if (folder.getParentFolder() != null || !folder.getDam().getId().equals(dam.getId())) {
-            throw new BusinessRuleException("Conflito de hierarquia ou barragem na atualização de pasta raiz.");
+        if (folder.getParentFolder() != null) {
+            throw new BusinessRuleException("A pasta '" + folderDTO.getId() + "' é uma subpasta e não pode ser atualizada como pasta raiz.");
+        }
+        if (!folder.getDam().getId().equals(dam.getId())) {
+            throw new BusinessRuleException("A pasta '" + folderDTO.getId() + "' pertence à barragem " + folder.getDam().getId() + " e não à barragem " + dam.getId() + ".");
         }
 
         if (!skipDbValidation) {

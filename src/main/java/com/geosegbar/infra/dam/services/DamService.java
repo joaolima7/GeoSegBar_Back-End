@@ -772,11 +772,20 @@ public class DamService {
 
     private LevelEntity processLevel(LevelRequestDTO levelDTO) {
         if (levelDTO.getId() != null) {
-            return levelRepository.findById(levelDTO.getId())
+            LevelEntity level = levelRepository.findById(levelDTO.getId())
                     .orElseThrow(() -> new NotFoundException("Nível não encontrado com ID: " + levelDTO.getId()));
+            level.setName(levelDTO.getName());
+            level.setValue(levelDTO.getValue());
+            level.setUnitLevel(levelDTO.getUnitLevel());
+            return levelRepository.save(level);
         }
 
         return levelRepository.findByName(levelDTO.getName())
+                .map(existing -> {
+                    existing.setValue(levelDTO.getValue());
+                    existing.setUnitLevel(levelDTO.getUnitLevel());
+                    return levelRepository.save(existing);
+                })
                 .orElseGet(() -> {
                     LevelEntity newLevel = new LevelEntity();
                     newLevel.setName(levelDTO.getName());
@@ -788,12 +797,21 @@ public class DamService {
 
     private LevelEntity processLevelForUpdate(LevelRequestDTO levelDTO, LevelEntity currentLevel) {
         if (levelDTO.getId() != null) {
-            return levelRepository.findById(levelDTO.getId())
+            LevelEntity level = levelRepository.findById(levelDTO.getId())
                     .orElseThrow(() -> new NotFoundException("Nível não encontrado com ID: " + levelDTO.getId()));
+            level.setName(levelDTO.getName());
+            level.setValue(levelDTO.getValue());
+            level.setUnitLevel(levelDTO.getUnitLevel());
+            return levelRepository.save(level);
         }
 
         if (!currentLevel.getName().equals(levelDTO.getName())) {
             return levelRepository.findByName(levelDTO.getName())
+                    .map(existing -> {
+                        existing.setValue(levelDTO.getValue());
+                        existing.setUnitLevel(levelDTO.getUnitLevel());
+                        return levelRepository.save(existing);
+                    })
                     .orElseGet(() -> {
                         LevelEntity newLevel = new LevelEntity();
                         newLevel.setName(levelDTO.getName());

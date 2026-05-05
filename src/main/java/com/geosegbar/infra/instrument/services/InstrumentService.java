@@ -49,6 +49,8 @@ import com.geosegbar.infra.instrument.dtos.UpdateInstrumentRequest;
 import com.geosegbar.infra.instrument.events.InstrumentCreatedEvent;
 import com.geosegbar.infra.instrument.events.LinimetricRulerCreatedEvent;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
+import com.geosegbar.infra.instrument_graph_pattern.persistence.jpa.InstrumentGraphPatternRepository;
+import com.geosegbar.infra.instrument_tabulate_pattern.persistence.jpa.InstrumentTabulatePatternRepository;
 import com.geosegbar.infra.instrument_type.persistence.jpa.InstrumentTypeRepository;
 import com.geosegbar.infra.measurement_unit.persistence.jpa.MeasurementUnitRepository;
 import com.geosegbar.infra.output.persistence.jpa.OutputRepository;
@@ -76,6 +78,8 @@ public class InstrumentService {
     private final OutputRepository outputRepository;
     private final InstrumentTypeRepository instrumentTypeRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final InstrumentGraphPatternRepository instrumentGraphPatternRepository;
+    private final InstrumentTabulatePatternRepository instrumentTabulatePatternRepository;
 
     @Transactional(readOnly = true)
     public List<InstrumentResponseDTO> findAll() {
@@ -490,6 +494,7 @@ public class InstrumentService {
         InstrumentEntity oldInstrument = instrumentRepository.findByIdWithFullDetails(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado com ID: " + id));
 
+        String oldName = oldInstrument.getName();
         Long oldLinimetricCode = oldInstrument.getLinimetricRulerCode();
 
         if (instrumentRepository.existsByNameAndDamIdAndIdNot(request.getName(), request.getDamId(), id)) {
@@ -562,6 +567,28 @@ public class InstrumentService {
         }
 
         instrumentRepository.save(oldInstrument);
+
+        String newName = request.getName().toUpperCase();
+        if (!oldName.equals(newName) && !Boolean.TRUE.equals(request.getIsLinimetricRuler())) {
+            String oldPatternName = "Padrão Automático - " + oldName;
+            String newPatternName = "Padrão Automático - " + newName;
+            instrumentGraphPatternRepository.findByNameStartingWithAndInstrumentId("Padrão Automático - ", id)
+                    .stream()
+                    .filter(p -> p.getName().equals(oldPatternName))
+                    .forEach(p -> {
+                        p.setName(newPatternName);
+                        instrumentGraphPatternRepository.save(p);
+                        log.info("Padrão de gráfico renomeado: '{}' -> '{}' (instrumento ID: {})", oldPatternName, newPatternName, id);
+                    });
+            instrumentTabulatePatternRepository.findByNameStartingWithAndDamId("Padrão Automático - ", oldInstrument.getDam().getId())
+                    .stream()
+                    .filter(p -> p.getName().equals(oldPatternName))
+                    .forEach(p -> {
+                        p.setName(newPatternName);
+                        instrumentTabulatePatternRepository.save(p);
+                        log.info("Padrão de tabela renomeado: '{}' -> '{}' (barragem ID: {})", oldPatternName, newPatternName, oldInstrument.getDam().getId());
+                    });
+        }
 
         InstrumentEntity updatedInstrument = instrumentRepository.findWithActiveOutputsById(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após atualização"));

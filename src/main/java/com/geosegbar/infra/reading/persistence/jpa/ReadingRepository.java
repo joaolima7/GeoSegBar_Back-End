@@ -424,9 +424,23 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             """)
     List<ReadingEntity> findByIdsWithAllRelations(@Param("ids") List<Long> ids);
 
+    @Query(value = """
+            SELECT r.id
+            FROM reading r
+            WHERE r.instrument_id IN :instrumentIds
+              AND r.active = true
+            ORDER BY r.instrument_id, r.date DESC, r.hour DESC
+            """, nativeQuery = true)
+    List<Long> findAllReadingIdsByInstrumentIds(@Param("instrumentIds") List<Long> instrumentIds);
+
     default List<ReadingEntity> findLatestReadingsByInstrumentIdsWithAllRelations(
             List<Long> instrumentIds, LocalDate startDate, LocalDate endDate, int limit) {
-        List<Long> ids = findLatestReadingIdsByInstrumentIds(instrumentIds, startDate, endDate, limit);
+        List<Long> ids;
+        if (startDate == null && endDate == null) {
+            ids = findAllReadingIdsByInstrumentIds(instrumentIds);
+        } else {
+            ids = findLatestReadingIdsByInstrumentIds(instrumentIds, startDate, endDate, limit);
+        }
         if (ids.isEmpty()) {
             return List.of();
         }

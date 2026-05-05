@@ -334,4 +334,19 @@ public class InstrumentGraphPatternService {
 
         return dto;
     }
+
+    @Transactional
+    public void renameAutoPattern(Long instrumentId, String oldInstrumentName, String newInstrumentName) {
+        String oldPatternName = "Padrão Automático - " + oldInstrumentName;
+        String newPatternName = "Padrão Automático - " + newInstrumentName;
+        List<InstrumentGraphPatternEntity> patterns = patternRepository
+                .findByNameStartingWithAndInstrumentId("Padrão Automático - ", instrumentId);
+        for (InstrumentGraphPatternEntity pattern : patterns) {
+            if (pattern.getName().equals(oldPatternName)) {
+                pattern.setName(newPatternName);
+                patternRepository.save(pattern);
+                log.info("Padrão de gráfico renomeado: '{}' -> '{}' (instrumento ID: {})", oldPatternName, newPatternName, instrumentId);
+            }
+        }
+    }
 }

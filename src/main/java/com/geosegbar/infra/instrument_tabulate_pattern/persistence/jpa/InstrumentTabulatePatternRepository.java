@@ -28,6 +28,8 @@ public interface InstrumentTabulatePatternRepository extends JpaRepository<Instr
 
     boolean existsByNameAndDamId(String name, Long damId);
 
+    List<InstrumentTabulatePatternEntity> findByNameStartingWithAndDamId(String prefix, Long damId);
+
     boolean existsByNameAndDamIdAndIdNot(String name, Long damId, Long id);
 
     @Query("SELECT p FROM InstrumentTabulatePatternEntity p "

@@ -477,4 +477,19 @@ public class InstrumentTabulatePatternService {
         }
         return index;
     }
+
+    @Transactional
+    public void renameAutoPattern(Long damId, String oldInstrumentName, String newInstrumentName) {
+        String oldPatternName = "Padrão Automático - " + oldInstrumentName;
+        String newPatternName = "Padrão Automático - " + newInstrumentName;
+        List<InstrumentTabulatePatternEntity> patterns = patternRepository
+                .findByNameStartingWithAndDamId("Padrão Automático - ", damId);
+        for (InstrumentTabulatePatternEntity pattern : patterns) {
+            if (pattern.getName().equals(oldPatternName)) {
+                pattern.setName(newPatternName);
+                patternRepository.save(pattern);
+                log.info("Padrão de tabela renomeado: '{}' -> '{}' (barragem ID: {})", oldPatternName, newPatternName, damId);
+            }
+        }
+    }
 }

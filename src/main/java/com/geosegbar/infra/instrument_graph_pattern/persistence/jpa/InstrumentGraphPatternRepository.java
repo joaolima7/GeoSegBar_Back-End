@@ -24,6 +24,8 @@ public interface InstrumentGraphPatternRepository extends JpaRepository<Instrume
 
     boolean existsByNameAndInstrumentId(String name, Long instrumentId);
 
+    List<InstrumentGraphPatternEntity> findByNameStartingWithAndInstrumentId(String prefix, Long instrumentId);
+
     @Query("SELECT DISTINCT p FROM InstrumentGraphPatternEntity p "
             + "LEFT JOIN FETCH p.instrument i "
             + "LEFT JOIN FETCH p.folder f "

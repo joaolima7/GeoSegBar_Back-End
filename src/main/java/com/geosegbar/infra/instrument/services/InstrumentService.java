@@ -599,8 +599,9 @@ public class InstrumentService {
                 .orElseThrow(() -> new NotFoundException("Unidade de medida não encontrada com ID: " + sourceDTO.getMeasurementUnitId()));
 
         if (inputLei != null) {
-            boolean precisionChanged = !inputLei.getPrecision().equals(sourceDTO.getPrecision());
-            boolean unitChanged = !inputLei.getMeasurementUnit().getId().equals(sourceDTO.getMeasurementUnitId());
+            boolean precisionChanged = !Objects.equals(inputLei.getPrecision(), sourceDTO.getPrecision());
+            boolean unitChanged = inputLei.getMeasurementUnit() == null
+                    || !Objects.equals(inputLei.getMeasurementUnit().getId(), sourceDTO.getMeasurementUnitId());
 
             inputLei.setName("Leitura");
             inputLei.setAcronym("LEI");
@@ -862,9 +863,9 @@ public class InstrumentService {
                 existingInputsByAcronym.remove(inputDTO.getAcronym());
                 updatedCount++;
 
-                boolean nameChanged = !originalName.equals(inputDTO.getName());
-                boolean precisionChanged = !originalPrecision.equals(inputDTO.getPrecision());
-                boolean unitChanged = !originalUnitId.equals(inputDTO.getMeasurementUnitId());
+                boolean nameChanged = !Objects.equals(originalName, inputDTO.getName());
+                boolean precisionChanged = !Objects.equals(originalPrecision, inputDTO.getPrecision());
+                boolean unitChanged = !Objects.equals(originalUnitId, inputDTO.getMeasurementUnitId());
 
                 if (nameChanged || precisionChanged || unitChanged) {
                     significantChange = true;
@@ -938,10 +939,10 @@ public class InstrumentService {
                 existingConstantsByAcronym.remove(constantDTO.getAcronym());
                 updatedCount++;
 
-                boolean nameChanged = !originalName.equals(constantDTO.getName());
-                boolean precisionChanged = !originalPrecision.equals(constantDTO.getPrecision());
-                boolean valueChanged = !originalValue.equals(constantDTO.getValue());
-                boolean unitChanged = !originalUnitId.equals(constantDTO.getMeasurementUnitId());
+                boolean nameChanged = !Objects.equals(originalName, constantDTO.getName());
+                boolean precisionChanged = !Objects.equals(originalPrecision, constantDTO.getPrecision());
+                boolean valueChanged = !Objects.equals(originalValue, constantDTO.getValue());
+                boolean unitChanged = !Objects.equals(originalUnitId, constantDTO.getMeasurementUnitId());
 
                 if (nameChanged || precisionChanged || valueChanged || unitChanged) {
                     significantChange = true;
@@ -1063,10 +1064,11 @@ public class InstrumentService {
                 instrument.getOutputs().add(savedOutput);
                 createdCount++;
             } else {
-                boolean nameChanged = !output.getName().equals(outputDTO.getName());
-                boolean equationChanged = !output.getEquation().equals(outputDTO.getEquation());
-                boolean precisionChanged = !output.getPrecision().equals(outputDTO.getPrecision());
-                boolean unitChanged = !output.getMeasurementUnit().getId().equals(outputDTO.getMeasurementUnitId());
+                boolean nameChanged = !Objects.equals(output.getName(), outputDTO.getName());
+                boolean equationChanged = !Objects.equals(output.getEquation(), outputDTO.getEquation());
+                boolean precisionChanged = !Objects.equals(output.getPrecision(), outputDTO.getPrecision());
+                boolean unitChanged = output.getMeasurementUnit() == null
+                        || !Objects.equals(output.getMeasurementUnit().getId(), outputDTO.getMeasurementUnitId());
 
                 if (nameChanged || equationChanged || precisionChanged || unitChanged) {
                     significantChange = true;
@@ -1133,8 +1135,8 @@ public class InstrumentService {
 
                 if (output.getStatisticalLimit() != null && outputDTO.getStatisticalLimit() != null) {
                     StatisticalLimitEntity limit = output.getStatisticalLimit();
-                    boolean lowerChanged = !limit.getLowerValue().equals(outputDTO.getStatisticalLimit().getLowerValue());
-                    boolean upperChanged = !limit.getUpperValue().equals(outputDTO.getStatisticalLimit().getUpperValue());
+                    boolean lowerChanged = !Objects.equals(limit.getLowerValue(), outputDTO.getStatisticalLimit().getLowerValue());
+                    boolean upperChanged = !Objects.equals(limit.getUpperValue(), outputDTO.getStatisticalLimit().getUpperValue());
                     if (lowerChanged || upperChanged) {
                         significantChange = true;
                     }
@@ -1142,9 +1144,9 @@ public class InstrumentService {
 
                 if (output.getDeterministicLimit() != null && outputDTO.getDeterministicLimit() != null) {
                     DeterministicLimitEntity limit = output.getDeterministicLimit();
-                    boolean attentionChanged = !limit.getAttentionValue().equals(outputDTO.getDeterministicLimit().getAttentionValue());
-                    boolean alertChanged = !limit.getAlertValue().equals(outputDTO.getDeterministicLimit().getAlertValue());
-                    boolean emergencyChanged = !limit.getEmergencyValue().equals(outputDTO.getDeterministicLimit().getEmergencyValue());
+                    boolean attentionChanged = !Objects.equals(limit.getAttentionValue(), outputDTO.getDeterministicLimit().getAttentionValue());
+                    boolean alertChanged = !Objects.equals(limit.getAlertValue(), outputDTO.getDeterministicLimit().getAlertValue());
+                    boolean emergencyChanged = !Objects.equals(limit.getEmergencyValue(), outputDTO.getDeterministicLimit().getEmergencyValue());
                     if (attentionChanged || alertChanged || emergencyChanged) {
                         significantChange = true;
                     }

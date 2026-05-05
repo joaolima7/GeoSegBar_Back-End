@@ -59,6 +59,7 @@ import com.geosegbar.infra.regulatory_dam.persistence.RegulatoryDamRepository;
 import com.geosegbar.infra.reservoir.persistence.ReservoirRepository;
 import com.geosegbar.infra.risk_category.persistence.RiskCategoryRepository;
 import com.geosegbar.infra.section.persistence.jpa.SectionRepository;
+import com.geosegbar.infra.section_rendering_config.persistence.jpa.SectionRenderingConfigRepository;
 import com.geosegbar.infra.security_level.persistence.SecurityLevelRepository;
 import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
 
@@ -88,6 +89,7 @@ public class DamService {
     private final AnomalyRepository anomalyRepository;
     private final MapKmlFolderRepository mapKmlFolderRepository;
     private final MapKmlFolderService mapKmlFolderService;
+    private final SectionRenderingConfigRepository sectionRenderingConfigRepository;
 
     @Transactional(readOnly = true)
     public DamMapDataDTO getMapData(Long damId) {
@@ -691,6 +693,7 @@ public class DamService {
 
             for (ReservoirRequestDTO reservoirDTO : request.getReservoirs()) {
                 if (reservoirDTO.getId() != null) {
+                    // Reservoir ID explicitamente enviado pelo frontend
                     ReservoirEntity existingReservoir = reservoirRepository.findById(reservoirDTO.getId())
                             .orElseThrow(() -> new NotFoundException("Reservatório não encontrado com ID: " + reservoirDTO.getId()));
 
@@ -700,25 +703,49 @@ public class DamService {
 
                     LevelEntity level = processLevelForUpdate(reservoirDTO.getLevel(), existingReservoir.getLevel());
                     existingReservoir.setLevel(level);
-
                     reservoirRepository.save(existingReservoir);
                     receivedReservoirIds.add(reservoirDTO.getId());
+
+                } else if (reservoirDTO.getLevel() != null && reservoirDTO.getLevel().getId() != null) {
+                    // Sem reservoir ID mas com level ID — casar pelo level.id para não recriar desnecessariamente
+                    Long levelId = reservoirDTO.getLevel().getId();
+                    ReservoirEntity matched = currentReservoirs.stream()
+                            .filter(r -> r.getLevel() != null && levelId.equals(r.getLevel().getId()))
+                            .findFirst()
+                            .orElse(null);
+
+                    if (matched != null) {
+                        LevelEntity level = processLevelForUpdate(reservoirDTO.getLevel(), matched.getLevel());
+                        matched.setLevel(level);
+                        reservoirRepository.save(matched);
+                        receivedReservoirIds.add(matched.getId());
+                    } else {
+                        LevelEntity level = processLevel(reservoirDTO.getLevel());
+                        ReservoirEntity newReservoir = new ReservoirEntity();
+                        newReservoir.setDam(finalDam);
+                        newReservoir.setLevel(level);
+                        receivedReservoirIds.add(reservoirRepository.save(newReservoir).getId());
+                    }
+
                 } else {
+                    // Sem nenhum ID — criar novo reservatório
                     LevelEntity level = processLevel(reservoirDTO.getLevel());
                     ReservoirEntity newReservoir = new ReservoirEntity();
                     newReservoir.setDam(finalDam);
                     newReservoir.setLevel(level);
-
-                    ReservoirEntity savedReservoir = reservoirRepository.save(newReservoir);
-                    receivedReservoirIds.add(savedReservoir.getId());
+                    receivedReservoirIds.add(reservoirRepository.save(newReservoir).getId());
                 }
             }
 
             List<ReservoirEntity> reservoirsToDelete = currentReservoirs.stream()
                     .filter(reservoir -> !receivedReservoirIds.contains(reservoir.getId()))
-                    .collect(java.util.stream.Collectors.toList());
+                    .collect(Collectors.toList());
 
             if (!reservoirsToDelete.isEmpty()) {
+                List<Long> idsToDelete = reservoirsToDelete.stream()
+                        .map(ReservoirEntity::getId)
+                        .collect(Collectors.toList());
+                sectionRenderingConfigRepository.deleteSelectedReservoirsByReservoirIds(idsToDelete);
                 reservoirRepository.deleteAll(reservoirsToDelete);
             }
         }

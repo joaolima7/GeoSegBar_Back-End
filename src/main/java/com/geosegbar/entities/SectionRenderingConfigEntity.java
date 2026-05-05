@@ -7,8 +7,10 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
+import jakarta.persistence.ConstraintMode;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -123,7 +125,10 @@ public class SectionRenderingConfigEntity {
     @JoinTable(
             name = "section_rendering_selected_reservoirs",
             joinColumns = @JoinColumn(name = "config_id"),
-            inverseJoinColumns = @JoinColumn(name = "reservoir_id"),
+            inverseJoinColumns = @JoinColumn(name = "reservoir_id",
+                    foreignKey = @ForeignKey(name = "fkq2dv1eajdtab0hhe1qdrwmcq3",
+                            value = ConstraintMode.CONSTRAINT,
+                            foreignKeyDefinition = "FOREIGN KEY (reservoir_id) REFERENCES reservoirs(id) ON DELETE CASCADE")),
             indexes = {
                 @Index(name = "idx_srsr_config", columnList = "config_id"),
                 @Index(name = "idx_srsr_reservoir", columnList = "reservoir_id")

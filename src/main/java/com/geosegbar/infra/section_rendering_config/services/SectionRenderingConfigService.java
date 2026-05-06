@@ -1,8 +1,10 @@
 package com.geosegbar.infra.section_rendering_config.services;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -11,7 +13,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.common.enums.LimitStatusEnum;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
+import com.geosegbar.entities.ConstantEntity;
 import com.geosegbar.entities.InstrumentEntity;
+import com.geosegbar.entities.OutputEntity;
+import com.geosegbar.entities.ReadingEntity;
 import com.geosegbar.entities.ReservoirEntity;
 import com.geosegbar.entities.SectionCustomLevelEntity;
 import com.geosegbar.entities.SectionEntity;
@@ -21,9 +26,12 @@ import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
+import com.geosegbar.infra.reading.persistence.jpa.ReadingRepository;
 import com.geosegbar.infra.reservoir.persistence.ReservoirRepository;
 import com.geosegbar.infra.section.persistence.jpa.SectionRepository;
-import com.geosegbar.infra.section_rendering_config.dtos.LastReadingDTO;
+import com.geosegbar.infra.section_rendering_config.dtos.ElevationVariableDTO;
+import com.geosegbar.infra.section_rendering_config.dtos.ElevationVariableDTO.VariableType;
+import com.geosegbar.infra.section_rendering_config.dtos.InstrumentMeasurementUnitDTO;
 import com.geosegbar.infra.section_rendering_config.dtos.SectionCustomLevelDTO;
 import com.geosegbar.infra.section_rendering_config.dtos.SectionRenderDataDTO;
 import com.geosegbar.infra.section_rendering_config.dtos.SectionRenderInstrumentDTO;
@@ -32,8 +40,6 @@ import com.geosegbar.infra.section_rendering_config.dtos.SectionRenderTelemetric
 import com.geosegbar.infra.section_rendering_config.dtos.SectionRenderingConfigResponseDTO;
 import com.geosegbar.infra.section_rendering_config.dtos.UpdateSectionRenderingConfigRequest;
 import com.geosegbar.infra.section_rendering_config.persistence.jpa.SectionRenderingConfigRepository;
-import com.geosegbar.infra.section_rendering_config.projections.PiezometerWithLastReadingProjection;
-import com.geosegbar.infra.section_rendering_config.projections.TelemetricInstrumentProjection;
 
 import lombok.RequiredArgsConstructor;
 
@@ -41,10 +47,14 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class SectionRenderingConfigService {
 
+    private static final String TRANSLATE_FROM = "àáâãäåçèéêëìíîïñòóôõöùúûüý";
+    private static final String TRANSLATE_TO   = "aaaaaaceeeeiiiinooooouuuuy";
+
     private final SectionRenderingConfigRepository configRepository;
     private final SectionRepository sectionRepository;
     private final InstrumentRepository instrumentRepository;
     private final ReservoirRepository reservoirRepository;
+    private final ReadingRepository readingRepository;
 
     @Transactional(readOnly = true)
     public SectionRenderingConfigResponseDTO getBySectionId(Long sectionId) {
@@ -223,26 +233,34 @@ public class SectionRenderingConfigService {
             }
         }
 
-        List<PiezometerWithLastReadingProjection> piezometerRows =
-                instrumentRepository.findPiezometersBySectionWithLastReading(sectionId);
+        // ---- piezômetros -------------------------------------------------------
+        List<InstrumentEntity> piezometerEntities =
+                instrumentRepository.findPiezometersBySectionWithOutputsAndConstants(sectionId);
 
-        List<SectionRenderInstrumentDTO> piezometers = piezometerRows.stream()
+        // Collect all output IDs from piezometers that are elevation outputs
+        List<Long> piezometerOutputIds = piezometerEntities.stream()
+                .flatMap(i -> i.getOutputs().stream())
+                .filter(OutputEntity::getActive)
+                .map(OutputEntity::getId)
+                .collect(Collectors.toList());
+
+        Map<Long, ReadingEntity> latestByOutputId = fetchLatestReadingsByOutputIds(piezometerOutputIds);
+
+        List<SectionRenderInstrumentDTO> piezometers = piezometerEntities.stream()
                 .map(p -> {
-                    LastReadingDTO lr = null;
-                    if (p.getLastReadingDate() != null) {
-                        LimitStatusEnum status = null;
-                        if (p.getLastReadingLimitStatus() != null) {
-                            status = LimitStatusEnum.valueOf(p.getLastReadingLimitStatus());
-                        }
-                        lr = new LastReadingDTO(p.getLastReadingDate(), p.getLastReadingHour(),
-                                p.getLastReadingValue(), status);
-                    }
-                    return new SectionRenderInstrumentDTO(
-                            p.getId(), p.getName(), p.getDistanceOffset(),
-                            selectedInstrumentIds.contains(p.getId()), lr);
+                    SectionRenderInstrumentDTO dto = new SectionRenderInstrumentDTO();
+                    dto.setId(p.getId());
+                    dto.setName(p.getName());
+                    dto.setDistanceOffset(p.getDistanceOffset());
+                    dto.setIsSelected(selectedInstrumentIds.contains(p.getId()));
+                    dto.setTopElevation(resolveTopElevation(p, latestByOutputId));
+                    dto.setBottomElevation(resolveBottomElevation(p, latestByOutputId));
+                    dto.setPiezometricElevation(resolvePiezometricElevation(p, latestByOutputId));
+                    return dto;
                 })
                 .collect(Collectors.toList());
 
+        // ---- reservatórios e telemetria ----------------------------------------
         List<SectionRenderReservoirDTO> reservoirs = new ArrayList<>();
         SectionRenderTelemetricInstrumentDTO upstream = null;
         SectionRenderTelemetricInstrumentDTO downstream = null;
@@ -259,20 +277,26 @@ public class SectionRenderingConfigService {
                         selectedReservoirIds.contains(r.getId())));
             }
 
-            List<TelemetricInstrumentProjection> telemetric =
-                    instrumentRepository.findActiveTelemetricByDamWithLastReading(damId);
-            for (TelemetricInstrumentProjection t : telemetric) {
-                LastReadingDTO lr = null;
-                if (t.getLastReadingDate() != null) {
-                    LimitStatusEnum status = null;
-                    if (t.getLastReadingLimitStatus() != null) {
-                        status = LimitStatusEnum.valueOf(t.getLastReadingLimitStatus());
-                    }
-                    lr = new LastReadingDTO(t.getLastReadingDate(), t.getLastReadingHour(),
-                            t.getLastReadingValue(), status);
-                }
-                SectionRenderTelemetricInstrumentDTO dto = new SectionRenderTelemetricInstrumentDTO(
-                        t.getId(), t.getName(), t.getIsLinimetricRuler(), t.getIsDownstream(), lr);
+            List<InstrumentEntity> telemetricEntities =
+                    instrumentRepository.findActiveTelemetricByDamWithOutputsAndConstants(damId);
+
+            List<Long> telemetricOutputIds = telemetricEntities.stream()
+                    .flatMap(i -> i.getOutputs().stream())
+                    .filter(OutputEntity::getActive)
+                    .map(OutputEntity::getId)
+                    .collect(Collectors.toList());
+
+            Map<Long, ReadingEntity> latestByTelemetricOutput = fetchLatestReadingsByOutputIds(telemetricOutputIds);
+
+            for (InstrumentEntity t : telemetricEntities) {
+                SectionRenderTelemetricInstrumentDTO dto = new SectionRenderTelemetricInstrumentDTO();
+                dto.setId(t.getId());
+                dto.setName(t.getName());
+                dto.setIsLinimetricRuler(t.getIsLinimetricRuler());
+                dto.setIsDownstream(t.getIsDownstream());
+                dto.setTopElevation(resolveTopElevation(t, latestByTelemetricOutput));
+                dto.setBottomElevation(resolveBottomElevation(t, latestByTelemetricOutput));
+                dto.setPiezometricElevation(resolvePiezometricElevation(t, latestByTelemetricOutput));
                 if (Boolean.TRUE.equals(t.getIsLinimetricRuler())) {
                     upstream = dto;
                 } else if (Boolean.TRUE.equals(t.getIsDownstream())) {
@@ -281,6 +305,7 @@ public class SectionRenderingConfigService {
             }
         }
 
+        // ---- config scalars ----------------------------------------------------
         SectionRenderDataDTO result = new SectionRenderDataDTO();
         result.setSectionId(sectionId);
 
@@ -305,7 +330,7 @@ public class SectionRenderingConfigService {
 
             List<SectionCustomLevelDTO> customLevels = config.getCustomLevels().stream()
                     .map(l -> new SectionCustomLevelDTO(l.getId(), l.getName(), l.getValue(),
-                            l.getColor(), Boolean.TRUE.equals(l.getEnabled()) ? Boolean.TRUE : Boolean.FALSE))
+                            l.getColor(), Boolean.TRUE.equals(l.getEnabled())))
                     .collect(Collectors.toList());
             result.setCustomLevels(customLevels);
         }
@@ -316,6 +341,129 @@ public class SectionRenderingConfigService {
         result.setDownstreamInstrument(downstream);
 
         return result;
+    }
+
+    // Fetches the single most-recent active reading for each output in one query.
+    private Map<Long, ReadingEntity> fetchLatestReadingsByOutputIds(List<Long> outputIds) {
+        if (outputIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> ids = readingRepository.findLatestReadingIdsByOutputIds(outputIds);
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        List<ReadingEntity> readings = readingRepository.findByIdsWithAllRelations(ids);
+        Map<Long, ReadingEntity> map = new HashMap<>();
+        for (ReadingEntity r : readings) {
+            map.put(r.getOutput().getId(), r);
+        }
+        return map;
+    }
+
+    // Normalises a name for fuzzy matching: lower-case, strip diacritics, collapse spaces.
+    private static String norm(String s) {
+        if (s == null) return "";
+        String lower = s.toLowerCase();
+        StringBuilder sb = new StringBuilder(lower.length());
+        for (char c : lower.toCharArray()) {
+            int idx = TRANSLATE_FROM.indexOf(c);
+            sb.append(idx >= 0 ? TRANSLATE_TO.charAt(idx) : c);
+        }
+        return sb.toString().replaceAll("\\s+", " ").trim();
+    }
+
+    private static boolean isTopElevation(String name) {
+        String n = norm(name);
+        return n.contains("cota de topo") || n.contains("cota de boca")
+                || (n.contains("cota") && n.contains("topo"))
+                || (n.contains("cota") && n.contains("boca"));
+    }
+
+    private static boolean isBottomElevation(String name) {
+        String n = norm(name);
+        return n.contains("cota de fundo") || n.contains("cota de instalacao")
+                || (n.contains("cota") && n.contains("fundo"))
+                || (n.contains("cota") && n.contains("instalacao"));
+    }
+
+    private static boolean isPiezometricElevation(String name) {
+        String n = norm(name);
+        return n.contains("cota piezometrica") || n.contains("cota piezometrico")
+                || (n.contains("cota") && n.contains("piezometr"));
+    }
+
+    // top elevation: prefer constant over output
+    private ElevationVariableDTO resolveTopElevation(InstrumentEntity i, Map<Long, ReadingEntity> latestByOutput) {
+        for (ConstantEntity c : i.getConstants()) {
+            if (isTopElevation(c.getName())) return toElevationDTO(c);
+        }
+        for (OutputEntity o : i.getOutputs()) {
+            if (Boolean.TRUE.equals(o.getActive()) && isTopElevation(o.getName())) {
+                return toElevationDTO(o, latestByOutput.get(o.getId()));
+            }
+        }
+        return null;
+    }
+
+    // bottom elevation: prefer constant over output
+    private ElevationVariableDTO resolveBottomElevation(InstrumentEntity i, Map<Long, ReadingEntity> latestByOutput) {
+        for (ConstantEntity c : i.getConstants()) {
+            if (isBottomElevation(c.getName())) return toElevationDTO(c);
+        }
+        for (OutputEntity o : i.getOutputs()) {
+            if (Boolean.TRUE.equals(o.getActive()) && isBottomElevation(o.getName())) {
+                return toElevationDTO(o, latestByOutput.get(o.getId()));
+            }
+        }
+        return null;
+    }
+
+    // piezometric elevation: prefer output over constant
+    private ElevationVariableDTO resolvePiezometricElevation(InstrumentEntity i, Map<Long, ReadingEntity> latestByOutput) {
+        for (OutputEntity o : i.getOutputs()) {
+            if (Boolean.TRUE.equals(o.getActive()) && isPiezometricElevation(o.getName())) {
+                return toElevationDTO(o, latestByOutput.get(o.getId()));
+            }
+        }
+        for (ConstantEntity c : i.getConstants()) {
+            if (isPiezometricElevation(c.getName())) return toElevationDTO(c);
+        }
+        return null;
+    }
+
+    private ElevationVariableDTO toElevationDTO(ConstantEntity c) {
+        ElevationVariableDTO dto = new ElevationVariableDTO();
+        dto.setId(c.getId());
+        dto.setName(c.getName());
+        dto.setAcronym(c.getAcronym());
+        dto.setPrecision(c.getPrecision());
+        dto.setType(VariableType.CONSTANT);
+        dto.setConstantValue(c.getValue());
+        if (c.getMeasurementUnit() != null) {
+            dto.setMeasurementUnit(new InstrumentMeasurementUnitDTO(
+                    c.getMeasurementUnit().getName(), c.getMeasurementUnit().getAcronym()));
+        }
+        return dto;
+    }
+
+    private ElevationVariableDTO toElevationDTO(OutputEntity o, ReadingEntity lastReading) {
+        ElevationVariableDTO dto = new ElevationVariableDTO();
+        dto.setId(o.getId());
+        dto.setName(o.getName());
+        dto.setAcronym(o.getAcronym());
+        dto.setPrecision(o.getPrecision());
+        dto.setType(VariableType.OUTPUT);
+        if (o.getMeasurementUnit() != null) {
+            dto.setMeasurementUnit(new InstrumentMeasurementUnitDTO(
+                    o.getMeasurementUnit().getName(), o.getMeasurementUnit().getAcronym()));
+        }
+        if (lastReading != null) {
+            dto.setLastReadingDate(lastReading.getDate());
+            dto.setLastReadingHour(lastReading.getHour());
+            dto.setLastReadingValue(lastReading.getCalculatedValue());
+            dto.setLastReadingLimitStatus(lastReading.getLimitStatus());
+        }
+        return dto;
     }
 
     private SectionRenderingConfigResponseDTO defaultResponse(Long sectionId) {

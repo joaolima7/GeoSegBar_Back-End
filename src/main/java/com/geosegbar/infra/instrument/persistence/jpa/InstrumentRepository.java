@@ -14,8 +14,6 @@ import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.entities.SectionEntity;
 import com.geosegbar.infra.dam.dtos.MapInstrumentDTO;
 import com.geosegbar.infra.dashboard.projections.InstrumentTypeCountProjection;
-import com.geosegbar.infra.section_rendering_config.projections.PiezometerWithLastReadingProjection;
-import com.geosegbar.infra.section_rendering_config.projections.TelemetricInstrumentProjection;
 
 @Repository
 public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Long> {
@@ -153,50 +151,45 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
     @Query("SELECT i FROM InstrumentEntity i WHERE (i.isLinimetricRuler = true OR i.isDownstream = true) AND i.linimetricRulerCode IS NOT NULL")
     List<InstrumentEntity> findAllTelemetricWithCode();
 
-    @Query(value = """
-            WITH norm AS (
-                SELECT i.id, i.name, i.distance_offset,
-                    translate(lower(it.name),
-                        'àáâãäåçèéêëìíîïñòóôõöùúûüý',
-                        'aaaaaaceeeeiiiinooooouuuuy') AS norm_type
-                FROM instrument i
-                JOIN instrument_type it ON i.instrument_type_id = it.id
-                WHERE i.section_id = :sectionId AND i.active = true
-            )
-            SELECT DISTINCT ON (n.id)
-                n.id AS id,
-                n.name AS name,
-                n.distance_offset AS distanceoffset,
-                r.date AS lastreadingdate,
-                r.hour AS lastreadinghour,
-                r.calculated_value AS lastreadingvalue,
-                CAST(r.limit_status AS text) AS lastreadinglimitstatus
-            FROM norm n
-            LEFT JOIN reading r ON r.instrument_id = n.id AND r.active = true
-            WHERE n.norm_type LIKE '%piezometro%'
-               OR (n.norm_type LIKE '%indicador%' AND n.norm_type LIKE '%nivel%' AND n.norm_type LIKE '%agua%')
-            ORDER BY n.id, r.date DESC NULLS LAST, r.hour DESC NULLS LAST
-            """, nativeQuery = true)
-    List<PiezometerWithLastReadingProjection> findPiezometersBySectionWithLastReading(@Param("sectionId") Long sectionId);
-
-    @Query(value = """
-            SELECT DISTINCT ON (i.id)
-                i.id AS id,
-                i.name AS name,
-                i.is_linimetric_ruler AS islinimetricruler,
-                i.is_downstream AS isdownstream,
-                r.date AS lastreadingdate,
-                r.hour AS lastreadinghour,
-                r.calculated_value AS lastreadingvalue,
-                CAST(r.limit_status AS text) AS lastreadinglimitstatus
-            FROM instrument i
-            LEFT JOIN reading r ON r.instrument_id = i.id AND r.active = true
-            WHERE i.dam_id = :damId
+    @Query("""
+            SELECT DISTINCT i FROM InstrumentEntity i
+            JOIN i.instrumentType it
+            LEFT JOIN FETCH i.outputs o
+            LEFT JOIN FETCH o.measurementUnit
+            LEFT JOIN FETCH i.constants c
+            LEFT JOIN FETCH c.measurementUnit
+            WHERE i.section.id = :sectionId
               AND i.active = true
-              AND (i.is_linimetric_ruler = true OR i.is_downstream = true)
-            ORDER BY i.id, r.date DESC NULLS LAST, r.hour DESC NULLS LAST
-            """, nativeQuery = true)
-    List<TelemetricInstrumentProjection> findActiveTelemetricByDamWithLastReading(@Param("damId") Long damId);
+              AND (
+                FUNCTION('translate', LOWER(it.name),
+                    'àáâãäåçèéêëìíîïñòóôõöùúûüý',
+                    'aaaaaaceeeeiiiinooooouuuuy') LIKE '%piezometro%'
+                OR (
+                    FUNCTION('translate', LOWER(it.name),
+                        'àáâãäåçèéêëìíîïñòóôõöùúûüý',
+                        'aaaaaaceeeeiiiinooooouuuuy') LIKE '%indicador%'
+                    AND FUNCTION('translate', LOWER(it.name),
+                        'àáâãäåçèéêëìíîïñòóôõöùúûüý',
+                        'aaaaaaceeeeiiiinooooouuuuy') LIKE '%nivel%'
+                    AND FUNCTION('translate', LOWER(it.name),
+                        'àáâãäåçèéêëìíîïñòóôõöùúûüý',
+                        'aaaaaaceeeeiiiinooooouuuuy') LIKE '%agua%'
+                )
+              )
+            """)
+    List<InstrumentEntity> findPiezometersBySectionWithOutputsAndConstants(@Param("sectionId") Long sectionId);
+
+    @Query("""
+            SELECT DISTINCT i FROM InstrumentEntity i
+            LEFT JOIN FETCH i.outputs o
+            LEFT JOIN FETCH o.measurementUnit
+            LEFT JOIN FETCH i.constants c
+            LEFT JOIN FETCH c.measurementUnit
+            WHERE i.dam.id = :damId
+              AND i.active = true
+              AND (i.isLinimetricRuler = true OR i.isDownstream = true)
+            """)
+    List<InstrumentEntity> findActiveTelemetricByDamWithOutputsAndConstants(@Param("damId") Long damId);
 
     @EntityGraph(attributePaths = {
         "dam",

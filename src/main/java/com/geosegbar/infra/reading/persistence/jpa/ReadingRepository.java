@@ -531,4 +531,19 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
     @Modifying
     @Query("DELETE FROM ReadingEntity r WHERE r.output.id = :outputId")
     void deleteByOutputId(@Param("outputId") Long outputId);
+
+    // Returns one row per output_id: the single most-recent active reading for each output in the list.
+    // Uses a CTE with ROW_NUMBER so the DB executes a single pass instead of N correlated subqueries.
+    @Query(value = """
+            WITH ranked AS (
+                SELECT r.id,
+                       r.output_id,
+                       ROW_NUMBER() OVER (PARTITION BY r.output_id ORDER BY r.date DESC, r.hour DESC) AS rn
+                FROM reading r
+                WHERE r.output_id IN :outputIds
+                  AND r.active = true
+            )
+            SELECT r.id FROM ranked r WHERE r.rn = 1
+            """, nativeQuery = true)
+    List<Long> findLatestReadingIdsByOutputIds(@Param("outputIds") List<Long> outputIds);
 }

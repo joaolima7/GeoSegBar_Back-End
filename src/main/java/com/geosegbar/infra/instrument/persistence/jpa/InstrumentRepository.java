@@ -151,45 +151,52 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
     @Query("SELECT i FROM InstrumentEntity i WHERE (i.isLinimetricRuler = true OR i.isDownstream = true) AND i.linimetricRulerCode IS NOT NULL")
     List<InstrumentEntity> findAllTelemetricWithCode();
 
-    @Query("""
-            SELECT DISTINCT i FROM InstrumentEntity i
-            JOIN i.instrumentType it
-            LEFT JOIN FETCH i.outputs o
-            LEFT JOIN FETCH o.measurementUnit
-            LEFT JOIN FETCH i.constants c
-            LEFT JOIN FETCH c.measurementUnit
-            WHERE i.section.id = :sectionId
+    @Query(value = """
+            SELECT i.id
+            FROM instrument i
+            JOIN instrument_type it ON i.instrument_type_id = it.id
+            WHERE i.section_id = :sectionId
               AND i.active = true
               AND (
-                FUNCTION('translate', LOWER(it.name),
+                translate(lower(it.name),
                     'àáâãäåçèéêëìíîïñòóôõöùúûüý',
                     'aaaaaaceeeeiiiinooooouuuuy') LIKE '%piezometro%'
                 OR (
-                    FUNCTION('translate', LOWER(it.name),
+                    translate(lower(it.name),
                         'àáâãäåçèéêëìíîïñòóôõöùúûüý',
                         'aaaaaaceeeeiiiinooooouuuuy') LIKE '%indicador%'
-                    AND FUNCTION('translate', LOWER(it.name),
+                    AND translate(lower(it.name),
                         'àáâãäåçèéêëìíîïñòóôõöùúûüý',
                         'aaaaaaceeeeiiiinooooouuuuy') LIKE '%nivel%'
-                    AND FUNCTION('translate', LOWER(it.name),
+                    AND translate(lower(it.name),
                         'àáâãäåçèéêëìíîïñòóôõöùúûüý',
                         'aaaaaaceeeeiiiinooooouuuuy') LIKE '%agua%'
                 )
               )
-            """)
-    List<InstrumentEntity> findPiezometersBySectionWithOutputsAndConstants(@Param("sectionId") Long sectionId);
+            """, nativeQuery = true)
+    List<Long> findPiezometerIdsBySection(@Param("sectionId") Long sectionId);
 
-    @Query("""
-            SELECT DISTINCT i FROM InstrumentEntity i
-            LEFT JOIN FETCH i.outputs o
-            LEFT JOIN FETCH o.measurementUnit
-            LEFT JOIN FETCH i.constants c
-            LEFT JOIN FETCH c.measurementUnit
-            WHERE i.dam.id = :damId
+    @Query(value = """
+            SELECT i.id
+            FROM instrument i
+            WHERE i.dam_id = :damId
               AND i.active = true
-              AND (i.isLinimetricRuler = true OR i.isDownstream = true)
-            """)
-    List<InstrumentEntity> findActiveTelemetricByDamWithOutputsAndConstants(@Param("damId") Long damId);
+              AND (i.is_linimetric_ruler = true OR i.is_downstream = true)
+            """, nativeQuery = true)
+    List<Long> findTelemetricIdsByDam(@Param("damId") Long damId);
+
+    @EntityGraph(attributePaths = {"outputs", "outputs.measurementUnit", "constants", "constants.measurementUnit"})
+    List<InstrumentEntity> findByIdIn(List<Long> ids);
+
+    default List<InstrumentEntity> findPiezometersBySectionWithOutputsAndConstants(Long sectionId) {
+        List<Long> ids = findPiezometerIdsBySection(sectionId);
+        return ids.isEmpty() ? List.of() : findByIdIn(ids);
+    }
+
+    default List<InstrumentEntity> findActiveTelemetricByDamWithOutputsAndConstants(Long damId) {
+        List<Long> ids = findTelemetricIdsByDam(damId);
+        return ids.isEmpty() ? List.of() : findByIdIn(ids);
+    }
 
     @EntityGraph(attributePaths = {
         "dam",

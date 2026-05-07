@@ -87,10 +87,12 @@ public class EmailService {
             helper.setSubject("🚨 [GeoSegBar] Erro Interno - " + errorMessage);
             helper.setText(htmlContent, true);
 
+            log.info("[EMAIL] Enviando error-report → to={} subject='[GeoSegBar] Erro Interno - {}'", logEmail, errorMessage);
             mailSender.send(message);
-            log.info("Relatório de erro enviado para o administrador: {}", logEmail);
+            log.info("[EMAIL] ✓ error-report entregue ao SMTP → to={}", logEmail);
         } catch (MessagingException e) {
-            log.error("FALHA CRÍTICA: Não foi possível enviar o email de relatório de erro: {}", e.getMessage());
+            log.error("[EMAIL] ✗ FALHA ao enviar error-report → to={} cause={} message={}",
+                    logEmail, e.getClass().getSimpleName(), e.getMessage(), e);
         }
     }
 
@@ -110,10 +112,12 @@ public class EmailService {
             helper.setSubject("Código de Verificação - GeoSegBar");
             helper.setText(htmlContent, true);
 
+            log.info("[EMAIL] Enviando verification-code → from={} to={}", fromEmail, toEmail);
             mailSender.send(message);
-            log.info("Email de verificação enviado para: {}", toEmail);
+            log.info("[EMAIL] ✓ verification-code entregue ao SMTP → to={}", toEmail);
         } catch (MessagingException e) {
-            log.error("Erro ao enviar email de verificação: {}", e.getMessage());
+            log.error("[EMAIL] ✗ FALHA ao enviar verification-code → to={} cause={} message={}",
+                    toEmail, e.getClass().getSimpleName(), e.getMessage(), e);
         }
     }
 
@@ -133,10 +137,12 @@ public class EmailService {
             helper.setSubject("Redefinição de Senha - GeoSegBar");
             helper.setText(htmlContent, true);
 
+            log.info("[EMAIL] Enviando password-reset-code → from={} to={}", fromEmail, toEmail);
             mailSender.send(message);
-            log.info("Email de redefinição de senha enviado para: {}", toEmail);
+            log.info("[EMAIL] ✓ password-reset-code entregue ao SMTP → to={}", toEmail);
         } catch (MessagingException e) {
-            log.error("Erro ao enviar email de redefinição de senha: {}", e.getMessage());
+            log.error("[EMAIL] ✗ FALHA ao enviar password-reset-code → to={} cause={} message={}",
+                    toEmail, e.getClass().getSimpleName(), e.getMessage(), e);
         }
     }
 
@@ -159,10 +165,12 @@ public class EmailService {
             helper.setSubject("Bem-vindo ao GeoSegBar - Sua senha de acesso");
             helper.setText(htmlContent, true);
 
+            log.info("[EMAIL] Enviando first-access-password → from={} to={} user='{}'", fromEmail, toEmail, userName);
             mailSender.send(message);
-            log.info("Email de primeiro acesso enviado para: {}", toEmail);
+            log.info("[EMAIL] ✓ first-access-password entregue ao SMTP → to={} user='{}'", toEmail, userName);
         } catch (MessagingException e) {
-            log.error("Erro ao enviar email de primeiro acesso: {}", e.getMessage());
+            log.error("[EMAIL] ✗ FALHA ao enviar first-access-password → to={} user='{}' cause={} message={}",
+                    toEmail, userName, e.getClass().getSimpleName(), e.getMessage(), e);
         }
     }
 
@@ -185,10 +193,13 @@ public class EmailService {
             String content = templateEngine.process("emails/share-folder", context);
             helper.setText(content, true);
 
+            log.info("[EMAIL] Enviando share-folder → from={} to={} folder='{}' sharedBy='{}'",
+                    fromEmail, to, folderName, sharedByName);
             mailSender.send(mimeMessage);
-            log.info("Email de compartilhamento enviado para: {}", to);
+            log.info("[EMAIL] ✓ share-folder entregue ao SMTP → to={} folder='{}'", to, folderName);
         } catch (MessagingException e) {
-            log.error("Erro ao enviar email de compartilhamento: {}", e.getMessage());
+            log.error("[EMAIL] ✗ FALHA ao enviar share-folder → to={} folder='{}' cause={} message={}",
+                    to, folderName, e.getClass().getSimpleName(), e.getMessage(), e);
         }
     }
 
@@ -237,6 +248,9 @@ public class EmailService {
 
             if (hasAttachments) {
                 for (AttachmentData attachment : attachments) {
+                    if (attachment == null) continue;
+                    log.debug("[EMAIL] Anexando arquivo → name='{}' type={} size={}b",
+                            attachment.filename(), attachment.contentType(), attachment.content().length);
                     helper.addAttachment(
                             attachment.filename(),
                             new ByteArrayResource(attachment.content()),
@@ -244,10 +258,15 @@ public class EmailService {
                 }
             }
 
+            log.info("[EMAIL] Enviando support-request → from={} to={} sender='{}' <{}> attachments={}",
+                    fromEmail, supportEmail, senderName, senderEmail,
+                    attachments != null ? attachments.size() : 0);
             mailSender.send(mimeMessage);
-            log.info("Email de suporte enviado de {} ({}) para o administrador: {}", senderName, senderEmail, logEmail);
+            log.info("[EMAIL] ✓ support-request entregue ao SMTP → to={} sender='{}' <{}>",
+                    supportEmail, senderName, senderEmail);
         } catch (MessagingException e) {
-            log.error("Erro ao enviar email de suporte de {} ({}): {}", senderName, senderEmail, e.getMessage());
+            log.error("[EMAIL] ✗ FALHA ao enviar support-request → to={} sender='{}' <{}> cause={} message={}",
+                    supportEmail, senderName, senderEmail, e.getClass().getSimpleName(), e.getMessage(), e);
         }
     }
 

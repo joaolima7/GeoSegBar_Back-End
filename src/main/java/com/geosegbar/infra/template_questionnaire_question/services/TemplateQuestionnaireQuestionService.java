@@ -257,13 +257,6 @@ public class TemplateQuestionnaireQuestionService {
         TemplateQuestionnaireEntity template = templateQuestionnaireRepository.findById(templateId)
                 .orElseThrow(() -> new NotFoundException("Template nao encontrado!"));
 
-        if (questionnaireResponseRepository.existsByTemplateQuestionnaireId(templateId)) {
-            throw new InvalidInputException(
-                    "Nao e possivel alterar questoes pois existem questionarios respondidos usando este template. "
-                    + "Crie um novo template para aplicar as alteracoes desejadas."
-            );
-        }
-
         var existing = tqQuestionRepository.findByTemplateQuestionnaireIdAndQuestionId(
                 templateId, dto.getQuestionId());
 
@@ -314,7 +307,19 @@ public class TemplateQuestionnaireQuestionService {
         }
 
         TemplateQuestionnaireQuestionEntity toRemove = existing.get();
-        deleteById(toRemove.getId());
+        int deletedIndex = toRemove.getOrderIndex();
+
+        tqQuestionRepository.deleteById(toRemove.getId());
+
+        List<TemplateQuestionnaireQuestionEntity> remainingQuestions
+                = tqQuestionRepository.findByTemplateQuestionnaireIdOrderByOrderIndex(templateId);
+
+        for (TemplateQuestionnaireQuestionEntity question : remainingQuestions) {
+            if (question.getOrderIndex() > deletedIndex) {
+                question.setOrderIndex(question.getOrderIndex() - 1);
+                tqQuestionRepository.save(question);
+            }
+        }
 
         return new TemplateQuestionAssociationResponseDTO(
                 templateId,

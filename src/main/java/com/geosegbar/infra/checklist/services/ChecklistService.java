@@ -39,7 +39,6 @@ import com.geosegbar.infra.checklist.dtos.QuestionWithLastAnswerDTO;
 import com.geosegbar.infra.checklist.dtos.TemplateInChecklistDTO;
 import com.geosegbar.infra.checklist.dtos.TemplateQuestionnaireWithAnswersDTO;
 import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
-import com.geosegbar.infra.checklist_response.persistence.jpa.ChecklistResponseRepository;
 import com.geosegbar.infra.dam.services.DamService;
 import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
 import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
@@ -57,7 +56,6 @@ import lombok.extern.slf4j.Slf4j;
 public class ChecklistService {
 
     private final ChecklistRepository checklistRepository;
-    private final ChecklistResponseRepository checklistResponseRepository;
     private final DamService damService;
     private final AnswerRepository answerRepository;
     private final TemplateQuestionnaireRepository templateQuestionnaireRepository;
@@ -703,14 +701,6 @@ public class ChecklistService {
 
         ChecklistEntity checklist = checklistRepository.findByIdWithTemplates(checklistId)
                 .orElseThrow(() -> new NotFoundException("Checklist nao encontrada para id: " + checklistId));
-
-        long responseCount = checklistResponseRepository.countByChecklistId(checklistId);
-        if (responseCount > 0) {
-            throw new BusinessRuleException(
-                    "Nao e possivel alterar os templates do checklist pois existem " + responseCount
-                    + " resposta(s) registrada(s) associadas a ele."
-            );
-        }
 
         TemplateQuestionnaireEntity template = templateQuestionnaireRepository.findById(dto.getTemplateId())
                 .orElseThrow(() -> new NotFoundException("Template nao encontrado com ID: " + dto.getTemplateId()));

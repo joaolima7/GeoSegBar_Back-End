@@ -18,12 +18,15 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.geosegbar.common.enums.AssociationAction;
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.ChecklistEntity;
 import com.geosegbar.infra.checklist.dtos.ChecklistCompleteCreationDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistCompleteDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistCompleteUpdateDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistReplicationDTO;
+import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationDTO;
+import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationResponseDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersAndDamDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersDTO;
 import com.geosegbar.infra.checklist.services.ChecklistService;
@@ -143,6 +146,24 @@ public class ChecklistController {
                 updated,
                 "Checklist completo atualizado com sucesso com todos os templates e questões!"
         );
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{checklistId}/templates/association")
+    public ResponseEntity<WebResponseEntity<ChecklistTemplateAssociationResponseDTO>> updateChecklistTemplateAssociation(
+            @PathVariable Long checklistId,
+            @Valid @RequestBody ChecklistTemplateAssociationDTO associationDto) {
+
+        ChecklistTemplateAssociationResponseDTO result = checklistService.updateTemplateAssociation(
+                checklistId, associationDto);
+
+        String message = associationDto.getAction() == AssociationAction.ASSOCIATE
+                ? "Template associado ao checklist com sucesso!"
+                : "Template desassociado do checklist com sucesso!";
+
+        WebResponseEntity<ChecklistTemplateAssociationResponseDTO> response = WebResponseEntity.success(
+                result, message);
+
         return ResponseEntity.ok(response);
     }
 

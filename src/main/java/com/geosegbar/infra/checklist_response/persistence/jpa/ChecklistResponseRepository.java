@@ -14,7 +14,6 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.geosegbar.common.enums.WeatherConditionEnum;
-
 import com.geosegbar.entities.ChecklistResponseEntity;
 import com.geosegbar.infra.dashboard.projections.CategoryCountProjection;
 import com.geosegbar.infra.dashboard.projections.ChecklistResponseCountProjection;
@@ -45,6 +44,8 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
 
     @EntityGraph(attributePaths = {"user", "dam"})
     List<ChecklistResponseEntity> findByCreatedAtBetween(LocalDateTime startDate, LocalDateTime endDate);
+
+    long countByChecklistId(Long checklistId);
 
     @EntityGraph(attributePaths = {"user", "dam"})
     @Query("SELECT cr FROM ChecklistResponseEntity cr WHERE cr.id = :id")
@@ -102,14 +103,14 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
             @Param("limit") int limit);
 
     @Modifying(clearAutomatically = true)
-    @Query("UPDATE ChecklistResponseEntity cr SET " +
-           "cr.upstreamLevel = COALESCE(:upstreamLevel, cr.upstreamLevel), " +
-           "cr.downstreamLevel = COALESCE(:downstreamLevel, cr.downstreamLevel), " +
-           "cr.spilledFlow = COALESCE(:spilledFlow, cr.spilledFlow), " +
-           "cr.turbinedFlow = COALESCE(:turbinedFlow, cr.turbinedFlow), " +
-           "cr.accumulatedRainfall = COALESCE(:accumulatedRainfall, cr.accumulatedRainfall), " +
-           "cr.weatherCondition = COALESCE(:weatherCondition, cr.weatherCondition) " +
-           "WHERE cr.id = :id")
+    @Query("UPDATE ChecklistResponseEntity cr SET "
+            + "cr.upstreamLevel = COALESCE(:upstreamLevel, cr.upstreamLevel), "
+            + "cr.downstreamLevel = COALESCE(:downstreamLevel, cr.downstreamLevel), "
+            + "cr.spilledFlow = COALESCE(:spilledFlow, cr.spilledFlow), "
+            + "cr.turbinedFlow = COALESCE(:turbinedFlow, cr.turbinedFlow), "
+            + "cr.accumulatedRainfall = COALESCE(:accumulatedRainfall, cr.accumulatedRainfall), "
+            + "cr.weatherCondition = COALESCE(:weatherCondition, cr.weatherCondition) "
+            + "WHERE cr.id = :id")
     int updateTopLevelFields(
             @Param("id") Long id,
             @Param("upstreamLevel") Double upstreamLevel,

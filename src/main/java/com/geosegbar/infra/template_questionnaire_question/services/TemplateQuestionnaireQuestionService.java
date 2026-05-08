@@ -9,12 +9,16 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.geosegbar.common.enums.AssociationAction;
+import com.geosegbar.entities.QuestionEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
 import com.geosegbar.entities.TemplateQuestionnaireQuestionEntity;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
 import com.geosegbar.infra.questionnaire_response.persistence.jpa.QuestionnaireResponseRepository;
+import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionAssociationDTO;
+import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionAssociationResponseDTO;
 import com.geosegbar.infra.template_questionnaire.persistence.jpa.TemplateQuestionnaireRepository;
 import com.geosegbar.infra.template_questionnaire_question.dtos.QuestionOrderDTO;
 import com.geosegbar.infra.template_questionnaire_question.dtos.QuestionReorderDTO;
@@ -239,5 +243,85 @@ public class TemplateQuestionnaireQuestionService {
     @Transactional(readOnly = true)
     public List<TemplateQuestionnaireQuestionEntity> findAllByTemplateIdOrdered(Long templateId) {
         return tqQuestionRepository.findByTemplateQuestionnaireIdOrderByOrderIndex(templateId);
+    }
+
+    @Transactional
+    public TemplateQuestionAssociationResponseDTO updateAssociation(
+            Long templateId,
+            TemplateQuestionAssociationDTO dto) {
+
+        if (dto.getAction() == null) {
+            throw new InvalidInputException("Acao e obrigatoria!");
+        }
+
+        TemplateQuestionnaireEntity template = templateQuestionnaireRepository.findById(templateId)
+                .orElseThrow(() -> new NotFoundException("Template nao encontrado!"));
+
+        if (questionnaireResponseRepository.existsByTemplateQuestionnaireId(templateId)) {
+            throw new InvalidInputException(
+                    "Nao e possivel alterar questoes pois existem questionarios respondidos usando este template. "
+                    + "Crie um novo template para aplicar as alteracoes desejadas."
+            );
+        }
+
+        var existing = tqQuestionRepository.findByTemplateQuestionnaireIdAndQuestionId(
+                templateId, dto.getQuestionId());
+
+        if (dto.getAction() == AssociationAction.ASSOCIATE) {
+            if (dto.getOrderIndex() == null) {
+                throw new InvalidInputException("Indice de ordem e obrigatorio!");
+            }
+
+            if (existing.isPresent()) {
+                TemplateQuestionnaireQuestionEntity found = existing.get();
+                return new TemplateQuestionAssociationResponseDTO(
+                        templateId,
+                        dto.getQuestionId(),
+                        found.getId(),
+                        found.getOrderIndex(),
+                        AssociationAction.ASSOCIATE
+                );
+            }
+
+            if (!questionRepository.existsById(dto.getQuestionId())) {
+                throw new NotFoundException("Questao nao encontrada com ID: " + dto.getQuestionId());
+            }
+
+            TemplateQuestionnaireQuestionEntity newAssociation = new TemplateQuestionnaireQuestionEntity();
+            TemplateQuestionnaireEntity templateRef = new TemplateQuestionnaireEntity();
+            templateRef.setId(template.getId());
+
+            QuestionEntity questionRef = new QuestionEntity();
+            questionRef.setId(dto.getQuestionId());
+
+            newAssociation.setTemplateQuestionnaire(templateRef);
+            newAssociation.setQuestion(questionRef);
+            newAssociation.setOrderIndex(dto.getOrderIndex());
+
+            TemplateQuestionnaireQuestionEntity saved = save(newAssociation);
+
+            return new TemplateQuestionAssociationResponseDTO(
+                    templateId,
+                    dto.getQuestionId(),
+                    saved.getId(),
+                    saved.getOrderIndex(),
+                    AssociationAction.ASSOCIATE
+            );
+        }
+
+        if (existing.isEmpty()) {
+            throw new NotFoundException("Questao nao esta associada a este template.");
+        }
+
+        TemplateQuestionnaireQuestionEntity toRemove = existing.get();
+        deleteById(toRemove.getId());
+
+        return new TemplateQuestionAssociationResponseDTO(
+                templateId,
+                dto.getQuestionId(),
+                toRemove.getId(),
+                toRemove.getOrderIndex(),
+                AssociationAction.DISASSOCIATE
+        );
     }
 }

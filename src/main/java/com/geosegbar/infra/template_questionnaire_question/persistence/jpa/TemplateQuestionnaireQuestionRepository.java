@@ -20,6 +20,9 @@ public interface TemplateQuestionnaireQuestionRepository extends JpaRepository<T
     @EntityGraph(attributePaths = {"templateQuestionnaire"})
     List<TemplateQuestionnaireQuestionEntity> findByQuestionId(Long questionId);
 
+    Optional<TemplateQuestionnaireQuestionEntity> findByTemplateQuestionnaireIdAndQuestionId(
+            Long templateQuestionnaireId, Long questionId);
+
     boolean existsByQuestionId(Long questionId);
 
     @Query("SELECT COUNT(tq) FROM TemplateQuestionnaireQuestionEntity tq WHERE tq.templateQuestionnaire.id = :templateId")

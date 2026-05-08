@@ -55,6 +55,10 @@ public interface ChecklistRepository extends JpaRepository<ChecklistEntity, Long
     @Query("SELECT c FROM ChecklistEntity c WHERE c.id = :checklistId")
     Optional<ChecklistEntity> findByIdWithDam(@Param("checklistId") Long checklistId);
 
+    @EntityGraph(attributePaths = {"templateQuestionnaires", "dam"})
+    @Query("SELECT c FROM ChecklistEntity c WHERE c.id = :checklistId")
+    Optional<ChecklistEntity> findByIdWithTemplates(@Param("checklistId") Long checklistId);
+
     boolean existsByName(String name);
 
     boolean existsByNameAndIdNot(String name, Long id);
@@ -62,6 +66,8 @@ public interface ChecklistRepository extends JpaRepository<ChecklistEntity, Long
     boolean existsByNameAndDamId(String name, Long damId);
 
     boolean existsByNameAndDamIdAndIdNot(String name, Long damId, Long id);
+
+    long countByTemplateQuestionnairesId(Long templateQuestionnaireId);
 
     @Query(value = "SELECT c FROM ChecklistEntity c JOIN FETCH c.dam",
             countQuery = "SELECT count(c) FROM ChecklistEntity c")

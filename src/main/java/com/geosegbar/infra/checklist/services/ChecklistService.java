@@ -12,6 +12,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import com.geosegbar.common.enums.AssociationAction;
 import com.geosegbar.common.enums.TypeQuestionEnum;
 import com.geosegbar.entities.AnswerEntity;
 import com.geosegbar.entities.ChecklistEntity;
@@ -29,6 +30,8 @@ import com.geosegbar.infra.answer.persistence.jpa.AnswerRepository;
 import com.geosegbar.infra.checklist.dtos.ChecklistCompleteCreationDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistCompleteDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistCompleteUpdateDTO;
+import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationDTO;
+import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationResponseDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersAndDamDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersDTO;
 import com.geosegbar.infra.checklist.dtos.OptionDTO;
@@ -36,6 +39,7 @@ import com.geosegbar.infra.checklist.dtos.QuestionWithLastAnswerDTO;
 import com.geosegbar.infra.checklist.dtos.TemplateInChecklistDTO;
 import com.geosegbar.infra.checklist.dtos.TemplateQuestionnaireWithAnswersDTO;
 import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
+import com.geosegbar.infra.checklist_response.persistence.jpa.ChecklistResponseRepository;
 import com.geosegbar.infra.dam.services.DamService;
 import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
 import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
@@ -53,6 +57,7 @@ import lombok.extern.slf4j.Slf4j;
 public class ChecklistService {
 
     private final ChecklistRepository checklistRepository;
+    private final ChecklistResponseRepository checklistResponseRepository;
     private final DamService damService;
     private final AnswerRepository answerRepository;
     private final TemplateQuestionnaireRepository templateQuestionnaireRepository;
@@ -685,6 +690,59 @@ public class ChecklistService {
         }
 
         return dto;
+    }
+
+    @Transactional
+    public ChecklistTemplateAssociationResponseDTO updateTemplateAssociation(
+            Long checklistId,
+            ChecklistTemplateAssociationDTO dto) {
+
+        if (dto.getAction() == null) {
+            throw new InvalidInputException("Acao e obrigatoria!");
+        }
+
+        ChecklistEntity checklist = checklistRepository.findByIdWithTemplates(checklistId)
+                .orElseThrow(() -> new NotFoundException("Checklist nao encontrada para id: " + checklistId));
+
+        long responseCount = checklistResponseRepository.countByChecklistId(checklistId);
+        if (responseCount > 0) {
+            throw new BusinessRuleException(
+                    "Nao e possivel alterar os templates do checklist pois existem " + responseCount
+                    + " resposta(s) registrada(s) associadas a ele."
+            );
+        }
+
+        TemplateQuestionnaireEntity template = templateQuestionnaireRepository.findById(dto.getTemplateId())
+                .orElseThrow(() -> new NotFoundException("Template nao encontrado com ID: " + dto.getTemplateId()));
+
+        if (!template.getDam().getId().equals(checklist.getDam().getId())) {
+            throw new BusinessRuleException(
+                    "Nao e possivel associar templates de outra barragem ao checklist."
+            );
+        }
+
+        boolean alreadyAssociated = checklist.getTemplateQuestionnaires().stream()
+                .anyMatch(t -> t.getId().equals(dto.getTemplateId()));
+
+        if (dto.getAction() == AssociationAction.ASSOCIATE) {
+            if (!alreadyAssociated) {
+                checklist.getTemplateQuestionnaires().add(template);
+                checklistRepository.save(checklist);
+            }
+        } else {
+            if (!alreadyAssociated) {
+                throw new NotFoundException("Template nao esta associado a este checklist.");
+            }
+            checklist.getTemplateQuestionnaires().removeIf(t -> t.getId().equals(dto.getTemplateId()));
+            checklistRepository.save(checklist);
+        }
+
+        return new ChecklistTemplateAssociationResponseDTO(
+                checklistId,
+                dto.getTemplateId(),
+                dto.getAction(),
+                checklist.getTemplateQuestionnaires().size()
+        );
     }
 
     @Transactional

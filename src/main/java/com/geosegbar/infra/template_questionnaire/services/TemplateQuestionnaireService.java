@@ -21,6 +21,7 @@ import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.answer.persistence.jpa.AnswerRepository;
+import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
 import com.geosegbar.infra.checklist.services.ChecklistService;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
@@ -43,6 +44,7 @@ public class TemplateQuestionnaireService {
 
     private final TemplateQuestionnaireRepository templateQuestionnaireRepository;
     private final ChecklistService checklistService;
+    private final ChecklistRepository checklistRepository;
     private final QuestionRepository questionRepository;
     private final QuestionService questionService;
     private final DamRepository damRepository;
@@ -64,6 +66,14 @@ public class TemplateQuestionnaireService {
                     "Não é possível excluir o template '" + template.getName()
                     + "' pois existem questionários respondidos associados a ele. "
                     + "A exclusão impactaria na consistência dos dados históricos.");
+        }
+
+        long checklistCount = checklistRepository.countByTemplateQuestionnairesId(id);
+        if (checklistCount > 0) {
+            throw new BusinessRuleException(
+                    "Não é possível excluir o template '" + template.getName()
+                    + "' pois ele está vinculado a " + checklistCount + " checklist(s). "
+                    + "Remova o vínculo antes de excluir o template.");
         }
 
         log.info("Template {} não possui questionários respondidos. Prosseguindo com exclusão.", id);

@@ -90,7 +90,7 @@ public class TemplateQuestionnaireController {
         return ResponseEntity.ok(response);
     }
 
-    @PutMapping("/{id}/with-questions")
+    @PutMapping("/with-questions/{id}")
     public ResponseEntity<WebResponseEntity<TemplateQuestionnaireEntity>> updateTemplateWithQuestions(
             @PathVariable Long id,
             @Valid @RequestBody TemplateQuestionnaireUpdateDTO updateDto) {

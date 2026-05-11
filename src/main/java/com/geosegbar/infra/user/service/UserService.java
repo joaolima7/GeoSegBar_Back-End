@@ -561,6 +561,9 @@ public class UserService {
     @Transactional
     public Object initiateLogin(LoginRequestDTO userDTO) {
 
+        // TEMPORARIO: desativa MFA. Para reativar, troque para true.
+        final boolean mfaEnabled = false;
+
         if (systemUserEmail.equalsIgnoreCase(userDTO.email())) {
             throw new InvalidInputException("Credenciais incorretas!");
         }
@@ -592,6 +595,20 @@ public class UserService {
 
         if (isSystemUser(authUser)) {
             throw new InvalidInputException("Credenciais incorretas!");
+        }
+
+        if (!mfaEnabled) {
+            UserEntity fullUser = userRepository.findByEmailWithAllPermissions(userDTO.email())
+                    .orElseThrow(() -> new NotFoundException("Erro ao carregar perfil do usuário"));
+
+            String token = tokenService.generateToken(fullUser);
+            updateLastLoginAsync(fullUser.getId(), token);
+
+            return new LoginResponseDTO(
+                    fullUser.getId(), fullUser.getName(), fullUser.getEmail(), fullUser.getPhone(),
+                    fullUser.getSex(), fullUser.getRole().getName(), fullUser.getIsFirstAccess(),
+                    token, new ArrayList<>(fullUser.getClients())
+            );
         }
 
         String verificationCode = GenerateRandomCode.generateRandomCode();

@@ -34,6 +34,8 @@ import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionnaireCrea
 import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionnaireUpdateDTO;
 import com.geosegbar.infra.template_questionnaire.persistence.jpa.TemplateQuestionnaireRepository;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -41,6 +43,9 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @Slf4j
 public class TemplateQuestionnaireService {
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     private final TemplateQuestionnaireRepository templateQuestionnaireRepository;
     private final ChecklistService checklistService;
@@ -237,6 +242,8 @@ public class TemplateQuestionnaireService {
 
         existingTemplate.setName(dto.getName());
         existingTemplate.getTemplateQuestions().clear();
+        templateQuestionnaireRepository.save(existingTemplate);
+        entityManager.flush();
 
         for (TemplateQuestionDTO questionDto : dto.getQuestions()) {
             QuestionEntity question;

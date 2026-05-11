@@ -25,11 +25,16 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
-@Table(name = "template_questionnaire_questions", indexes = {
-    @Index(name = "idx_tqq_template_id", columnList = "template_questionnaire_id"),
-    @Index(name = "idx_tqq_question_id", columnList = "question_id"),
-    @Index(name = "idx_tqq_order", columnList = "template_questionnaire_id, order_index")
-})
+@Table(name = "template_questionnaire_questions",
+        indexes = {
+            @Index(name = "idx_tqq_template_id", columnList = "template_questionnaire_id"),
+            @Index(name = "idx_tqq_question_id", columnList = "question_id"),
+            @Index(name = "idx_tqq_order", columnList = "template_questionnaire_id, order_index")
+        },
+        uniqueConstraints = {
+            @jakarta.persistence.UniqueConstraint(name = "uq_tqq_template_question", columnNames = {"template_questionnaire_id", "question_id"})
+        }
+)
 public class TemplateQuestionnaireQuestionEntity {
 
     @Id

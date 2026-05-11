@@ -20,6 +20,10 @@ public interface TemplateQuestionnaireQuestionRepository extends JpaRepository<T
     @EntityGraph(attributePaths = {"templateQuestionnaire"})
     List<TemplateQuestionnaireQuestionEntity> findByQuestionId(Long questionId);
 
+    // Busca todas as associações para validação de duplicidade
+    List<TemplateQuestionnaireQuestionEntity> findAllByTemplateQuestionnaireIdAndQuestionId(Long templateQuestionnaireId, Long questionId);
+
+    // Mantém o método antigo para compatibilidade, mas recomenda-se usar o novo para validação
     Optional<TemplateQuestionnaireQuestionEntity> findByTemplateQuestionnaireIdAndQuestionId(
             Long templateQuestionnaireId, Long questionId);
 

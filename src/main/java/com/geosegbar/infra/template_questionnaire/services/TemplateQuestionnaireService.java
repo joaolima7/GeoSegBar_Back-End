@@ -180,6 +180,8 @@ public class TemplateQuestionnaireService {
                     + "' para a barragem '" + dam.getName() + "'");
         }
 
+        validateNoDuplicateQuestionIds(dto.getQuestions());
+
         TemplateQuestionnaireEntity template = new TemplateQuestionnaireEntity();
         template.setName(dto.getName());
         template.setDam(dam);
@@ -231,6 +233,8 @@ public class TemplateQuestionnaireService {
             }
         }
 
+        validateNoDuplicateQuestionIds(dto.getQuestions());
+
         existingTemplate.setName(dto.getName());
         existingTemplate.getTemplateQuestions().clear();
 
@@ -258,6 +262,24 @@ public class TemplateQuestionnaireService {
         TemplateQuestionnaireEntity saved = templateQuestionnaireRepository.save(existingTemplate);
         log.info("Template {} atualizado com questões.", saved.getId());
         return saved;
+    }
+
+    private void validateNoDuplicateQuestionIds(List<TemplateQuestionDTO> questions) {
+        if (questions == null || questions.isEmpty()) {
+            return;
+        }
+
+        Set<Long> seenQuestionIds = new HashSet<>();
+        for (TemplateQuestionDTO questionDto : questions) {
+            if (questionDto != null && questionDto.isExistingQuestion()) {
+                Long questionId = questionDto.getQuestionId();
+                if (questionId != null && !seenQuestionIds.add(questionId)) {
+                    throw new InvalidInputException(
+                            "A mesma questão não pode ser adicionada mais de uma vez no mesmo template. ID duplicado: "
+                            + questionId);
+                }
+            }
+        }
     }
 
     @Transactional(readOnly = true)

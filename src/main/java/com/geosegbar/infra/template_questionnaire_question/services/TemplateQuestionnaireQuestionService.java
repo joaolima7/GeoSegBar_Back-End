@@ -3,6 +3,7 @@ package com.geosegbar.infra.template_questionnaire_question.services;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -77,6 +78,15 @@ public class TemplateQuestionnaireQuestionService {
                 .orElseThrow(() -> new NotFoundException("Template não encontrado!"));
 
         tqQuestion.setTemplateQuestionnaire(template);
+
+        if (tqQuestion.getId() == null) {
+            List<TemplateQuestionnaireQuestionEntity> existing
+                    = tqQuestionRepository.findAllByTemplateQuestionnaireIdAndQuestionId(
+                            template.getId(), tqQuestion.getQuestion().getId());
+            if (!existing.isEmpty()) {
+                throw new InvalidInputException("A mesma questão não pode ser adicionada mais de uma vez no mesmo template.");
+            }
+        }
 
         int currentQuestionCount = tqQuestionRepository.countQuestionsByTemplateId(template.getId());
 
@@ -257,8 +267,17 @@ public class TemplateQuestionnaireQuestionService {
         TemplateQuestionnaireEntity template = templateQuestionnaireRepository.findById(templateId)
                 .orElseThrow(() -> new NotFoundException("Template nao encontrado!"));
 
-        var existing = tqQuestionRepository.findByTemplateQuestionnaireIdAndQuestionId(
-                templateId, dto.getQuestionId());
+        // Busca todas as associações para garantir unicidade
+        List<TemplateQuestionnaireQuestionEntity> existingList = tqQuestionRepository.findByTemplateQuestionnaireIdOrderByOrderIndex(templateId)
+                .stream()
+                .filter(q -> q.getQuestion().getId().equals(dto.getQuestionId()))
+                .collect(Collectors.toList());
+
+        if (existingList.size() > 1) {
+            throw new InvalidInputException("Foram encontradas múltiplas associações para este template e questão. Corrija os dados duplicados na tabela template_questionnaire_questions.");
+        }
+
+        Optional<TemplateQuestionnaireQuestionEntity> existing = existingList.isEmpty() ? Optional.empty() : Optional.of(existingList.get(0));
 
         if (dto.getAction() == AssociationAction.ASSOCIATE) {
             if (dto.getOrderIndex() == null) {

@@ -644,6 +644,8 @@ public class ChecklistService {
                     + "' para a barragem '" + dam.getName() + "'");
         }
 
+        validateNoDuplicateQuestionIds(templateDto.getQuestions(), templateDto.getName());
+
         TemplateQuestionnaireEntity template = new TemplateQuestionnaireEntity();
         template.setName(templateDto.getName());
         template.setDam(dam);
@@ -677,6 +679,24 @@ public class ChecklistService {
         }
 
         return templateQuestionnaireRepository.save(template);
+    }
+
+    private void validateNoDuplicateQuestionIds(List<TemplateQuestionDTO> questions, String templateName) {
+        if (questions == null || questions.isEmpty()) {
+            return;
+        }
+
+        Set<Long> seenQuestionIds = new HashSet<>();
+        for (TemplateQuestionDTO questionDto : questions) {
+            if (questionDto != null && questionDto.isExistingQuestion()) {
+                Long questionId = questionDto.getQuestionId();
+                if (questionId != null && !seenQuestionIds.add(questionId)) {
+                    throw new InvalidInputException(
+                            "A mesma questão não pode ser adicionada mais de uma vez no template '"
+                            + templateName + "'. ID duplicado: " + questionId);
+                }
+            }
+        }
     }
 
     private QuestionEntity createNewQuestion(TemplateQuestionDTO questionDto, Long clientId) {

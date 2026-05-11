@@ -300,8 +300,43 @@ public class RestExceptionHandler {
                     requestBody = "(vazio)";
                 }
             }
+
+            if ("(vazio)".equals(requestBody) || "(não disponível)".equals(requestBody)) {
+                Object cached = request.getAttribute("cachedRequestBody");
+                if (cached instanceof byte[] cachedBytes && cachedBytes.length > 0) {
+                    String raw = new String(cachedBytes, StandardCharsets.UTF_8);
+                    requestBody = raw.length() > 2000 ? raw.substring(0, 2000) + "... [truncado]" : raw;
+                }
+            }
         } catch (Exception ignored) {
             requestBody = "(erro ao ler body)";
+        }
+
+        String requestHeaders = "(nao disponivel)";
+        try {
+            StringBuilder headersBuilder = new StringBuilder();
+            var headerNames = request.getHeaderNames();
+            while (headerNames != null && headerNames.hasMoreElements()) {
+                String headerName = headerNames.nextElement();
+                String headerValue = request.getHeader(headerName);
+
+                if (headerName != null) {
+                    String lower = headerName.toLowerCase();
+                    if ("authorization".equals(lower) || "cookie".equals(lower) || "set-cookie".equals(lower)) {
+                        headerValue = "***";
+                    }
+                }
+
+                headersBuilder.append(headerName).append(": ")
+                        .append(headerValue != null ? headerValue : "")
+                        .append("\n");
+            }
+
+            if (headersBuilder.length() > 0) {
+                requestHeaders = headersBuilder.toString();
+            }
+        } catch (Exception ignored) {
+            requestHeaders = "(erro ao ler headers)";
         }
 
         // Determinar a aplicação de origem
@@ -323,7 +358,8 @@ public class RestExceptionHandler {
                 endpoint,
                 method,
                 requestBody,
-                requestOrigin
+                requestOrigin,
+                requestHeaders
         );
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

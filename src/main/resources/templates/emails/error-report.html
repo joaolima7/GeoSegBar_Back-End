@@ -53,6 +53,21 @@
                 overflow-y: auto;">[[${requestBody}]]</pre>
         </div>
 
+        <div th:if="${requestHeaders != null and requestHeaders != '(nao disponivel)'}" style="margin-top: 20px;">
+            <strong style="font-size: 14px; color: #475569;">Headers da Requisicao:</strong>
+            <pre style="
+                background: #1e293b;
+                color: #e2e8f0;
+                padding: 15px;
+                border-radius: 8px;
+                font-size: 11px;
+                overflow-x: auto;
+                white-space: pre-wrap;
+                margin-top: 8px;
+                max-height: 300px;
+                overflow-y: auto;">[[${requestHeaders}]]</pre>
+        </div>
+
         <div style="margin-top: 20px;">
             <strong style="font-size: 14px; color: #475569;">Stack Trace Principal:</strong>
             <pre style="

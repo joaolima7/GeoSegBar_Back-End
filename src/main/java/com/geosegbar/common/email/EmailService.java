@@ -65,7 +65,8 @@ public class EmailService {
 
     @Async
     public void sendInternalErrorException(String errorMessage, String stackTrace, String userContext,
-            String requestEndpoint, String requestMethod, String requestBody, String requestOrigin) {
+            String requestEndpoint, String requestMethod, String requestBody, String requestOrigin,
+            String requestHeaders) {
         try {
             Context context = new Context();
             context.setVariable("errorMessage", errorMessage);
@@ -75,6 +76,7 @@ public class EmailService {
             context.setVariable("requestMethod", requestMethod);
             context.setVariable("requestBody", requestBody);
             context.setVariable("requestOrigin", requestOrigin);
+            context.setVariable("requestHeaders", requestHeaders);
             context.setVariable("timestamp", LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")));
 
             String htmlContent = templateEngine.process("emails/error-report", context);
@@ -248,7 +250,9 @@ public class EmailService {
 
             if (hasAttachments) {
                 for (AttachmentData attachment : attachments) {
-                    if (attachment == null) continue;
+                    if (attachment == null) {
+                        continue;
+                    }
                     log.debug("[EMAIL] Anexando arquivo → name='{}' type={} size={}b",
                             attachment.filename(), attachment.contentType(), attachment.content().length);
                     helper.addAttachment(

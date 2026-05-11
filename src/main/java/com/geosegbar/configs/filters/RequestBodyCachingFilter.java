@@ -27,6 +27,13 @@ public class RequestBodyCachingFilter extends OncePerRequestFilter {
                 ? (ContentCachingRequestWrapper) request
                 : new ContentCachingRequestWrapper(request);
 
-        filterChain.doFilter(wrapper, response);
+        try {
+            filterChain.doFilter(wrapper, response);
+        } finally {
+            byte[] bodyBytes = wrapper.getContentAsByteArray();
+            if (bodyBytes != null && bodyBytes.length > 0) {
+                wrapper.setAttribute("cachedRequestBody", bodyBytes);
+            }
+        }
     }
 }

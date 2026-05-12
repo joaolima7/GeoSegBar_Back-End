@@ -32,6 +32,8 @@ import com.geosegbar.infra.answer.persistence.jpa.AnswerRepository;
 import com.geosegbar.infra.checklist.dtos.ChecklistCompleteCreationDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistCompleteDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistCompleteUpdateDTO;
+import com.geosegbar.infra.checklist.dtos.ChecklistNameResponseDTO;
+import com.geosegbar.infra.checklist.dtos.ChecklistNameUpdateDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationResponseDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersAndDamDTO;
@@ -299,6 +301,52 @@ public class ChecklistService {
             ((ChecklistWithLastAnswersDTO) checklistDTO).setTemplateQuestionnaires(templateDTOs);
         } else if (checklistDTO instanceof ChecklistWithLastAnswersAndDamDTO) {
             ((ChecklistWithLastAnswersAndDamDTO) checklistDTO).setTemplateQuestionnaires(templateDTOs);
+        }
+    }
+
+    @Transactional
+    public ChecklistNameResponseDTO updateName(Long checklistId, ChecklistNameUpdateDTO dto) {
+        String actor = resolveActor();
+        String newName = dto.getName().trim();
+
+        logChecklistAudit(
+                "CHECKLIST_UPDATE_NAME",
+                "START",
+                actor,
+                "checklistId=" + checklistId + " name=" + newName,
+                null
+        );
+
+        try {
+            ChecklistEntity checklist = checklistRepository.findByIdWithDam(checklistId)
+                    .orElseThrow(() -> new NotFoundException("Checklist não encontrada para id: " + checklistId));
+
+            Long damId = checklist.getDam().getId();
+            if (checklistRepository.existsByNameAndDamIdAndIdNot(newName, damId, checklistId)) {
+                throw new DuplicateResourceException("Já existe um checklist com esse nome para esta barragem.");
+            }
+
+            checklist.setName(newName);
+            ChecklistEntity saved = checklistRepository.save(checklist);
+
+            logChecklistAudit(
+                    "CHECKLIST_UPDATE_NAME",
+                    "SUCCESS",
+                    actor,
+                    "checklistId=" + saved.getId() + " damId=" + damId,
+                    null
+            );
+
+            return new ChecklistNameResponseDTO(saved.getId(), saved.getName(), damId);
+        } catch (RuntimeException e) {
+            logChecklistAudit(
+                    "CHECKLIST_UPDATE_NAME",
+                    "ERROR",
+                    actor,
+                    "checklistId=" + checklistId + " name=" + newName,
+                    e
+            );
+            throw e;
         }
     }
 
@@ -979,16 +1027,18 @@ public class ChecklistService {
                         + "Não é possível criar outro checklist para a mesma barragem.");
             }
 
-            if (checklistRepository.existsByNameAndDamId(sourceChecklist.getName(), targetDamId)) {
+            String replicatedChecklistName = defaultReplicatedChecklistName(targetDam);
+
+            if (checklistRepository.existsByNameAndDamId(replicatedChecklistName, targetDamId)) {
                 throw new DuplicateResourceException(
-                        "Já existe um checklist com o nome '" + sourceChecklist.getName()
+                        "Já existe um checklist com o nome '" + replicatedChecklistName
                         + "' para a barragem de destino.");
             }
 
             log.info("Validações concluídas. Iniciando criação de cópias...");
 
             ChecklistEntity newChecklist = new ChecklistEntity();
-            newChecklist.setName(sourceChecklist.getName());
+            newChecklist.setName(replicatedChecklistName);
             newChecklist.setDam(targetDam);
             newChecklist.setTemplateQuestionnaires(new HashSet<>());
 
@@ -1076,6 +1126,10 @@ public class ChecklistService {
         } catch (Exception e) {
             return "Anonimo/Não autenticado";
         }
+    }
+
+    private String defaultReplicatedChecklistName(DamEntity targetDam) {
+        return "Checklist " + targetDam.getName();
     }
 
     private void logChecklistAudit(String action, String status, String actor, String details, Exception error) {

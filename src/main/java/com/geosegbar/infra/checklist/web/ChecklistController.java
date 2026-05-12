@@ -24,6 +24,8 @@ import com.geosegbar.entities.ChecklistEntity;
 import com.geosegbar.infra.checklist.dtos.ChecklistCompleteCreationDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistCompleteDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistCompleteUpdateDTO;
+import com.geosegbar.infra.checklist.dtos.ChecklistNameResponseDTO;
+import com.geosegbar.infra.checklist.dtos.ChecklistNameUpdateDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistReplicationDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationResponseDTO;
@@ -134,6 +136,18 @@ public class ChecklistController {
         checklist.setId(id);
         ChecklistEntity updated = checklistService.update(checklist);
         WebResponseEntity<ChecklistEntity> response = WebResponseEntity.success(updated, "Checklist atualizada com sucesso!");
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}/name")
+    public ResponseEntity<WebResponseEntity<ChecklistNameResponseDTO>> updateChecklistName(
+            @PathVariable Long id,
+            @Valid @RequestBody ChecklistNameUpdateDTO dto) {
+        ChecklistNameResponseDTO updated = checklistService.updateName(id, dto);
+        WebResponseEntity<ChecklistNameResponseDTO> response = WebResponseEntity.success(
+                updated,
+                "Nome do checklist atualizado com sucesso!"
+        );
         return ResponseEntity.ok(response);
     }
 

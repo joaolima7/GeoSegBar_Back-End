@@ -22,6 +22,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import com.geosegbar.configs.filters.GzipRequestDecompressingFilter;
 import com.geosegbar.configs.filters.RequestBodyCachingFilter;
 
 @Configuration
@@ -68,6 +69,15 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
+    }
+
+    @Bean
+    public FilterRegistrationBean<GzipRequestDecompressingFilter> gzipRequestDecompressingFilter() {
+        FilterRegistrationBean<GzipRequestDecompressingFilter> registration = new FilterRegistrationBean<>();
+        registration.setFilter(new GzipRequestDecompressingFilter());
+        registration.addUrlPatterns("/*");
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE - 1);
+        return registration;
     }
 
     @Bean

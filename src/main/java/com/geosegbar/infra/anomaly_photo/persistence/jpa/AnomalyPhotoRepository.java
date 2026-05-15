@@ -3,6 +3,7 @@ package com.geosegbar.infra.anomaly_photo.persistence.jpa;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -16,4 +17,8 @@ public interface AnomalyPhotoRepository extends JpaRepository<AnomalyPhotoEntity
     @Query("SELECT ap.anomaly.id as anomalyId, ap.imagePath as imagePath "
             + "FROM AnomalyPhotoEntity ap WHERE ap.anomaly.id IN :anomalyIds")
     List<AnomalyPhotoPathProjection> findPathsByAnomalyIds(@Param("anomalyIds") List<Long> anomalyIds);
+
+    @Modifying
+    @Query("UPDATE AnomalyPhotoEntity p SET p.imagePath = :url WHERE p.id = :id")
+    void updateImagePath(@Param("id") Long id, @Param("url") String url);
 }

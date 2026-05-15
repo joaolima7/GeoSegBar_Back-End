@@ -2,6 +2,7 @@ package com.geosegbar.infra.template_questionnaire.persistence.jpa;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -60,6 +61,9 @@ public interface TemplateQuestionnaireRepository extends JpaRepository<TemplateQ
     boolean existsByNameAndDamId(String name, Long damId);
 
     boolean existsByNameAndDamIdAndIdNot(String name, Long damId, Long id);
+
+    @Query("SELECT t.id FROM TemplateQuestionnaireEntity t WHERE t.id IN :ids AND SIZE(t.templateQuestions) > 0")
+    Set<Long> findIdsWithQuestions(@Param("ids") Set<Long> ids);
 
     @Override
     @EntityGraph(attributePaths = {

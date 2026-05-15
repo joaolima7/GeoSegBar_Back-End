@@ -392,9 +392,12 @@ public class ChecklistResponseSubmissionService {
             Set<Long> missingTemplateIds = new HashSet<>(requiredTemplateIds);
             missingTemplateIds.removeAll(submittedTemplateIdsSet);
 
-            List<String> missingNames = templateQuestionnaireRepository.findAllById(missingTemplateIds).stream()
-                    .map(TemplateQuestionnaireEntity::getName).toList();
-            throw new InvalidInputException("Checklist incompleto. Faltam: " + missingNames);
+            Set<Long> missingWithQuestions = templateQuestionnaireRepository.findIdsWithQuestions(missingTemplateIds);
+            if (!missingWithQuestions.isEmpty()) {
+                List<String> missingNames = templateQuestionnaireRepository.findAllById(missingWithQuestions).stream()
+                        .map(TemplateQuestionnaireEntity::getName).toList();
+                throw new InvalidInputException("Checklist incompleto. Faltam: " + missingNames);
+            }
         }
 
         if (!requiredTemplateIds.containsAll(submittedTemplateIdsSet)) {

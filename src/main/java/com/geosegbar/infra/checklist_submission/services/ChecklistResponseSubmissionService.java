@@ -235,23 +235,34 @@ public class ChecklistResponseSubmissionService {
                 .map(AnswerSubmissionDTO::getQuestionId)
                 .collect(Collectors.toList());
 
+        List<Long> allTemplateIds = submissionDto.getQuestionnaireResponses().stream()
+                .map(QuestionnaireResponseSubmissionDTO::getTemplateQuestionnaireId)
+                .collect(Collectors.toList());
+
         List<Object[]> prevResults = answerRepository.findLatestOptionLabels(
                 allQuestionIds,
+                allTemplateIds,
                 submissionDto.getDamId(),
                 submissionDto.getChecklistId());
 
-        Map<Long, String> previousLabels = new java.util.HashMap<>();
+        // chave: questionId + "_" + templateId → label mais recente naquele template+barragem+checklist
+        Map<String, String> previousLabels = new java.util.HashMap<>();
         for (Object[] row : prevResults) {
-            previousLabels.put((Long) row[0], (String) row[1]);
+            Long questionId = ((Number) row[0]).longValue();
+            Long templateId = ((Number) row[1]).longValue();
+            String label = (String) row[2];
+            previousLabels.put(questionId + "_" + templateId, label);
         }
 
         Map<Long, String> questionTexts = questionRepository.findAllById(allQuestionIds).stream()
                 .collect(Collectors.toMap(QuestionEntity::getId, QuestionEntity::getQuestionText));
 
         for (QuestionnaireResponseSubmissionDTO qDto : submissionDto.getQuestionnaireResponses()) {
+            Long templateId = qDto.getTemplateQuestionnaireId();
             for (AnswerSubmissionDTO answerDto : qDto.getAnswers()) {
                 if (answerDto.getSelectedOptionIds() != null) {
-                    String previousLabel = previousLabels.get(answerDto.getQuestionId());
+                    String key = answerDto.getQuestionId() + "_" + templateId;
+                    String previousLabel = previousLabels.get(key);
                     String questionText = questionTexts.getOrDefault(answerDto.getQuestionId(), "Desconhecida");
 
                     for (Long optionId : answerDto.getSelectedOptionIds()) {

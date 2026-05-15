@@ -55,17 +55,25 @@ public interface AnswerRepository extends JpaRepository<AnswerEntity, Long> {
             @Param("checklistId") Long checklistId,
             @Param("beforeDate") LocalDateTime beforeDate);
 
-    @Query("SELECT a.question.id, o.label FROM AnswerEntity a " +
-           "JOIN a.selectedOptions o " +
-           "WHERE a.question.id IN :questionIds " +
-           "AND a.questionnaireResponse.checklistResponse.dam.id = :damId " +
-           "AND a.questionnaireResponse.checklistResponse.checklistId = :checklistId " +
-           "AND a.questionnaireResponse.checklistResponse.createdAt = (" +
-           "  SELECT MAX(cr2.createdAt) FROM ChecklistResponseEntity cr2 " +
-           "  WHERE cr2.dam.id = :damId " +
-           "  AND cr2.checklistId = :checklistId)")
+    @Query(value = """
+            SELECT DISTINCT ON (a.question_id, qr.template_questionnaire_id)
+                   a.question_id,
+                   qr.template_questionnaire_id,
+                   o.label
+            FROM answers a
+            JOIN answer_options ao ON ao.answer_id = a.id
+            JOIN options o ON o.id = ao.option_id
+            JOIN questionnaire_responses qr ON qr.id = a.questionnaire_response_id
+            JOIN checklist_responses cr ON cr.id = qr.checklist_response_id
+            WHERE a.question_id IN :questionIds
+              AND qr.template_questionnaire_id IN :templateIds
+              AND cr.dam_id = :damId
+              AND cr.checklist_id = :checklistId
+            ORDER BY a.question_id, qr.template_questionnaire_id, cr.created_at DESC, cr.id DESC
+            """, nativeQuery = true)
     List<Object[]> findLatestOptionLabels(
             @Param("questionIds") List<Long> questionIds,
+            @Param("templateIds") List<Long> templateIds,
             @Param("damId") Long damId,
             @Param("checklistId") Long checklistId);
 

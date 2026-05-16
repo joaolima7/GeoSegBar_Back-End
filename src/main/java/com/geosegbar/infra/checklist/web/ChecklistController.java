@@ -31,6 +31,7 @@ import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationResponseDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersAndDamDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersDTO;
+import com.geosegbar.infra.checklist.dtos.TemplateReorderDTO;
 import com.geosegbar.infra.checklist.services.ChecklistService;
 
 import jakarta.validation.Valid;
@@ -177,6 +178,19 @@ public class ChecklistController {
 
         WebResponseEntity<ChecklistTemplateAssociationResponseDTO> response = WebResponseEntity.success(
                 result, message);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{checklistId}/templates/reorder")
+    public ResponseEntity<WebResponseEntity<List<ChecklistTemplateAssociationResponseDTO>>> reorderTemplates(
+            @PathVariable Long checklistId,
+            @Valid @RequestBody TemplateReorderDTO dto) {
+
+        List<ChecklistTemplateAssociationResponseDTO> result = checklistService.reorderTemplates(checklistId, dto);
+
+        WebResponseEntity<List<ChecklistTemplateAssociationResponseDTO>> response = WebResponseEntity.success(
+                result, "Templates reordenados com sucesso!");
 
         return ResponseEntity.ok(response);
     }

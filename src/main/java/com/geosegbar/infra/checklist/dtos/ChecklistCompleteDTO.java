@@ -1,7 +1,9 @@
 package com.geosegbar.infra.checklist.dtos;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import lombok.AllArgsConstructor;
@@ -16,7 +18,7 @@ public class ChecklistCompleteDTO {
     private Long id;
     private String name;
     private LocalDateTime createdAt;
-    private Set<TemplateQuestionnaireDTO> templateQuestionnaires = new HashSet<>();
+    private List<TemplateQuestionnaireDTO> templateQuestionnaires = new ArrayList<>();
     private DamDTO dam;
 
     @Data
@@ -26,6 +28,7 @@ public class ChecklistCompleteDTO {
 
         private Long id;
         private String name;
+        private Integer orderIndex;
         private Set<TemplateQuestionnaireQuestionDTO> templateQuestions = new HashSet<>();
     }
 

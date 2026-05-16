@@ -36,6 +36,12 @@ public class TemplateInChecklistDTO {
     private List<TemplateQuestionDTO> questions;
 
     /**
+     * Posição deste template dentro do checklist (1-based). Se null, o backend
+     * atribui o próximo índice disponível (append no fim).
+     */
+    private Integer orderIndex;
+
+    /**
      * Verifica se é um template existente.
      */
     public boolean isExistingTemplate() {

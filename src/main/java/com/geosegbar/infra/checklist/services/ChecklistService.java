@@ -1,9 +1,9 @@
 package com.geosegbar.infra.checklist.services;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -17,6 +17,7 @@ import com.geosegbar.common.enums.TypeQuestionEnum;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.AnswerEntity;
 import com.geosegbar.entities.ChecklistEntity;
+import com.geosegbar.entities.ChecklistTemplateEntity;
 import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.OptionEntity;
@@ -41,8 +42,11 @@ import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersDTO;
 import com.geosegbar.infra.checklist.dtos.OptionDTO;
 import com.geosegbar.infra.checklist.dtos.QuestionWithLastAnswerDTO;
 import com.geosegbar.infra.checklist.dtos.TemplateInChecklistDTO;
+import com.geosegbar.infra.checklist.dtos.TemplateOrderDTO;
 import com.geosegbar.infra.checklist.dtos.TemplateQuestionnaireWithAnswersDTO;
+import com.geosegbar.infra.checklist.dtos.TemplateReorderDTO;
 import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
+import com.geosegbar.infra.checklist_template.persistence.jpa.ChecklistTemplateRepository;
 import com.geosegbar.infra.dam.services.DamService;
 import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
 import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
@@ -60,6 +64,7 @@ import lombok.extern.slf4j.Slf4j;
 public class ChecklistService {
 
     private final ChecklistRepository checklistRepository;
+    private final ChecklistTemplateRepository checklistTemplateRepository;
     private final DamService damService;
     private final AnswerRepository answerRepository;
     private final TemplateQuestionnaireRepository templateQuestionnaireRepository;
@@ -71,18 +76,12 @@ public class ChecklistService {
         return checklistRepository.findAllWithDams(pageable);
     }
 
-    /**
-     * ✅ OTIMIZAÇÃO: Usa query com details para montar o DTO sem lazy exception.
-     */
     public ChecklistCompleteDTO findByIdDTO(Long id) {
         ChecklistEntity entity = checklistRepository.findByIdWithFullDetails(id)
                 .orElseThrow(() -> new NotFoundException("Checklist não encontrado para id: " + id));
         return convertToCompleteDTO(entity);
     }
 
-    /**
-     * ✅ OTIMIZAÇÃO: Retorna entidade carregada.
-     */
     public ChecklistEntity findById(Long id) {
         return checklistRepository.findByIdWithFullDetails(id)
                 .orElseThrow(() -> new NotFoundException("Checklist não encontrada para id: " + id));
@@ -98,7 +97,7 @@ public class ChecklistService {
                 actor,
                 "damId=" + (checklist.getDam() != null ? checklist.getDam().getId() : null)
                 + " name=" + checklist.getName() + " "
-                + templateIdsSummary(checklist.getTemplateQuestionnaires()),
+                + templateIdsSummary(checklist.getChecklistTemplates()),
                 null
         );
 
@@ -111,7 +110,6 @@ public class ChecklistService {
             Long damId = dam.getId();
 
             DamEntity fullDam = damService.findById(damId);
-            // Long clientId = fullDam.getClient().getId(); // Não usado, removido para limpar aviso
 
             ChecklistEntity existingChecklist = checklistRepository.findByDamId(damId);
             if (existingChecklist != null) {
@@ -126,28 +124,9 @@ public class ChecklistService {
                 throw new DuplicateResourceException("Já existe um checklist com esse nome para esta barragem.");
             }
 
-            Set<TemplateQuestionnaireEntity> fullTemplates = new HashSet<>();
-            if (checklist.getTemplateQuestionnaires() != null && !checklist.getTemplateQuestionnaires().isEmpty()) {
-                for (TemplateQuestionnaireEntity template : checklist.getTemplateQuestionnaires()) {
-                    if (template.getId() == null) {
-                        throw new InvalidInputException("ID do template é obrigatório!");
-                    }
-
-                    TemplateQuestionnaireEntity fullTemplate = templateQuestionnaireRepository.findById(template.getId())
-                            .orElseThrow(() -> new NotFoundException(
-                            "Template não encontrado com ID: " + template.getId()));
-
-                    fullTemplates.add(fullTemplate);
-                }
-
-                checklist.setTemplateQuestionnaires(fullTemplates);
-            }
-
-            validateTemplatesBelongToDam(checklist.getTemplateQuestionnaires(), damId, fullDam.getName());
+            validateTemplatesBelongToDam(checklist.getTemplateQuestionnairesForJson(), damId, fullDam.getName());
 
             ChecklistEntity saved = checklistRepository.save(checklist);
-
-            // ✅ SEGURANÇA OSIV: Retorna objeto recarregado com grafo completo
             ChecklistEntity result = findById(saved.getId());
 
             logChecklistAudit(
@@ -155,7 +134,7 @@ public class ChecklistService {
                     "SUCCESS",
                     actor,
                     "checklistId=" + result.getId() + " damId=" + damId
-                    + " templateCount=" + result.getTemplateQuestionnaires().size(),
+                    + " templateCount=" + result.getChecklistTemplates().size(),
                     null
             );
 
@@ -174,10 +153,8 @@ public class ChecklistService {
 
     @Transactional()
     public List<ChecklistWithLastAnswersDTO> findChecklistsWithLastAnswersForDam(Long damId) {
-        // Valida existência da barragem
         damService.findById(damId);
 
-        // Busca checklist com toda a árvore carregada
         ChecklistEntity checklist = checklistRepository.findByDamIdWithFullDetails(damId);
 
         List<ChecklistWithLastAnswersDTO> result = new ArrayList<>();
@@ -194,15 +171,12 @@ public class ChecklistService {
     @Transactional()
     public List<ChecklistWithLastAnswersAndDamDTO> findAllChecklistsWithLastAnswersByClientId(Long clientId) {
 
-        // ✅ OTIMIZAÇÃO MASSIVA: Busca todos os checklists do cliente em 1 Query
-        // Em vez de iterar barragens (N) e buscar checklists (N), fazemos 1 busca só.
         List<ChecklistEntity> allChecklistsEntities = checklistRepository.findAllByClientIdWithDetails(clientId);
 
         List<ChecklistWithLastAnswersAndDamDTO> allChecklists = new ArrayList<>();
 
         for (ChecklistEntity checklist : allChecklistsEntities) {
 
-            // Reutiliza a lógica de montagem
             ChecklistWithLastAnswersAndDamDTO checklistDTO = new ChecklistWithLastAnswersAndDamDTO();
             checklistDTO.setId(checklist.getId());
             checklistDTO.setName(checklist.getName());
@@ -219,8 +193,6 @@ public class ChecklistService {
             );
             checklistDTO.setDam(damInfo);
 
-            // Popula os templates e respostas
-            // Nota: dam.getId() aqui é seguro pois o graph carregou a dam
             populateTemplatesWithAnswers(checklistDTO, checklist, dam.getId());
 
             allChecklists.add(checklistDTO);
@@ -234,7 +206,6 @@ public class ChecklistService {
         return allChecklists;
     }
 
-    // --- Métodos Auxiliares de Construção (Extraídos para reutilização e clareza) ---
     private ChecklistWithLastAnswersDTO buildChecklistWithAnswersDTO(ChecklistEntity checklist, Long damId) {
         ChecklistWithLastAnswersDTO checklistDTO = new ChecklistWithLastAnswersDTO();
         checklistDTO.setId(checklist.getId());
@@ -246,16 +217,16 @@ public class ChecklistService {
         return checklistDTO;
     }
 
-    // Método genérico para popular templates em qualquer DTO que herde ou tenha estrutura similar
-    // Como os DTOs são diferentes classes mas mesma estrutura, mantive a lógica duplicada no loop acima
-    // mas aqui extraio a lógica comum do "miolo".
     private void populateTemplatesWithAnswers(Object checklistDTO, ChecklistEntity checklist, Long damId) {
         List<TemplateQuestionnaireWithAnswersDTO> templateDTOs = new ArrayList<>();
 
-        for (TemplateQuestionnaireEntity template : checklist.getTemplateQuestionnaires()) {
+        for (ChecklistTemplateEntity ct : checklist.getChecklistTemplates()) {
+            TemplateQuestionnaireEntity template = ct.getTemplateQuestionnaire();
+
             TemplateQuestionnaireWithAnswersDTO templateDTO = new TemplateQuestionnaireWithAnswersDTO();
             templateDTO.setId(template.getId());
             templateDTO.setName(template.getName());
+            templateDTO.setOrderIndex(ct.getOrderIndex());
 
             List<QuestionWithLastAnswerDTO> questionDTOs = new ArrayList<>();
 
@@ -272,8 +243,6 @@ public class ChecklistService {
                         .collect(Collectors.toList());
                 questionDTO.setAllOptions(allOptionDTOs);
 
-                // Esta query busca a última resposta. Como estamos em transação, ok.
-                // Otimização futura: Buscar todas as respostas do checklist em batch.
                 Optional<AnswerEntity> lastNonNIAnswer = answerRepository.findLatestNonNIAnswer(
                         damId, question.getId(), template.getId());
 
@@ -358,7 +327,7 @@ public class ChecklistService {
                 "CHECKLIST_UPDATE",
                 "START",
                 actor,
-                "checklistId=" + checklist.getId() + " " + templateIdsSummary(checklist.getTemplateQuestionnaires()),
+                "checklistId=" + checklist.getId() + " " + templateIdsSummary(checklist.getChecklistTemplates()),
                 null
         );
 
@@ -371,12 +340,10 @@ public class ChecklistService {
             DamEntity oldDam = oldChecklist.getDam();
             Long oldDamId = oldDam.getId();
             DamEntity oldFullDam = damService.findById(oldDamId);
-            // Long oldClientId = oldFullDam.getClient().getId(); // Removido
 
             DamEntity newDam = checklist.getDam();
             Long newDamId = newDam.getId();
 
-            // Não permite mudança da barragem após criação
             if (!oldDamId.equals(newDamId)) {
                 throw new BusinessRuleException(
                         "Não é possível alterar a barragem de um checklist após sua criação. "
@@ -389,35 +356,16 @@ public class ChecklistService {
                 throw new DuplicateResourceException("Já existe um checklist com esse nome para esta barragem.");
             }
 
-            Set<TemplateQuestionnaireEntity> fullTemplates = new HashSet<>();
-            if (checklist.getTemplateQuestionnaires() != null && !checklist.getTemplateQuestionnaires().isEmpty()) {
-                for (TemplateQuestionnaireEntity template : checklist.getTemplateQuestionnaires()) {
-                    if (template.getId() == null) {
-                        throw new InvalidInputException("ID do template é obrigatório!");
-                    }
-
-                    TemplateQuestionnaireEntity fullTemplate = templateQuestionnaireRepository.findById(template.getId())
-                            .orElseThrow(() -> new NotFoundException(
-                            "Template não encontrado com ID: " + template.getId()));
-
-                    fullTemplates.add(fullTemplate);
-                }
-
-                checklist.setTemplateQuestionnaires(fullTemplates);
-            }
-
-            validateTemplatesBelongToDam(checklist.getTemplateQuestionnaires(), newDamId, oldFullDam.getName());
+            validateTemplatesBelongToDam(checklist.getTemplateQuestionnairesForJson(), newDamId, oldFullDam.getName());
 
             ChecklistEntity saved = checklistRepository.save(checklist);
-
-            // ✅ SEGURANÇA OSIV
             ChecklistEntity result = findById(saved.getId());
 
             logChecklistAudit(
                     "CHECKLIST_UPDATE",
                     "SUCCESS",
                     actor,
-                    "checklistId=" + result.getId() + " templateCount=" + result.getTemplateQuestionnaires().size(),
+                    "checklistId=" + result.getId() + " templateCount=" + result.getChecklistTemplates().size(),
                     null
             );
 
@@ -446,7 +394,6 @@ public class ChecklistService {
         );
 
         try {
-            // Apenas verifica existência, não precisa carregar grafo pesado para deletar
             if (!checklistRepository.existsById(id)) {
                 throw new NotFoundException("Checklist não encontrada para exclusão!");
             }
@@ -505,14 +452,12 @@ public class ChecklistService {
             ChecklistEntity checklist = new ChecklistEntity();
             checklist.setName(dto.getName());
             checklist.setDam(dam);
-            checklist.setTemplateQuestionnaires(new HashSet<>());
 
             checklist = checklistRepository.save(checklist);
             log.info("Checklist base criado com ID: {}", checklist.getId());
 
             int templateCount = 0;
             for (TemplateInChecklistDTO templateDto : dto.getTemplates()) {
-                // ... (Validações de templateDTO mantidas) ...
                 if (templateDto.isNewTemplate()) {
                     if (templateDto.getName() == null || templateDto.getName().trim().isEmpty()) {
                         throw new InvalidInputException("Nome do template é obrigatório ao criar um novo template!");
@@ -549,7 +494,12 @@ public class ChecklistService {
                     log.info("Novo template criado: {} (ID: {})", template.getName(), template.getId());
                 }
 
-                checklist.getTemplateQuestionnaires().add(template);
+                int orderIdx = templateDto.getOrderIndex() != null ? templateDto.getOrderIndex() : templateCount + 1;
+                ChecklistTemplateEntity ct = new ChecklistTemplateEntity();
+                ct.setChecklist(checklist);
+                ct.setTemplateQuestionnaire(template);
+                ct.setOrderIndex(orderIdx);
+                checklist.getChecklistTemplates().add(ct);
                 templateCount++;
             }
 
@@ -558,7 +508,6 @@ public class ChecklistService {
             log.info("Checklist completo criado com sucesso: {} com {} template(s)",
                     saved.getName(), templateCount);
 
-            // ✅ SEGURANÇA OSIV
             ChecklistEntity result = findById(saved.getId());
 
             logChecklistAudit(
@@ -566,7 +515,7 @@ public class ChecklistService {
                     "SUCCESS",
                     actor,
                     "checklistId=" + result.getId() + " damId=" + dto.getDamId()
-                    + " templateCount=" + result.getTemplateQuestionnaires().size(),
+                    + " templateCount=" + result.getChecklistTemplates().size(),
                     null
             );
 
@@ -598,7 +547,6 @@ public class ChecklistService {
 
         try {
 
-            // Busca e carrega tudo
             ChecklistEntity existingChecklist = findById(checklistId);
             DamEntity dam = existingChecklist.getDam();
             Long damId = dam.getId();
@@ -609,11 +557,10 @@ public class ChecklistService {
             }
 
             existingChecklist.setName(dto.getName());
-            existingChecklist.getTemplateQuestionnaires().clear();
+            existingChecklist.getChecklistTemplates().clear();
 
             int templateCount = 0;
             for (TemplateInChecklistDTO templateDto : dto.getTemplates()) {
-                // ... (Validações mantidas) ...
                 if (templateDto.isNewTemplate()) {
                     if (templateDto.getName() == null || templateDto.getName().trim().isEmpty()) {
                         throw new InvalidInputException("Nome do template é obrigatório ao criar um novo template!");
@@ -650,7 +597,12 @@ public class ChecklistService {
                     log.info("Novo template criado: {} (ID: {})", template.getName(), template.getId());
                 }
 
-                existingChecklist.getTemplateQuestionnaires().add(template);
+                int orderIdx = templateDto.getOrderIndex() != null ? templateDto.getOrderIndex() : templateCount + 1;
+                ChecklistTemplateEntity ct = new ChecklistTemplateEntity();
+                ct.setChecklist(existingChecklist);
+                ct.setTemplateQuestionnaire(template);
+                ct.setOrderIndex(orderIdx);
+                existingChecklist.getChecklistTemplates().add(ct);
                 templateCount++;
             }
 
@@ -659,14 +611,13 @@ public class ChecklistService {
             log.info("Checklist {} atualizado com sucesso com {} template(s)",
                     saved.getName(), templateCount);
 
-            // ✅ SEGURANÇA OSIV
             ChecklistEntity result = findById(saved.getId());
 
             logChecklistAudit(
                     "CHECKLIST_UPDATE_COMPLETE",
                     "SUCCESS",
                     actor,
-                    "checklistId=" + result.getId() + " templateCount=" + result.getTemplateQuestionnaires().size(),
+                    "checklistId=" + result.getId() + " templateCount=" + result.getChecklistTemplates().size(),
                     null
             );
 
@@ -826,7 +777,7 @@ public class ChecklistService {
     }
 
     public ChecklistCompleteDTO findChecklistForDamDTO(Long damId, Long checklistId) {
-        ChecklistEntity checklist = findById(checklistId); // Usa a busca completa
+        ChecklistEntity checklist = findById(checklistId);
 
         if (checklist.getDam() != null && checklist.getDam().getId().equals(damId)) {
             return convertToCompleteDTO(checklist);
@@ -851,13 +802,14 @@ public class ChecklistService {
         dto.setName(entity.getName());
         dto.setCreatedAt(entity.getCreatedAt());
 
-        // Stream seguro pois 'entity' veio de findByIdWithFullDetails
-        Set<ChecklistCompleteDTO.TemplateQuestionnaireDTO> templateDTOs = entity.getTemplateQuestionnaires().stream()
-                .map(template -> {
+        List<ChecklistCompleteDTO.TemplateQuestionnaireDTO> templateDTOs = entity.getChecklistTemplates().stream()
+                .map(ct -> {
+                    TemplateQuestionnaireEntity template = ct.getTemplateQuestionnaire();
                     ChecklistCompleteDTO.TemplateQuestionnaireDTO templateDTO
                             = new ChecklistCompleteDTO.TemplateQuestionnaireDTO();
                     templateDTO.setId(template.getId());
                     templateDTO.setName(template.getName());
+                    templateDTO.setOrderIndex(ct.getOrderIndex());
 
                     Set<ChecklistCompleteDTO.TemplateQuestionnaireQuestionDTO> questionDTOs = template.getTemplateQuestions().stream()
                             .map(tqq -> {
@@ -888,7 +840,7 @@ public class ChecklistService {
 
                     return templateDTO;
                 })
-                .collect(Collectors.toSet());
+                .collect(Collectors.toList());
         dto.setTemplateQuestionnaires(templateDTOs);
 
         if (entity.getDam() != null) {
@@ -946,28 +898,59 @@ public class ChecklistService {
                 );
             }
 
-            boolean alreadyAssociated = checklist.getTemplateQuestionnaires().stream()
-                    .anyMatch(t -> t.getId().equals(dto.getTemplateId()));
+            boolean alreadyAssociated = checklistTemplateRepository
+                    .findByChecklistIdAndTemplateQuestionnaireId(checklistId, dto.getTemplateId())
+                    .isPresent();
+
+            Integer resultOrderIndex = null;
 
             if (dto.getAction() == AssociationAction.ASSOCIATE) {
                 if (!alreadyAssociated) {
-                    checklist.getTemplateQuestionnaires().add(template);
-                    checklistRepository.save(checklist);
+                    long count = checklistTemplateRepository.countByChecklistId(checklistId);
+                    int newIndex = dto.getOrderIndex() != null ? dto.getOrderIndex() : (int) count + 1;
+
+                    if (dto.getOrderIndex() != null && dto.getOrderIndex() <= count) {
+                        List<ChecklistTemplateEntity> existing = checklistTemplateRepository
+                                .findByChecklistIdOrderByOrderIndex(checklistId);
+                        for (ChecklistTemplateEntity e : existing) {
+                            if (e.getOrderIndex() >= newIndex) {
+                                checklistTemplateRepository.updateOrderIndex(e.getId(), e.getOrderIndex() + 1);
+                            }
+                        }
+                    }
+
+                    ChecklistTemplateEntity ct = new ChecklistTemplateEntity();
+                    ct.setChecklist(checklist);
+                    ct.setTemplateQuestionnaire(template);
+                    ct.setOrderIndex(newIndex);
+                    checklistTemplateRepository.save(ct);
+                    resultOrderIndex = newIndex;
                 }
             } else {
-                if (!alreadyAssociated) {
-                    throw new NotFoundException("Template nao esta associado a este checklist.");
+                ChecklistTemplateEntity ct = checklistTemplateRepository
+                        .findByChecklistIdAndTemplateQuestionnaireId(checklistId, dto.getTemplateId())
+                        .orElseThrow(() -> new NotFoundException("Template nao esta associado a este checklist."));
+
+                int removedIndex = ct.getOrderIndex();
+                checklistTemplateRepository.delete(ct);
+
+                List<ChecklistTemplateEntity> remaining = checklistTemplateRepository
+                        .findByChecklistIdOrderByOrderIndex(checklistId);
+                for (ChecklistTemplateEntity e : remaining) {
+                    if (e.getOrderIndex() > removedIndex) {
+                        checklistTemplateRepository.updateOrderIndex(e.getId(), e.getOrderIndex() - 1);
+                    }
                 }
-                checklist.getTemplateQuestionnaires().removeIf(t -> t.getId().equals(dto.getTemplateId()));
-                checklistRepository.save(checklist);
             }
 
-            ChecklistTemplateAssociationResponseDTO result = new ChecklistTemplateAssociationResponseDTO(
-                    checklistId,
-                    dto.getTemplateId(),
-                    dto.getAction(),
-                    checklist.getTemplateQuestionnaires().size()
-            );
+            long templateCount = checklistTemplateRepository.countByChecklistId(checklistId);
+
+            ChecklistTemplateAssociationResponseDTO result = new ChecklistTemplateAssociationResponseDTO();
+            result.setChecklistId(checklistId);
+            result.setTemplateId(dto.getTemplateId());
+            result.setAction(dto.getAction());
+            result.setTemplateCount((int) templateCount);
+            result.setOrderIndex(resultOrderIndex);
 
             logChecklistAudit(
                     "CHECKLIST_TEMPLATE_ASSOCIATION",
@@ -993,6 +976,64 @@ public class ChecklistService {
     }
 
     @Transactional
+    public List<ChecklistTemplateAssociationResponseDTO> reorderTemplates(Long checklistId, TemplateReorderDTO dto) {
+        checklistRepository.findByIdWithDam(checklistId)
+                .orElseThrow(() -> new NotFoundException("Checklist não encontrado para id: " + checklistId));
+
+        List<ChecklistTemplateEntity> existing = checklistTemplateRepository
+                .findByChecklistIdOrderByOrderIndex(checklistId);
+
+        if (existing.size() != dto.getTemplates().size()) {
+            throw new InvalidInputException(
+                    "Número de templates na reordenação (" + dto.getTemplates().size()
+                    + ") não corresponde ao número de templates no checklist (" + existing.size() + ").");
+        }
+
+        Set<Long> existingIds = existing.stream()
+                .map(ChecklistTemplateEntity::getId)
+                .collect(Collectors.toSet());
+        for (TemplateOrderDTO orderDto : dto.getTemplates()) {
+            if (!existingIds.contains(orderDto.getChecklistTemplateId())) {
+                throw new InvalidInputException(
+                        "ChecklistTemplate ID " + orderDto.getChecklistTemplateId() + " não pertence a este checklist.");
+            }
+        }
+
+        Set<Integer> seenIndexes = new HashSet<>();
+        for (TemplateOrderDTO orderDto : dto.getTemplates()) {
+            if (!seenIndexes.add(orderDto.getOrderIndex())) {
+                throw new InvalidInputException("Índice de ordem duplicado: " + orderDto.getOrderIndex());
+            }
+        }
+
+        int n = dto.getTemplates().size();
+        for (TemplateOrderDTO orderDto : dto.getTemplates()) {
+            if (orderDto.getOrderIndex() < 1 || orderDto.getOrderIndex() > n) {
+                throw new InvalidInputException(
+                        "Índices de ordem devem ser uma sequência contínua de 1 a " + n + ".");
+            }
+        }
+
+        Map<Long, ChecklistTemplateEntity> ctById = existing.stream()
+                .collect(Collectors.toMap(ChecklistTemplateEntity::getId, ct -> ct));
+
+        List<ChecklistTemplateAssociationResponseDTO> results = new ArrayList<>();
+        for (TemplateOrderDTO orderDto : dto.getTemplates()) {
+            checklistTemplateRepository.updateOrderIndex(orderDto.getChecklistTemplateId(), orderDto.getOrderIndex());
+            ChecklistTemplateEntity ct = ctById.get(orderDto.getChecklistTemplateId());
+
+            ChecklistTemplateAssociationResponseDTO resp = new ChecklistTemplateAssociationResponseDTO();
+            resp.setChecklistId(checklistId);
+            resp.setTemplateId(ct.getTemplateQuestionnaire().getId());
+            resp.setTemplateCount(n);
+            resp.setOrderIndex(orderDto.getOrderIndex());
+            results.add(resp);
+        }
+
+        return results;
+    }
+
+    @Transactional
     public ChecklistEntity replicateChecklist(Long sourceChecklistId, Long targetDamId) {
         String actor = resolveActor();
         logChecklistAudit(
@@ -1007,7 +1048,6 @@ public class ChecklistService {
 
         try {
 
-            // Busca origem carregada
             ChecklistEntity sourceChecklist = findById(sourceChecklistId);
 
             DamEntity targetDam = damService.findById(targetDamId);
@@ -1040,32 +1080,25 @@ public class ChecklistService {
             ChecklistEntity newChecklist = new ChecklistEntity();
             newChecklist.setName(replicatedChecklistName);
             newChecklist.setDam(targetDam);
-            newChecklist.setTemplateQuestionnaires(new HashSet<>());
 
             newChecklist = checklistRepository.save(newChecklist);
             log.info("Checklist replicado criado com ID: {}", newChecklist.getId());
 
-            List<TemplateQuestionnaireEntity> sortedTemplates = sourceChecklist.getTemplateQuestionnaires()
-                    .stream()
-                    .sorted(Comparator.comparing(TemplateQuestionnaireEntity::getId))
-                    .collect(Collectors.toList());
-
             int templateCount = 0;
-            for (TemplateQuestionnaireEntity sourceTemplate : sortedTemplates) {
+            for (ChecklistTemplateEntity sourceCt : sourceChecklist.getChecklistTemplates()) {
+                TemplateQuestionnaireEntity sourceTemplate = sourceCt.getTemplateQuestionnaire();
 
                 TemplateQuestionnaireEntity newTemplate = new TemplateQuestionnaireEntity();
                 newTemplate.setName(sourceTemplate.getName());
                 newTemplate.setDam(targetDam);
                 newTemplate.setTemplateQuestions(new HashSet<>());
-                newTemplate.setChecklists(new HashSet<>());
-                newTemplate.getChecklists().add(newChecklist);
 
                 newTemplate = templateQuestionnaireRepository.save(newTemplate);
                 log.debug("Template replicado: {} com ID {}", newTemplate.getName(), newTemplate.getId());
 
                 List<TemplateQuestionnaireQuestionEntity> sortedQuestions = sourceTemplate.getTemplateQuestions()
                         .stream()
-                        .sorted(Comparator.comparing(TemplateQuestionnaireQuestionEntity::getOrderIndex))
+                        .sorted(java.util.Comparator.comparing(TemplateQuestionnaireQuestionEntity::getOrderIndex))
                         .collect(Collectors.toList());
 
                 int questionCount = 0;
@@ -1082,7 +1115,12 @@ public class ChecklistService {
                 }
 
                 newTemplate = templateQuestionnaireRepository.save(newTemplate);
-                newChecklist.getTemplateQuestionnaires().add(newTemplate);
+
+                ChecklistTemplateEntity newCt = new ChecklistTemplateEntity();
+                newCt.setChecklist(newChecklist);
+                newCt.setTemplateQuestionnaire(newTemplate);
+                newCt.setOrderIndex(sourceCt.getOrderIndex());
+                newChecklist.getChecklistTemplates().add(newCt);
 
                 log.debug("Template '{}' replicado reutilizando {} questões", newTemplate.getName(), questionCount);
                 templateCount++;
@@ -1093,7 +1131,6 @@ public class ChecklistService {
             log.info("Replicação concluída: Checklist {} criado com {} template(s) para barragem {}",
                     saved.getId(), templateCount, targetDamId);
 
-            // ✅ SEGURANÇA OSIV
             ChecklistEntity result = findById(saved.getId());
 
             logChecklistAudit(
@@ -1101,7 +1138,7 @@ public class ChecklistService {
                     "SUCCESS",
                     actor,
                     "newChecklistId=" + result.getId() + " targetDamId=" + targetDamId
-                    + " templateCount=" + result.getTemplateQuestionnaires().size(),
+                    + " templateCount=" + result.getChecklistTemplates().size(),
                     null
             );
 
@@ -1146,7 +1183,7 @@ public class ChecklistService {
         }
     }
 
-    private String templateIdsSummary(Set<TemplateQuestionnaireEntity> templates) {
+    private String templateIdsSummary(List<ChecklistTemplateEntity> templates) {
         if (templates == null) {
             return "templates=null";
         }
@@ -1154,7 +1191,8 @@ public class ChecklistService {
             return "templates=[]";
         }
         List<String> ids = templates.stream()
-                .map(t -> t.getId() != null ? t.getId().toString() : "null")
+                .map(ct -> ct.getTemplateQuestionnaire() != null && ct.getTemplateQuestionnaire().getId() != null
+                ? ct.getTemplateQuestionnaire().getId().toString() : "null")
                 .collect(Collectors.toList());
         return "templateIds=" + ids;
     }

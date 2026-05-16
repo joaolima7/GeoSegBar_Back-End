@@ -16,24 +16,26 @@ import com.geosegbar.entities.ChecklistEntity;
 @Repository
 public interface ChecklistRepository extends JpaRepository<ChecklistEntity, Long> {
 
-    @EntityGraph(attributePaths = {"templateQuestionnaires"})
+    @EntityGraph(attributePaths = {"checklistTemplates", "checklistTemplates.templateQuestionnaire"})
     ChecklistEntity findByDamId(Long damId);
 
     @EntityGraph(attributePaths = {
-        "templateQuestionnaires",
-        "templateQuestionnaires.templateQuestions",
-        "templateQuestionnaires.templateQuestions.question",
-        "templateQuestionnaires.templateQuestions.question.options",
+        "checklistTemplates",
+        "checklistTemplates.templateQuestionnaire",
+        "checklistTemplates.templateQuestionnaire.templateQuestions",
+        "checklistTemplates.templateQuestionnaire.templateQuestions.question",
+        "checklistTemplates.templateQuestionnaire.templateQuestions.question.options",
         "dam"
     })
     @Query("SELECT c FROM ChecklistEntity c WHERE c.dam.id = :damId")
     ChecklistEntity findByDamIdWithFullDetails(@Param("damId") Long damId);
 
     @EntityGraph(attributePaths = {
-        "templateQuestionnaires",
-        "templateQuestionnaires.templateQuestions",
-        "templateQuestionnaires.templateQuestions.question",
-        "templateQuestionnaires.templateQuestions.question.options",
+        "checklistTemplates",
+        "checklistTemplates.templateQuestionnaire",
+        "checklistTemplates.templateQuestionnaire.templateQuestions",
+        "checklistTemplates.templateQuestionnaire.templateQuestions.question",
+        "checklistTemplates.templateQuestionnaire.templateQuestions.question.options",
         "dam",
         "dam.client"
     })
@@ -41,10 +43,11 @@ public interface ChecklistRepository extends JpaRepository<ChecklistEntity, Long
     Optional<ChecklistEntity> findByIdWithFullDetails(@Param("id") Long id);
 
     @EntityGraph(attributePaths = {
-        "templateQuestionnaires",
-        "templateQuestionnaires.templateQuestions",
-        "templateQuestionnaires.templateQuestions.question",
-        "templateQuestionnaires.templateQuestions.question.options",
+        "checklistTemplates",
+        "checklistTemplates.templateQuestionnaire",
+        "checklistTemplates.templateQuestionnaire.templateQuestions",
+        "checklistTemplates.templateQuestionnaire.templateQuestions.question",
+        "checklistTemplates.templateQuestionnaire.templateQuestions.question.options",
         "dam",
         "dam.client"
     })
@@ -55,7 +58,7 @@ public interface ChecklistRepository extends JpaRepository<ChecklistEntity, Long
     @Query("SELECT c FROM ChecklistEntity c WHERE c.id = :checklistId")
     Optional<ChecklistEntity> findByIdWithDam(@Param("checklistId") Long checklistId);
 
-    @EntityGraph(attributePaths = {"templateQuestionnaires", "dam"})
+    @EntityGraph(attributePaths = {"checklistTemplates", "checklistTemplates.templateQuestionnaire", "dam"})
     @Query("SELECT c FROM ChecklistEntity c WHERE c.id = :checklistId")
     Optional<ChecklistEntity> findByIdWithTemplates(@Param("checklistId") Long checklistId);
 
@@ -67,7 +70,8 @@ public interface ChecklistRepository extends JpaRepository<ChecklistEntity, Long
 
     boolean existsByNameAndDamIdAndIdNot(String name, Long damId, Long id);
 
-    long countByTemplateQuestionnairesId(Long templateQuestionnaireId);
+    @Query("SELECT COUNT(ct) FROM ChecklistTemplateEntity ct WHERE ct.templateQuestionnaire.id = :templateId")
+    long countByTemplateId(@Param("templateId") Long templateId);
 
     @Query(value = "SELECT c FROM ChecklistEntity c JOIN FETCH c.dam",
             countQuery = "SELECT count(c) FROM ChecklistEntity c")

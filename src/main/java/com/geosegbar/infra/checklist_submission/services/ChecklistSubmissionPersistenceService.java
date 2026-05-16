@@ -383,8 +383,8 @@ public class ChecklistSubmissionPersistenceService {
         ChecklistEntity checklist = checklistRepository.findByIdWithFullDetails(submissionDto.getChecklistId())
                 .orElseThrow(() -> new NotFoundException("Checklist não encontrado: " + submissionDto.getChecklistId()));
 
-        Set<Long> requiredTemplateIds = checklist.getTemplateQuestionnaires().stream()
-                .map(TemplateQuestionnaireEntity::getId)
+        Set<Long> requiredTemplateIds = checklist.getChecklistTemplates().stream()
+                .map(ct -> ct.getTemplateQuestionnaire().getId())
                 .collect(Collectors.toSet());
 
         List<Long> submittedTemplateIdsList = submissionDto.getQuestionnaireResponses().stream()

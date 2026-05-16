@@ -17,4 +17,6 @@ public class ChecklistTemplateAssociationDTO {
 
     @NotNull(message = "Acao e obrigatoria!")
     private AssociationAction action;
+
+    private Integer orderIndex;
 }

@@ -15,4 +15,5 @@ public class ChecklistTemplateAssociationResponseDTO {
     private Long templateId;
     private AssociationAction action;
     private Integer templateCount;
+    private Integer orderIndex;
 }

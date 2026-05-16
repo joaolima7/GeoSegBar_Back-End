@@ -21,7 +21,12 @@ public interface TemplateQuestionnaireRepository extends JpaRepository<TemplateQ
         "templateQuestions.question.options",
         "dam"
     })
-    List<TemplateQuestionnaireEntity> findByChecklistsId(Long checklistId);
+    @Query("""
+            SELECT ct.templateQuestionnaire FROM ChecklistTemplateEntity ct
+            WHERE ct.checklist.id = :checklistId
+            ORDER BY ct.orderIndex ASC
+            """)
+    List<TemplateQuestionnaireEntity> findByChecklistIdOrderByIndex(@Param("checklistId") Long checklistId);
 
     @EntityGraph(attributePaths = {
         "templateQuestions",

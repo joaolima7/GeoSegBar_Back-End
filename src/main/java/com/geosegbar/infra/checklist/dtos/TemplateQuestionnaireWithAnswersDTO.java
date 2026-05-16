@@ -13,5 +13,6 @@ public class TemplateQuestionnaireWithAnswersDTO {
 
     private Long id;
     private String name;
+    private Integer orderIndex;
     private List<QuestionWithLastAnswerDTO> questions;
 }

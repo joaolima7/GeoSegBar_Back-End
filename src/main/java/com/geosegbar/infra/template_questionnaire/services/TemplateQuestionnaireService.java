@@ -73,7 +73,7 @@ public class TemplateQuestionnaireService {
                     + "A exclusão impactaria na consistência dos dados históricos.");
         }
 
-        long checklistCount = checklistRepository.countByTemplateQuestionnairesId(id);
+        long checklistCount = checklistRepository.countByTemplateId(id);
         if (checklistCount > 0) {
             throw new BusinessRuleException(
                     "Não é possível excluir o template '" + template.getName()
@@ -306,7 +306,7 @@ public class TemplateQuestionnaireService {
 
         checklistService.findById(checklistId);
 
-        return templateQuestionnaireRepository.findByChecklistsId(checklistId);
+        return templateQuestionnaireRepository.findByChecklistIdOrderByIndex(checklistId);
     }
 
     @Transactional(readOnly = true)

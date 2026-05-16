@@ -1,13 +1,19 @@
 package com.geosegbar.entities;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.hibernate.annotations.CreationTimestamp;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -16,9 +22,9 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.JoinTable;
-import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotBlank;
@@ -57,13 +63,24 @@ public class ChecklistEntity {
     @CreationTimestamp
     private LocalDateTime createdAt;
 
-    @ManyToMany(fetch = FetchType.EAGER)
-    @JoinTable(name = "checklist_template_questionnaire",
-            joinColumns = @JoinColumn(name = "checklist_id"),
-            inverseJoinColumns = @JoinColumn(name = "template_questionnaire_id"))
-    private Set<TemplateQuestionnaireEntity> templateQuestionnaires = new HashSet<>();
+    @OneToMany(mappedBy = "checklist", fetch = FetchType.LAZY,
+            cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("orderIndex ASC")
+    @JsonManagedReference
+    private List<ChecklistTemplateEntity> checklistTemplates = new ArrayList<>();
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "dam_id", nullable = false)
     private DamEntity dam;
+
+    // Getter JSON backward-compat: mantém "templateQuestionnaires" no JSON do GET /{id}
+    @JsonProperty("templateQuestionnaires")
+    public Set<TemplateQuestionnaireEntity> getTemplateQuestionnairesForJson() {
+        if (checklistTemplates == null) {
+            return new HashSet<>();
+        }
+        return checklistTemplates.stream()
+                .map(ChecklistTemplateEntity::getTemplateQuestionnaire)
+                .collect(Collectors.toSet());
+    }
 }

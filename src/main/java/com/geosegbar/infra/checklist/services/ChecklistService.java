@@ -220,7 +220,9 @@ public class ChecklistService {
     private void populateTemplatesWithAnswers(Object checklistDTO, ChecklistEntity checklist, Long damId) {
         List<TemplateQuestionnaireWithAnswersDTO> templateDTOs = new ArrayList<>();
 
+        Set<Long> seenCtIds = new HashSet<>();
         for (ChecklistTemplateEntity ct : checklist.getChecklistTemplates()) {
+            if (!seenCtIds.add(ct.getId())) continue;
             TemplateQuestionnaireEntity template = ct.getTemplateQuestionnaire();
 
             TemplateQuestionnaireWithAnswersDTO templateDTO = new TemplateQuestionnaireWithAnswersDTO();
@@ -802,7 +804,9 @@ public class ChecklistService {
         dto.setName(entity.getName());
         dto.setCreatedAt(entity.getCreatedAt());
 
+        Set<Long> seenCtIds = new HashSet<>();
         List<ChecklistCompleteDTO.TemplateQuestionnaireDTO> templateDTOs = entity.getChecklistTemplates().stream()
+                .filter(ct -> seenCtIds.add(ct.getId()))
                 .map(ct -> {
                     TemplateQuestionnaireEntity template = ct.getTemplateQuestionnaire();
                     ChecklistCompleteDTO.TemplateQuestionnaireDTO templateDTO
@@ -1085,7 +1089,9 @@ public class ChecklistService {
             log.info("Checklist replicado criado com ID: {}", newChecklist.getId());
 
             int templateCount = 0;
+            Set<Long> seenSourceCtIds = new HashSet<>();
             for (ChecklistTemplateEntity sourceCt : sourceChecklist.getChecklistTemplates()) {
+                if (!seenSourceCtIds.add(sourceCt.getId())) continue;
                 TemplateQuestionnaireEntity sourceTemplate = sourceCt.getTemplateQuestionnaire();
 
                 TemplateQuestionnaireEntity newTemplate = new TemplateQuestionnaireEntity();

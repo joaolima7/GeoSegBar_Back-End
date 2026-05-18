@@ -239,6 +239,7 @@ public class ChecklistService {
                 questionDTO.setId(question.getId());
                 questionDTO.setQuestionText(question.getQuestionText());
                 questionDTO.setType(question.getType());
+                questionDTO.setOrderIndex(tqQuestion.getOrderIndex());
 
                 List<OptionDTO> allOptionDTOs = question.getOptions().stream()
                         .map(opt -> new OptionDTO(opt.getId(), opt.getLabel(), opt.getValue()))

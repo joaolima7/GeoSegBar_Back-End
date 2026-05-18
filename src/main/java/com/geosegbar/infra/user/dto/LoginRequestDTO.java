@@ -1,3 +1,5 @@
 package com.geosegbar.infra.user.dto;
 
-public record LoginRequestDTO(String email, String password) {}
+import com.geosegbar.common.enums.LoginOriginEnum;
+
+public record LoginRequestDTO(String email, String password, LoginOriginEnum origin) {}

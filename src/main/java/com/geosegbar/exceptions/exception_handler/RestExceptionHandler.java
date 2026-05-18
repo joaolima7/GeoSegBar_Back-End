@@ -34,6 +34,7 @@ import com.geosegbar.exceptions.FileStorageException;
 import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.InvalidTokenException;
+import com.geosegbar.exceptions.MobileAdminLoginException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.exceptions.RateLimitExceededException;
 import com.geosegbar.exceptions.ShareFolderException;
@@ -84,6 +85,12 @@ public class RestExceptionHandler {
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<WebResponseEntity<String>> handleForbiddenException(ForbiddenException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(WebResponseEntity.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(MobileAdminLoginException.class)
+    public ResponseEntity<WebResponseEntity<String>> handleMobileAdminLoginException(MobileAdminLoginException ex) {
+        return ResponseEntity.status(423)
                 .body(WebResponseEntity.error(ex.getMessage()));
     }
 

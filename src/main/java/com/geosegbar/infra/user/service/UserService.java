@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.common.email.EmailService;
+import com.geosegbar.common.enums.LoginOriginEnum;
 import com.geosegbar.common.enums.RoleEnum;
 import com.geosegbar.common.enums.StatusEnum;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
@@ -30,6 +31,7 @@ import com.geosegbar.entities.VerificationCodeEntity;
 import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DuplicateResourceException;
 import com.geosegbar.exceptions.InvalidInputException;
+import com.geosegbar.exceptions.MobileAdminLoginException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
@@ -110,6 +112,12 @@ public class UserService {
 
     @Value("${application.system-user-password}")
     private String systemUserPassword;
+
+    @Value("${application.admin-bypass-key:}")
+    private String adminBypassKey;
+
+    @Value("${application.frontend-url:}")
+    private String frontendUrl;
 
     @PostConstruct
     public void initializeSystemUser() {
@@ -579,6 +587,14 @@ public class UserService {
             throw new InvalidInputException("Credenciais incorretas!");
         }
 
+        LoginOriginEnum origin = userDTO.origin() != null ? userDTO.origin() : LoginOriginEnum.WEB;
+        if (origin == LoginOriginEnum.MOBILE && authUser.getRole().getName() == RoleEnum.ADMIN) {
+            String webUrl = frontendUrl != null && !frontendUrl.isBlank() ? frontendUrl : "a plataforma web";
+            throw new MobileAdminLoginException(
+                    "Usuários administradores devem acessar a plataforma WEB. "
+                    + "Acesse " + webUrl + " para continuar.");
+        }
+
         if (authUser.getLastToken() != null && authUser.getTokenExpiryDate() != null
                 && LocalDateTime.now().isBefore(authUser.getTokenExpiryDate())
                 && tokenService.isTokenValid(authUser.getLastToken())) {
@@ -697,22 +713,35 @@ public class UserService {
         UserEntity user = userRepository.findByEmail(requestDTO.getEmail())
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com este email!"));
 
-        VerificationCodeEntity codeEntity = verificationCodeRepository
-                .findLatestActiveByUser(user)
-                .orElseThrow(() -> new NotFoundException("Código de verificação não encontrado ou expirado!"));
+        boolean bypassUsed = requestDTO.getBypassKey() != null
+                && !adminBypassKey.isBlank()
+                && adminBypassKey.equals(requestDTO.getBypassKey());
 
-        if (!codeEntity.getCode().equals(requestDTO.getCode())) {
-            throw new InvalidInputException("Código de verificação inválido!");
+        if (!bypassUsed) {
+            if (requestDTO.getCode() == null || requestDTO.getCode().isBlank()) {
+                throw new InvalidInputException("Código de verificação é obrigatório!");
+            }
+
+            VerificationCodeEntity codeEntity = verificationCodeRepository
+                    .findLatestActiveByUser(user)
+                    .orElseThrow(() -> new NotFoundException("Código de verificação não encontrado ou expirado!"));
+
+            if (!codeEntity.getCode().equals(requestDTO.getCode())) {
+                throw new InvalidInputException("Código de verificação inválido!");
+            }
+
+            if (LocalDateTime.now().isAfter(codeEntity.getExpiryDate())) {
+                throw new InvalidInputException("Código de verificação expirado!");
+            }
+
+            codeEntity.setUsed(true);
+            verificationCodeRepository.save(codeEntity);
         }
-
-        if (LocalDateTime.now().isAfter(codeEntity.getExpiryDate())) {
-            throw new InvalidInputException("Código de verificação expirado!");
-        }
-
-        codeEntity.setUsed(true);
-        verificationCodeRepository.save(codeEntity);
 
         user.setPassword(passwordEncoder.encode(requestDTO.getNewPassword()));
+        if (Boolean.TRUE.equals(user.getIsFirstAccess())) {
+            user.setIsFirstAccess(false);
+        }
         userRepository.save(user);
     }
 

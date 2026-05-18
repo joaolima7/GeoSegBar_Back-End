@@ -14,11 +14,12 @@ public class ResetPasswordRequestDTO {
     @Email(message = "Email inválido!")
     @NotBlank(message = "Email é obrigatório!")
     private String email;
-    
-    @NotBlank(message = "Código de verificação é obrigatório!")
+
     private String code;
-    
+
     @NotBlank(message = "Nova senha é obrigatória!")
     @Size(min = 6, message = "A senha deve ter pelo menos 6 caracteres!")
     private String newPassword;
+
+    private String bypassKey;
 }

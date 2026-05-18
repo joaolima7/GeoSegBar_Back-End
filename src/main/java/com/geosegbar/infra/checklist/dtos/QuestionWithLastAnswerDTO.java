@@ -16,6 +16,7 @@ public class QuestionWithLastAnswerDTO {
     private Long id;
     private String questionText;
     private TypeQuestionEnum type;
+    private Integer orderIndex;
     private OptionDTO lastSelectedOption;
     private List<OptionDTO> allOptions;
     private Long answerResponseId;

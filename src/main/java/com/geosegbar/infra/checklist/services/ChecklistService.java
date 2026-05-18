@@ -561,6 +561,7 @@ public class ChecklistService {
 
             existingChecklist.setName(dto.getName());
             existingChecklist.getChecklistTemplates().clear();
+            existingChecklist = checklistRepository.saveAndFlush(existingChecklist);
 
             int templateCount = 0;
             for (TemplateInChecklistDTO templateDto : dto.getTemplates()) {

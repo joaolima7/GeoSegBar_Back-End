@@ -549,8 +549,9 @@ public class ChecklistService {
 
         try {
 
-            ChecklistEntity existingChecklist = findById(checklistId);
-            DamEntity dam = existingChecklist.getDam();
+            ChecklistEntity existingChecklist = checklistRepository.findByIdWithTemplates(checklistId)
+                    .orElseThrow(() -> new NotFoundException("Checklist não encontrada para id: " + checklistId));
+            DamEntity dam = damService.findById(existingChecklist.getDam().getId());
             Long damId = dam.getId();
             Long clientId = dam.getClient().getId();
 

@@ -569,8 +569,8 @@ public class UserService {
     @Transactional
     public Object initiateLogin(LoginRequestDTO userDTO) {
 
-        // TEMPORARIO: desativa MFA. Para reativar, troque para true.
-        final boolean mfaEnabled = false;
+        // Desativa/Ativa MFA.
+        final boolean mfaEnabled = true;
 
         if (systemUserEmail.equalsIgnoreCase(userDTO.email())) {
             throw new InvalidInputException("Credenciais incorretas!");

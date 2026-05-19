@@ -474,13 +474,25 @@ public class BulkInstrumentImportService {
         return v == null ? null : Boolean.valueOf(v);
     }
 
-    private Long fetchUnit(String acr, Map<String, Long> unitMap) {
-        String normalizedAcr = acr != null ? acr.toUpperCase() : null;
+    private Long fetchUnit(String value, Map<String, Long> unitMap) {
+        if (value == null || value.isBlank()) {
+            throw new InvalidInputException("Unidade de medida não informada.");
+        }
+
+        // Support "Nome (Acronym)" format — extract the acronym from inside the last parentheses
+        String acronym = value.trim();
+        int openParen = acronym.lastIndexOf('(');
+        int closeParen = acronym.lastIndexOf(')');
+        if (openParen >= 0 && closeParen > openParen) {
+            acronym = acronym.substring(openParen + 1, closeParen).trim();
+        }
+
+        String normalizedAcr = acronym.toUpperCase();
         Long id = unitMap.get(normalizedAcr);
         if (id == null) {
-            log.error("[Import] Unidade '{}' (normalizado: '{}') não encontrada. Chaves disponíveis: {}",
-                    acr, normalizedAcr, unitMap.keySet());
-            throw new InvalidInputException("Unidade de medida não encontrada: '" + acr + "'. Verifique se a sigla da planilha corresponde exatamente ao cadastro (sem espaços extras).");
+            log.error("[Import] Unidade '{}' (acrônimo extraído: '{}') não encontrada. Chaves disponíveis: {}",
+                    value, normalizedAcr, unitMap.keySet());
+            throw new InvalidInputException("Unidade de medida não encontrada: '" + value + "'. Verifique se a unidade da planilha corresponde ao cadastro.");
         }
         return id;
     }

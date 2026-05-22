@@ -193,8 +193,8 @@ public class InstrumentService {
             request.setNoLimit(true);
 
             if (request.getLinimetricRulerCode() != null
-                    && instrumentRepository.findByLinimetricRulerCode(request.getLinimetricRulerCode()).isPresent()) {
-                throw new DuplicateResourceException("Já existe um instrumento telemetrado com o código " + request.getLinimetricRulerCode());
+                    && instrumentRepository.existsByLinimetricRulerCodeAndActiveTrue(request.getLinimetricRulerCode())) {
+                throw new DuplicateResourceException("Já existe um instrumento ativo com o código ANA " + request.getLinimetricRulerCode());
             }
 
             if (request.getOutputs() == null || request.getOutputs().isEmpty()) {
@@ -209,8 +209,8 @@ public class InstrumentService {
             );
         }
 
-        if (instrumentRepository.existsByNameAndDamId(request.getName(), request.getDamId())) {
-            throw new DuplicateResourceException("Já existe um instrumento com o nome '" + request.getName() + "' na mesma barragem");
+        if (instrumentRepository.existsByNameAndDamIdAndActiveTrue(request.getName(), request.getDamId())) {
+            throw new DuplicateResourceException("Já existe um instrumento ativo com o nome '" + request.getName() + "' na mesma barragem");
         }
 
         DamEntity dam = damRepository.findById(request.getDamId())
@@ -497,8 +497,8 @@ public class InstrumentService {
         String oldName = oldInstrument.getName();
         Long oldLinimetricCode = oldInstrument.getLinimetricRulerCode();
 
-        if (instrumentRepository.existsByNameAndDamIdAndIdNot(request.getName(), request.getDamId(), id)) {
-            throw new DuplicateResourceException("Já existe um instrumento com esse nome nesta barragem");
+        if (instrumentRepository.existsByNameAndDamIdAndActiveTrueAndIdNot(request.getName(), request.getDamId(), id)) {
+            throw new DuplicateResourceException("Já existe um instrumento ativo com esse nome nesta barragem");
         }
 
         if (Boolean.TRUE.equals(request.getIsLinimetricRuler()) && Boolean.TRUE.equals(request.getIsDownstream())) {
@@ -536,8 +536,8 @@ public class InstrumentService {
 
         if (isTelemetric) {
             if (request.getLinimetricRulerCode() != null
-                    && instrumentRepository.existsByLinimetricRulerCodeAndIdNot(request.getLinimetricRulerCode(), id)) {
-                throw new DuplicateResourceException("Código de instrumento telemetrado já existe: " + request.getLinimetricRulerCode());
+                    && instrumentRepository.existsByLinimetricRulerCodeAndActiveTrueAndIdNot(request.getLinimetricRulerCode(), id)) {
+                throw new DuplicateResourceException("Já existe um instrumento ativo com o código ANA " + request.getLinimetricRulerCode());
             }
             if (request.getOutputs() == null || request.getOutputs().isEmpty()) {
                 throw new InvalidInputException("Instrumento telemetrado deve ter output.");
@@ -795,11 +795,46 @@ public class InstrumentService {
         }
 
         InstrumentEntity instrument = findById(id);
+
+        if (Boolean.FALSE.equals(active)) {
+            if (Boolean.TRUE.equals(instrument.getIsLinimetricRuler())) {
+                throw new InvalidInputException("Não é possível desativar o instrumento de montante.");
+            }
+            if (Boolean.TRUE.equals(instrument.getIsDownstream())) {
+                throw new InvalidInputException("Não é possível desativar o instrumento de jusante.");
+            }
+        }
+
+        if (Boolean.TRUE.equals(active) && !Boolean.TRUE.equals(instrument.getActive())) {
+            if (instrumentRepository.existsByNameAndDamIdAndActiveTrueAndIdNot(
+                    instrument.getName(), instrument.getDam().getId(), id)) {
+                throw new DuplicateResourceException(
+                        "Já existe um instrumento ativo com o nome '" + instrument.getName() + "' nesta barragem. Renomeie o instrumento antes de reativá-lo.");
+            }
+            if (instrument.getLinimetricRulerCode() != null
+                    && instrumentRepository.existsByLinimetricRulerCodeAndActiveTrueAndIdNot(
+                            instrument.getLinimetricRulerCode(), id)) {
+                throw new DuplicateResourceException(
+                        "Já existe um instrumento ativo com o código ANA " + instrument.getLinimetricRulerCode() + ". Altere o código antes de reativar.");
+            }
+            if (Boolean.TRUE.equals(instrument.getIsLinimetricRuler())
+                    && instrumentRepository.existsByDamIdAndIsLinimetricRulerTrueAndActiveTrueAndIdNot(
+                            instrument.getDam().getId(), id)) {
+                throw new DuplicateResourceException(
+                        "Já existe um instrumento de montante ativo nesta barragem.");
+            }
+            if (Boolean.TRUE.equals(instrument.getIsDownstream())
+                    && instrumentRepository.existsByDamIdAndIsDownstreamTrueAndActiveTrueAndIdNot(
+                            instrument.getDam().getId(), id)) {
+                throw new DuplicateResourceException(
+                        "Já existe um instrumento de jusante ativo nesta barragem.");
+            }
+        }
+
         instrument.setActive(active);
         instrumentRepository.save(instrument);
         log.info("Status do instrumento {} alterado para {}.", id, active);
 
-        // ✅ Refetch com coleções carregadas (OSIV=false)
         return instrumentRepository.findByIdWithAllDetails(id)
                 .orElseThrow(() -> new NotFoundException("Instrumento não encontrado após atualização"));
     }

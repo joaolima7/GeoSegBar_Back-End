@@ -613,6 +613,39 @@ public class UserService {
             throw new InvalidInputException("Credenciais incorretas!");
         }
 
+        // MOBILE: nunca pede MFA, faz login direto
+        if (origin == LoginOriginEnum.MOBILE) {
+            UserEntity fullUser = userRepository.findByEmailWithAllPermissions(userDTO.email())
+                    .orElseThrow(() -> new NotFoundException("Erro ao carregar perfil do usuário"));
+
+            String token = tokenService.generateToken(fullUser);
+            updateLastLoginAsync(fullUser.getId(), token);
+
+            return new LoginResponseDTO(
+                    fullUser.getId(), fullUser.getName(), fullUser.getEmail(), fullUser.getPhone(),
+                    fullUser.getSex(), fullUser.getRole().getName(), fullUser.getIsFirstAccess(),
+                    token, new ArrayList<>(fullUser.getClients())
+            );
+        }
+
+        // WEB: pula MFA se já verificou nos últimos 30 dias
+        if (mfaEnabled
+                && authUser.getLastMfaVerifiedAt() != null
+                && authUser.getLastMfaVerifiedAt().isAfter(LocalDateTime.now().minusDays(30))) {
+
+            UserEntity fullUser = userRepository.findByEmailWithAllPermissions(userDTO.email())
+                    .orElseThrow(() -> new NotFoundException("Erro ao carregar perfil do usuário"));
+
+            String token = tokenService.generateToken(fullUser);
+            updateLastLoginAsync(fullUser.getId(), token);
+
+            return new LoginResponseDTO(
+                    fullUser.getId(), fullUser.getName(), fullUser.getEmail(), fullUser.getPhone(),
+                    fullUser.getSex(), fullUser.getRole().getName(), fullUser.getIsFirstAccess(),
+                    token, new ArrayList<>(fullUser.getClients())
+            );
+        }
+
         if (!mfaEnabled) {
             UserEntity fullUser = userRepository.findByEmailWithAllPermissions(userDTO.email())
                     .orElseThrow(() -> new NotFoundException("Erro ao carregar perfil do usuário"));
@@ -656,6 +689,9 @@ public class UserService {
 
         codeEntity.setUsed(true);
         verificationCodeRepository.save(codeEntity);
+
+        user.setLastMfaVerifiedAt(LocalDateTime.now());
+        userRepository.save(user);
 
         String token = tokenService.generateToken(user);
 

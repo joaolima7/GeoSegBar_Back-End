@@ -101,6 +101,10 @@ public class UserEntity {
     @Column
     private LocalDateTime tokenExpiryDate;
 
+    @JsonProperty(access = Access.WRITE_ONLY)
+    @Column
+    private LocalDateTime lastMfaVerifiedAt;
+
     @JsonIgnore
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
     private Set<ReadingEntity> readings = new HashSet<>();

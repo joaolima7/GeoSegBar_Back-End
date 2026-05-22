@@ -48,6 +48,10 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
 
     boolean existsByNameAndDamIdAndIdNot(String name, Long damId, Long id);
 
+    boolean existsByNameAndDamIdAndActiveTrue(String name, Long damId);
+
+    boolean existsByNameAndDamIdAndActiveTrueAndIdNot(String name, Long damId, Long id);
+
     @Query("SELECT i.id FROM InstrumentEntity i WHERE i.dam.id = :damId")
     List<Long> findInstrumentIdsByDamId(@Param("damId") Long damId);
 
@@ -144,6 +148,14 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
 
     boolean existsByLinimetricRulerCodeAndIdNot(Long linimetricRulerCode, Long id);
 
+    boolean existsByLinimetricRulerCodeAndActiveTrueAndIdNot(Long linimetricRulerCode, Long id);
+
+    boolean existsByLinimetricRulerCodeAndActiveTrue(Long linimetricRulerCode);
+
+    @EntityGraph(attributePaths = {"dam", "section", "instrumentType", "inputs", "inputs.measurementUnit"})
+    @Query("SELECT i FROM InstrumentEntity i WHERE i.linimetricRulerCode IS NOT NULL AND i.active = true")
+    List<InstrumentEntity> findAllActiveWithLinimetricRulerCode();
+
     @EntityGraph(attributePaths = {"dam", "section", "instrumentType"})
     List<InstrumentEntity> findByIsLinimetricRulerTrue();
 
@@ -187,6 +199,44 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
 
     @EntityGraph(attributePaths = {"outputs", "outputs.measurementUnit", "constants", "constants.measurementUnit"})
     List<InstrumentEntity> findByIdIn(List<Long> ids);
+
+    @Query("SELECT DISTINCT i FROM InstrumentEntity i "
+            + "LEFT JOIN FETCH i.outputs o "
+            + "LEFT JOIN FETCH o.measurementUnit "
+            + "LEFT JOIN FETCH o.statisticalLimit "
+            + "LEFT JOIN FETCH o.deterministicLimit "
+            + "LEFT JOIN FETCH i.constants c "
+            + "LEFT JOIN FETCH c.measurementUnit "
+            + "LEFT JOIN FETCH i.dam "
+            + "WHERE i.id IN :ids AND (o IS NULL OR o.active = true)")
+    List<InstrumentEntity> findWithActiveOutputsByIdIn(@Param("ids") List<Long> ids);
+
+    @Query(value = """
+            SELECT i.id FROM instrument i
+            WHERE i.active = true
+              AND (i.is_linimetric_ruler = false OR i.is_linimetric_ruler IS NULL)
+              AND NOT EXISTS (
+                SELECT 1 FROM instrument_graph_pattern igp
+                WHERE igp.instrument_id = i.id
+                  AND igp.name LIKE 'Padrão Automático - %'
+              )
+            ORDER BY i.id
+            """, nativeQuery = true)
+    List<Long> findActiveNonLinimetricIdsWithoutAutoGraphPattern();
+
+    @Query(value = """
+            SELECT i.id FROM instrument i
+            WHERE i.active = true
+              AND (i.is_linimetric_ruler = false OR i.is_linimetric_ruler IS NULL)
+              AND NOT EXISTS (
+                SELECT 1 FROM instrument_tabulate_pattern itp
+                JOIN instrument_tabulate_association ita ON ita.pattern_id = itp.id
+                WHERE ita.instrument_id = i.id
+                  AND itp.name LIKE 'Padrão Automático - %'
+              )
+            ORDER BY i.id
+            """, nativeQuery = true)
+    List<Long> findActiveNonLinimetricIdsWithoutAutoTabulatePattern();
 
     default List<InstrumentEntity> findPiezometersBySectionWithOutputsAndConstants(Long sectionId) {
         List<Long> ids = findPiezometerIdsBySection(sectionId);

@@ -158,6 +158,7 @@ public class InstrumentTabulatePatternService {
 
         List<InstrumentTabulatePatternEntity> patterns = patternRepository.findByDamIdWithAllDetails(damId);
         return patterns.stream()
+                .filter(InstrumentTabulatePatternService::isPatternVisible)
                 .map(mapper::mapToResponseDTO)
                 .collect(Collectors.toList());
     }
@@ -168,8 +169,17 @@ public class InstrumentTabulatePatternService {
 
         List<InstrumentTabulatePatternEntity> patterns = patternRepository.findByFolderIdWithAllDetails(folderId);
         return patterns.stream()
+                .filter(InstrumentTabulatePatternService::isPatternVisible)
                 .map(mapper::mapToResponseDTO)
                 .collect(Collectors.toList());
+    }
+
+    private static boolean isPatternVisible(InstrumentTabulatePatternEntity pattern) {
+        if (pattern.getName() == null || !pattern.getName().startsWith("Padrão Automático - ")) {
+            return true;
+        }
+        return pattern.getAssociations().stream()
+                .allMatch(a -> a.getInstrument() != null && Boolean.TRUE.equals(a.getInstrument().getActive()));
     }
 
     public InstrumentTabulatePatternEntity findEntityByIdWithAllDetails(Long patternId) {

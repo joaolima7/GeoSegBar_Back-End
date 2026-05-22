@@ -41,15 +41,16 @@ public class InstrumentGraphPatternService {
     public List<GraphPatternResponseDTO> findByInstrument(Long instrumentId) {
         return patternRepository.findByInstrumentId(instrumentId)
                 .stream()
+                .filter(p -> Boolean.TRUE.equals(p.getInstrument().getActive()))
                 .map(this::mapToResponseDTO)
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public List<GraphPatternDetailResponseDTO> findByInstrumentWithDetails(Long instrumentId) {
-
         return patternRepository.findByInstrumentIdWithAllDetails(instrumentId)
                 .stream()
+                .filter(p -> Boolean.TRUE.equals(p.getInstrument().getActive()))
                 .map(this::mapToDetailResponseDTO)
                 .collect(Collectors.toList());
     }
@@ -67,6 +68,7 @@ public class InstrumentGraphPatternService {
         List<InstrumentGraphPatternEntity> patterns = patternRepository.findByInstrumentDamIdWithAllDetails(damId);
 
         return patterns.stream()
+                .filter(p -> Boolean.TRUE.equals(p.getInstrument().getActive()))
                 .map(this::mapToDetailResponseDTO)
                 .collect(Collectors.toList());
     }

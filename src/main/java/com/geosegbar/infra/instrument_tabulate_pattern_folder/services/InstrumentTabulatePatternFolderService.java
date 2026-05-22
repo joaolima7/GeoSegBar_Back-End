@@ -68,6 +68,7 @@ public class InstrumentTabulatePatternFolderService {
         List<InstrumentTabulatePatternEntity> patternsWithoutFolder = patternRepository.findByDamIdWithoutFolderWithAllDetails(damId);
 
         Map<Long, List<InstrumentTabulatePatternEntity>> patternsByFolder = patternsInFolders.stream()
+                .filter(InstrumentTabulatePatternFolderService::isPatternVisible)
                 .collect(Collectors.groupingBy(p -> p.getFolder().getId()));
 
         List<TabulateFolderWithPatternsDetailResponseDTO> folderDTOs = folders.stream()
@@ -97,6 +98,7 @@ public class InstrumentTabulatePatternFolderService {
                 .collect(Collectors.toList());
 
         List<TabulatePatternResponseDTO> patternsWithoutFolderDTOs = patternsWithoutFolder.stream()
+                .filter(InstrumentTabulatePatternFolderService::isPatternVisible)
                 .map(mapper::mapToResponseDTO)
                 .collect(Collectors.toList());
 
@@ -178,6 +180,14 @@ public class InstrumentTabulatePatternFolderService {
         return folders.stream()
                 .map(this::mapToResponseDTO)
                 .toList();
+    }
+
+    private static boolean isPatternVisible(InstrumentTabulatePatternEntity pattern) {
+        if (pattern.getName() == null || !pattern.getName().startsWith("Padrão Automático - ")) {
+            return true;
+        }
+        return pattern.getAssociations().stream()
+                .allMatch(a -> a.getInstrument() != null && Boolean.TRUE.equals(a.getInstrument().getActive()));
     }
 
     private TabulateFolderResponseDTO mapToResponseDTO(InstrumentTabulatePatternFolder folder) {

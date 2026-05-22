@@ -231,8 +231,8 @@ public class InstrumentGraphPatternFolderService {
 
         List<InstrumentGraphPatternFolder> folders = folderRepository.findByDamIdWithDamDetails(damId);
 
-        List<InstrumentGraphPatternEntity> patternsInFolders = patternRepository.findByFolderDamIdWithAllDetails(damId);
-        List<InstrumentGraphPatternEntity> patternsWithoutFolder = patternRepository.findByInstrumentDamIdWithoutFolderWithAllDetails(damId);
+        List<InstrumentGraphPatternEntity> patternsInFolders = patternRepository.findByFolderDamIdWithAllDetailsActiveOnly(damId);
+        List<InstrumentGraphPatternEntity> patternsWithoutFolder = patternRepository.findByInstrumentDamIdWithoutFolderWithAllDetailsActiveOnly(damId);
 
         Map<Long, List<InstrumentGraphPatternEntity>> patternsByFolder = patternsInFolders.stream()
                 .collect(Collectors.groupingBy(p -> p.getFolder().getId()));

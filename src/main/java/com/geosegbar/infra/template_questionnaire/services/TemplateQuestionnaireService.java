@@ -379,11 +379,16 @@ public class TemplateQuestionnaireService {
 
         String templateName = sourceTemplate.getName();
         if (templateQuestionnaireRepository.existsByNameAndDamId(templateName, targetDamId)) {
-            throw new DuplicateResourceException("Já existe um template com o nome '" + templateName + "' na barragem de destino.");
+            templateName = templateName + " - Cópia";
+            int suffix = 2;
+            while (templateQuestionnaireRepository.existsByNameAndDamId(templateName, targetDamId)) {
+                templateName = sourceTemplate.getName() + " - Cópia " + suffix;
+                suffix++;
+            }
         }
 
         TemplateQuestionnaireEntity newTemplate = new TemplateQuestionnaireEntity();
-        newTemplate.setName(sourceTemplate.getName());
+        newTemplate.setName(templateName);
         newTemplate.setDam(targetDam);
         newTemplate.setTemplateQuestions(new HashSet<>());
 

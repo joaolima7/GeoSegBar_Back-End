@@ -63,6 +63,19 @@ public class AutoPatternCreationService {
         }
     }
 
+    @Transactional
+    public void createGraphPatternOnly(InstrumentEntity instrument) {
+        GraphPatternResponseDTO graphPattern = createGraphPatternForInstrument(instrument);
+        if (graphPattern != null) {
+            configureGraphPatternProperties(instrument, graphPattern.getId());
+        }
+    }
+
+    @Transactional
+    public void createTabulatePatternOnly(InstrumentEntity instrument) {
+        createTabulatePatternForInstrument(instrument);
+    }
+
     private GraphPatternResponseDTO createGraphPatternForInstrument(InstrumentEntity instrument) {
         String patternName = "Padrão Automático - " + instrument.getName();
 

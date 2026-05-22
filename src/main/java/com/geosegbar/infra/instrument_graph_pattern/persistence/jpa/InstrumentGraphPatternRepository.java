@@ -60,6 +60,40 @@ public interface InstrumentGraphPatternRepository extends JpaRepository<Instrume
             + "WHERE p.instrument.id = :instrumentId")
     List<InstrumentGraphPatternEntity> findByInstrumentIdWithAllDetails(@Param("instrumentId") Long instrumentId);
 
+    @Query("SELECT DISTINCT p FROM InstrumentGraphPatternEntity p "
+            + "LEFT JOIN FETCH p.instrument i "
+            + "LEFT JOIN FETCH i.dam "
+            + "LEFT JOIN FETCH p.folder f "
+            + "LEFT JOIN FETCH p.axes a "
+            + "LEFT JOIN FETCH p.properties prop "
+            + "LEFT JOIN FETCH prop.instrument "
+            + "LEFT JOIN FETCH prop.output "
+            + "LEFT JOIN FETCH prop.constant "
+            + "LEFT JOIN FETCH prop.statisticalLimit sl "
+            + "LEFT JOIN FETCH sl.output "
+            + "LEFT JOIN FETCH prop.deterministicLimit dl "
+            + "LEFT JOIN FETCH dl.output "
+            + "WHERE p.folder.dam.id = :damId AND i.active = true "
+            + "ORDER BY p.folder.name ASC, p.name ASC")
+    List<InstrumentGraphPatternEntity> findByFolderDamIdWithAllDetailsActiveOnly(@Param("damId") Long damId);
+
+    @Query("SELECT DISTINCT p FROM InstrumentGraphPatternEntity p "
+            + "LEFT JOIN FETCH p.instrument i "
+            + "LEFT JOIN FETCH i.dam "
+            + "LEFT JOIN FETCH p.axes a "
+            + "LEFT JOIN FETCH p.properties prop "
+            + "LEFT JOIN FETCH prop.instrument "
+            + "LEFT JOIN FETCH prop.output "
+            + "LEFT JOIN FETCH prop.constant "
+            + "LEFT JOIN FETCH prop.statisticalLimit sl "
+            + "LEFT JOIN FETCH sl.output "
+            + "LEFT JOIN FETCH prop.deterministicLimit dl "
+            + "LEFT JOIN FETCH dl.output "
+            + "WHERE p.instrument.dam.id = :damId AND i.active = true "
+            + "AND p.folder IS NULL "
+            + "ORDER BY p.instrument.name ASC, p.name ASC")
+    List<InstrumentGraphPatternEntity> findByInstrumentDamIdWithoutFolderWithAllDetailsActiveOnly(@Param("damId") Long damId);
+
     List<InstrumentGraphPatternEntity> findByFolderId(Long folderId);
 
     List<InstrumentGraphPatternEntity> findByFolderIsNull();

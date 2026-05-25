@@ -43,6 +43,7 @@ import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
 import com.geosegbar.infra.checklist_response.persistence.jpa.ChecklistResponseRepository;
 import com.geosegbar.infra.checklist_submission.dtos.AnswerSubmissionDTO;
 import com.geosegbar.infra.checklist_submission.dtos.ChecklistResponseSubmissionDTO;
+import com.geosegbar.infra.checklist_submission.dtos.OtherSubmissionDTO;
 import com.geosegbar.infra.checklist_submission.dtos.PhotoSubmissionDTO;
 import com.geosegbar.infra.checklist_submission.dtos.QuestionnaireResponseSubmissionDTO;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
@@ -124,6 +125,8 @@ public class ChecklistSubmissionPersistenceService {
 
         validatePVAnswersHaveRequiredFields(submissionDto, optionsCache);
 
+        validateOthersHaveRequiredFields(submissionDto);
+
         validateOptionTransitions(submissionDto, optionsCache);
 
         List<ChecklistResponseSubmissionService.PendingPhotoUpload> pendingUploads = new ArrayList<>();
@@ -148,6 +151,20 @@ public class ChecklistSubmissionPersistenceService {
                             pendingUploads
                     );
                 }
+            }
+
+            if (questionnaireDto.getOthers() != null) {
+                for (OtherSubmissionDTO other : questionnaireDto.getOthers()) {
+                    createAnomalyFromOther(other, submissionDto.getUserId(), submissionDto.getDamId(),
+                            questionnaireDto.getTemplateQuestionnaireId(), pendingUploads);
+                }
+            }
+        }
+
+        if (submissionDto.getOthers() != null) {
+            for (OtherSubmissionDTO other : submissionDto.getOthers()) {
+                createAnomalyFromOther(other, submissionDto.getUserId(), submissionDto.getDamId(),
+                        null, pendingUploads);
             }
         }
 
@@ -377,6 +394,56 @@ public class ChecklistSubmissionPersistenceService {
         pendingUploads.add(new ChecklistResponseSubmissionService.PendingPhotoUpload(
                 saved.getId(), true, imageBytes,
                 photoDto.getFileName(), photoDto.getContentType(), "anomalies", damId));
+    }
+
+    private void validateOthersHaveRequiredFields(ChecklistResponseSubmissionDTO submissionDto) {
+        for (QuestionnaireResponseSubmissionDTO qDto : submissionDto.getQuestionnaireResponses()) {
+            if (qDto.getOthers() == null) continue;
+            for (OtherSubmissionDTO other : qDto.getOthers()) {
+                if (other.getPhotos() == null || other.getPhotos().isEmpty()) {
+                    throw new InvalidInputException("Each 'others' entry requires at least one photo.");
+                }
+            }
+        }
+        if (submissionDto.getOthers() != null) {
+            for (OtherSubmissionDTO other : submissionDto.getOthers()) {
+                if (other.getPhotos() == null || other.getPhotos().isEmpty()) {
+                    throw new InvalidInputException("Each 'others' entry requires at least one photo.");
+                }
+            }
+        }
+    }
+
+    private void createAnomalyFromOther(
+            OtherSubmissionDTO otherDto,
+            Long userId,
+            Long damId,
+            Long questionnaireId,
+            List<ChecklistResponseSubmissionService.PendingPhotoUpload> pendingUploads) {
+
+        UserEntity user = userRepository.getReferenceById(userId);
+        DamEntity dam = damRepository.getReferenceById(damId);
+        DangerLevelEntity dangerLevel = dangerLevelRepository.getReferenceById(otherDto.getAnomalyDangerLevelId());
+        AnomalyStatusEntity status = anomalyStatusRepository.getReferenceById(otherDto.getAnomalyStatusId());
+
+        AnomalyEntity anomaly = new AnomalyEntity();
+        anomaly.setUser(user);
+        anomaly.setDam(dam);
+        anomaly.setLatitude(otherDto.getLatitude());
+        anomaly.setLongitude(otherDto.getLongitude());
+        anomaly.setQuestionnaireId(questionnaireId);
+        anomaly.setQuestionId(null);
+        anomaly.setOrigin(AnomalyOriginEnum.CHECKLIST);
+        anomaly.setObservation(otherDto.getObservation());
+        anomaly.setRecommendation(otherDto.getRecommendation());
+        anomaly.setDangerLevel(dangerLevel);
+        anomaly.setStatus(status);
+
+        AnomalyEntity saved = anomalyRepository.save(anomaly);
+
+        for (PhotoSubmissionDTO photoDto : otherDto.getPhotos()) {
+            prepareAnomalyPhoto(photoDto, saved, damId, pendingUploads);
+        }
     }
 
     private void validateAllRequiredQuestionnaires(ChecklistResponseSubmissionDTO submissionDto) {

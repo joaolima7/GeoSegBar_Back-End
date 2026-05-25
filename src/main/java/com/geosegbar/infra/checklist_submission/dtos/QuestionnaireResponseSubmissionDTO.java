@@ -18,8 +18,11 @@ public class QuestionnaireResponseSubmissionDTO {
     @NotNull(message = "ID do modelo de questionário é obrigatório!")
     @Positive(message = "ID do modelo de questionário deve ser um número positivo!")
     private Long templateQuestionnaireId;
-    
+
     @NotEmpty(message = "É necessário incluir pelo menos uma resposta!")
     @Valid
     private List<AnswerSubmissionDTO> answers;
+
+    @Valid
+    private List<OtherSubmissionDTO> others;
 }

@@ -64,4 +64,7 @@ public class ChecklistResponseSubmissionDTO {
     private Double accumulatedRainfall;
 
     private WeatherConditionEnum weatherCondition;
+
+    @Valid
+    private List<OtherSubmissionDTO> others;
 }

@@ -226,7 +226,7 @@ public class ChecklistResponseService {
 
             // Aplica comentario se enviado
             if (updateDto.getComment() != null) {
-                answer.setComment(updateDto.getComment());
+                answer.setComment(updateDto.getComment().trim().isEmpty() ? null : updateDto.getComment());
             }
 
             // Aplica fotos se enviadas: apaga antigas do S3 + DB e salva novas

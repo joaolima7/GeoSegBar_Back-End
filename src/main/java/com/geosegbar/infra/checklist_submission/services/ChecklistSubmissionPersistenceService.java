@@ -363,8 +363,10 @@ public class ChecklistSubmissionPersistenceService {
         anomaly.setQuestionnaireId(questionnaireId);
         anomaly.setQuestionId(answerDto.getQuestionId());
         anomaly.setOrigin(AnomalyOriginEnum.CHECKLIST);
-        anomaly.setObservation(answerDto.getComment());
-        anomaly.setRecommendation(answerDto.getAnomalyRecommendation());
+        String pvObservation = answerDto.getComment();
+        anomaly.setObservation(pvObservation != null && !pvObservation.trim().isEmpty() ? pvObservation : null);
+        String pvRecommendation = answerDto.getAnomalyRecommendation();
+        anomaly.setRecommendation(pvRecommendation != null && !pvRecommendation.trim().isEmpty() ? pvRecommendation : null);
         anomaly.setDangerLevel(dangerLevel);
         anomaly.setStatus(status);
 
@@ -570,7 +572,7 @@ public class ChecklistSubmissionPersistenceService {
         answer.setLatitude(answerDto.getLatitude());
         answer.setLongitude(answerDto.getLongitude());
 
-        if (answerDto.getComment() != null) {
+        if (answerDto.getComment() != null && !answerDto.getComment().trim().isEmpty()) {
             answer.setComment(answerDto.getComment());
         }
 

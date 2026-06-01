@@ -11,6 +11,7 @@ import com.geosegbar.common.utils.ExpressionEvaluator;
 import com.geosegbar.entities.ConstantEntity;
 import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.entities.OutputEntity;
+import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.infra.reading.dtos.ReadingRequestDTO;
 
 import lombok.RequiredArgsConstructor;
@@ -32,9 +33,17 @@ public class OutputCalculationService {
             variables.put(constant.getAcronym(), constant.getValue());
         }
 
-        Double rawResult = ExpressionEvaluator.evaluate(output.getEquation(), variables);
-
-        return formatToSpecificPrecision(rawResult, output.getPrecision());
+        String outputLabel = output.getAcronym() != null ? output.getAcronym() : output.getName();
+        try {
+            Double rawResult = ExpressionEvaluator.evaluate(output.getEquation(), variables);
+            if (rawResult == null || rawResult.isNaN() || rawResult.isInfinite()) {
+                throw new IllegalArgumentException("Resultado numérico inválido");
+            }
+            return formatToSpecificPrecision(rawResult, output.getPrecision());
+        } catch (RuntimeException e) {
+            throw new InvalidInputException("Não foi possível calcular o output '" + outputLabel + "'. "
+                    + ExpressionEvaluator.friendlySyntaxErrorMessage(output.getEquation()));
+        }
     }
 
     public Map<String, BigDecimal> calculateAllOutputs(InstrumentEntity instrument, ReadingRequestDTO reading,

@@ -98,6 +98,37 @@ class ExpressionEvaluatorTest extends BaseUnitTest {
     }
 
     @Test
+    @DisplayName("Should evaluate math functions without SpEL prefix")
+    void shouldEvaluateMathFunctionsWithoutSpelPrefix() {
+        // Given
+        String expression = "pow(BASE, 2) + sqrt(ALTURA)";
+        Map<String, Double> variables = new HashMap<>();
+        variables.put("BASE", 5.0);
+        variables.put("ALTURA", 16.0);
+
+        // When
+        Double result = ExpressionEvaluator.evaluate(expression, variables);
+
+        // Then
+        assertThat(result).isEqualTo(29.0);
+    }
+
+    @Test
+    @DisplayName("Should evaluate math functions with Math prefix")
+    void shouldEvaluateMathFunctionsWithMathPrefix() {
+        // Given
+        String expression = "Math.pow(BASE, 2)";
+        Map<String, Double> variables = new HashMap<>();
+        variables.put("BASE", 5.0);
+
+        // When
+        Double result = ExpressionEvaluator.evaluate(expression, variables);
+
+        // Then
+        assertThat(result).isEqualTo(25.0);
+    }
+
+    @Test
     @DisplayName("Should evaluate expression with parentheses for precedence")
     void shouldEvaluateExpressionWithParenthesesForPrecedence() {
         // Given
@@ -167,6 +198,16 @@ class ExpressionEvaluatorTest extends BaseUnitTest {
     void shouldValidateSyntaxForValidExpression() throws Exception {
         // Given
         String expression = "x + y * z";
+
+        // When & Then (no exception thrown)
+        ExpressionEvaluator.validateSyntax(expression);
+    }
+
+    @Test
+    @DisplayName("Should validate syntax for expression with math functions")
+    void shouldValidateSyntaxForExpressionWithMathFunctions() throws Exception {
+        // Given
+        String expression = "pow(BASE, 2) + sqrt(ALTURA)";
 
         // When & Then (no exception thrown)
         ExpressionEvaluator.validateSyntax(expression);

@@ -1,7 +1,13 @@
 package com.geosegbar.common.utils;
 
 import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
@@ -11,6 +17,7 @@ import org.springframework.expression.spel.support.StandardEvaluationContext;
 public class ExpressionEvaluator {
 
     private static final ExpressionParser parser = new SpelExpressionParser();
+    private static final Pattern MATH_PREFIX_PATTERN = Pattern.compile("\\bMath\\s*\\.\\s*", Pattern.CASE_INSENSITIVE);
 
     private static final String[] MATH_FUNCTION_NAMES = {
         "sin", "cos", "tan", "asin", "acos", "atan",
@@ -33,6 +40,9 @@ public class ExpressionEvaluator {
         {double.class, double.class},                      // min
         {double.class, double.class}                       // max
     };
+
+    private static final Set<String> MATH_FUNCTIONS = Arrays.stream(MATH_FUNCTION_NAMES)
+            .collect(Collectors.toSet());
 
     private static StandardEvaluationContext buildContext(Map<String, Double> variables) {
         StandardEvaluationContext context = new StandardEvaluationContext();
@@ -59,9 +69,13 @@ public class ExpressionEvaluator {
     }
 
     private static String substituteVariables(String expression, Map<String, Double> variables) {
-        String processed = expression;
-        for (String varName : variables.keySet()) {
-            processed = processed.replaceAll("\\b" + varName + "\\b", "#" + varName);
+        String processed = normalizeMathFunctions(expression);
+        for (String varName : variables.keySet().stream()
+                .sorted(Comparator.comparingInt(String::length).reversed())
+                .toList()) {
+            processed = processed.replaceAll(
+                    "(?<![#A-Za-z0-9_])\\b" + Pattern.quote(varName) + "\\b",
+                    Matcher.quoteReplacement("#" + varName));
         }
         return processed;
     }
@@ -77,11 +91,31 @@ public class ExpressionEvaluator {
         StandardEvaluationContext context = new StandardEvaluationContext();
         registerMathFunctions(context);
 
-        // Replace variable-like identifiers (not registered math functions) with a dummy variable
         context.setVariable("__v__", 1.0);
-        String testExpression = expression.replaceAll("[A-Za-z][A-Za-z0-9_]*", "#__v__");
+        String testExpression = normalizeMathFunctions(expression)
+                .replaceAll("(?<![#A-Za-z0-9_])\\b[A-Za-z][A-Za-z0-9_]*\\b", "#__v__");
 
         Expression exp = parser.parseExpression(testExpression);
         exp.getValue(context, Double.class);
+    }
+
+    public static boolean isMathFunction(String name) {
+        return name != null && MATH_FUNCTIONS.contains(name.toLowerCase());
+    }
+
+    public static String friendlySyntaxErrorMessage(String expression) {
+        return "Equação inválida. Use os acrônimos dos inputs/constantes, operadores como +, -, *, / e parênteses. "
+                + "Para funções matemáticas, use exemplos como pow(BASE, 2), sqrt(BASE), abs(BASE), min(A, B) ou max(A, B).";
+    }
+
+    private static String normalizeMathFunctions(String expression) {
+        String processed = MATH_PREFIX_PATTERN.matcher(expression).replaceAll("");
+        for (String functionName : MATH_FUNCTION_NAMES) {
+            Pattern functionPattern = Pattern.compile(
+                    "(?<![#A-Za-z0-9_\\.])" + Pattern.quote(functionName) + "\\s*\\(",
+                    Pattern.CASE_INSENSITIVE);
+            processed = functionPattern.matcher(processed).replaceAll(Matcher.quoteReplacement("#" + functionName + "("));
+        }
+        return processed;
     }
 }

@@ -852,6 +852,10 @@ public class InstrumentService {
     }
 
     private void validateEquation(String equation, Set<String> inputAcronyms, Set<String> constantAcronyms) {
+        if (equation == null || equation.isBlank()) {
+            throw new InvalidInputException("A equação do output é obrigatória.");
+        }
+
         String cleanEquation = equation.replaceAll("\\s+", "");
 
         Pattern pattern = Pattern.compile("[A-Za-z][A-Za-z0-9_]*");
@@ -860,7 +864,7 @@ public class InstrumentService {
         Set<String> variablesInEquation = new HashSet<>();
         while (matcher.find()) {
             String var = matcher.group();
-            if (!isKnownMathFunction(var)) {
+            if (!"Math".equalsIgnoreCase(var) && !ExpressionEvaluator.isMathFunction(var)) {
                 variablesInEquation.add(var);
             }
         }
@@ -875,17 +879,8 @@ public class InstrumentService {
         try {
             ExpressionEvaluator.validateSyntax(cleanEquation);
         } catch (Exception e) {
-            throw new InvalidInputException("Erro de sintaxe na equação: " + e.getMessage());
+            throw new InvalidInputException(ExpressionEvaluator.friendlySyntaxErrorMessage(cleanEquation));
         }
-    }
-
-    private boolean isKnownMathFunction(String name) {
-        Set<String> mathFunctions = Set.of(
-                "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
-                "sinh", "cosh", "tanh", "exp", "log", "log10", "pow",
-                "sqrt", "cbrt", "abs", "min", "max", "floor", "ceil", "round"
-        );
-        return mathFunctions.contains(name.toLowerCase());
     }
 
     private void processInputsForUpdate(InstrumentEntity instrument, List<InputDTO> inputDTOs,

@@ -49,6 +49,7 @@ import com.geosegbar.infra.instrument.dtos.UpdateInstrumentRequest;
 import com.geosegbar.infra.instrument.events.InstrumentCreatedEvent;
 import com.geosegbar.infra.instrument.events.LinimetricRulerCreatedEvent;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
+import com.geosegbar.infra.instrument_graph_customization_properties.persistence.jpa.InstrumentGraphCustomizationPropertiesRepository;
 import com.geosegbar.infra.instrument_graph_pattern.persistence.jpa.InstrumentGraphPatternRepository;
 import com.geosegbar.infra.instrument_tabulate_pattern.persistence.jpa.InstrumentTabulatePatternRepository;
 import com.geosegbar.infra.instrument_type.persistence.jpa.InstrumentTypeRepository;
@@ -80,6 +81,7 @@ public class InstrumentService {
     private final ApplicationEventPublisher eventPublisher;
     private final InstrumentGraphPatternRepository instrumentGraphPatternRepository;
     private final InstrumentTabulatePatternRepository instrumentTabulatePatternRepository;
+    private final InstrumentGraphCustomizationPropertiesRepository graphCustomizationPropertiesRepository;
 
     @Transactional(readOnly = true)
     public List<InstrumentResponseDTO> findAll() {
@@ -1238,6 +1240,12 @@ public class InstrumentService {
         }
 
         for (ConstantEntity constant : unusedConstants.values()) {
+            graphCustomizationPropertiesRepository.findByConstantId(constant.getId())
+                    .forEach(prop -> {
+                        prop.setConstant(null);
+                        graphCustomizationPropertiesRepository.save(prop);
+                    });
+
             InstrumentEntity instrument = constant.getInstrument();
             instrument.getConstants().remove(constant);
             constant.setInstrument(null);

@@ -1,7 +1,9 @@
 package com.geosegbar.infra.checklist.services;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -12,7 +14,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
-import com.geosegbar.common.enums.AssociationAction;
 import com.geosegbar.common.enums.TypeQuestionEnum;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.AnswerEntity;
@@ -35,8 +36,9 @@ import com.geosegbar.infra.checklist.dtos.ChecklistCompleteDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistCompleteUpdateDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistNameResponseDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistNameUpdateDTO;
-import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationDTO;
-import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationResponseDTO;
+import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationItemDTO;
+import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationsRequestDTO;
+import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationsResponseDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersAndDamDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersDTO;
 import com.geosegbar.infra.checklist.dtos.OptionDTO;
@@ -874,170 +876,304 @@ public class ChecklistService {
     }
 
     @Transactional
-    public ChecklistTemplateAssociationResponseDTO updateTemplateAssociation(
+    public ChecklistTemplateAssociationsResponseDTO updateTemplateAssociations(
             Long checklistId,
-            ChecklistTemplateAssociationDTO dto) {
+            ChecklistTemplateAssociationsRequestDTO dto) {
+
+        if (dto == null) {
+            throw new InvalidInputException("Dados de associação de templates são obrigatórios.");
+        }
+
+        Set<Long> associateIds = normalizeIds(dto.getAssociateTemplateIds(), "associateTemplateIds");
+        Set<Long> disassociateIds = normalizeIds(dto.getDisassociateTemplateIds(), "disassociateTemplateIds");
+
+        if (associateIds.isEmpty() && disassociateIds.isEmpty()) {
+            throw new InvalidInputException("Informe ao menos um template para associar ou desassociar.");
+        }
+
+        return applyTemplateAssociations(
+                checklistId,
+                associateIds,
+                disassociateIds,
+                dto.getOrder(),
+                "CHECKLIST_TEMPLATE_ASSOCIATIONS"
+        );
+    }
+
+    @Transactional
+    public ChecklistTemplateAssociationsResponseDTO reorderTemplates(Long checklistId, TemplateReorderDTO dto) {
+        if (dto == null) {
+            throw new InvalidInputException("Dados de reordenação de templates são obrigatórios.");
+        }
+
+        return applyTemplateAssociations(
+                checklistId,
+                new LinkedHashSet<>(),
+                new LinkedHashSet<>(),
+                dto.getTemplates(),
+                "CHECKLIST_TEMPLATE_REORDER"
+        );
+    }
+
+    private ChecklistTemplateAssociationsResponseDTO applyTemplateAssociations(
+            Long checklistId,
+            Set<Long> associateIds,
+            Set<Long> disassociateIds,
+            List<TemplateOrderDTO> order,
+            String auditAction) {
 
         String actor = resolveActor();
         logChecklistAudit(
-                "CHECKLIST_TEMPLATE_ASSOCIATION",
+                auditAction,
                 "START",
                 actor,
-                "checklistId=" + checklistId + " templateId=" + dto.getTemplateId()
-                + " action=" + dto.getAction(),
+                "checklistId=" + checklistId
+                + " associateTemplateIds=" + associateIds
+                + " disassociateTemplateIds=" + disassociateIds,
                 null
         );
 
         try {
-            if (dto.getAction() == null) {
-                throw new InvalidInputException("Acao e obrigatoria!");
-            }
+            validateNoOverlap(associateIds, disassociateIds, "template");
 
             ChecklistEntity checklist = checklistRepository.findByIdWithTemplates(checklistId)
-                    .orElseThrow(() -> new NotFoundException("Checklist nao encontrada para id: " + checklistId));
+                    .orElseThrow(() -> new NotFoundException("Checklist não encontrado para id: " + checklistId));
 
-            TemplateQuestionnaireEntity template = templateQuestionnaireRepository.findById(dto.getTemplateId())
-                    .orElseThrow(() -> new NotFoundException("Template nao encontrado com ID: " + dto.getTemplateId()));
+            List<ChecklistTemplateEntity> existingAssociations = checklistTemplateRepository
+                    .findByChecklistIdOrderByOrderIndex(checklistId);
 
-            if (!template.getDam().getId().equals(checklist.getDam().getId())) {
-                throw new BusinessRuleException(
-                        "Nao e possivel associar templates de outra barragem ao checklist."
-                );
+            Map<Long, ChecklistTemplateEntity> existingByTemplateId = existingAssociations.stream()
+                    .collect(Collectors.toMap(this::templateIdOf, ct -> ct));
+            Set<Long> existingTemplateIds = new LinkedHashSet<>(existingByTemplateId.keySet());
+
+            validateTemplateAssociationChanges(existingTemplateIds, associateIds, disassociateIds);
+
+            Map<Long, TemplateQuestionnaireEntity> templatesToAssociate = findTemplatesById(associateIds);
+            validateTemplatesBelongToChecklistDam(checklist, templatesToAssociate.values());
+
+            Set<Long> finalTemplateIds = new LinkedHashSet<>(existingTemplateIds);
+            finalTemplateIds.removeAll(disassociateIds);
+            finalTemplateIds.addAll(associateIds);
+
+            Map<Long, Integer> orderByTemplateId = validateTemplateOrder(order, finalTemplateIds);
+
+            for (Long templateId : disassociateIds) {
+                checklistTemplateRepository.delete(existingByTemplateId.get(templateId));
             }
 
-            boolean alreadyAssociated = checklistTemplateRepository
-                    .findByChecklistIdAndTemplateQuestionnaireId(checklistId, dto.getTemplateId())
-                    .isPresent();
+            List<ChecklistTemplateEntity> finalAssociations = existingAssociations.stream()
+                    .filter(ct -> !disassociateIds.contains(templateIdOf(ct)))
+                    .collect(Collectors.toCollection(ArrayList::new));
 
-            Integer resultOrderIndex = null;
-
-            if (dto.getAction() == AssociationAction.ASSOCIATE) {
-                if (!alreadyAssociated) {
-                    long count = checklistTemplateRepository.countByChecklistId(checklistId);
-                    int newIndex = dto.getOrderIndex() != null ? dto.getOrderIndex() : (int) count + 1;
-
-                    if (dto.getOrderIndex() != null && dto.getOrderIndex() <= count) {
-                        List<ChecklistTemplateEntity> existing = checklistTemplateRepository
-                                .findByChecklistIdOrderByOrderIndex(checklistId);
-                        for (ChecklistTemplateEntity e : existing) {
-                            if (e.getOrderIndex() >= newIndex) {
-                                checklistTemplateRepository.updateOrderIndex(e.getId(), e.getOrderIndex() + 1);
-                            }
-                        }
-                    }
-
-                    ChecklistTemplateEntity ct = new ChecklistTemplateEntity();
-                    ct.setChecklist(checklist);
-                    ct.setTemplateQuestionnaire(template);
-                    ct.setOrderIndex(newIndex);
-                    checklistTemplateRepository.save(ct);
-                    resultOrderIndex = newIndex;
-                }
-            } else {
-                ChecklistTemplateEntity ct = checklistTemplateRepository
-                        .findByChecklistIdAndTemplateQuestionnaireId(checklistId, dto.getTemplateId())
-                        .orElseThrow(() -> new NotFoundException("Template nao esta associado a este checklist."));
-
-                int removedIndex = ct.getOrderIndex();
-                checklistTemplateRepository.delete(ct);
-
-                List<ChecklistTemplateEntity> remaining = checklistTemplateRepository
-                        .findByChecklistIdOrderByOrderIndex(checklistId);
-                for (ChecklistTemplateEntity e : remaining) {
-                    if (e.getOrderIndex() > removedIndex) {
-                        checklistTemplateRepository.updateOrderIndex(e.getId(), e.getOrderIndex() - 1);
-                    }
-                }
+            for (Long templateId : associateIds) {
+                ChecklistTemplateEntity ct = new ChecklistTemplateEntity();
+                ct.setChecklist(checklist);
+                ct.setTemplateQuestionnaire(templatesToAssociate.get(templateId));
+                ct.setOrderIndex(orderByTemplateId.get(templateId));
+                finalAssociations.add(checklistTemplateRepository.save(ct));
             }
 
-            long templateCount = checklistTemplateRepository.countByChecklistId(checklistId);
+            for (ChecklistTemplateEntity ct : finalAssociations) {
+                ct.setOrderIndex(orderByTemplateId.get(templateIdOf(ct)));
+            }
 
-            ChecklistTemplateAssociationResponseDTO result = new ChecklistTemplateAssociationResponseDTO();
-            result.setChecklistId(checklistId);
-            result.setTemplateId(dto.getTemplateId());
-            result.setAction(dto.getAction());
-            result.setTemplateCount((int) templateCount);
-            result.setOrderIndex(resultOrderIndex);
+            List<ChecklistTemplateEntity> savedAssociations = checklistTemplateRepository.saveAll(finalAssociations);
+            savedAssociations.sort(Comparator.comparing(ChecklistTemplateEntity::getOrderIndex));
+
+            ChecklistTemplateAssociationsResponseDTO response = buildTemplateAssociationsResponse(
+                    checklistId,
+                    associateIds,
+                    disassociateIds,
+                    savedAssociations
+            );
 
             logChecklistAudit(
-                    "CHECKLIST_TEMPLATE_ASSOCIATION",
+                    auditAction,
                     "SUCCESS",
                     actor,
-                    "checklistId=" + checklistId + " templateId=" + dto.getTemplateId()
-                    + " action=" + dto.getAction() + " templateCount=" + result.getTemplateCount(),
+                    "checklistId=" + checklistId + " templateCount=" + response.getTemplateCount(),
                     null
             );
 
-            return result;
+            return response;
         } catch (RuntimeException e) {
             logChecklistAudit(
-                    "CHECKLIST_TEMPLATE_ASSOCIATION",
+                    auditAction,
                     "ERROR",
                     actor,
-                    "checklistId=" + checklistId + " templateId=" + dto.getTemplateId()
-                    + " action=" + dto.getAction(),
+                    "checklistId=" + checklistId
+                    + " associateTemplateIds=" + associateIds
+                    + " disassociateTemplateIds=" + disassociateIds,
                     e
             );
             throw e;
         }
     }
 
-    @Transactional
-    public List<ChecklistTemplateAssociationResponseDTO> reorderTemplates(Long checklistId, TemplateReorderDTO dto) {
-        checklistRepository.findByIdWithDam(checklistId)
-                .orElseThrow(() -> new NotFoundException("Checklist não encontrado para id: " + checklistId));
+    private Set<Long> normalizeIds(List<Long> ids, String fieldName) {
+        Set<Long> normalized = new LinkedHashSet<>();
+        if (ids == null) {
+            return normalized;
+        }
 
-        List<ChecklistTemplateEntity> existing = checklistTemplateRepository
-                .findByChecklistIdOrderByOrderIndex(checklistId);
+        for (Long id : ids) {
+            if (id == null) {
+                throw new InvalidInputException("O campo " + fieldName + " não aceita IDs nulos.");
+            }
+            if (!normalized.add(id)) {
+                throw new InvalidInputException("ID duplicado em " + fieldName + ": " + id);
+            }
+        }
 
-        if (existing.size() != dto.getTemplates().size()) {
+        return normalized;
+    }
+
+    private void validateNoOverlap(Set<Long> associateIds, Set<Long> disassociateIds, String itemName) {
+        Set<Long> overlap = new LinkedHashSet<>(associateIds);
+        overlap.retainAll(disassociateIds);
+        if (!overlap.isEmpty()) {
             throw new InvalidInputException(
-                    "Número de templates na reordenação (" + dto.getTemplates().size()
-                    + ") não corresponde ao número de templates no checklist (" + existing.size() + ").");
+                    "O mesmo " + itemName + " não pode ser associado e desassociado na mesma requisição: " + overlap);
+        }
+    }
+
+    private void validateTemplateAssociationChanges(
+            Set<Long> existingTemplateIds,
+            Set<Long> associateIds,
+            Set<Long> disassociateIds) {
+
+        Set<Long> alreadyAssociated = new LinkedHashSet<>(associateIds);
+        alreadyAssociated.retainAll(existingTemplateIds);
+        if (!alreadyAssociated.isEmpty()) {
+            throw new InvalidInputException("Templates já associados a este checklist: " + alreadyAssociated);
         }
 
-        Set<Long> existingIds = existing.stream()
-                .map(ChecklistTemplateEntity::getId)
+        Set<Long> notAssociated = new LinkedHashSet<>(disassociateIds);
+        notAssociated.removeAll(existingTemplateIds);
+        if (!notAssociated.isEmpty()) {
+            throw new InvalidInputException("Templates não associados a este checklist: " + notAssociated);
+        }
+    }
+
+    private Map<Long, TemplateQuestionnaireEntity> findTemplatesById(Set<Long> templateIds) {
+        if (templateIds.isEmpty()) {
+            return Map.of();
+        }
+
+        List<TemplateQuestionnaireEntity> templates = templateQuestionnaireRepository.findAllById(templateIds);
+        Set<Long> foundIds = templates.stream()
+                .map(TemplateQuestionnaireEntity::getId)
                 .collect(Collectors.toSet());
-        for (TemplateOrderDTO orderDto : dto.getTemplates()) {
-            if (!existingIds.contains(orderDto.getChecklistTemplateId())) {
+
+        Set<Long> missingIds = new LinkedHashSet<>(templateIds);
+        missingIds.removeAll(foundIds);
+        if (!missingIds.isEmpty()) {
+            throw new NotFoundException("Templates não encontrados: " + missingIds);
+        }
+
+        return templates.stream()
+                .collect(Collectors.toMap(TemplateQuestionnaireEntity::getId, template -> template));
+    }
+
+    private void validateTemplatesBelongToChecklistDam(
+            ChecklistEntity checklist,
+            Iterable<TemplateQuestionnaireEntity> templates) {
+
+        Long checklistDamId = checklist.getDam().getId();
+        List<Long> invalidTemplateIds = new ArrayList<>();
+
+        for (TemplateQuestionnaireEntity template : templates) {
+            if (template.getDam() == null || !checklistDamId.equals(template.getDam().getId())) {
+                invalidTemplateIds.add(template.getId());
+            }
+        }
+
+        if (!invalidTemplateIds.isEmpty()) {
+            throw new BusinessRuleException(
+                    "Não é possível associar templates de outra barragem ao checklist: " + invalidTemplateIds);
+        }
+    }
+
+    private Map<Long, Integer> validateTemplateOrder(List<TemplateOrderDTO> order, Set<Long> finalTemplateIds) {
+        if (order == null) {
+            throw new InvalidInputException("Lista de ordenação final de templates é obrigatória.");
+        }
+
+        if (order.size() != finalTemplateIds.size()) {
+            throw new InvalidInputException(
+                    "A ordenação final deve conter exatamente os templates finais do checklist. "
+                    + "Informados: " + order.size() + ", esperados: " + finalTemplateIds.size() + ".");
+        }
+
+        Set<Long> orderedTemplateIds = new LinkedHashSet<>();
+        Set<Integer> orderIndexes = new HashSet<>();
+        Map<Long, Integer> orderByTemplateId = order.stream()
+                .peek(orderDto -> {
+                    if (orderDto == null) {
+                        throw new InvalidInputException("A lista de ordenação não aceita itens nulos.");
+                    }
+                    if (orderDto.getTemplateId() == null) {
+                        throw new InvalidInputException("ID do template é obrigatório na ordenação.");
+                    }
+                    if (orderDto.getOrderIndex() == null) {
+                        throw new InvalidInputException("Índice de ordem é obrigatório na ordenação.");
+                    }
+                    if (!orderedTemplateIds.add(orderDto.getTemplateId())) {
+                        throw new InvalidInputException("Template duplicado na ordenação: " + orderDto.getTemplateId());
+                    }
+                    if (!orderIndexes.add(orderDto.getOrderIndex())) {
+                        throw new InvalidInputException("Índice de ordem duplicado: " + orderDto.getOrderIndex());
+                    }
+                })
+                .collect(Collectors.toMap(TemplateOrderDTO::getTemplateId, TemplateOrderDTO::getOrderIndex));
+
+        Set<Long> missingTemplateIds = new LinkedHashSet<>(finalTemplateIds);
+        missingTemplateIds.removeAll(orderedTemplateIds);
+        Set<Long> invalidTemplateIds = new LinkedHashSet<>(orderedTemplateIds);
+        invalidTemplateIds.removeAll(finalTemplateIds);
+
+        if (!missingTemplateIds.isEmpty() || !invalidTemplateIds.isEmpty()) {
+            throw new InvalidInputException(
+                    "A ordenação final não corresponde aos templates finais. "
+                    + "Faltando: " + missingTemplateIds + ". Inválidos: " + invalidTemplateIds + ".");
+        }
+
+        for (int i = 1; i <= finalTemplateIds.size(); i++) {
+            if (!orderIndexes.contains(i)) {
                 throw new InvalidInputException(
-                        "ChecklistTemplate ID " + orderDto.getChecklistTemplateId() + " não pertence a este checklist.");
+                        "Índices de ordem devem ser uma sequência contínua de 1 a " + finalTemplateIds.size() + ".");
             }
         }
 
-        Set<Integer> seenIndexes = new HashSet<>();
-        for (TemplateOrderDTO orderDto : dto.getTemplates()) {
-            if (!seenIndexes.add(orderDto.getOrderIndex())) {
-                throw new InvalidInputException("Índice de ordem duplicado: " + orderDto.getOrderIndex());
-            }
-        }
+        return orderByTemplateId;
+    }
 
-        int n = dto.getTemplates().size();
-        for (TemplateOrderDTO orderDto : dto.getTemplates()) {
-            if (orderDto.getOrderIndex() < 1 || orderDto.getOrderIndex() > n) {
-                throw new InvalidInputException(
-                        "Índices de ordem devem ser uma sequência contínua de 1 a " + n + ".");
-            }
-        }
+    private ChecklistTemplateAssociationsResponseDTO buildTemplateAssociationsResponse(
+            Long checklistId,
+            Set<Long> associateIds,
+            Set<Long> disassociateIds,
+            List<ChecklistTemplateEntity> associations) {
 
-        Map<Long, ChecklistTemplateEntity> ctById = existing.stream()
-                .collect(Collectors.toMap(ChecklistTemplateEntity::getId, ct -> ct));
+        List<ChecklistTemplateAssociationItemDTO> items = associations.stream()
+                .sorted(Comparator.comparing(ChecklistTemplateEntity::getOrderIndex))
+                .map(ct -> new ChecklistTemplateAssociationItemDTO(
+                        ct.getId(),
+                        templateIdOf(ct),
+                        ct.getOrderIndex()
+                ))
+                .collect(Collectors.toList());
 
-        List<ChecklistTemplateAssociationResponseDTO> results = new ArrayList<>();
-        for (TemplateOrderDTO orderDto : dto.getTemplates()) {
-            checklistTemplateRepository.updateOrderIndex(orderDto.getChecklistTemplateId(), orderDto.getOrderIndex());
-            ChecklistTemplateEntity ct = ctById.get(orderDto.getChecklistTemplateId());
+        return new ChecklistTemplateAssociationsResponseDTO(
+                checklistId,
+                new ArrayList<>(associateIds),
+                new ArrayList<>(disassociateIds),
+                items.size(),
+                items
+        );
+    }
 
-            ChecklistTemplateAssociationResponseDTO resp = new ChecklistTemplateAssociationResponseDTO();
-            resp.setChecklistId(checklistId);
-            resp.setTemplateId(ct.getTemplateQuestionnaire().getId());
-            resp.setTemplateCount(n);
-            resp.setOrderIndex(orderDto.getOrderIndex());
-            results.add(resp);
-        }
-
-        return results;
+    private Long templateIdOf(ChecklistTemplateEntity ct) {
+        return ct.getTemplateQuestionnaire().getId();
     }
 
     @Transactional

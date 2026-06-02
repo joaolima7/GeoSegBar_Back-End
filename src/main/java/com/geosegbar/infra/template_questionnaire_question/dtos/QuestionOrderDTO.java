@@ -11,8 +11,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class QuestionOrderDTO {
     
-    @NotNull(message = "ID da associação template-questão é obrigatório")
-    private Long templateQuestionId;
+    @NotNull(message = "ID da questão é obrigatório")
+    private Long questionId;
     
     @NotNull(message = "Índice de ordem é obrigatório")
     @Min(value = 1, message = "A ordenação deve começar em 1")

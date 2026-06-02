@@ -1,16 +1,17 @@
 package com.geosegbar.infra.template_questionnaire_question.services;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.geosegbar.common.enums.AssociationAction;
 import com.geosegbar.entities.QuestionEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
 import com.geosegbar.entities.TemplateQuestionnaireQuestionEntity;
@@ -18,8 +19,9 @@ import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
 import com.geosegbar.infra.questionnaire_response.persistence.jpa.QuestionnaireResponseRepository;
-import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionAssociationDTO;
-import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionAssociationResponseDTO;
+import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionAssociationItemDTO;
+import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionAssociationsRequestDTO;
+import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionAssociationsResponseDTO;
 import com.geosegbar.infra.template_questionnaire.persistence.jpa.TemplateQuestionnaireRepository;
 import com.geosegbar.infra.template_questionnaire_question.dtos.QuestionOrderDTO;
 import com.geosegbar.infra.template_questionnaire_question.dtos.QuestionReorderDTO;
@@ -184,70 +186,36 @@ public class TemplateQuestionnaireQuestionService {
     }
 
     @Transactional
-    public List<TemplateQuestionnaireQuestionEntity> reorderQuestions(QuestionReorderDTO reorderDTO) {
-        Long templateId = reorderDTO.getTemplateQuestionnaireId();
+    public TemplateQuestionAssociationsResponseDTO updateQuestionAssociations(
+            Long templateId,
+            TemplateQuestionAssociationsRequestDTO dto) {
 
-        if (!templateQuestionnaireRepository.existsById(templateId)) {
-            throw new NotFoundException("Template de questionário não encontrado com ID: " + templateId);
+        if (dto == null) {
+            throw new InvalidInputException("Dados de associação de questões são obrigatórios.");
         }
 
-        List<TemplateQuestionnaireQuestionEntity> existingQuestions
-                = tqQuestionRepository.findByTemplateQuestionnaireIdOrderByOrderIndex(templateId);
+        Set<Long> associateIds = normalizeIds(dto.getAssociateQuestionIds(), "associateQuestionIds");
+        Set<Long> disassociateIds = normalizeIds(dto.getDisassociateQuestionIds(), "disassociateQuestionIds");
 
-        if (existingQuestions.isEmpty()) {
-            throw new NotFoundException("O template de questionário não contém questões para reordenar");
+        if (associateIds.isEmpty() && disassociateIds.isEmpty()) {
+            throw new InvalidInputException("Informe ao menos uma questão para associar ou desassociar.");
         }
 
-        if (existingQuestions.size() != reorderDTO.getQuestions().size()) {
-            throw new InvalidInputException(
-                    "O número de questões informadas (" + reorderDTO.getQuestions().size()
-                    + ") não corresponde ao número de questões do template (" + existingQuestions.size() + ")!");
+        return applyQuestionAssociations(templateId, associateIds, disassociateIds, dto.getOrder());
+    }
+
+    @Transactional
+    public TemplateQuestionAssociationsResponseDTO reorderQuestions(Long templateId, QuestionReorderDTO reorderDTO) {
+        if (reorderDTO == null) {
+            throw new InvalidInputException("Dados de reordenação de questões são obrigatórios.");
         }
 
-        Set<Long> existingQuestionIds = existingQuestions.stream()
-                .map(TemplateQuestionnaireQuestionEntity::getId)
-                .collect(Collectors.toSet());
-
-        Set<Long> requestQuestionIds = reorderDTO.getQuestions().stream()
-                .map(QuestionOrderDTO::getTemplateQuestionId)
-                .collect(Collectors.toSet());
-
-        if (!existingQuestionIds.containsAll(requestQuestionIds)) {
-            Set<Long> invalidIds = new HashSet<>(requestQuestionIds);
-            invalidIds.removeAll(existingQuestionIds);
-            throw new InvalidInputException("As seguintes questões não pertencem a este template: " + invalidIds);
-        }
-
-        if (!requestQuestionIds.containsAll(existingQuestionIds)) {
-            Set<Long> missingIds = new HashSet<>(existingQuestionIds);
-            missingIds.removeAll(requestQuestionIds);
-            throw new InvalidInputException("As seguintes questões do template não foram incluídas: " + missingIds);
-        }
-
-        Set<Integer> requestIndices = reorderDTO.getQuestions().stream()
-                .map(QuestionOrderDTO::getOrderIndex)
-                .collect(Collectors.toSet());
-
-        if (requestIndices.size() != reorderDTO.getQuestions().size()) {
-            throw new InvalidInputException("Existem índices duplicados na requisição");
-        }
-
-        int maxIndex = requestIndices.stream().max(Integer::compare).orElse(0);
-        if (requestIndices.size() != maxIndex) {
-            throw new InvalidInputException("A sequência de índices não é contínua. Deve começar em 1 e não ter lacunas.");
-        }
-
-        Map<Long, Integer> reorderMap = reorderDTO.getQuestions().stream()
-                .collect(Collectors.toMap(
-                        QuestionOrderDTO::getTemplateQuestionId,
-                        QuestionOrderDTO::getOrderIndex
-                ));
-
-        for (TemplateQuestionnaireQuestionEntity question : existingQuestions) {
-            question.setOrderIndex(reorderMap.get(question.getId()));
-        }
-
-        return tqQuestionRepository.saveAll(existingQuestions);
+        return applyQuestionAssociations(
+                templateId,
+                new LinkedHashSet<>(),
+                new LinkedHashSet<>(),
+                reorderDTO.getQuestions()
+        );
     }
 
     @Transactional(readOnly = true)
@@ -255,97 +223,228 @@ public class TemplateQuestionnaireQuestionService {
         return tqQuestionRepository.findByTemplateQuestionnaireIdOrderByOrderIndex(templateId);
     }
 
-    @Transactional
-    public TemplateQuestionAssociationResponseDTO updateAssociation(
+    private TemplateQuestionAssociationsResponseDTO applyQuestionAssociations(
             Long templateId,
-            TemplateQuestionAssociationDTO dto) {
+            Set<Long> associateIds,
+            Set<Long> disassociateIds,
+            List<QuestionOrderDTO> order) {
 
-        if (dto.getAction() == null) {
-            throw new InvalidInputException("Acao e obrigatoria!");
-        }
+        validateNoOverlap(associateIds, disassociateIds);
 
         TemplateQuestionnaireEntity template = templateQuestionnaireRepository.findById(templateId)
-                .orElseThrow(() -> new NotFoundException("Template nao encontrado!"));
+                .orElseThrow(() -> new NotFoundException("Template não encontrado com ID: " + templateId));
 
-        // Busca todas as associações para garantir unicidade
-        List<TemplateQuestionnaireQuestionEntity> existingList = tqQuestionRepository.findByTemplateQuestionnaireIdOrderByOrderIndex(templateId)
-                .stream()
-                .filter(q -> q.getQuestion().getId().equals(dto.getQuestionId()))
-                .collect(Collectors.toList());
-
-        if (existingList.size() > 1) {
-            throw new InvalidInputException("Foram encontradas múltiplas associações para este template e questão. Corrija os dados duplicados na tabela template_questionnaire_questions.");
-        }
-
-        Optional<TemplateQuestionnaireQuestionEntity> existing = existingList.isEmpty() ? Optional.empty() : Optional.of(existingList.get(0));
-
-        if (dto.getAction() == AssociationAction.ASSOCIATE) {
-            if (dto.getOrderIndex() == null) {
-                throw new InvalidInputException("Indice de ordem e obrigatorio!");
-            }
-
-            if (existing.isPresent()) {
-                TemplateQuestionnaireQuestionEntity found = existing.get();
-                return new TemplateQuestionAssociationResponseDTO(
-                        templateId,
-                        dto.getQuestionId(),
-                        found.getId(),
-                        found.getOrderIndex(),
-                        AssociationAction.ASSOCIATE
-                );
-            }
-
-            if (!questionRepository.existsById(dto.getQuestionId())) {
-                throw new NotFoundException("Questao nao encontrada com ID: " + dto.getQuestionId());
-            }
-
-            TemplateQuestionnaireQuestionEntity newAssociation = new TemplateQuestionnaireQuestionEntity();
-            TemplateQuestionnaireEntity templateRef = new TemplateQuestionnaireEntity();
-            templateRef.setId(template.getId());
-
-            QuestionEntity questionRef = new QuestionEntity();
-            questionRef.setId(dto.getQuestionId());
-
-            newAssociation.setTemplateQuestionnaire(templateRef);
-            newAssociation.setQuestion(questionRef);
-            newAssociation.setOrderIndex(dto.getOrderIndex());
-
-            TemplateQuestionnaireQuestionEntity saved = save(newAssociation);
-
-            return new TemplateQuestionAssociationResponseDTO(
-                    templateId,
-                    dto.getQuestionId(),
-                    saved.getId(),
-                    saved.getOrderIndex(),
-                    AssociationAction.ASSOCIATE
-            );
-        }
-
-        if (existing.isEmpty()) {
-            throw new NotFoundException("Questao nao esta associada a este template.");
-        }
-
-        TemplateQuestionnaireQuestionEntity toRemove = existing.get();
-        int deletedIndex = toRemove.getOrderIndex();
-
-        tqQuestionRepository.deleteById(toRemove.getId());
-
-        List<TemplateQuestionnaireQuestionEntity> remainingQuestions
+        List<TemplateQuestionnaireQuestionEntity> existingAssociations
                 = tqQuestionRepository.findByTemplateQuestionnaireIdOrderByOrderIndex(templateId);
 
-        for (TemplateQuestionnaireQuestionEntity question : remainingQuestions) {
-            if (question.getOrderIndex() > deletedIndex) {
-                question.setOrderIndex(question.getOrderIndex() - 1);
-                tqQuestionRepository.save(question);
+        Map<Long, TemplateQuestionnaireQuestionEntity> existingByQuestionId = existingAssociations.stream()
+                .collect(Collectors.toMap(this::questionIdOf, tqq -> tqq));
+        Set<Long> existingQuestionIds = new LinkedHashSet<>(existingByQuestionId.keySet());
+
+        validateQuestionAssociationChanges(existingQuestionIds, associateIds, disassociateIds);
+
+        Map<Long, QuestionEntity> questionsToAssociate = findQuestionsById(associateIds);
+        validateQuestionsBelongToTemplateClient(template, questionsToAssociate.values());
+
+        Set<Long> finalQuestionIds = new LinkedHashSet<>(existingQuestionIds);
+        finalQuestionIds.removeAll(disassociateIds);
+        finalQuestionIds.addAll(associateIds);
+
+        Map<Long, Integer> orderByQuestionId = validateQuestionOrder(order, finalQuestionIds);
+
+        for (Long questionId : disassociateIds) {
+            tqQuestionRepository.delete(existingByQuestionId.get(questionId));
+        }
+
+        List<TemplateQuestionnaireQuestionEntity> finalAssociations = existingAssociations.stream()
+                .filter(tqq -> !disassociateIds.contains(questionIdOf(tqq)))
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        for (Long questionId : associateIds) {
+            TemplateQuestionnaireQuestionEntity newAssociation = new TemplateQuestionnaireQuestionEntity();
+            newAssociation.setTemplateQuestionnaire(template);
+            newAssociation.setQuestion(questionsToAssociate.get(questionId));
+            newAssociation.setOrderIndex(orderByQuestionId.get(questionId));
+            finalAssociations.add(tqQuestionRepository.save(newAssociation));
+        }
+
+        for (TemplateQuestionnaireQuestionEntity association : finalAssociations) {
+            association.setOrderIndex(orderByQuestionId.get(questionIdOf(association)));
+        }
+
+        List<TemplateQuestionnaireQuestionEntity> savedAssociations = tqQuestionRepository.saveAll(finalAssociations);
+        savedAssociations.sort(Comparator.comparing(TemplateQuestionnaireQuestionEntity::getOrderIndex));
+
+        return buildQuestionAssociationsResponse(templateId, associateIds, disassociateIds, savedAssociations);
+    }
+
+    private Set<Long> normalizeIds(List<Long> ids, String fieldName) {
+        Set<Long> normalized = new LinkedHashSet<>();
+        if (ids == null) {
+            return normalized;
+        }
+
+        for (Long id : ids) {
+            if (id == null) {
+                throw new InvalidInputException("O campo " + fieldName + " não aceita IDs nulos.");
+            }
+            if (!normalized.add(id)) {
+                throw new InvalidInputException("ID duplicado em " + fieldName + ": " + id);
             }
         }
 
-        return new TemplateQuestionAssociationResponseDTO(
+        return normalized;
+    }
+
+    private void validateNoOverlap(Set<Long> associateIds, Set<Long> disassociateIds) {
+        Set<Long> overlap = new LinkedHashSet<>(associateIds);
+        overlap.retainAll(disassociateIds);
+        if (!overlap.isEmpty()) {
+            throw new InvalidInputException(
+                    "A mesma questão não pode ser associada e desassociada na mesma requisição: " + overlap);
+        }
+    }
+
+    private void validateQuestionAssociationChanges(
+            Set<Long> existingQuestionIds,
+            Set<Long> associateIds,
+            Set<Long> disassociateIds) {
+
+        Set<Long> alreadyAssociated = new LinkedHashSet<>(associateIds);
+        alreadyAssociated.retainAll(existingQuestionIds);
+        if (!alreadyAssociated.isEmpty()) {
+            throw new InvalidInputException("Questões já associadas a este template: " + alreadyAssociated);
+        }
+
+        Set<Long> notAssociated = new LinkedHashSet<>(disassociateIds);
+        notAssociated.removeAll(existingQuestionIds);
+        if (!notAssociated.isEmpty()) {
+            throw new InvalidInputException("Questões não associadas a este template: " + notAssociated);
+        }
+    }
+
+    private Map<Long, QuestionEntity> findQuestionsById(Set<Long> questionIds) {
+        if (questionIds.isEmpty()) {
+            return Map.of();
+        }
+
+        List<QuestionEntity> questions = questionRepository.findAllById(questionIds);
+        Set<Long> foundIds = questions.stream()
+                .map(QuestionEntity::getId)
+                .collect(Collectors.toSet());
+
+        Set<Long> missingIds = new LinkedHashSet<>(questionIds);
+        missingIds.removeAll(foundIds);
+        if (!missingIds.isEmpty()) {
+            throw new NotFoundException("Questões não encontradas: " + missingIds);
+        }
+
+        return questions.stream()
+                .collect(Collectors.toMap(QuestionEntity::getId, question -> question));
+    }
+
+    private void validateQuestionsBelongToTemplateClient(
+            TemplateQuestionnaireEntity template,
+            Iterable<QuestionEntity> questions) {
+
+        if (template.getDam() == null || template.getDam().getClient() == null) {
+            throw new InvalidInputException("Template não possui barragem/cliente associado para validar as questões.");
+        }
+
+        Long templateClientId = template.getDam().getClient().getId();
+        List<Long> invalidQuestionIds = new ArrayList<>();
+
+        for (QuestionEntity question : questions) {
+            if (question.getClient() == null || !templateClientId.equals(question.getClient().getId())) {
+                invalidQuestionIds.add(question.getId());
+            }
+        }
+
+        if (!invalidQuestionIds.isEmpty()) {
+            throw new InvalidInputException(
+                    "Não é possível associar questões de outro cliente ao template: " + invalidQuestionIds);
+        }
+    }
+
+    private Map<Long, Integer> validateQuestionOrder(List<QuestionOrderDTO> order, Set<Long> finalQuestionIds) {
+        if (order == null) {
+            throw new InvalidInputException("Lista de ordenação final de questões é obrigatória.");
+        }
+
+        if (order.size() != finalQuestionIds.size()) {
+            throw new InvalidInputException(
+                    "A ordenação final deve conter exatamente as questões finais do template. "
+                    + "Informadas: " + order.size() + ", esperadas: " + finalQuestionIds.size() + ".");
+        }
+
+        Set<Long> orderedQuestionIds = new LinkedHashSet<>();
+        Set<Integer> orderIndexes = new HashSet<>();
+        Map<Long, Integer> orderByQuestionId = order.stream()
+                .peek(orderDto -> {
+                    if (orderDto == null) {
+                        throw new InvalidInputException("A lista de ordenação não aceita itens nulos.");
+                    }
+                    if (orderDto.getQuestionId() == null) {
+                        throw new InvalidInputException("ID da questão é obrigatório na ordenação.");
+                    }
+                    if (orderDto.getOrderIndex() == null) {
+                        throw new InvalidInputException("Índice de ordem é obrigatório na ordenação.");
+                    }
+                    if (!orderedQuestionIds.add(orderDto.getQuestionId())) {
+                        throw new InvalidInputException("Questão duplicada na ordenação: " + orderDto.getQuestionId());
+                    }
+                    if (!orderIndexes.add(orderDto.getOrderIndex())) {
+                        throw new InvalidInputException("Índice de ordem duplicado: " + orderDto.getOrderIndex());
+                    }
+                })
+                .collect(Collectors.toMap(QuestionOrderDTO::getQuestionId, QuestionOrderDTO::getOrderIndex));
+
+        Set<Long> missingQuestionIds = new LinkedHashSet<>(finalQuestionIds);
+        missingQuestionIds.removeAll(orderedQuestionIds);
+        Set<Long> invalidQuestionIds = new LinkedHashSet<>(orderedQuestionIds);
+        invalidQuestionIds.removeAll(finalQuestionIds);
+
+        if (!missingQuestionIds.isEmpty() || !invalidQuestionIds.isEmpty()) {
+            throw new InvalidInputException(
+                    "A ordenação final não corresponde às questões finais. "
+                    + "Faltando: " + missingQuestionIds + ". Inválidas: " + invalidQuestionIds + ".");
+        }
+
+        for (int i = 1; i <= finalQuestionIds.size(); i++) {
+            if (!orderIndexes.contains(i)) {
+                throw new InvalidInputException(
+                        "Índices de ordem devem ser uma sequência contínua de 1 a " + finalQuestionIds.size() + ".");
+            }
+        }
+
+        return orderByQuestionId;
+    }
+
+    private TemplateQuestionAssociationsResponseDTO buildQuestionAssociationsResponse(
+            Long templateId,
+            Set<Long> associateIds,
+            Set<Long> disassociateIds,
+            List<TemplateQuestionnaireQuestionEntity> associations) {
+
+        List<TemplateQuestionAssociationItemDTO> items = associations.stream()
+                .sorted(Comparator.comparing(TemplateQuestionnaireQuestionEntity::getOrderIndex))
+                .map(tqq -> new TemplateQuestionAssociationItemDTO(
+                        tqq.getId(),
+                        questionIdOf(tqq),
+                        tqq.getOrderIndex()
+                ))
+                .collect(Collectors.toList());
+
+        return new TemplateQuestionAssociationsResponseDTO(
                 templateId,
-                dto.getQuestionId(),
-                toRemove.getId(),
-                toRemove.getOrderIndex(),
-                AssociationAction.DISASSOCIATE
+                new ArrayList<>(associateIds),
+                new ArrayList<>(disassociateIds),
+                items.size(),
+                items
         );
+    }
+
+    private Long questionIdOf(TemplateQuestionnaireQuestionEntity tqq) {
+        return tqq.getQuestion().getId();
     }
 }

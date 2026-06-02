@@ -1,7 +1,5 @@
 package com.geosegbar.infra.checklist.dtos;
 
-import com.geosegbar.common.enums.AssociationAction;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -9,11 +7,9 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class ChecklistTemplateAssociationResponseDTO {
+public class ChecklistTemplateAssociationItemDTO {
 
-    private Long checklistId;
+    private Long checklistTemplateId;
     private Long templateId;
-    private AssociationAction action;
-    private Integer templateCount;
     private Integer orderIndex;
 }

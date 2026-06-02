@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.geosegbar.common.enums.AssociationAction;
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.ChecklistEntity;
 import com.geosegbar.infra.checklist.dtos.ChecklistCompleteCreationDTO;
@@ -27,8 +26,8 @@ import com.geosegbar.infra.checklist.dtos.ChecklistCompleteUpdateDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistNameResponseDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistNameUpdateDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistReplicationDTO;
-import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationDTO;
-import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationResponseDTO;
+import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationsRequestDTO;
+import com.geosegbar.infra.checklist.dtos.ChecklistTemplateAssociationsResponseDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersAndDamDTO;
 import com.geosegbar.infra.checklist.dtos.ChecklistWithLastAnswersDTO;
 import com.geosegbar.infra.checklist.dtos.TemplateReorderDTO;
@@ -164,32 +163,28 @@ public class ChecklistController {
         return ResponseEntity.ok(response);
     }
 
-    @PutMapping("/{checklistId}/templates/association")
-    public ResponseEntity<WebResponseEntity<ChecklistTemplateAssociationResponseDTO>> updateChecklistTemplateAssociation(
+    @PutMapping("/{checklistId}/templates/associations")
+    public ResponseEntity<WebResponseEntity<ChecklistTemplateAssociationsResponseDTO>> updateChecklistTemplateAssociations(
             @PathVariable Long checklistId,
-            @Valid @RequestBody ChecklistTemplateAssociationDTO associationDto) {
+            @Valid @RequestBody ChecklistTemplateAssociationsRequestDTO associationDto) {
 
-        ChecklistTemplateAssociationResponseDTO result = checklistService.updateTemplateAssociation(
+        ChecklistTemplateAssociationsResponseDTO result = checklistService.updateTemplateAssociations(
                 checklistId, associationDto);
 
-        String message = associationDto.getAction() == AssociationAction.ASSOCIATE
-                ? "Template associado ao checklist com sucesso!"
-                : "Template desassociado do checklist com sucesso!";
-
-        WebResponseEntity<ChecklistTemplateAssociationResponseDTO> response = WebResponseEntity.success(
-                result, message);
+        WebResponseEntity<ChecklistTemplateAssociationsResponseDTO> response = WebResponseEntity.success(
+                result, "Templates do checklist atualizados com sucesso!");
 
         return ResponseEntity.ok(response);
     }
 
     @PutMapping("/{checklistId}/templates/reorder")
-    public ResponseEntity<WebResponseEntity<List<ChecklistTemplateAssociationResponseDTO>>> reorderTemplates(
+    public ResponseEntity<WebResponseEntity<ChecklistTemplateAssociationsResponseDTO>> reorderTemplates(
             @PathVariable Long checklistId,
             @Valid @RequestBody TemplateReorderDTO dto) {
 
-        List<ChecklistTemplateAssociationResponseDTO> result = checklistService.reorderTemplates(checklistId, dto);
+        ChecklistTemplateAssociationsResponseDTO result = checklistService.reorderTemplates(checklistId, dto);
 
-        WebResponseEntity<List<ChecklistTemplateAssociationResponseDTO>> response = WebResponseEntity.success(
+        WebResponseEntity<ChecklistTemplateAssociationsResponseDTO> response = WebResponseEntity.success(
                 result, "Templates reordenados com sucesso!");
 
         return ResponseEntity.ok(response);

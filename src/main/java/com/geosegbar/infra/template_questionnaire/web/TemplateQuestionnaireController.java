@@ -13,15 +13,15 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.geosegbar.common.enums.AssociationAction;
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
-import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionAssociationDTO;
-import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionAssociationResponseDTO;
+import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionAssociationsRequestDTO;
+import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionAssociationsResponseDTO;
 import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionnaireCreationDTO;
 import com.geosegbar.infra.template_questionnaire.dtos.TemplateQuestionnaireUpdateDTO;
 import com.geosegbar.infra.template_questionnaire.dtos.TemplateReplicationDTO;
 import com.geosegbar.infra.template_questionnaire.services.TemplateQuestionnaireService;
+import com.geosegbar.infra.template_questionnaire_question.dtos.QuestionReorderDTO;
 import com.geosegbar.infra.template_questionnaire_question.services.TemplateQuestionnaireQuestionService;
 
 import jakarta.validation.Valid;
@@ -110,20 +110,30 @@ public class TemplateQuestionnaireController {
         return ResponseEntity.ok(response);
     }
 
-    @PutMapping("/{templateId}/questions/association")
-    public ResponseEntity<WebResponseEntity<TemplateQuestionAssociationResponseDTO>> updateTemplateQuestionAssociation(
+    @PutMapping("/{templateId}/questions/associations")
+    public ResponseEntity<WebResponseEntity<TemplateQuestionAssociationsResponseDTO>> updateTemplateQuestionAssociations(
             @PathVariable Long templateId,
-            @Valid @RequestBody TemplateQuestionAssociationDTO associationDto) {
+            @Valid @RequestBody TemplateQuestionAssociationsRequestDTO associationDto) {
 
-        TemplateQuestionAssociationResponseDTO result = templateQuestionnaireQuestionService.updateAssociation(
+        TemplateQuestionAssociationsResponseDTO result = templateQuestionnaireQuestionService.updateQuestionAssociations(
                 templateId, associationDto);
 
-        String message = associationDto.getAction() == AssociationAction.ASSOCIATE
-                ? "Questao associada ao template com sucesso!"
-                : "Questao desassociada do template com sucesso!";
+        WebResponseEntity<TemplateQuestionAssociationsResponseDTO> response = WebResponseEntity.success(
+                result, "Questões do template atualizadas com sucesso!");
 
-        WebResponseEntity<TemplateQuestionAssociationResponseDTO> response = WebResponseEntity.success(
-                result, message);
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{templateId}/questions/reorder")
+    public ResponseEntity<WebResponseEntity<TemplateQuestionAssociationsResponseDTO>> reorderTemplateQuestions(
+            @PathVariable Long templateId,
+            @Valid @RequestBody QuestionReorderDTO reorderDto) {
+
+        TemplateQuestionAssociationsResponseDTO result = templateQuestionnaireQuestionService.reorderQuestions(
+                templateId, reorderDto);
+
+        WebResponseEntity<TemplateQuestionAssociationsResponseDTO> response = WebResponseEntity.success(
+                result, "Questões reordenadas com sucesso!");
 
         return ResponseEntity.ok(response);
     }

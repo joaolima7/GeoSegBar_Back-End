@@ -1,7 +1,5 @@
 package com.geosegbar.infra.template_questionnaire.dtos;
 
-import com.geosegbar.common.enums.AssociationAction;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -9,11 +7,9 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class TemplateQuestionAssociationResponseDTO {
+public class TemplateQuestionAssociationItemDTO {
 
-    private Long templateId;
-    private Long questionId;
     private Long templateQuestionId;
+    private Long questionId;
     private Integer orderIndex;
-    private AssociationAction action;
 }

@@ -11,8 +11,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class TemplateOrderDTO {
 
-    @NotNull(message = "ID do vínculo checklist-template é obrigatório!")
-    private Long checklistTemplateId;
+    @NotNull(message = "ID do template é obrigatório!")
+    private Long templateId;
 
     @NotNull(message = "Índice de ordem é obrigatório!")
     @Min(value = 1, message = "Índice de ordem deve ser maior ou igual a 1!")

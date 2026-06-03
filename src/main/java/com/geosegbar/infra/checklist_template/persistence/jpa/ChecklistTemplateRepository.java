@@ -27,4 +27,8 @@ public interface ChecklistTemplateRepository extends JpaRepository<ChecklistTemp
     @Modifying
     @Query("UPDATE ChecklistTemplateEntity ct SET ct.orderIndex = :orderIndex WHERE ct.id = :id")
     void updateOrderIndex(@Param("id") Long id, @Param("orderIndex") Integer orderIndex);
+
+    @Modifying
+    @Query("DELETE FROM ChecklistTemplateEntity ct WHERE ct.id = :id")
+    void deleteByIdNative(@Param("id") Long id);
 }

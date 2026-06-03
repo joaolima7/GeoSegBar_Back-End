@@ -958,8 +958,9 @@ public class ChecklistService {
             Map<Long, Integer> orderByTemplateId = validateTemplateOrder(order, finalTemplateIds);
 
             for (Long templateId : disassociateIds) {
-                checklistTemplateRepository.delete(existingByTemplateId.get(templateId));
+                checklistTemplateRepository.deleteByIdNative(existingByTemplateId.get(templateId).getId());
             }
+            checklistTemplateRepository.flush();
 
             List<ChecklistTemplateEntity> finalAssociations = existingAssociations.stream()
                     .filter(ct -> !disassociateIds.contains(templateIdOf(ct)))

@@ -253,8 +253,9 @@ public class TemplateQuestionnaireQuestionService {
         Map<Long, Integer> orderByQuestionId = validateQuestionOrder(order, finalQuestionIds);
 
         for (Long questionId : disassociateIds) {
-            tqQuestionRepository.delete(existingByQuestionId.get(questionId));
+            tqQuestionRepository.deleteByIdNative(existingByQuestionId.get(questionId).getId());
         }
+        tqQuestionRepository.flush();
 
         List<TemplateQuestionnaireQuestionEntity> finalAssociations = existingAssociations.stream()
                 .filter(tqq -> !disassociateIds.contains(questionIdOf(tqq)))

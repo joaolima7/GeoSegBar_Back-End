@@ -825,7 +825,8 @@ public class ChecklistService {
                     templateDTO.setName(template.getName());
                     templateDTO.setOrderIndex(ct.getOrderIndex());
 
-                    Set<ChecklistCompleteDTO.TemplateQuestionnaireQuestionDTO> questionDTOs = template.getTemplateQuestions().stream()
+                    List<ChecklistCompleteDTO.TemplateQuestionnaireQuestionDTO> questionDTOs = template.getTemplateQuestions().stream()
+                            .sorted(Comparator.comparing(TemplateQuestionnaireQuestionEntity::getOrderIndex))
                             .map(tqq -> {
                                 ChecklistCompleteDTO.TemplateQuestionnaireQuestionDTO tqqDTO
                                         = new ChecklistCompleteDTO.TemplateQuestionnaireQuestionDTO();
@@ -849,7 +850,7 @@ public class ChecklistService {
                                 tqqDTO.setQuestion(questionDTO);
                                 return tqqDTO;
                             })
-                            .collect(Collectors.toSet());
+                            .collect(Collectors.toList());
                     templateDTO.setTemplateQuestions(questionDTOs);
 
                     return templateDTO;

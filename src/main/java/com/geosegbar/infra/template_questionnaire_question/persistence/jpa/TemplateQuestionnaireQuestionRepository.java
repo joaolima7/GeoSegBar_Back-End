@@ -15,8 +15,12 @@ import com.geosegbar.entities.TemplateQuestionnaireQuestionEntity;
 @Repository
 public interface TemplateQuestionnaireQuestionRepository extends JpaRepository<TemplateQuestionnaireQuestionEntity, Long> {
 
-    @EntityGraph(attributePaths = {"question", "question.options", "templateQuestionnaire"})
-    List<TemplateQuestionnaireQuestionEntity> findByTemplateQuestionnaireIdOrderByOrderIndex(Long templateQuestionnaireId);
+    @EntityGraph(attributePaths = {"question", "templateQuestionnaire"})
+    @Query("SELECT tqq FROM TemplateQuestionnaireQuestionEntity tqq "
+            + "WHERE tqq.templateQuestionnaire.id = :templateQuestionnaireId "
+            + "ORDER BY tqq.orderIndex ASC")
+    List<TemplateQuestionnaireQuestionEntity> findByTemplateQuestionnaireIdOrderByOrderIndex(
+            @Param("templateQuestionnaireId") Long templateQuestionnaireId);
 
     @EntityGraph(attributePaths = {"templateQuestionnaire"})
     List<TemplateQuestionnaireQuestionEntity> findByQuestionId(Long questionId);

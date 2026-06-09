@@ -29,7 +29,7 @@ public class ChecklistCompleteDTO {
         private Long id;
         private String name;
         private Integer orderIndex;
-        private Set<TemplateQuestionnaireQuestionDTO> templateQuestions = new HashSet<>();
+        private List<TemplateQuestionnaireQuestionDTO> templateQuestions = new ArrayList<>();
     }
 
     @Data

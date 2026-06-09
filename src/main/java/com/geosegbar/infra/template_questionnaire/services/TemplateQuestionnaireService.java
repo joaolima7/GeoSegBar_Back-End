@@ -408,6 +408,11 @@ public class TemplateQuestionnaireService {
                 continue;
             }
 
+            // Inicializa as opções dentro da transação para evitar LazyInitializationException
+            // na serialização da resposta (open-in-view=false). As opções são serializadas
+            // no JSON do template; o client da questão não é (vem como proxy não navegado).
+            org.hibernate.Hibernate.initialize(existingQuestion.getOptions());
+
             TemplateQuestionnaireQuestionEntity newTemplateQuestion = new TemplateQuestionnaireQuestionEntity();
             newTemplateQuestion.setTemplateQuestionnaire(newTemplate);
             newTemplateQuestion.setQuestion(existingQuestion);

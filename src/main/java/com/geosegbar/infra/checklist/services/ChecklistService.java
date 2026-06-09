@@ -1261,6 +1261,10 @@ public class ChecklistService {
                         continue;
                     }
 
+                    // Inicializa as opções dentro da transação para evitar LazyInitializationException
+                    // na serialização da resposta (open-in-view=false).
+                    org.hibernate.Hibernate.initialize(existingQuestion.getOptions());
+
                     TemplateQuestionnaireQuestionEntity newTemplateQuestion = new TemplateQuestionnaireQuestionEntity();
                     newTemplateQuestion.setTemplateQuestionnaire(newTemplate);
                     newTemplateQuestion.setQuestion(existingQuestion);

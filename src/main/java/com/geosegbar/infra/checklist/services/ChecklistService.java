@@ -1253,8 +1253,13 @@ public class ChecklistService {
                         .collect(Collectors.toList());
 
                 int questionCount = 0;
+                Set<Long> copiedQuestionIds = new HashSet<>();
                 for (TemplateQuestionnaireQuestionEntity sourceTemplateQuestion : sortedQuestions) {
                     QuestionEntity existingQuestion = sourceTemplateQuestion.getQuestion();
+
+                    if (!copiedQuestionIds.add(existingQuestion.getId())) {
+                        continue;
+                    }
 
                     TemplateQuestionnaireQuestionEntity newTemplateQuestion = new TemplateQuestionnaireQuestionEntity();
                     newTemplateQuestion.setTemplateQuestionnaire(newTemplate);

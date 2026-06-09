@@ -400,8 +400,13 @@ public class TemplateQuestionnaireService {
                 .sorted(Comparator.comparing(TemplateQuestionnaireQuestionEntity::getOrderIndex))
                 .collect(Collectors.toList());
 
+        Set<Long> copiedQuestionIds = new HashSet<>();
         for (TemplateQuestionnaireQuestionEntity sourceTemplateQuestion : sortedQuestions) {
             QuestionEntity existingQuestion = sourceTemplateQuestion.getQuestion();
+
+            if (!copiedQuestionIds.add(existingQuestion.getId())) {
+                continue;
+            }
 
             TemplateQuestionnaireQuestionEntity newTemplateQuestion = new TemplateQuestionnaireQuestionEntity();
             newTemplateQuestion.setTemplateQuestionnaire(newTemplate);

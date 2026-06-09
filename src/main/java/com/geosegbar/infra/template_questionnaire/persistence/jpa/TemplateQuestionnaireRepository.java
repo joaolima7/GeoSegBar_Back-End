@@ -18,7 +18,6 @@ public interface TemplateQuestionnaireRepository extends JpaRepository<TemplateQ
     @EntityGraph(attributePaths = {
         "templateQuestions",
         "templateQuestions.question",
-        "templateQuestions.question.options",
         "dam"
     })
     @Query("""
@@ -31,7 +30,6 @@ public interface TemplateQuestionnaireRepository extends JpaRepository<TemplateQ
     @EntityGraph(attributePaths = {
         "templateQuestions",
         "templateQuestions.question",
-        "templateQuestions.question.options",
         "dam",
         "dam.client"
     })
@@ -41,7 +39,6 @@ public interface TemplateQuestionnaireRepository extends JpaRepository<TemplateQ
     @EntityGraph(attributePaths = {
         "templateQuestions",
         "templateQuestions.question",
-        "templateQuestions.question.options",
         "dam"
     })
     @Query("SELECT t FROM TemplateQuestionnaireEntity t")
@@ -50,7 +47,6 @@ public interface TemplateQuestionnaireRepository extends JpaRepository<TemplateQ
     @EntityGraph(attributePaths = {
         "templateQuestions",
         "templateQuestions.question",
-        "templateQuestions.question.options",
         "dam"
     })
     @Query("SELECT t FROM TemplateQuestionnaireEntity t WHERE t.id IN :ids")

@@ -209,6 +209,10 @@ public class TemplateQuestionnaireService {
                 throw new InvalidInputException("Dados da questão inválidos (ID ou Texto/Tipo obrigatórios).");
             }
 
+            // Inicializa as opções dentro da transação para evitar LazyInitializationException
+            // na serialização da resposta (open-in-view=false).
+            org.hibernate.Hibernate.initialize(question.getOptions());
+
             TemplateQuestionnaireQuestionEntity templateQuestion = new TemplateQuestionnaireQuestionEntity();
             templateQuestion.setTemplateQuestionnaire(template);
             templateQuestion.setQuestion(question);
@@ -258,6 +262,10 @@ public class TemplateQuestionnaireService {
             } else {
                 throw new InvalidInputException("Dados da questão inválidos.");
             }
+
+            // Inicializa as opções dentro da transação para evitar LazyInitializationException
+            // na serialização da resposta (open-in-view=false).
+            org.hibernate.Hibernate.initialize(question.getOptions());
 
             TemplateQuestionnaireQuestionEntity templateQuestion = new TemplateQuestionnaireQuestionEntity();
             templateQuestion.setTemplateQuestionnaire(existingTemplate);

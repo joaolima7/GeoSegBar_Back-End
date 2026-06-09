@@ -655,7 +655,7 @@ public class ChecklistService {
         TemplateQuestionnaireEntity template = new TemplateQuestionnaireEntity();
         template.setName(templateDto.getName());
         template.setDam(dam);
-        template.setTemplateQuestions(new HashSet<>());
+        template.setTemplateQuestions(new ArrayList<>());
 
         template = templateQuestionnaireRepository.save(template);
 
@@ -1237,7 +1237,7 @@ public class ChecklistService {
                 TemplateQuestionnaireEntity newTemplate = new TemplateQuestionnaireEntity();
                 newTemplate.setName(sourceTemplate.getName());
                 newTemplate.setDam(targetDam);
-                newTemplate.setTemplateQuestions(new HashSet<>());
+                newTemplate.setTemplateQuestions(new ArrayList<>());
 
                 newTemplate = templateQuestionnaireRepository.save(newTemplate);
                 log.debug("Template replicado: {} com ID {}", newTemplate.getName(), newTemplate.getId());

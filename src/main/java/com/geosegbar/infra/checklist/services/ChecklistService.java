@@ -78,12 +78,14 @@ public class ChecklistService {
         return checklistRepository.findAllWithDams(pageable);
     }
 
+    @Transactional
     public ChecklistCompleteDTO findByIdDTO(Long id) {
         ChecklistEntity entity = checklistRepository.findByIdWithFullDetails(id)
                 .orElseThrow(() -> new NotFoundException("Checklist não encontrado para id: " + id));
         return convertToCompleteDTO(entity);
     }
 
+    @Transactional
     public ChecklistEntity findById(Long id) {
         return checklistRepository.findByIdWithFullDetails(id)
                 .orElseThrow(() -> new NotFoundException("Checklist não encontrada para id: " + id));
@@ -775,6 +777,7 @@ public class ChecklistService {
         }
     }
 
+    @Transactional
     public List<ChecklistCompleteDTO> findByDamIdDTO(Long damId) {
         ChecklistEntity checklist = checklistRepository.findByDamIdWithFullDetails(damId);
         if (checklist == null) {
@@ -783,6 +786,7 @@ public class ChecklistService {
         return List.of(convertToCompleteDTO(checklist));
     }
 
+    @Transactional
     public ChecklistCompleteDTO findChecklistForDamDTO(Long damId, Long checklistId) {
         ChecklistEntity checklist = findById(checklistId);
 
@@ -793,6 +797,7 @@ public class ChecklistService {
         }
     }
 
+    @Transactional
     public ChecklistEntity findChecklistForDam(Long damId, Long checklistId) {
         ChecklistEntity checklist = findById(checklistId);
 

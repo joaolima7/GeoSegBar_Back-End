@@ -22,9 +22,6 @@ public interface ChecklistRepository extends JpaRepository<ChecklistEntity, Long
     @EntityGraph(attributePaths = {
         "checklistTemplates",
         "checklistTemplates.templateQuestionnaire",
-        "checklistTemplates.templateQuestionnaire.templateQuestions",
-        "checklistTemplates.templateQuestionnaire.templateQuestions.question",
-        "checklistTemplates.templateQuestionnaire.templateQuestions.question.options",
         "dam"
     })
     @Query("SELECT DISTINCT c FROM ChecklistEntity c WHERE c.dam.id = :damId")
@@ -33,9 +30,6 @@ public interface ChecklistRepository extends JpaRepository<ChecklistEntity, Long
     @EntityGraph(attributePaths = {
         "checklistTemplates",
         "checklistTemplates.templateQuestionnaire",
-        "checklistTemplates.templateQuestionnaire.templateQuestions",
-        "checklistTemplates.templateQuestionnaire.templateQuestions.question",
-        "checklistTemplates.templateQuestionnaire.templateQuestions.question.options",
         "dam",
         "dam.client"
     })
@@ -45,9 +39,6 @@ public interface ChecklistRepository extends JpaRepository<ChecklistEntity, Long
     @EntityGraph(attributePaths = {
         "checklistTemplates",
         "checklistTemplates.templateQuestionnaire",
-        "checklistTemplates.templateQuestionnaire.templateQuestions",
-        "checklistTemplates.templateQuestionnaire.templateQuestions.question",
-        "checklistTemplates.templateQuestionnaire.templateQuestions.question.options",
         "dam",
         "dam.client"
     })

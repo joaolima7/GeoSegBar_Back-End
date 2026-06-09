@@ -8,6 +8,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
@@ -66,6 +68,7 @@ public class ChecklistEntity {
     @OneToMany(mappedBy = "checklist", fetch = FetchType.LAZY,
             cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("orderIndex ASC")
+    @Fetch(FetchMode.SUBSELECT)
     @JsonManagedReference
     private List<ChecklistTemplateEntity> checklistTemplates = new ArrayList<>();
 

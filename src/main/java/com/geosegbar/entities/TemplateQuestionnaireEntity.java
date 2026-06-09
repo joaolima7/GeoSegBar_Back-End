@@ -3,6 +3,9 @@ package com.geosegbar.entities;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 
@@ -52,6 +55,7 @@ public class TemplateQuestionnaireEntity {
     @OneToMany(mappedBy = "templateQuestionnaire", fetch = FetchType.LAZY,
             cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("orderIndex ASC")
+    @Fetch(FetchMode.SUBSELECT)
     @JsonManagedReference
     private List<TemplateQuestionnaireQuestionEntity> templateQuestions = new ArrayList<>();
 

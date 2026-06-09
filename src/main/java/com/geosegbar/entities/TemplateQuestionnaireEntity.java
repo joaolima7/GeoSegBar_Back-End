@@ -1,7 +1,7 @@
 package com.geosegbar.entities;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
@@ -17,6 +17,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
@@ -50,7 +51,8 @@ public class TemplateQuestionnaireEntity {
 
     @OneToMany(mappedBy = "templateQuestionnaire", fetch = FetchType.LAZY,
             cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("orderIndex ASC")
     @JsonManagedReference
-    private Set<TemplateQuestionnaireQuestionEntity> templateQuestions = new HashSet<>();
+    private List<TemplateQuestionnaireQuestionEntity> templateQuestions = new ArrayList<>();
 
 }

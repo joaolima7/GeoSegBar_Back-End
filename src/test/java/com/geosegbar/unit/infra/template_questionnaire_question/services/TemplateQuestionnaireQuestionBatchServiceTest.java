@@ -143,7 +143,8 @@ class TemplateQuestionnaireQuestionBatchServiceTest extends BaseUnitTest {
                         org.assertj.core.api.Assertions.tuple(3L, 2)
                 );
 
-        verify(tqQuestionRepository).delete(templateOneQuestionTwo);
+        verify(tqQuestionRepository).deleteByIdNative(1002L);
+        verify(tqQuestionRepository).flush();
     }
 
     private TemplateQuestionnaireEntity template(Long id, DamEntity dam) {

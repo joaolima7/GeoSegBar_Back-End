@@ -130,7 +130,8 @@ class ChecklistTemplateBatchServiceTest extends BaseUnitTest {
                         org.assertj.core.api.Assertions.tuple(3L, 2)
                 );
 
-        verify(checklistTemplateRepository).delete(associationTwo);
+        verify(checklistTemplateRepository).deleteByIdNative(102L);
+        verify(checklistTemplateRepository).flush();
     }
 
     private TemplateQuestionnaireEntity template(Long id) {

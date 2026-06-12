@@ -1,5 +1,6 @@
 package com.geosegbar.infra.question.services;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -86,16 +87,27 @@ public class QuestionService {
 
     @Transactional
     public QuestionEntity update(QuestionEntity question) {
+        return update(question, true, null);
+    }
+
+    /**
+     * Atualiza uma questão respeitando a política de propagação.
+     *
+     * <p>
+     * {@code applyToAll=true}: edita a questão in-place (reflete em todos os
+     * questionários que a usam). {@code applyToAll=false}: se a questão estiver
+     * em outros questionários além do {@code originTemplateId}, cria uma nova
+     * questão com as alterações e a substitui apenas nesse template (mesma
+     * posição); a questão original é preservada. Se não estiver em nenhum outro,
+     * edita in-place mesmo (não há motivo para duplicar).
+     */
+    @Transactional
+    public QuestionEntity update(QuestionEntity question, boolean applyToAll, Long originTemplateId) {
         QuestionEntity existingQuestion = questionRepository.findById(question.getId())
                 .orElseThrow(() -> new NotFoundException("Questão não encontrada para atualização!"));
 
-        if (question.getClient() == null || question.getClient().getId() == null) {
-            throw new InvalidInputException("Questão deve estar associada a um cliente!");
-        }
-
-        if (!clientRepository.existsById(question.getClient().getId())) {
-            throw new NotFoundException("Cliente não encontrado com ID: " + question.getClient().getId());
-        }
+        validateClient(question);
+        validateQuestionByType(question);
 
         boolean hasChanges = hasSignificantChanges(existingQuestion, question);
 
@@ -110,50 +122,126 @@ public class QuestionService {
             }
         }
 
-        validateQuestionByType(question);
-        QuestionEntity saved = questionRepository.save(question);
-
-        log.info("Questão {} atualizada.", question.getId());
-        return saved;
+        return applyQuestionUpdate(existingQuestion, question, applyToAll, originTemplateId, false);
     }
 
     @Transactional
     public QuestionEntity confirmUpdate(QuestionEntity question) {
+        return confirmUpdate(question, true, null);
+    }
+
+    @Transactional
+    public QuestionEntity confirmUpdate(QuestionEntity question, boolean applyToAll, Long originTemplateId) {
         log.warn("Atualização CONFIRMADA da questão {} que possui respostas registradas.", question.getId());
 
         QuestionEntity existingQuestion = questionRepository.findById(question.getId())
                 .orElseThrow(() -> new NotFoundException("Questão não encontrada para atualização!"));
 
-        if (question.getClient() == null || question.getClient().getId() == null) {
-            throw new InvalidInputException("Questão deve estar associada a um cliente!");
-        }
-
-        if (!clientRepository.existsById(question.getClient().getId())) {
-            throw new NotFoundException("Cliente não encontrado com ID: " + question.getClient().getId());
-        }
+        validateClient(question);
+        validateQuestionByType(question);
 
         List<com.geosegbar.entities.AnswerEntity> answers = answerRepository.findByQuestionIdWithDetails(question.getId());
         if (!answers.isEmpty()) {
             log.warn("ATENÇÃO: Atualizando questão '{}' que possui {} resposta(s) registrada(s). "
                     + "Esta operação pode impactar a consistência dos dados históricos.",
                     existingQuestion.getQuestionText(), answers.size());
-
-            if (!existingQuestion.getQuestionText().equals(question.getQuestionText())) {
-                log.warn("Texto alterado de '{}' para '{}'",
-                        existingQuestion.getQuestionText(), question.getQuestionText());
-            }
-
-            if (!existingQuestion.getType().equals(question.getType())) {
-                log.warn("Tipo alterado de '{}' para '{}'",
-                        existingQuestion.getType(), question.getType());
-            }
         }
 
-        validateQuestionByType(question);
-        QuestionEntity saved = questionRepository.save(question);
+        return applyQuestionUpdate(existingQuestion, question, applyToAll, originTemplateId, true);
+    }
 
-        log.info("Questão {} atualizada COM CONFIRMAÇÃO.", question.getId());
+    /**
+     * Núcleo compartilhado da atualização de questão com copy-on-write.
+     * Reaproveitado por {@link #update} e {@link #confirmUpdate}.
+     */
+    private QuestionEntity applyQuestionUpdate(
+            QuestionEntity existingQuestion,
+            QuestionEntity incoming,
+            boolean applyToAll,
+            Long originTemplateId,
+            boolean confirmed) {
+
+        // Propagar para todos: edição in-place na própria questão.
+        if (applyToAll) {
+            return saveInPlace(incoming, confirmed);
+        }
+
+        // Não propagar: só faz sentido copiar se a questão estiver em outros
+        // questionários além do template de origem. Caso contrário, edita in-place.
+        long otherUsages = (originTemplateId != null)
+                ? templateQuestionnaireQuestionRepository.countByQuestionIdAndTemplateIdNot(existingQuestion.getId(), originTemplateId)
+                : templateQuestionnaireQuestionRepository.countByQuestionId(existingQuestion.getId());
+
+        if (otherUsages == 0) {
+            log.info("Questão {} não está em outros questionários; aplicando edição in-place mesmo com applyToAll=false.",
+                    existingQuestion.getId());
+            return saveInPlace(incoming, confirmed);
+        }
+
+        // Questão compartilhada: precisa do template de origem para saber onde substituir.
+        if (originTemplateId == null) {
+            throw new InvalidInputException(
+                    "A questão está em outros questionários. Para alterá-la sem afetar os demais, "
+                    + "é necessário informar o templateId de origem da edição.");
+        }
+
+        return copyOnWrite(existingQuestion, incoming, originTemplateId, confirmed);
+    }
+
+    /**
+     * Cria uma nova questão com as alterações (reusando as mesmas OptionEntity)
+     * e a substitui no template de origem, na mesma posição. A questão original
+     * é preservada e continua disponível para revínculo.
+     */
+    private QuestionEntity copyOnWrite(
+            QuestionEntity existingQuestion,
+            QuestionEntity incoming,
+            Long originTemplateId,
+            boolean confirmed) {
+
+        com.geosegbar.entities.TemplateQuestionnaireQuestionEntity association
+                = templateQuestionnaireQuestionRepository
+                        .findByTemplateQuestionnaireIdAndQuestionId(originTemplateId, existingQuestion.getId())
+                        .orElseThrow(() -> new InvalidInputException(
+                        "A questão informada não está associada ao template de origem (templateId="
+                        + originTemplateId + ")."));
+
+        QuestionEntity copy = new QuestionEntity();
+        copy.setQuestionText(incoming.getQuestionText());
+        copy.setType(incoming.getType());
+        copy.setClient(existingQuestion.getClient());
+        // Reusa as mesmas OptionEntity (catálogo compartilhado).
+        copy.setOptions(incoming.getOptions() != null
+                ? new HashSet<>(incoming.getOptions()) : new HashSet<>());
+
+        QuestionEntity savedCopy = questionRepository.save(copy);
+
+        // Substitui a questão apenas nesta associação (mesmo orderIndex), mantendo
+        // a questão original intacta nas demais associações.
+        association.setQuestion(savedCopy);
+        templateQuestionnaireQuestionRepository.save(association);
+
+        log.info("Copy-on-write: questão {} substituída pela nova questão {} no template {} (orderIndex {}). "
+                + "Questão original preservada.{}",
+                existingQuestion.getId(), savedCopy.getId(), originTemplateId, association.getOrderIndex(),
+                confirmed ? " [CONFIRMADO]" : "");
+
+        return savedCopy;
+    }
+
+    private QuestionEntity saveInPlace(QuestionEntity question, boolean confirmed) {
+        QuestionEntity saved = questionRepository.save(question);
+        log.info("Questão {} atualizada in-place.{}", question.getId(), confirmed ? " [CONFIRMADO]" : "");
         return saved;
+    }
+
+    private void validateClient(QuestionEntity question) {
+        if (question.getClient() == null || question.getClient().getId() == null) {
+            throw new InvalidInputException("Questão deve estar associada a um cliente!");
+        }
+        if (!clientRepository.existsById(question.getClient().getId())) {
+            throw new NotFoundException("Cliente não encontrado com ID: " + question.getClient().getId());
+        }
     }
 
     private boolean hasSignificantChanges(QuestionEntity existing, QuestionEntity updated) {

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.QuestionEntity;
+import com.geosegbar.infra.question.dtos.QuestionUpdateRequestDTO;
 import com.geosegbar.infra.question.services.QuestionService;
 
 import jakarta.validation.Valid;
@@ -59,17 +60,25 @@ public class QuestionController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<WebResponseEntity<QuestionEntity>> updateQuestion(@PathVariable Long id, @Valid @RequestBody QuestionEntity question) {
+    public ResponseEntity<WebResponseEntity<QuestionEntity>> updateQuestion(
+            @PathVariable Long id,
+            @Valid @RequestBody QuestionUpdateRequestDTO request) {
+        QuestionEntity question = request.getQuestion();
         question.setId(id);
-        QuestionEntity updated = questionService.update(question);
+        boolean applyToAll = request.getApplyToAll() == null || request.getApplyToAll();
+        QuestionEntity updated = questionService.update(question, applyToAll, request.getTemplateId());
         WebResponseEntity<QuestionEntity> response = WebResponseEntity.success(updated, "Questão atualizada com sucesso!");
         return ResponseEntity.ok(response);
     }
 
     @PutMapping("/{id}/confirm-update")
-    public ResponseEntity<WebResponseEntity<QuestionEntity>> confirmUpdateQuestion(@PathVariable Long id, @Valid @RequestBody QuestionEntity question) {
+    public ResponseEntity<WebResponseEntity<QuestionEntity>> confirmUpdateQuestion(
+            @PathVariable Long id,
+            @Valid @RequestBody QuestionUpdateRequestDTO request) {
+        QuestionEntity question = request.getQuestion();
         question.setId(id);
-        QuestionEntity updated = questionService.confirmUpdate(question);
+        boolean applyToAll = request.getApplyToAll() == null || request.getApplyToAll();
+        QuestionEntity updated = questionService.confirmUpdate(question, applyToAll, request.getTemplateId());
         WebResponseEntity<QuestionEntity> response = WebResponseEntity.success(
                 updated,
                 "Questão atualizada com sucesso!"

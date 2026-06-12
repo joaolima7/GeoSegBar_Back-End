@@ -37,6 +37,14 @@ public interface TemplateQuestionnaireQuestionRepository extends JpaRepository<T
     @Query("SELECT COUNT(tq) FROM TemplateQuestionnaireQuestionEntity tq WHERE tq.templateQuestionnaire.id = :templateId")
     int countQuestionsByTemplateId(@Param("templateId") Long templateId);
 
+    @Query("SELECT COUNT(tq) FROM TemplateQuestionnaireQuestionEntity tq WHERE tq.question.id = :questionId")
+    long countByQuestionId(@Param("questionId") Long questionId);
+
+    @Query("SELECT COUNT(tq) FROM TemplateQuestionnaireQuestionEntity tq "
+            + "WHERE tq.question.id = :questionId AND tq.templateQuestionnaire.id <> :templateId")
+    long countByQuestionIdAndTemplateIdNot(
+            @Param("questionId") Long questionId, @Param("templateId") Long templateId);
+
     @Modifying
     @Query("DELETE FROM TemplateQuestionnaireQuestionEntity tqq WHERE tqq.id = :id")
     void deleteByIdNative(@Param("id") Long id);

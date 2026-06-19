@@ -14,6 +14,7 @@ import com.geosegbar.entities.DeterministicLimitEntity;
 import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.entities.OutputEntity;
 import com.geosegbar.entities.StatisticalLimitEntity;
+import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.instrument_graph_customization_properties.dtos.UpdateGraphPropertiesRequestDTO;
 import com.geosegbar.infra.instrument_graph_customization_properties.dtos.UpdateGraphPropertiesRequestDTO.DeterministicLimitValueReference;
 import com.geosegbar.infra.instrument_graph_customization_properties.dtos.UpdateGraphPropertiesRequestDTO.StatisticalLimitValueReference;
@@ -35,10 +36,24 @@ public class AutoPatternCreationService {
     private final InstrumentGraphPatternService graphPatternService;
     private final InstrumentTabulatePatternService tabulatePatternService;
     private final InstrumentGraphCustomizationPropertiesService propertiesService;
+    private final InstrumentRepository instrumentRepository;
 
     @Async
     @Transactional
-    public void createPatternsForInstrument(InstrumentEntity instrument) {
+    public void createPatternsForInstrument(InstrumentEntity detachedInstrument) {
+
+        Long instrumentId = detachedInstrument.getId();
+
+        // Recarrega o instrumento na transação/thread atual. O evento é disparado
+        // AFTER_COMMIT e processado de forma assíncrona, então a entidade recebida
+        // está detached (e suas coleções lazy não podem ser acessadas aqui).
+        InstrumentEntity instrument = instrumentRepository.findWithActiveOutputsById(instrumentId)
+                .orElse(null);
+
+        if (instrument == null) {
+            log.error("Instrumento {} não encontrado ao criar padrões automáticos. Padrões não criados.", instrumentId);
+            return;
+        }
 
         if (Boolean.TRUE.equals(instrument.getIsLinimetricRuler())) {
             log.debug("Ignorando criação de padrões para régua linimétrica: {}", instrument.getId());

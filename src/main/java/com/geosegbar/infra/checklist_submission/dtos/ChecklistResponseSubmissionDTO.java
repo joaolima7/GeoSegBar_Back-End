@@ -1,5 +1,6 @@
 package com.geosegbar.infra.checklist_submission.dtos;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -64,6 +65,10 @@ public class ChecklistResponseSubmissionDTO {
     private Double accumulatedRainfall;
 
     private WeatherConditionEnum weatherCondition;
+
+    private LocalDateTime startedAt;
+
+    private LocalDateTime finishedAt;
 
     @Valid
     private List<OtherSubmissionDTO> others;

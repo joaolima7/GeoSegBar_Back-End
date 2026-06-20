@@ -314,6 +314,8 @@ public class ChecklistResponseService {
         dto.setChecklistName(checklistResponse.getChecklistName());
         dto.setChecklistId(checklistResponse.getChecklistId());
         dto.setCreatedAt(checklistResponse.getCreatedAt());
+        dto.setStartedAt(checklistResponse.getStartedAt());
+        dto.setFinishedAt(checklistResponse.getFinishedAt());
 
         if (checklistResponse.getUser() != null) {
             dto.setUserId(checklistResponse.getUser().getId());

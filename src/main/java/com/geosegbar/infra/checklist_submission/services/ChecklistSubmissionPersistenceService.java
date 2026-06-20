@@ -536,6 +536,8 @@ public class ChecklistSubmissionPersistenceService {
         checklistResponse.setTurbinedFlow(formatToTwoDecimals(submissionDto.getTurbinedFlow()));
         checklistResponse.setAccumulatedRainfall(formatToTwoDecimals(submissionDto.getAccumulatedRainfall()));
         checklistResponse.setWeatherCondition(submissionDto.getWeatherCondition());
+        checklistResponse.setStartedAt(submissionDto.getStartedAt());
+        checklistResponse.setFinishedAt(submissionDto.getFinishedAt());
 
         return checklistResponseRepository.save(checklistResponse);
     }

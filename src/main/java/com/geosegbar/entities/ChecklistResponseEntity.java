@@ -98,4 +98,10 @@ public class ChecklistResponseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "weather_condition", length = 50)
     private WeatherConditionEnum weatherCondition;
+
+    @Column(name = "started_at")
+    private LocalDateTime startedAt;
+
+    @Column(name = "finished_at")
+    private LocalDateTime finishedAt;
 }

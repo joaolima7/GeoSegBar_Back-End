@@ -18,6 +18,8 @@ public class ChecklistResponseDetailDTO {
     private String checklistName;
     private Long checklistId;
     private LocalDateTime createdAt;
+    private LocalDateTime startedAt;
+    private LocalDateTime finishedAt;
     private Long userId;
     private String userName;
     private DamInfoDTO dam;

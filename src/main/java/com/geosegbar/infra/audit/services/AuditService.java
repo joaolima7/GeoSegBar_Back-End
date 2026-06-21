@@ -116,7 +116,7 @@ public class AuditService {
         return auditLogRepository.findSummaries(
                 f.getStartDate(), f.getEndDate(), f.getActorUserId(),
                 likePattern(f.getActorEmail()), likePattern(f.getAction()),
-                f.getStatus(), f.getSource(), normalize(f.getHttpMethod()),
+                enumName(f.getStatus()), enumName(f.getSource()), normalize(f.getHttpMethod()),
                 f.getEntityType(), f.getEntityId(), pageable)
                 .map(AuditLogSummaryDTO::fromProjection);
     }
@@ -128,7 +128,7 @@ public class AuditService {
         return auditLogRepository.findDetails(
                 f.getStartDate(), f.getEndDate(), f.getActorUserId(),
                 likePattern(f.getActorEmail()), likePattern(f.getAction()),
-                f.getStatus(), f.getSource(), normalize(f.getHttpMethod()),
+                enumName(f.getStatus()), enumName(f.getSource()), normalize(f.getHttpMethod()),
                 f.getEntityType(), f.getEntityId(), pageable)
                 .map(AuditLogDetailDTO::fromProjection);
     }
@@ -161,6 +161,14 @@ public class AuditService {
             return null;
         }
         return httpMethod.trim().toUpperCase();
+    }
+
+    /**
+     * Nome do enum (ex.: "SUCCESS", "HTTP") para comparação por string na query;
+     * null quando o filtro não foi informado.
+     */
+    private String enumName(Enum<?> value) {
+        return value != null ? value.name() : null;
     }
 
     // ---- Construção da entidade ----

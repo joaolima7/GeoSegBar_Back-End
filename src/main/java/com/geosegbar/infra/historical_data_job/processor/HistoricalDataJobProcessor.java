@@ -13,10 +13,14 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.geosegbar.common.enums.AuditSource;
+import com.geosegbar.common.enums.AuditStatus;
 import com.geosegbar.common.response.AnaTelemetryResponse.TelemetryItem;
 import com.geosegbar.entities.HistoricalDataJobEntity;
 import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.exceptions.ExternalApiException;
+import com.geosegbar.infra.audit.services.AuditContext;
+import com.geosegbar.infra.audit.services.AuditService;
 import com.geosegbar.infra.historical_data_job.service.HistoricalDataJobService;
 import com.geosegbar.infra.hydrotelemetric.services.AnaApiService;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
@@ -43,10 +47,15 @@ public class HistoricalDataJobProcessor {
     private static final int DAYS_PER_REQUEST = 30;
     private static final String INPUT_ACRONYM = "LEI";
 
+    private static final String ACTION = "JOB_HISTORICAL_DATA";
+    private static final String ACTION_LABEL = "Coleta de dados históricos";
+    private static final String ENTITY_TYPE = "HistoricalDataJob";
+
     private final HistoricalDataJobService jobService;
     private final InstrumentRepository instrumentRepository;
     private final AnaApiService anaApiService;
     private final ReadingService readingService;
+    private final AuditService auditService;
 
     /**
      * Processa um job completo de coleta histórica
@@ -84,6 +93,13 @@ public class HistoricalDataJobProcessor {
 
             jobService.markAsCompleted(jobId);
             log.info("✅ Job {} COMPLETADO com sucesso", jobId);
+
+            auditService.record(AuditContext.builder()
+                    .action(ACTION).actionLabel(ACTION_LABEL).source(AuditSource.JOB)
+                    .status(AuditStatus.SUCCESS)
+                    .message("Coleta histórica concluída para o instrumento " + instrument.getName() + ".")
+                    .entityType(ENTITY_TYPE).entityId(jobId)
+                    .build());
 
             return CompletableFuture.completedFuture(null);
 
@@ -289,6 +305,13 @@ public class HistoricalDataJobProcessor {
             } else {
                 jobService.markAsFailed(jobId, "Falhou após 3 tentativas: " + e.getMessage());
                 log.error("Job {} FALHOU definitivamente após retries", jobId);
+                auditService.record(AuditContext.builder()
+                        .action(ACTION).actionLabel(ACTION_LABEL).source(AuditSource.JOB)
+                        .status(AuditStatus.ERROR)
+                        .message("Coleta histórica falhou após 3 tentativas (erro de API externa).")
+                        .error(e)
+                        .entityType(ENTITY_TYPE).entityId(jobId)
+                        .build());
             }
         } catch (Exception ex) {
             log.error("Erro ao marcar job como pausado/falho: {}", ex.getMessage());
@@ -309,6 +332,13 @@ public class HistoricalDataJobProcessor {
                 errorMessage = errorMessage.substring(0, 1997) + "...";
             }
             jobService.markAsFailed(jobId, errorMessage);
+            auditService.record(AuditContext.builder()
+                    .action(ACTION).actionLabel(ACTION_LABEL).source(AuditSource.JOB)
+                    .status(AuditStatus.ERROR)
+                    .message("Coleta histórica falhou (erro não recuperável).")
+                    .error(e)
+                    .entityType(ENTITY_TYPE).entityId(jobId)
+                    .build());
         } catch (Exception ex) {
             log.error("Erro ao marcar job como falho: {}", ex.getMessage());
         }

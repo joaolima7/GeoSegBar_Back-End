@@ -5,6 +5,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import com.geosegbar.common.utils.ClientIpUtil;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.RateLimitExceededException;
 
@@ -62,7 +63,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             log.debug("Rate limit check - Authenticated user: {}, ID: {}", user.getEmail(), identifier);
         } else {
             // Usuário não autenticado - limita por IP
-            identifier = extractClientIp(request);
+            identifier = ClientIpUtil.extractClientIp(request);
             type = RateLimitType.PUBLIC;
 
             log.debug("Rate limit check - Public request from IP: {}", identifier);
@@ -103,42 +104,4 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         response.setHeader("X-RateLimit-Reset", String.valueOf(info.getSecondsUntilRefill()));
     }
 
-    /**
-     * Extrai o endereço IP real do cliente, considerando proxies e load
-     * balancers.
-     * <p>
-     * Verifica os seguintes headers em ordem: 1. X-Forwarded-For (padrão de
-     * proxies) 2. X-Real-IP (Nginx) 3. RemoteAddr (direto)
-     *
-     * @param request Requisição HTTP
-     * @return Endereço IP do cliente
-     */
-    private String extractClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-
-        if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
-            // X-Forwarded-For pode conter múltiplos IPs separados por vírgula
-            // O primeiro é o IP real do cliente
-            int commaIndex = ip.indexOf(',');
-            if (commaIndex > 0) {
-                ip = ip.substring(0, commaIndex).trim();
-            }
-            return ip;
-        }
-
-        ip = request.getHeader("X-Real-IP");
-        if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
-            return ip;
-        }
-
-        // Fallback para RemoteAddr
-        ip = request.getRemoteAddr();
-
-        // Normaliza localhost IPv6 para IPv4
-        if ("0:0:0:0:0:0:0:1".equals(ip) || "::1".equals(ip)) {
-            ip = "127.0.0.1";
-        }
-
-        return ip;
-    }
 }

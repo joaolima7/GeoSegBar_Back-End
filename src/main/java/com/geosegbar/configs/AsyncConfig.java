@@ -55,4 +55,24 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    /**
+     * Thread pool dedicado à persistência de registros de auditoria. Mantido
+     * separado dos pools de negócio para que a auditoria nunca compita por
+     * recursos com operações críticas. CallerRunsPolicy garante que, sob carga,
+     * o registro seja gravado no próprio thread em vez de descartado.
+     */
+    @Bean(name = "auditExecutor")
+    public Executor auditExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(1000);
+        executor.setThreadNamePrefix("audit-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        executor.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        return executor;
+    }
 }

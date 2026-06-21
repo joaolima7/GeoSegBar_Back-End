@@ -22,8 +22,12 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.geosegbar.configs.filters.GzipRequestDecompressingFilter;
 import com.geosegbar.configs.filters.RequestBodyCachingFilter;
+import com.geosegbar.infra.audit.config.AuditProperties;
+import com.geosegbar.infra.audit.filter.AuditLogFilter;
+import com.geosegbar.infra.audit.services.AuditService;
 
 @Configuration
 @EnableWebSecurity
@@ -86,6 +90,21 @@ public class SecurityConfig {
         registration.setFilter(new RequestBodyCachingFilter());
         registration.addUrlPatterns("/*");
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        return registration;
+    }
+
+    /**
+     * Filtro de auditoria. Registrado logo após o cache do corpo da requisição,
+     * de forma que ele já tenha o body disponível e envolva a resposta antes do
+     * restante da cadeia (Security, controllers).
+     */
+    @Bean
+    public FilterRegistrationBean<AuditLogFilter> auditLogFilter(
+            AuditService auditService, AuditProperties auditProperties, ObjectMapper objectMapper) {
+        FilterRegistrationBean<AuditLogFilter> registration = new FilterRegistrationBean<>();
+        registration.setFilter(new AuditLogFilter(auditService, auditProperties, objectMapper));
+        registration.addUrlPatterns("/*");
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
         return registration;
     }
 

@@ -8,12 +8,16 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.geosegbar.common.enums.AuditSource;
+import com.geosegbar.common.enums.AuditStatus;
 import com.geosegbar.common.enums.LimitValueTypeEnum;
 import com.geosegbar.entities.ConstantEntity;
 import com.geosegbar.entities.DeterministicLimitEntity;
 import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.entities.OutputEntity;
 import com.geosegbar.entities.StatisticalLimitEntity;
+import com.geosegbar.infra.audit.services.AuditContext;
+import com.geosegbar.infra.audit.services.AuditService;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.instrument_graph_customization_properties.dtos.UpdateGraphPropertiesRequestDTO;
 import com.geosegbar.infra.instrument_graph_customization_properties.dtos.UpdateGraphPropertiesRequestDTO.DeterministicLimitValueReference;
@@ -33,16 +37,22 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class AutoPatternCreationService {
 
+    private static final String ACTION = "AUTO_PATTERN_CREATION";
+    private static final String ACTION_LABEL = "Criação automática de padrões do instrumento";
+
     private final InstrumentGraphPatternService graphPatternService;
     private final InstrumentTabulatePatternService tabulatePatternService;
     private final InstrumentGraphCustomizationPropertiesService propertiesService;
     private final InstrumentRepository instrumentRepository;
+    private final AuditService auditService;
 
     @Async
     @Transactional
     public void createPatternsForInstrument(InstrumentEntity detachedInstrument) {
 
         Long instrumentId = detachedInstrument.getId();
+        long start = System.nanoTime();
+        String traceId = auditService.newTraceId();
 
         // Recarrega o instrumento na transação/thread atual. O evento é disparado
         // AFTER_COMMIT e processado de forma assíncrona, então a entidade recebida
@@ -52,6 +62,13 @@ public class AutoPatternCreationService {
 
         if (instrument == null) {
             log.error("Instrumento {} não encontrado ao criar padrões automáticos. Padrões não criados.", instrumentId);
+            auditService.record(AuditContext.builder()
+                    .action(ACTION).actionLabel(ACTION_LABEL).source(AuditSource.ASYNC)
+                    .status(AuditStatus.ERROR)
+                    .message("Instrumento não encontrado ao criar padrões automáticos.")
+                    .entityType("Instrument").entityId(instrumentId)
+                    .traceId(traceId).durationMs(durationMs(start))
+                    .build());
             return;
         }
 
@@ -72,10 +89,29 @@ public class AutoPatternCreationService {
             createTabulatePatternForInstrument(instrument);
 
             log.info("Padrões de gráfico e tabela criados com sucesso para o instrumento: {}", instrument.getId());
+            auditService.record(AuditContext.builder()
+                    .action(ACTION).actionLabel(ACTION_LABEL).source(AuditSource.ASYNC)
+                    .status(AuditStatus.SUCCESS)
+                    .message("Padrões de gráfico e tabela criados para o instrumento " + instrument.getName() + ".")
+                    .entityType("Instrument").entityId(instrument.getId())
+                    .traceId(traceId).durationMs(durationMs(start))
+                    .build());
         } catch (Exception e) {
             log.error("Erro ao criar padrões automáticos para o instrumento {}: {}",
                     instrument.getId(), e.getMessage(), e);
+            auditService.record(AuditContext.builder()
+                    .action(ACTION).actionLabel(ACTION_LABEL).source(AuditSource.ASYNC)
+                    .status(AuditStatus.ERROR)
+                    .message("Falha ao criar padrões automáticos para o instrumento " + instrument.getName() + ".")
+                    .error(e)
+                    .entityType("Instrument").entityId(instrument.getId())
+                    .traceId(traceId).durationMs(durationMs(start))
+                    .build());
         }
+    }
+
+    private long durationMs(long startNanos) {
+        return (System.nanoTime() - startNanos) / 1_000_000;
     }
 
     @Transactional

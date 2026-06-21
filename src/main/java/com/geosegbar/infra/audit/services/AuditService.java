@@ -54,15 +54,21 @@ public class AuditService {
      */
     public void record(AuditContext ctx) {
         if (!auditProperties.isEnabled() || ctx == null) {
+            log.info("[AUDIT] IGNORADO (enabled={}, ctx={})",
+                    auditProperties.isEnabled(), ctx != null);
             return;
         }
 
         try {
             AuditLogEntity entity = toEntity(ctx);
+            log.info("[AUDIT] >>> PUBLICANDO evento: action={} status={} source={} actorUserId={} actorLabel={} httpStatus={} endpoint={}",
+                    entity.getAction(), entity.getStatus(), entity.getSource(),
+                    entity.getActorUserId(), entity.getActorLabel(),
+                    entity.getHttpStatus(), entity.getEndpoint());
             eventPublisher.publishEvent(new AuditEvent(entity));
         } catch (Exception e) {
             // Auditar nunca pode quebrar o fluxo de origem.
-            log.error("Falha ao montar/registrar auditoria (action={}): {}",
+            log.error("[AUDIT] Falha ao montar/registrar auditoria (action={}): {}",
                     ctx.getAction(), e.getMessage(), e);
         }
     }

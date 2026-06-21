@@ -56,9 +56,13 @@ public class AuditLogFilter extends OncePerRequestFilter {
             FilterChain filterChain) throws ServletException, IOException {
 
         if (!auditProperties.isEnabled() || !shouldAudit(request)) {
+            log.info("[AUDIT] filtro PULOU {} {} (enabled={})",
+                    request.getMethod(), request.getRequestURI(), auditProperties.isEnabled());
             filterChain.doFilter(request, response);
             return;
         }
+
+        log.info("[AUDIT] filtro VAI AUDITAR {} {}", request.getMethod(), request.getRequestURI());
 
         ContentCachingResponseWrapper responseWrapper = new ContentCachingResponseWrapper(response);
         long startNanos = System.nanoTime();
@@ -70,7 +74,7 @@ public class AuditLogFilter extends OncePerRequestFilter {
                 long durationMs = (System.nanoTime() - startNanos) / 1_000_000;
                 buildAndRecord(request, responseWrapper, durationMs);
             } catch (Exception e) {
-                log.error("Falha ao auditar requisição {} {}: {}",
+                log.error("[AUDIT] Falha ao auditar requisição {} {}: {}",
                         request.getMethod(), request.getRequestURI(), e.getMessage(), e);
             } finally {
                 // Sempre devolve o corpo bufferizado ao cliente.

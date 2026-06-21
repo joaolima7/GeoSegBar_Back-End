@@ -3,7 +3,9 @@ package com.geosegbar.infra.audit.services;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -22,6 +24,7 @@ import com.geosegbar.infra.audit.dtos.AuditLogFilterDTO;
 import com.geosegbar.infra.audit.dtos.AuditLogSummaryDTO;
 import com.geosegbar.infra.audit.events.AuditEvent;
 import com.geosegbar.infra.audit.persistence.jpa.AuditLogRepository;
+import com.geosegbar.infra.user.persistence.jpa.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +50,16 @@ public class AuditService {
     private final ApplicationEventPublisher eventPublisher;
     private final AuditProperties auditProperties;
     private final AuditLogRepository auditLogRepository;
+    private final UserRepository userRepository;
+
+    @Value("${application.system-user-email}")
+    private String systemUserEmail;
+
+    /**
+     * ID do usuário SISTEMA, resolvido sob demanda e cacheado (não muda em
+     * runtime). Usado para vincular jobs/tarefas automáticas ao usuário real.
+     */
+    private final AtomicReference<Long> systemUserIdCache = new AtomicReference<>();
 
     /**
      * Registra uma ação a partir de um contexto já montado (usado pelo filtro
@@ -83,7 +96,6 @@ public class AuditService {
                 .source(source != null ? source : AuditSource.SCHEDULED)
                 .status(AuditStatus.SUCCESS)
                 .message(message)
-                .actorLabel(ACTOR_SYSTEM_JOB)
                 .traceId(traceId)
                 .durationMs(durationMs)
                 .build());
@@ -98,10 +110,31 @@ public class AuditService {
                 .status(AuditStatus.ERROR)
                 .message(message)
                 .error(error)
-                .actorLabel(ACTOR_SYSTEM_JOB)
                 .traceId(traceId)
                 .durationMs(durationMs)
                 .build());
+    }
+
+    /**
+     * Resolve (e cacheia) o ID do usuário SISTEMA a partir do e-mail configurado.
+     * Usado para vincular jobs/tarefas automáticas ao usuário real. Se não for
+     * possível resolver, o chamador cai em rótulo textual — nunca quebra.
+     */
+    private Long resolveSystemUserId() {
+        Long cached = systemUserIdCache.get();
+        if (cached != null) {
+            return cached;
+        }
+        try {
+            Long id = userRepository.findSystemUserIdByEmail(systemUserEmail).orElse(null);
+            if (id != null) {
+                systemUserIdCache.set(id);
+            }
+            return id;
+        } catch (Exception e) {
+            log.warn("[AUDIT] Não foi possível resolver o usuário SISTEMA para auditar job: {}", e.getMessage());
+            return null;
+        }
     }
 
     /**
@@ -219,9 +252,14 @@ public class AuditService {
      * nome/e-mail/role são resolvidos por JOIN na leitura) ou, para atores sem
      * conta, um rótulo textual de fallback.
      * <p>
-     * Precedência: 1) {@code actorUserId} explícito no contexto; 2) usuário do
-     * {@code SecurityContext}; 3) {@code actorLabel} explícito (ex.: e-mail
-     * tentado em login que falhou, ou "Sistema (Job)"); 4) anônimo.
+     * Precedência:
+     * <ol>
+     *   <li>{@code actorUserId} explícito no contexto;</li>
+     *   <li>usuário do {@code SecurityContext} (requisições HTTP autenticadas);</li>
+     *   <li>fontes não-HTTP (jobs/async/scheduled) → usuário SISTEMA real;</li>
+     *   <li>{@code actorLabel} explícito (ex.: e-mail tentado em login que falhou);</li>
+     *   <li>"Anônimo/Não autenticado".</li>
+     * </ol>
      */
     private void applyActor(AuditLogEntity.AuditLogEntityBuilder builder, AuditContext ctx) {
         if (ctx.getActorUserId() != null) {
@@ -232,6 +270,18 @@ public class AuditService {
         UserEntity user = resolveCurrentUser();
         if (user != null) {
             builder.actorUserId(user.getId());
+            return;
+        }
+
+        // Tarefas automáticas do sistema (jobs/async/scheduled) → usuário SISTEMA real.
+        if (ctx.getSource() != null && ctx.getSource() != AuditSource.HTTP) {
+            Long systemUserId = resolveSystemUserId();
+            if (systemUserId != null) {
+                builder.actorUserId(systemUserId);
+            } else {
+                // Fallback textual caso o usuário SISTEMA não possa ser resolvido.
+                builder.actorLabel(ACTOR_SYSTEM_JOB);
+            }
             return;
         }
 

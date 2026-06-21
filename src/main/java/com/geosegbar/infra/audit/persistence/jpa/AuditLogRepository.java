@@ -39,31 +39,31 @@ public interface AuditLogRepository extends JpaRepository<AuditLogEntity, Long> 
                    a.message AS message
             FROM AuditLogEntity a
             LEFT JOIN UserEntity u ON u.id = a.actorUserId
-            WHERE (:startDate IS NULL OR a.occurredAt >= :startDate)
-              AND (:endDate IS NULL OR a.occurredAt <= :endDate)
-              AND (:actorUserId IS NULL OR a.actorUserId = :actorUserId)
-              AND (:actorEmail IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :actorEmail, '%')))
-              AND (:action IS NULL OR LOWER(a.action) LIKE LOWER(CONCAT('%', :action, '%')))
+            WHERE (CAST(:startDate AS timestamp) IS NULL OR a.occurredAt >= :startDate)
+              AND (CAST(:endDate AS timestamp) IS NULL OR a.occurredAt <= :endDate)
+              AND (CAST(:actorUserId AS long) IS NULL OR a.actorUserId = :actorUserId)
+              AND (CAST(:actorEmail AS string) IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :actorEmail, '%')))
+              AND (CAST(:action AS string) IS NULL OR LOWER(a.action) LIKE LOWER(CONCAT('%', :action, '%')))
               AND (:status IS NULL OR a.status = :status)
               AND (:source IS NULL OR a.source = :source)
-              AND (:httpMethod IS NULL OR UPPER(a.httpMethod) = UPPER(:httpMethod))
-              AND (:entityType IS NULL OR a.entityType = :entityType)
-              AND (:entityId IS NULL OR a.entityId = :entityId)
+              AND (CAST(:httpMethod AS string) IS NULL OR UPPER(a.httpMethod) = UPPER(:httpMethod))
+              AND (CAST(:entityType AS string) IS NULL OR a.entityType = :entityType)
+              AND (CAST(:entityId AS long) IS NULL OR a.entityId = :entityId)
             """,
             countQuery = """
             SELECT COUNT(a)
             FROM AuditLogEntity a
             LEFT JOIN UserEntity u ON u.id = a.actorUserId
-            WHERE (:startDate IS NULL OR a.occurredAt >= :startDate)
-              AND (:endDate IS NULL OR a.occurredAt <= :endDate)
-              AND (:actorUserId IS NULL OR a.actorUserId = :actorUserId)
-              AND (:actorEmail IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :actorEmail, '%')))
-              AND (:action IS NULL OR LOWER(a.action) LIKE LOWER(CONCAT('%', :action, '%')))
+            WHERE (CAST(:startDate AS timestamp) IS NULL OR a.occurredAt >= :startDate)
+              AND (CAST(:endDate AS timestamp) IS NULL OR a.occurredAt <= :endDate)
+              AND (CAST(:actorUserId AS long) IS NULL OR a.actorUserId = :actorUserId)
+              AND (CAST(:actorEmail AS string) IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :actorEmail, '%')))
+              AND (CAST(:action AS string) IS NULL OR LOWER(a.action) LIKE LOWER(CONCAT('%', :action, '%')))
               AND (:status IS NULL OR a.status = :status)
               AND (:source IS NULL OR a.source = :source)
-              AND (:httpMethod IS NULL OR UPPER(a.httpMethod) = UPPER(:httpMethod))
-              AND (:entityType IS NULL OR a.entityType = :entityType)
-              AND (:entityId IS NULL OR a.entityId = :entityId)
+              AND (CAST(:httpMethod AS string) IS NULL OR UPPER(a.httpMethod) = UPPER(:httpMethod))
+              AND (CAST(:entityType AS string) IS NULL OR a.entityType = :entityType)
+              AND (CAST(:entityId AS long) IS NULL OR a.entityId = :entityId)
             """)
     Page<AuditLogSummaryProjection> findSummaries(
             @Param("startDate") LocalDateTime startDate,
@@ -112,31 +112,31 @@ public interface AuditLogRepository extends JpaRepository<AuditLogEntity, Long> 
                    a.entityId AS entityId
             FROM AuditLogEntity a
             LEFT JOIN UserEntity u ON u.id = a.actorUserId
-            WHERE (:startDate IS NULL OR a.occurredAt >= :startDate)
-              AND (:endDate IS NULL OR a.occurredAt <= :endDate)
-              AND (:actorUserId IS NULL OR a.actorUserId = :actorUserId)
-              AND (:actorEmail IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :actorEmail, '%')))
-              AND (:action IS NULL OR LOWER(a.action) LIKE LOWER(CONCAT('%', :action, '%')))
+            WHERE (CAST(:startDate AS timestamp) IS NULL OR a.occurredAt >= :startDate)
+              AND (CAST(:endDate AS timestamp) IS NULL OR a.occurredAt <= :endDate)
+              AND (CAST(:actorUserId AS long) IS NULL OR a.actorUserId = :actorUserId)
+              AND (CAST(:actorEmail AS string) IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :actorEmail, '%')))
+              AND (CAST(:action AS string) IS NULL OR LOWER(a.action) LIKE LOWER(CONCAT('%', :action, '%')))
               AND (:status IS NULL OR a.status = :status)
               AND (:source IS NULL OR a.source = :source)
-              AND (:httpMethod IS NULL OR UPPER(a.httpMethod) = UPPER(:httpMethod))
-              AND (:entityType IS NULL OR a.entityType = :entityType)
-              AND (:entityId IS NULL OR a.entityId = :entityId)
+              AND (CAST(:httpMethod AS string) IS NULL OR UPPER(a.httpMethod) = UPPER(:httpMethod))
+              AND (CAST(:entityType AS string) IS NULL OR a.entityType = :entityType)
+              AND (CAST(:entityId AS long) IS NULL OR a.entityId = :entityId)
             """,
             countQuery = """
             SELECT COUNT(a)
             FROM AuditLogEntity a
             LEFT JOIN UserEntity u ON u.id = a.actorUserId
-            WHERE (:startDate IS NULL OR a.occurredAt >= :startDate)
-              AND (:endDate IS NULL OR a.occurredAt <= :endDate)
-              AND (:actorUserId IS NULL OR a.actorUserId = :actorUserId)
-              AND (:actorEmail IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :actorEmail, '%')))
-              AND (:action IS NULL OR LOWER(a.action) LIKE LOWER(CONCAT('%', :action, '%')))
+            WHERE (CAST(:startDate AS timestamp) IS NULL OR a.occurredAt >= :startDate)
+              AND (CAST(:endDate AS timestamp) IS NULL OR a.occurredAt <= :endDate)
+              AND (CAST(:actorUserId AS long) IS NULL OR a.actorUserId = :actorUserId)
+              AND (CAST(:actorEmail AS string) IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :actorEmail, '%')))
+              AND (CAST(:action AS string) IS NULL OR LOWER(a.action) LIKE LOWER(CONCAT('%', :action, '%')))
               AND (:status IS NULL OR a.status = :status)
               AND (:source IS NULL OR a.source = :source)
-              AND (:httpMethod IS NULL OR UPPER(a.httpMethod) = UPPER(:httpMethod))
-              AND (:entityType IS NULL OR a.entityType = :entityType)
-              AND (:entityId IS NULL OR a.entityId = :entityId)
+              AND (CAST(:httpMethod AS string) IS NULL OR UPPER(a.httpMethod) = UPPER(:httpMethod))
+              AND (CAST(:entityType AS string) IS NULL OR a.entityType = :entityType)
+              AND (CAST(:entityId AS long) IS NULL OR a.entityId = :entityId)
             """)
     Page<AuditLogDetailProjection> findDetails(
             @Param("startDate") LocalDateTime startDate,

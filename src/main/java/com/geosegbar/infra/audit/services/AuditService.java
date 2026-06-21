@@ -114,8 +114,9 @@ public class AuditService {
      */
     public Page<AuditLogSummaryDTO> findSummaries(AuditLogFilterDTO f, Pageable pageable) {
         return auditLogRepository.findSummaries(
-                f.getStartDate(), f.getEndDate(), f.getActorUserId(), f.getActorEmail(),
-                f.getAction(), f.getStatus(), f.getSource(), f.getHttpMethod(),
+                f.getStartDate(), f.getEndDate(), f.getActorUserId(),
+                likePattern(f.getActorEmail()), likePattern(f.getAction()),
+                f.getStatus(), f.getSource(), normalize(f.getHttpMethod()),
                 f.getEntityType(), f.getEntityId(), pageable)
                 .map(AuditLogSummaryDTO::fromProjection);
     }
@@ -125,8 +126,9 @@ public class AuditService {
      */
     public Page<AuditLogDetailDTO> findDetails(AuditLogFilterDTO f, Pageable pageable) {
         return auditLogRepository.findDetails(
-                f.getStartDate(), f.getEndDate(), f.getActorUserId(), f.getActorEmail(),
-                f.getAction(), f.getStatus(), f.getSource(), f.getHttpMethod(),
+                f.getStartDate(), f.getEndDate(), f.getActorUserId(),
+                likePattern(f.getActorEmail()), likePattern(f.getAction()),
+                f.getStatus(), f.getSource(), normalize(f.getHttpMethod()),
                 f.getEntityType(), f.getEntityId(), pageable)
                 .map(AuditLogDetailDTO::fromProjection);
     }
@@ -138,6 +140,27 @@ public class AuditService {
         return auditLogRepository.findDetailById(id)
                 .map(AuditLogDetailDTO::fromProjection)
                 .orElseThrow(() -> new NotFoundException("Registro de auditoria não encontrado para id: " + id));
+    }
+
+    /**
+     * Monta o padrão LIKE em minúsculas ({@code %valor%}) para busca por
+     * substring. Retorna null quando o filtro está vazio (filtro ignorado).
+     */
+    private String likePattern(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return "%" + value.trim().toLowerCase() + "%";
+    }
+
+    /**
+     * Normaliza o método HTTP (uppercase) para comparação exata; null se vazio.
+     */
+    private String normalize(String httpMethod) {
+        if (httpMethod == null || httpMethod.isBlank()) {
+            return null;
+        }
+        return httpMethod.trim().toUpperCase();
     }
 
     // ---- Construção da entidade ----

@@ -41,7 +41,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLogEntity, Long> 
                    a.actorLabel AS actorLabel,
                    u.name AS userName,
                    u.email AS userEmail,
-                   u.role.name AS userRole,
+                   r.name AS userRole,
                    a.action AS action,
                    a.actionLabel AS actionLabel,
                    a.source AS source,
@@ -49,6 +49,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLogEntity, Long> 
                    a.message AS message
             FROM AuditLogEntity a
             LEFT JOIN UserEntity u ON u.id = a.actorUserId
+            LEFT JOIN u.role r
             WHERE (CAST(:startDate AS timestamp) IS NULL OR a.occurredAt >= :startDate)
               AND (CAST(:endDate AS timestamp) IS NULL OR a.occurredAt <= :endDate)
               AND (CAST(:actorUserId AS long) IS NULL OR a.actorUserId = :actorUserId)
@@ -99,7 +100,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLogEntity, Long> 
                    a.actorLabel AS actorLabel,
                    u.name AS userName,
                    u.email AS userEmail,
-                   u.role.name AS userRole,
+                   r.name AS userRole,
                    a.occurredAt AS occurredAt,
                    a.status AS status,
                    a.message AS message,
@@ -121,6 +122,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLogEntity, Long> 
                    a.entityId AS entityId
             FROM AuditLogEntity a
             LEFT JOIN UserEntity u ON u.id = a.actorUserId
+            LEFT JOIN u.role r
             WHERE (CAST(:startDate AS timestamp) IS NULL OR a.occurredAt >= :startDate)
               AND (CAST(:endDate AS timestamp) IS NULL OR a.occurredAt <= :endDate)
               AND (CAST(:actorUserId AS long) IS NULL OR a.actorUserId = :actorUserId)
@@ -171,7 +173,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLogEntity, Long> 
                    a.actorLabel AS actorLabel,
                    u.name AS userName,
                    u.email AS userEmail,
-                   u.role.name AS userRole,
+                   r.name AS userRole,
                    a.occurredAt AS occurredAt,
                    a.status AS status,
                    a.message AS message,
@@ -193,6 +195,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLogEntity, Long> 
                    a.entityId AS entityId
             FROM AuditLogEntity a
             LEFT JOIN UserEntity u ON u.id = a.actorUserId
+            LEFT JOIN u.role r
             WHERE a.id = :id
             """)
     Optional<AuditLogDetailProjection> findDetailById(@Param("id") Long id);

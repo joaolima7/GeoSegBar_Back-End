@@ -54,14 +54,14 @@ public class AuditService {
      */
     public void record(AuditContext ctx) {
         if (!auditProperties.isEnabled() || ctx == null) {
-            log.info("[AUDIT] IGNORADO (enabled={}, ctx={})",
+            log.debug("[AUDIT] IGNORADO (enabled={}, ctx={})",
                     auditProperties.isEnabled(), ctx != null);
             return;
         }
 
         try {
             AuditLogEntity entity = toEntity(ctx);
-            log.info("[AUDIT] >>> PUBLICANDO evento: action={} status={} source={} actorUserId={} actorLabel={} httpStatus={} endpoint={}",
+            log.debug("[AUDIT] >>> PUBLICANDO evento: action={} status={} source={} actorUserId={} actorLabel={} httpStatus={} endpoint={}",
                     entity.getAction(), entity.getStatus(), entity.getSource(),
                     entity.getActorUserId(), entity.getActorLabel(),
                     entity.getHttpStatus(), entity.getEndpoint());

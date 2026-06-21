@@ -28,10 +28,10 @@ public class AuditPersistenceListener {
     public void onAuditEvent(AuditEvent event) {
         String action = event.getAuditLog() != null ? event.getAuditLog().getAction() : "null";
         try {
-            log.info("[AUDIT] ... gravando no banco (action={}) na thread {}",
+            log.debug("[AUDIT] ... gravando no banco (action={}) na thread {}",
                     action, Thread.currentThread().getName());
             var saved = auditLogRepository.save(event.getAuditLog());
-            log.info("[AUDIT] OK gravado: id={} action={} status={}",
+            log.debug("[AUDIT] OK gravado: id={} action={} status={}",
                     saved.getId(), saved.getAction(), saved.getStatus());
         } catch (Exception e) {
             log.error("[AUDIT] FALHA ao persistir registro de auditoria (action={}): {}",

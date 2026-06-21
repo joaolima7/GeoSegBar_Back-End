@@ -43,6 +43,13 @@ import org.springframework.security.core.context.SecurityContextHolder;
 @Slf4j
 public class AuditLogFilter extends OncePerRequestFilter {
 
+    /**
+     * Atributo de request onde o {@code SecurityFilter} guarda o ID do usuário
+     * autenticado. Lido pela auditoria no finais do processamento, quando o
+     * {@code SecurityContextHolder} já foi limpo pela cadeia do Spring Security.
+     */
+    public static final String AUDIT_ACTOR_USER_ID = "auditActorUserId";
+
     private static final String LOGIN_INITIATE_PATH = "/user/login/initiate";
     private static final String LOGIN_VERIFY_PATH = "/user/login/verify";
 
@@ -56,13 +63,13 @@ public class AuditLogFilter extends OncePerRequestFilter {
             FilterChain filterChain) throws ServletException, IOException {
 
         if (!auditProperties.isEnabled() || !shouldAudit(request)) {
-            log.info("[AUDIT] filtro PULOU {} {} (enabled={})",
+            log.debug("[AUDIT] filtro PULOU {} {} (enabled={})",
                     request.getMethod(), request.getRequestURI(), auditProperties.isEnabled());
             filterChain.doFilter(request, response);
             return;
         }
 
-        log.info("[AUDIT] filtro VAI AUDITAR {} {}", request.getMethod(), request.getRequestURI());
+        log.debug("[AUDIT] filtro VAI AUDITAR {} {}", request.getMethod(), request.getRequestURI());
 
         ContentCachingResponseWrapper responseWrapper = new ContentCachingResponseWrapper(response);
         long startNanos = System.nanoTime();
@@ -175,12 +182,25 @@ public class AuditLogFilter extends OncePerRequestFilter {
 
     /**
      * Resolve o ator gravando APENAS a FK do usuário (nome/e-mail/role vêm de
-     * JOIN na leitura). Para a maioria das rotas usa o {@code SecurityContext}.
-     * Nas rotas de login o usuário ainda não está autenticado (e em login que
-     * falha nunca estará): extrai o e-mail tentado do corpo da requisição e o
-     * grava como rótulo de fallback ({@code actorLabel}).
+     * JOIN na leitura).
+     * <p>
+     * Precedência:
+     * <ol>
+     *   <li>ID do usuário gravado pelo {@code SecurityFilter} no atributo da
+     *       request — fonte confiável, pois o {@code SecurityContextHolder} já foi
+     *       limpo pela cadeia do Spring quando este código roda (no finally).</li>
+     *   <li>{@code SecurityContext} (fallback, caso ainda esteja populado).</li>
+     *   <li>Rotas de login: e-mail tentado extraído do corpo (mesmo em falha),
+     *       gravado como rótulo {@code actorLabel}.</li>
+     * </ol>
      */
     private void applyActor(AuditContext.AuditContextBuilder ctx, HttpServletRequest request, String path) {
+        Long actorUserId = resolveActorUserIdFromRequest(request);
+        if (actorUserId != null) {
+            ctx.actorUserId(actorUserId);
+            return;
+        }
+
         UserEntity user = resolveCurrentUser();
         if (user != null) {
             ctx.actorUserId(user.getId());
@@ -193,6 +213,14 @@ public class AuditLogFilter extends OncePerRequestFilter {
                 ctx.actorLabel(email);
             }
         }
+    }
+
+    /**
+     * Lê o ID do usuário autenticado do atributo gravado pelo {@code SecurityFilter}.
+     */
+    private Long resolveActorUserIdFromRequest(HttpServletRequest request) {
+        Object attr = request.getAttribute(AUDIT_ACTOR_USER_ID);
+        return attr instanceof Long id ? id : null;
     }
 
     private UserEntity resolveCurrentUser() {

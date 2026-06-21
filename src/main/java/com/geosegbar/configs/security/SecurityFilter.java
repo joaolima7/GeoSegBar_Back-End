@@ -12,6 +12,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.audit.filter.AuditLogFilter;
 import com.geosegbar.infra.user.persistence.jpa.UserRepository;
 
 import jakarta.servlet.FilterChain;
@@ -41,6 +42,11 @@ public class SecurityFilter extends OncePerRequestFilter {
             var authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"));
             var authentication = new UsernamePasswordAuthenticationToken(user, null, authorities);
             SecurityContextHolder.getContext().setAuthentication(authentication);
+
+            // Persiste o usuário autenticado em atributos da request para que a
+            // auditoria (que monta o registro no finally, após o SecurityContext já
+            // ter sido limpo) consiga vincular o ator ao ID correto.
+            request.setAttribute(AuditLogFilter.AUDIT_ACTOR_USER_ID, user.getId());
         }
         filterChain.doFilter(request, response);
     }

@@ -879,7 +879,7 @@ public class InstrumentService {
         }
 
         try {
-            ExpressionEvaluator.validateSyntax(cleanEquation);
+            ExpressionEvaluator.validateSyntax(cleanEquation, variablesInEquation);
         } catch (Exception e) {
             throw new InvalidInputException(ExpressionEvaluator.friendlySyntaxErrorMessage(cleanEquation));
         }

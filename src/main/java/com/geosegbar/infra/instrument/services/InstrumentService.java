@@ -22,6 +22,7 @@ import com.geosegbar.common.utils.ExpressionEvaluator;
 import com.geosegbar.entities.ConstantEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.DeterministicLimitEntity;
+import com.geosegbar.entities.InstrumentGraphCustomizationPropertiesEntity;
 import com.geosegbar.entities.InputEntity;
 import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.entities.InstrumentTypeEntity;
@@ -772,9 +773,11 @@ public class InstrumentService {
 
         for (OutputEntity output : instrument.getOutputs()) {
             if (output.getStatisticalLimit() != null) {
+                deleteGraphPropertiesForStatisticalLimit(output.getStatisticalLimit());
                 statisticalLimitRepository.delete(output.getStatisticalLimit());
             }
             if (output.getDeterministicLimit() != null) {
+                deleteGraphPropertiesForDeterministicLimit(output.getDeterministicLimit());
                 deterministicLimitRepository.delete(output.getDeterministicLimit());
             }
         }
@@ -1141,16 +1144,19 @@ public class InstrumentService {
 
                 if (instrument.getNoLimit()) {
                     if (output.getStatisticalLimit() != null) {
+                        deleteGraphPropertiesForStatisticalLimit(output.getStatisticalLimit());
                         statisticalLimitRepository.delete(output.getStatisticalLimit());
                         output.setStatisticalLimit(null);
                     }
                     if (output.getDeterministicLimit() != null) {
+                        deleteGraphPropertiesForDeterministicLimit(output.getDeterministicLimit());
                         deterministicLimitRepository.delete(output.getDeterministicLimit());
                         output.setDeterministicLimit(null);
                     }
                 } else {
                     if (outputDTO.getStatisticalLimit() != null) {
                         if (output.getDeterministicLimit() != null) {
+                            deleteGraphPropertiesForDeterministicLimit(output.getDeterministicLimit());
                             deterministicLimitRepository.delete(output.getDeterministicLimit());
                             output.setDeterministicLimit(null);
                         }
@@ -1168,6 +1174,7 @@ public class InstrumentService {
                         }
                     } else if (outputDTO.getDeterministicLimit() != null) {
                         if (output.getStatisticalLimit() != null) {
+                            deleteGraphPropertiesForStatisticalLimit(output.getStatisticalLimit());
                             statisticalLimitRepository.delete(output.getStatisticalLimit());
                             output.setStatisticalLimit(null);
                         }
@@ -1228,6 +1235,42 @@ public class InstrumentService {
         }
 
         log.info("Outputs processados: {} atualizados, {} criados, {} desativados", updatedCount, createdCount, existingOutputsByAcronym.size());
+    }
+
+    /**
+     * Remove as propriedades de customização de gráfico (legendas) que
+     * referenciam um limite estatístico que será deletado. Sem isso, ao trocar o
+     * tipo de limite do output, a legenda continua exibindo o limite antigo
+     * (propriedade órfã apontando para um limite inexistente).
+     */
+    private void deleteGraphPropertiesForStatisticalLimit(StatisticalLimitEntity limit) {
+        if (limit == null || limit.getId() == null) {
+            return;
+        }
+        List<InstrumentGraphCustomizationPropertiesEntity> orphanProps
+                = graphCustomizationPropertiesRepository.findByStatisticalLimitId(limit.getId());
+        if (!orphanProps.isEmpty()) {
+            graphCustomizationPropertiesRepository.deleteAll(orphanProps);
+            log.info("Removidas {} propriedade(s) de gráfico vinculadas ao limite estatístico ID: {}",
+                    orphanProps.size(), limit.getId());
+        }
+    }
+
+    /**
+     * Remove as propriedades de customização de gráfico (legendas) que
+     * referenciam um limite determinístico que será deletado.
+     */
+    private void deleteGraphPropertiesForDeterministicLimit(DeterministicLimitEntity limit) {
+        if (limit == null || limit.getId() == null) {
+            return;
+        }
+        List<InstrumentGraphCustomizationPropertiesEntity> orphanProps
+                = graphCustomizationPropertiesRepository.findByDeterministicLimitId(limit.getId());
+        if (!orphanProps.isEmpty()) {
+            graphCustomizationPropertiesRepository.deleteAll(orphanProps);
+            log.info("Removidas {} propriedade(s) de gráfico vinculadas ao limite determinístico ID: {}",
+                    orphanProps.size(), limit.getId());
+        }
     }
 
     private void deleteUnusedComponents(Map<String, InputEntity> unusedInputs, Map<String, ConstantEntity> unusedConstants) {

@@ -21,8 +21,12 @@ import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.common.utils.ExpressionEvaluator;
 import com.geosegbar.entities.ConstantEntity;
 import com.geosegbar.entities.DamEntity;
+import com.geosegbar.common.enums.CustomizationTypeEnum;
+import com.geosegbar.common.enums.LimitValueTypeEnum;
+import com.geosegbar.common.enums.LineTypeEnum;
 import com.geosegbar.entities.DeterministicLimitEntity;
 import com.geosegbar.entities.InstrumentGraphCustomizationPropertiesEntity;
+import com.geosegbar.entities.InstrumentGraphPatternEntity;
 import com.geosegbar.entities.InputEntity;
 import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.entities.InstrumentTypeEntity;
@@ -1155,11 +1159,9 @@ public class InstrumentService {
                     }
                 } else {
                     if (outputDTO.getStatisticalLimit() != null) {
-                        if (output.getDeterministicLimit() != null) {
-                            deleteGraphPropertiesForDeterministicLimit(output.getDeterministicLimit());
-                            deterministicLimitRepository.delete(output.getDeterministicLimit());
-                            output.setDeterministicLimit(null);
-                        }
+                        // Captura o limite determinístico antigo (se houver) ANTES de
+                        // deletá-lo, para migrar suas legendas para o novo estatístico.
+                        DeterministicLimitEntity oldDetLimit = output.getDeterministicLimit();
 
                         if (output.getStatisticalLimit() != null) {
                             output.getStatisticalLimit().setLowerValue(outputDTO.getStatisticalLimit().getLowerValue());
@@ -1172,12 +1174,19 @@ public class InstrumentService {
                             statisticalLimitRepository.save(statisticalLimit);
                             output.setStatisticalLimit(statisticalLimit);
                         }
-                    } else if (outputDTO.getDeterministicLimit() != null) {
-                        if (output.getStatisticalLimit() != null) {
-                            deleteGraphPropertiesForStatisticalLimit(output.getStatisticalLimit());
-                            statisticalLimitRepository.delete(output.getStatisticalLimit());
-                            output.setStatisticalLimit(null);
+
+                        // Troca de tipo (Determinístico -> Estatístico): migra as
+                        // legendas dos gráficos do limite antigo para o novo, depois
+                        // remove o limite antigo.
+                        if (oldDetLimit != null) {
+                            migrateGraphPropertiesToStatisticalLimit(oldDetLimit, output.getStatisticalLimit());
+                            deterministicLimitRepository.delete(oldDetLimit);
+                            output.setDeterministicLimit(null);
                         }
+                    } else if (outputDTO.getDeterministicLimit() != null) {
+                        // Captura o limite estatístico antigo (se houver) ANTES de
+                        // deletá-lo, para migrar suas legendas para o novo determinístico.
+                        StatisticalLimitEntity oldStatLimit = output.getStatisticalLimit();
 
                         if (output.getDeterministicLimit() != null) {
                             output.getDeterministicLimit().setAttentionValue(outputDTO.getDeterministicLimit().getAttentionValue());
@@ -1191,6 +1200,15 @@ public class InstrumentService {
                             deterministicLimit.setEmergencyValue(outputDTO.getDeterministicLimit().getEmergencyValue());
                             deterministicLimitRepository.save(deterministicLimit);
                             output.setDeterministicLimit(deterministicLimit);
+                        }
+
+                        // Troca de tipo (Estatístico -> Determinístico): migra as
+                        // legendas dos gráficos do limite antigo para o novo, depois
+                        // remove o limite antigo.
+                        if (oldStatLimit != null) {
+                            migrateGraphPropertiesToDeterministicLimit(oldStatLimit, output.getDeterministicLimit());
+                            statisticalLimitRepository.delete(oldStatLimit);
+                            output.setStatisticalLimit(null);
                         }
                     }
                 }
@@ -1239,9 +1257,9 @@ public class InstrumentService {
 
     /**
      * Remove as propriedades de customização de gráfico (legendas) que
-     * referenciam um limite estatístico que será deletado. Sem isso, ao trocar o
-     * tipo de limite do output, a legenda continua exibindo o limite antigo
-     * (propriedade órfã apontando para um limite inexistente).
+     * referenciam um limite estatístico que será deletado. Usado quando o limite
+     * é removido sem substituto (ex.: instrumento marcado como 'Sem limites' ou
+     * exclusão do instrumento).
      */
     private void deleteGraphPropertiesForStatisticalLimit(StatisticalLimitEntity limit) {
         if (limit == null || limit.getId() == null) {
@@ -1258,7 +1276,7 @@ public class InstrumentService {
 
     /**
      * Remove as propriedades de customização de gráfico (legendas) que
-     * referenciam um limite determinístico que será deletado.
+     * referenciam um limite determinístico que será deletado (sem substituto).
      */
     private void deleteGraphPropertiesForDeterministicLimit(DeterministicLimitEntity limit) {
         if (limit == null || limit.getId() == null) {
@@ -1271,6 +1289,131 @@ public class InstrumentService {
             log.info("Removidas {} propriedade(s) de gráfico vinculadas ao limite determinístico ID: {}",
                     orphanProps.size(), limit.getId());
         }
+    }
+
+    /**
+     * Troca de tipo Determinístico -> Estatístico: para cada padrão de gráfico que
+     * exibia o limite determinístico antigo na legenda, substitui essas legendas
+     * pelas do novo limite estatístico (Inferior/Superior), preservando todo o
+     * resto do padrão. Patterns que não usavam o limite antigo ficam intactos.
+     */
+    private void migrateGraphPropertiesToStatisticalLimit(DeterministicLimitEntity oldLimit, StatisticalLimitEntity newLimit) {
+        if (oldLimit == null || oldLimit.getId() == null || newLimit == null) {
+            return;
+        }
+
+        List<InstrumentGraphCustomizationPropertiesEntity> oldProps
+                = graphCustomizationPropertiesRepository.findByDeterministicLimitId(oldLimit.getId());
+        if (oldProps.isEmpty()) {
+            return;
+        }
+
+        Set<Long> affectedPatternIds = oldProps.stream()
+                .map(p -> p.getPattern().getId())
+                .collect(Collectors.toSet());
+
+        graphCustomizationPropertiesRepository.deleteAll(oldProps);
+
+        for (Long patternId : affectedPatternIds) {
+            InstrumentGraphPatternEntity pattern = instrumentGraphPatternRepository.findById(patternId).orElse(null);
+            if (pattern == null) {
+                continue;
+            }
+            if (newLimit.getLowerValue() != null) {
+                createStatisticalLimitProperty(pattern, newLimit, LimitValueTypeEnum.STATISTICAL_LOWER);
+            }
+            if (newLimit.getUpperValue() != null) {
+                createStatisticalLimitProperty(pattern, newLimit, LimitValueTypeEnum.STATISTICAL_UPPER);
+            }
+        }
+
+        log.info("Migradas legendas de {} padrão(ões) do limite determinístico {} para o estatístico {}",
+                affectedPatternIds.size(), oldLimit.getId(), newLimit.getId());
+    }
+
+    /**
+     * Troca de tipo Estatístico -> Determinístico: substitui as legendas do limite
+     * estatístico antigo pelas do novo determinístico (Atenção/Alerta/Emergência),
+     * apenas nos padrões que exibiam o limite antigo.
+     */
+    private void migrateGraphPropertiesToDeterministicLimit(StatisticalLimitEntity oldLimit, DeterministicLimitEntity newLimit) {
+        if (oldLimit == null || oldLimit.getId() == null || newLimit == null) {
+            return;
+        }
+
+        List<InstrumentGraphCustomizationPropertiesEntity> oldProps
+                = graphCustomizationPropertiesRepository.findByStatisticalLimitId(oldLimit.getId());
+        if (oldProps.isEmpty()) {
+            return;
+        }
+
+        Set<Long> affectedPatternIds = oldProps.stream()
+                .map(p -> p.getPattern().getId())
+                .collect(Collectors.toSet());
+
+        graphCustomizationPropertiesRepository.deleteAll(oldProps);
+
+        for (Long patternId : affectedPatternIds) {
+            InstrumentGraphPatternEntity pattern = instrumentGraphPatternRepository.findById(patternId).orElse(null);
+            if (pattern == null) {
+                continue;
+            }
+            if (newLimit.getAttentionValue() != null) {
+                createDeterministicLimitProperty(pattern, newLimit, LimitValueTypeEnum.DETERMINISTIC_ATTENTION);
+            }
+            if (newLimit.getAlertValue() != null) {
+                createDeterministicLimitProperty(pattern, newLimit, LimitValueTypeEnum.DETERMINISTIC_ALERT);
+            }
+            if (newLimit.getEmergencyValue() != null) {
+                createDeterministicLimitProperty(pattern, newLimit, LimitValueTypeEnum.DETERMINISTIC_EMERGENCY);
+            }
+        }
+
+        log.info("Migradas legendas de {} padrão(ões) do limite estatístico {} para o determinístico {}",
+                affectedPatternIds.size(), oldLimit.getId(), newLimit.getId());
+    }
+
+    /**
+     * Cria uma propriedade de legenda para um valor de limite estatístico, com as
+     * cores/estilos padrão (mesma convenção do AutoPatternCreationService).
+     */
+    private void createStatisticalLimitProperty(InstrumentGraphPatternEntity pattern, StatisticalLimitEntity limit, LimitValueTypeEnum valueType) {
+        InstrumentGraphCustomizationPropertiesEntity prop = new InstrumentGraphCustomizationPropertiesEntity();
+        prop.setPattern(pattern);
+        prop.setCustomizationType(CustomizationTypeEnum.STATISTICAL_LIMIT);
+        prop.setStatisticalLimit(limit);
+        prop.setLimitValueType(valueType);
+        prop.setLineType(LineTypeEnum.DASHED);
+        prop.setFillColor(valueType == LimitValueTypeEnum.STATISTICAL_LOWER ? "#00AA00" : "#AA0000");
+        prop.setLabelEnable(true);
+        prop.setIsPrimaryOrdinate(true);
+        graphCustomizationPropertiesRepository.save(prop);
+    }
+
+    /**
+     * Cria uma propriedade de legenda para um valor de limite determinístico.
+     */
+    private void createDeterministicLimitProperty(InstrumentGraphPatternEntity pattern, DeterministicLimitEntity limit, LimitValueTypeEnum valueType) {
+        InstrumentGraphCustomizationPropertiesEntity prop = new InstrumentGraphCustomizationPropertiesEntity();
+        prop.setPattern(pattern);
+        prop.setCustomizationType(CustomizationTypeEnum.DETERMINISTIC_LIMIT);
+        prop.setDeterministicLimit(limit);
+        prop.setLimitValueType(valueType);
+        prop.setLineType(LineTypeEnum.DASHED);
+        String color = switch (valueType) {
+            case DETERMINISTIC_ATTENTION ->
+                "#FFFF00";
+            case DETERMINISTIC_ALERT ->
+                "#FFA500";
+            case DETERMINISTIC_EMERGENCY ->
+                "#FF0000";
+            default ->
+                "#000000";
+        };
+        prop.setFillColor(color);
+        prop.setLabelEnable(true);
+        prop.setIsPrimaryOrdinate(true);
+        graphCustomizationPropertiesRepository.save(prop);
     }
 
     private void deleteUnusedComponents(Map<String, InputEntity> unusedInputs, Map<String, ConstantEntity> unusedConstants) {

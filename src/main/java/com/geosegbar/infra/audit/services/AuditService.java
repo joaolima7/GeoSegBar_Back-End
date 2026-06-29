@@ -215,22 +215,25 @@ public class AuditService {
     private AuditLogEntity toEntity(AuditContext ctx) {
         boolean isError = ctx.getStatus() == AuditStatus.ERROR;
 
+        // Todos os campos String são truncados no tamanho EXATO da coluna. Valores
+        // derivados de entrada externa (URL → action, X-Forwarded-For → clientIp)
+        // podem ser forjados/gigantes; nunca devem estourar o INSERT.
         AuditLogEntity.AuditLogEntityBuilder builder = AuditLogEntity.builder()
-                .action(ctx.getAction())
-                .actionLabel(ctx.getActionLabel())
+                .action(truncate(ctx.getAction(), 100))
+                .actionLabel(truncate(ctx.getActionLabel(), 150))
                 .source(ctx.getSource())
                 .status(ctx.getStatus())
                 .message(truncate(ctx.getMessage(), 1000))
                 .durationMs(ctx.getDurationMs())
-                .httpMethod(ctx.getHttpMethod())
+                .httpMethod(truncate(ctx.getHttpMethod(), 10))
                 .endpoint(truncate(ctx.getEndpoint(), 500))
                 .queryString(truncate(ctx.getQueryString(), 1000))
                 .httpStatus(ctx.getHttpStatus())
-                .clientIp(ctx.getClientIp())
+                .clientIp(truncate(ctx.getClientIp(), 64))
                 .userAgent(truncate(ctx.getUserAgent(), 512))
                 .origin(truncate(ctx.getOrigin(), 512))
-                .traceId(ctx.getTraceId())
-                .entityType(ctx.getEntityType())
+                .traceId(truncate(ctx.getTraceId(), 64))
+                .entityType(truncate(ctx.getEntityType(), 100))
                 .entityId(ctx.getEntityId());
 
         applyActor(builder, ctx);
@@ -286,7 +289,7 @@ public class AuditService {
         }
 
         if (ctx.getActorLabel() != null && !ctx.getActorLabel().isBlank()) {
-            builder.actorLabel(ctx.getActorLabel());
+            builder.actorLabel(truncate(ctx.getActorLabel(), 255));
         } else {
             builder.actorLabel(ACTOR_ANONYMOUS);
         }
@@ -355,13 +358,22 @@ public class AuditService {
         return sw.toString();
     }
 
+    private static final String TRUNCATION_SUFFIX = "... [truncado]";
+
+    /**
+     * Trunca o valor garantindo que o resultado NUNCA exceda {@code max}
+     * caracteres (o sufixo de truncamento é contabilizado dentro do limite).
+     * Essencial para não estourar o tamanho das colunas no INSERT — uma falha de
+     * persistência de auditoria não pode poluir o log nem depender do tamanho da
+     * entrada (URL/headers podem ser forjados/gigantes por scanners).
+     */
     private String truncate(String value, int max) {
-        if (value == null) {
-            return null;
-        }
-        if (value.length() <= max) {
+        if (value == null || value.length() <= max) {
             return value;
         }
-        return value.substring(0, max) + "... [truncado]";
+        if (max <= TRUNCATION_SUFFIX.length()) {
+            return value.substring(0, max);
+        }
+        return value.substring(0, max - TRUNCATION_SUFFIX.length()) + TRUNCATION_SUFFIX;
     }
 }

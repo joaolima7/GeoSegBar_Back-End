@@ -1,7 +1,9 @@
-upstream backend {
-    server ${UPSTREAM_SERVER};
-    keepalive 32;
-}
+# Resolver do DNS embutido do Docker (127.0.0.11). Permite resolver o upstream
+# em TEMPO DE REQUEST, e não no startup. Sem isso, se o container da API ainda
+# não estiver resolvível quando o nginx sobe (ex.: durante o deploy, logo após
+# recriar o container da API), o nginx falha com "[emerg] host not found in
+# upstream" e MORRE — derrubando o proxy e, com ele, toda a API publicada.
+resolver 127.0.0.11 valid=10s ipv6=off;
 
 server {
     listen 80;
@@ -67,6 +69,11 @@ server {
     }
 
     location / {
-        proxy_pass http://backend;
+        # A variável força o nginx a resolver o upstream dinamicamente via
+        # resolver (em vez de travar no startup, como faz um bloco upstream
+        # com nome estático). Se a API estiver momentaneamente indisponível,
+        # o nginx retorna 502 pontual e se recupera sozinho — não morre.
+        set $upstream_server ${UPSTREAM_SERVER};
+        proxy_pass http://$upstream_server;
     }
 }

@@ -183,6 +183,227 @@ public class ChecklistSubmissionPersistenceService {
         anomalyPhotoRepository.updateImagePath(entityId, url);
     }
 
+    // =========================================================================
+    // FLUXO PRESIGNED (direto-pro-S3) — transacional, tudo-ou-nada.
+    //
+    // As imagens JÁ estão no S3 quando este método roda; recebemos apenas o mapa
+    // objectKey → URL final (já validado: prefixo + existência no S3). Aqui só
+    // gravamos linhas — se qualquer coisa falhar, ROLLBACK total (nada persiste).
+    //
+    // Reusa TODOS os validadores privados do fluxo base64 (mesma lógica, sem
+    // divergência). O método base64 acima permanece INTACTO. A única diferença é
+    // a foto: gravamos imagePath = URL final direto (sem "pending", sem async).
+    // =========================================================================
+    @Transactional(timeout = 120)
+    public ChecklistResponseEntity persistChecklistDataPresigned(
+            ChecklistResponseSubmissionDTO submissionDto,
+            Map<String, String> urlByObjectKey) {
+
+        validateUserAccessToDam(submissionDto.getUserId(), submissionDto.getDamId());
+
+        if (!AuthenticatedUserUtil.isAdmin()) {
+
+            UserEntity currentUser = AuthenticatedUserUtil.getCurrentUser();
+
+            if (currentUser.getRoutineInspectionPermission() == null) {
+                currentUser = userRepository.findByIdWithPermissions(currentUser.getId())
+                        .orElseThrow(() -> new NotFoundException("Usuário logado não encontrado"));
+            }
+
+            if (currentUser.getRoutineInspectionPermission() == null) {
+                throw new UnauthorizedException("Usuário não tem permissão para preencher checklist!");
+            }
+
+            if (submissionDto.isMobile()) {
+                if (!Boolean.TRUE.equals(currentUser.getRoutineInspectionPermission().getIsFillMobile())) {
+                    throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via mobile!");
+                }
+            } else {
+                if (!Boolean.TRUE.equals(currentUser.getRoutineInspectionPermission().getIsFillWeb())) {
+                    throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via web!");
+                }
+            }
+        }
+
+        Set<Long> allOptionIds = collectOptionIds(submissionDto);
+        Map<Long, String> optionsCache;
+        if (allOptionIds.isEmpty()) {
+            optionsCache = Map.of();
+        } else {
+            optionsCache = optionRepository.findAllById(allOptionIds).stream()
+                    .collect(Collectors.toMap(OptionEntity::getId, OptionEntity::getLabel));
+        }
+
+        ChecklistResponseEntity checklistResponse = createChecklistResponse(submissionDto);
+
+        validateAllRequiredQuestionnaires(submissionDto);
+
+        validatePVAnswersHaveRequiredFields(submissionDto, optionsCache);
+
+        validateOthersHaveRequiredFields(submissionDto);
+
+        validateOptionTransitions(submissionDto, optionsCache);
+
+        for (QuestionnaireResponseSubmissionDTO questionnaireDto : submissionDto.getQuestionnaireResponses()) {
+            validateAllQuestionsAnswered(questionnaireDto);
+
+            QuestionnaireResponseEntity questionnaireResponse = createQuestionnaireResponse(questionnaireDto, checklistResponse);
+
+            for (AnswerSubmissionDTO answerDto : questionnaireDto.getAnswers()) {
+
+                validateCriticalAnswerRequirements(answerDto, optionsCache);
+
+                createAnswerPresigned(answerDto, questionnaireResponse, optionsCache, urlByObjectKey);
+
+                if (pvAnswerValidator.isPVAnswer(answerDto, optionsCache)) {
+                    createAnomalyFromPVAnswerPresigned(
+                            answerDto,
+                            submissionDto.getUserId(),
+                            submissionDto.getDamId(),
+                            questionnaireDto.getTemplateQuestionnaireId(),
+                            urlByObjectKey
+                    );
+                }
+            }
+
+            if (questionnaireDto.getOthers() != null) {
+                for (OtherSubmissionDTO other : questionnaireDto.getOthers()) {
+                    createAnomalyFromOtherPresigned(other, submissionDto.getUserId(), submissionDto.getDamId(),
+                            questionnaireDto.getTemplateQuestionnaireId(), urlByObjectKey);
+                }
+            }
+        }
+
+        if (submissionDto.getOthers() != null) {
+            for (OtherSubmissionDTO other : submissionDto.getOthers()) {
+                createAnomalyFromOtherPresigned(other, submissionDto.getUserId(), submissionDto.getDamId(),
+                        null, urlByObjectKey);
+            }
+        }
+
+        updateLastAchievementChecklist(submissionDto.getDamId());
+
+        return checklistResponse;
+    }
+
+    private AnswerEntity createAnswerPresigned(AnswerSubmissionDTO answerDto,
+            QuestionnaireResponseEntity questionnaireResponse,
+            Map<Long, String> optionsCache, Map<String, String> urlByObjectKey) {
+        QuestionEntity question = questionRepository.getReferenceById(answerDto.getQuestionId());
+
+        AnswerEntity answer = new AnswerEntity();
+        answer.setQuestion(question);
+        answer.setQuestionnaireResponse(questionnaireResponse);
+        answer.setLatitude(answerDto.getLatitude());
+        answer.setLongitude(answerDto.getLongitude());
+
+        if (answerDto.getComment() != null && !answerDto.getComment().trim().isEmpty()) {
+            answer.setComment(answerDto.getComment());
+        }
+
+        if (answerDto.getSelectedOptionIds() != null && !answerDto.getSelectedOptionIds().isEmpty()) {
+            Set<OptionEntity> options = new HashSet<>();
+            for (Long optionId : answerDto.getSelectedOptionIds()) {
+                if (!optionsCache.containsKey(optionId)) {
+                    throw new NotFoundException("Opção inválida: " + optionId);
+                }
+                options.add(optionRepository.getReferenceById(optionId));
+            }
+            answer.setSelectedOptions(options);
+        }
+
+        AnswerEntity savedAnswer = answerRepository.save(answer);
+
+        if (answerDto.getPhotos() != null && !answerDto.getPhotos().isEmpty()) {
+            for (PhotoSubmissionDTO photoDto : answerDto.getPhotos()) {
+                AnswerPhotoEntity photo = new AnswerPhotoEntity();
+                photo.setAnswer(savedAnswer);
+                photo.setImagePath(resolvePresignedUrl(photoDto, urlByObjectKey));
+                answerPhotoRepository.save(photo);
+            }
+        }
+
+        return savedAnswer;
+    }
+
+    private void createAnomalyFromPVAnswerPresigned(AnswerSubmissionDTO answerDto, Long userId, Long damId,
+            Long questionnaireId, Map<String, String> urlByObjectKey) {
+
+        UserEntity user = userRepository.getReferenceById(userId);
+        DamEntity dam = damRepository.getReferenceById(damId);
+        DangerLevelEntity dangerLevel = dangerLevelRepository.getReferenceById(answerDto.getAnomalyDangerLevelId());
+        AnomalyStatusEntity status = anomalyStatusRepository.getReferenceById(answerDto.getAnomalyStatusId());
+
+        AnomalyEntity anomaly = new AnomalyEntity();
+        anomaly.setUser(user);
+        anomaly.setDam(dam);
+        anomaly.setLatitude(answerDto.getLatitude());
+        anomaly.setLongitude(answerDto.getLongitude());
+        anomaly.setQuestionnaireId(questionnaireId);
+        anomaly.setQuestionId(answerDto.getQuestionId());
+        anomaly.setOrigin(AnomalyOriginEnum.CHECKLIST);
+        String pvObservation = answerDto.getComment();
+        anomaly.setObservation(pvObservation != null && !pvObservation.trim().isEmpty() ? pvObservation : null);
+        String pvRecommendation = answerDto.getAnomalyRecommendation();
+        anomaly.setRecommendation(pvRecommendation != null && !pvRecommendation.trim().isEmpty() ? pvRecommendation : null);
+        anomaly.setDangerLevel(dangerLevel);
+        anomaly.setStatus(status);
+
+        AnomalyEntity savedAnomaly = anomalyRepository.save(anomaly);
+
+        if (answerDto.getPhotos() != null && !answerDto.getPhotos().isEmpty()) {
+            for (PhotoSubmissionDTO photoDto : answerDto.getPhotos()) {
+                savePresignedAnomalyPhoto(photoDto, savedAnomaly, damId, urlByObjectKey);
+            }
+        }
+    }
+
+    private void createAnomalyFromOtherPresigned(OtherSubmissionDTO otherDto, Long userId, Long damId,
+            Long questionnaireId, Map<String, String> urlByObjectKey) {
+
+        UserEntity user = userRepository.getReferenceById(userId);
+        DamEntity dam = damRepository.getReferenceById(damId);
+        DangerLevelEntity dangerLevel = dangerLevelRepository.getReferenceById(otherDto.getAnomalyDangerLevelId());
+        AnomalyStatusEntity status = anomalyStatusRepository.getReferenceById(otherDto.getAnomalyStatusId());
+
+        AnomalyEntity anomaly = new AnomalyEntity();
+        anomaly.setUser(user);
+        anomaly.setDam(dam);
+        anomaly.setLatitude(otherDto.getLatitude());
+        anomaly.setLongitude(otherDto.getLongitude());
+        anomaly.setQuestionnaireId(questionnaireId);
+        anomaly.setQuestionId(null);
+        anomaly.setOrigin(AnomalyOriginEnum.CHECKLIST);
+        anomaly.setObservation(otherDto.getObservation());
+        anomaly.setRecommendation(otherDto.getRecommendation());
+        anomaly.setDangerLevel(dangerLevel);
+        anomaly.setStatus(status);
+
+        AnomalyEntity saved = anomalyRepository.save(anomaly);
+
+        for (PhotoSubmissionDTO photoDto : otherDto.getPhotos()) {
+            savePresignedAnomalyPhoto(photoDto, saved, damId, urlByObjectKey);
+        }
+    }
+
+    private void savePresignedAnomalyPhoto(PhotoSubmissionDTO photoDto, AnomalyEntity anomaly, Long damId,
+            Map<String, String> urlByObjectKey) {
+        AnomalyPhotoEntity photoEntity = new AnomalyPhotoEntity();
+        photoEntity.setAnomaly(anomaly);
+        photoEntity.setImagePath(resolvePresignedUrl(photoDto, urlByObjectKey));
+        photoEntity.setDamId(damId);
+        anomalyPhotoRepository.save(photoEntity);
+    }
+
+    private String resolvePresignedUrl(PhotoSubmissionDTO photoDto, Map<String, String> urlByObjectKey) {
+        String url = urlByObjectKey.get(photoDto.getObjectKey());
+        if (url == null) {
+            throw new InvalidInputException(
+                    "Imagem não resolvida para objectKey: " + photoDto.getObjectKey());
+        }
+        return url;
+    }
+
     private Set<Long> collectOptionIds(ChecklistResponseSubmissionDTO dto) {
         Set<Long> ids = new HashSet<>();
         if (dto.getQuestionnaireResponses() != null) {

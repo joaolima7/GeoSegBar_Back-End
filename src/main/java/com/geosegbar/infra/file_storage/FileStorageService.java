@@ -29,7 +29,10 @@ import software.amazon.awssdk.services.s3.model.CompletedPart;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetUrlRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.UploadPartRequest;
 import software.amazon.awssdk.services.s3.model.UploadPartResponse;
 
@@ -277,6 +280,39 @@ public class FileStorageService {
                 .bucket(bucketName)
                 .key(key)
                 .build()).toExternalForm();
+    }
+
+    /**
+     * Reconstrói a URL pública final de um objeto a partir da sua chave S3.
+     * Mesma forma de URL usada pelos uploads existentes ({@link #getS3Url}),
+     * garantindo consistência de exibição. Usado pelo fluxo presigned, onde o
+     * servidor NUNCA confia numa URL vinda do cliente — só na chave (objectKey).
+     */
+    public String publicUrlForKey(String key) {
+        return getS3Url(key);
+    }
+
+    /**
+     * Verifica se um objeto existe no bucket (HEAD). Usado pelo fluxo presigned
+     * para confirmar, antes de persistir, que a imagem foi de fato enviada ao
+     * S3. Retorna {@code false} se a chave não existir; propaga erros de
+     * infraestrutura (para não persistir referências não validadas).
+     */
+    public boolean objectExists(String key) {
+        try {
+            s3Client.headObject(HeadObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .build());
+            return true;
+        } catch (NoSuchKeyException e) {
+            return false;
+        } catch (S3Exception e) {
+            if (e.statusCode() == 404) {
+                return false;
+            }
+            throw e;
+        }
     }
 
     private String extractKeyFromUrl(String fileUrl) {

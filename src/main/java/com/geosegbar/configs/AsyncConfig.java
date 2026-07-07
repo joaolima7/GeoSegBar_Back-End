@@ -57,6 +57,31 @@ public class AsyncConfig {
     }
 
     /**
+     * Thread pool dedicado ao envio de e-mails ({@code EmailService}).
+     * <p>
+     * Antes deste bean, os métodos {@code @Async} de e-mail não tinham
+     * qualifier e havia 4 executors nomeados concorrendo — nenhum chamado
+     * {@code taskExecutor} — então o Spring não conseguia resolver um único
+     * candidato e caía no {@code SimpleAsyncTaskExecutor} padrão: uma thread
+     * NOVA por envio, sem limite e sem fila. Sob rajada (ex.: import em massa
+     * de usuários) isso podia esgotar threads/conexões. Aqui o pool é limitado
+     * e monitorável, como os demais.
+     */
+    @Bean(name = "emailExecutor")
+    public Executor emailExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(6);
+        executor.setQueueCapacity(200);
+        executor.setThreadNamePrefix("email-async-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(60);
+        executor.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        return executor;
+    }
+
+    /**
      * Thread pool dedicado à persistência de registros de auditoria. Mantido
      * separado dos pools de negócio para que a auditoria nunca compita por
      * recursos com operações críticas. CallerRunsPolicy garante que, sob carga,

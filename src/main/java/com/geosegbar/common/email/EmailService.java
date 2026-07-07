@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
+import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
@@ -20,8 +21,10 @@ import org.thymeleaf.context.Context;
 
 import com.geosegbar.common.email.dtos.AttachmentData;
 import com.geosegbar.common.email.dtos.SupportEmailRequestDTO;
+import com.geosegbar.common.enums.AuditSource;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.audit.services.AuditService;
 import com.geosegbar.infra.user.dto.UserSupportInfoProjection;
 import com.geosegbar.infra.user.persistence.jpa.UserRepository;
 
@@ -41,6 +44,7 @@ public class EmailService {
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
     private final UserRepository userRepository;
+    private final AuditService auditService;
 
     /**
      * Auto-injeção lazy para permitir que métodos @Async da mesma classe sejam
@@ -63,7 +67,29 @@ public class EmailService {
     @Value("${application.frontend-url}")
     private String frontendUrl;
 
-    @Async
+    /**
+     * Registra a falha de envio na auditoria, para ficar visível no painel sem
+     * precisar vasculhar log/cPanel manualmente (foi assim que uma rejeição SMTP
+     * 550 do destinatário só foi descoberta dias depois). Best-effort: uma falha
+     * aqui nunca pode mascarar/derrubar o tratamento original do erro de e-mail.
+     */
+    private void auditEmailFailure(String action, String actionLabel, String recipient, Exception e) {
+        try {
+            auditService.recordJobError(
+                    action,
+                    actionLabel,
+                    AuditSource.ASYNC,
+                    "Falha ao enviar e-mail para " + recipient + ": " + e.getMessage(),
+                    e,
+                    null,
+                    null
+            );
+        } catch (Exception auditFailure) {
+            log.error("[EMAIL] Falha ao registrar auditoria de e-mail (ignorado): {}", auditFailure.getMessage());
+        }
+    }
+
+    @Async("emailExecutor")
     public void sendInternalErrorException(String errorMessage, String stackTrace, String userContext,
             String requestEndpoint, String requestMethod, String requestBody, String requestOrigin,
             String requestHeaders) {
@@ -92,13 +118,14 @@ public class EmailService {
             log.info("[EMAIL] Enviando error-report → to={} subject='[GeoSegBar] Erro Interno - {}'", logEmail, errorMessage);
             mailSender.send(message);
             log.info("[EMAIL] ✓ error-report entregue ao SMTP → to={}", logEmail);
-        } catch (MessagingException e) {
+        } catch (MessagingException | MailException e) {
             log.error("[EMAIL] ✗ FALHA ao enviar error-report → to={} cause={} message={}",
                     logEmail, e.getClass().getSimpleName(), e.getMessage(), e);
+            auditEmailFailure("EMAIL_FAILED_ERROR_REPORT", "Falha no envio de e-mail (relatório de erro interno)", logEmail, e);
         }
     }
 
-    @Async
+    @Async("emailExecutor")
     public void sendVerificationCode(String toEmail, String code) {
         try {
             Context context = new Context();
@@ -117,13 +144,14 @@ public class EmailService {
             log.info("[EMAIL] Enviando verification-code → from={} to={}", fromEmail, toEmail);
             mailSender.send(message);
             log.info("[EMAIL] ✓ verification-code entregue ao SMTP → to={}", toEmail);
-        } catch (MessagingException e) {
+        } catch (MessagingException | MailException e) {
             log.error("[EMAIL] ✗ FALHA ao enviar verification-code → to={} cause={} message={}",
                     toEmail, e.getClass().getSimpleName(), e.getMessage(), e);
+            auditEmailFailure("EMAIL_FAILED_VERIFICATION_CODE", "Falha no envio de e-mail (código de verificação)", toEmail, e);
         }
     }
 
-    @Async
+    @Async("emailExecutor")
     public void sendPasswordResetCode(String toEmail, String code) {
         try {
             Context context = new Context();
@@ -142,13 +170,14 @@ public class EmailService {
             log.info("[EMAIL] Enviando password-reset-code → from={} to={}", fromEmail, toEmail);
             mailSender.send(message);
             log.info("[EMAIL] ✓ password-reset-code entregue ao SMTP → to={}", toEmail);
-        } catch (MessagingException e) {
+        } catch (MessagingException | MailException e) {
             log.error("[EMAIL] ✗ FALHA ao enviar password-reset-code → to={} cause={} message={}",
                     toEmail, e.getClass().getSimpleName(), e.getMessage(), e);
+            auditEmailFailure("EMAIL_FAILED_PASSWORD_RESET", "Falha no envio de e-mail (redefinição de senha)", toEmail, e);
         }
     }
 
-    @Async
+    @Async("emailExecutor")
     public void sendFirstAccessPassword(String toEmail, String password, String userName) {
         try {
             Context context = new Context();
@@ -170,13 +199,15 @@ public class EmailService {
             log.info("[EMAIL] Enviando first-access-password → from={} to={} user='{}'", fromEmail, toEmail, userName);
             mailSender.send(message);
             log.info("[EMAIL] ✓ first-access-password entregue ao SMTP → to={} user='{}'", toEmail, userName);
-        } catch (MessagingException e) {
+        } catch (MessagingException | MailException e) {
             log.error("[EMAIL] ✗ FALHA ao enviar first-access-password → to={} user='{}' cause={} message={}",
                     toEmail, userName, e.getClass().getSimpleName(), e.getMessage(), e);
+            auditEmailFailure("EMAIL_FAILED_FIRST_ACCESS",
+                    "Falha no envio de e-mail (primeiro acesso - usuário: " + userName + ")", toEmail, e);
         }
     }
 
-    @Async
+    @Async("emailExecutor")
     public void sendShareFolderEmail(String to, String sharedByName, String folderName, String token, String customMessage) {
         try {
             MimeMessage mimeMessage = mailSender.createMimeMessage();
@@ -199,9 +230,11 @@ public class EmailService {
                     fromEmail, to, folderName, sharedByName);
             mailSender.send(mimeMessage);
             log.info("[EMAIL] ✓ share-folder entregue ao SMTP → to={} folder='{}'", to, folderName);
-        } catch (MessagingException e) {
+        } catch (MessagingException | MailException e) {
             log.error("[EMAIL] ✗ FALHA ao enviar share-folder → to={} folder='{}' cause={} message={}",
                     to, folderName, e.getClass().getSimpleName(), e.getMessage(), e);
+            auditEmailFailure("EMAIL_FAILED_SHARE_FOLDER",
+                    "Falha no envio de e-mail (pasta compartilhada: " + folderName + ")", to, e);
         }
     }
 
@@ -223,7 +256,7 @@ public class EmailService {
                 userInfo.getClientName(), request.getMessage(), attachments);
     }
 
-    @Async
+    @Async("emailExecutor")
     public void dispatchSupportEmailAsync(String senderName, String senderEmail, String phone,
             String clientName, String message, List<AttachmentData> attachments) {
         try {
@@ -268,9 +301,11 @@ public class EmailService {
             mailSender.send(mimeMessage);
             log.info("[EMAIL] ✓ support-request entregue ao SMTP → to={} sender='{}' <{}>",
                     supportEmail, senderName, senderEmail);
-        } catch (MessagingException e) {
+        } catch (MessagingException | MailException e) {
             log.error("[EMAIL] ✗ FALHA ao enviar support-request → to={} sender='{}' <{}> cause={} message={}",
                     supportEmail, senderName, senderEmail, e.getClass().getSimpleName(), e.getMessage(), e);
+            auditEmailFailure("EMAIL_FAILED_SUPPORT_REQUEST",
+                    "Falha no envio de e-mail (solicitação de suporte de " + senderName + ")", supportEmail, e);
         }
     }
 

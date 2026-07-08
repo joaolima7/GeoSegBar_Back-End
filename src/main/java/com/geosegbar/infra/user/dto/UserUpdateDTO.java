@@ -33,4 +33,12 @@ public class UserUpdateDTO {
 
     @NotNull(message = "A role deve ser informada!")
     private RoleEntity role;
+
+    /**
+     * Ativa/desativa a autenticação multifator (2FA). Opcional: {@code null}
+     * significa "não alterar" (preserva o valor atual do usuário). Só pode ser
+     * {@code false} para colaboradores — administradores nunca podem desabilitar
+     * (validado em {@code UserService.update}).
+     */
+    private Boolean mfaEnabled;
 }

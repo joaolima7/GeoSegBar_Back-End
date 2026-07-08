@@ -93,6 +93,18 @@ public class UserEntity {
     @Column(name = "is_first_access")
     private Boolean isFirstAccess = false;
 
+    /**
+     * Ativa/desativa a autenticação multifator (2FA) para este usuário.
+     * Somente colaboradores podem ter o valor {@code false} — administradores
+     * sempre têm MFA obrigatório (garantido em {@code UserService}). Nullable de
+     * propósito (coluna adicionada via {@code ddl-auto=update}, sem default de
+     * banco): {@code null} é tratado como "ativado" em todo o código (default
+     * seguro), então linhas antigas nunca perdem a proteção por causa da
+     * migração.
+     */
+    @Column(name = "mfa_enabled")
+    private Boolean mfaEnabled = true;
+
     @JsonProperty(access = Access.WRITE_ONLY)
     @Column(columnDefinition = "TEXT")
     private String lastToken;

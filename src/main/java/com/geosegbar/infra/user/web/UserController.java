@@ -144,6 +144,16 @@ public class UserController {
         return ResponseEntity.ok(response);
     }
 
+    @PutMapping("/{id}/reset-password")
+    public ResponseEntity<WebResponseEntity<UserEntity>> resetPasswordByAdmin(@PathVariable Long id) {
+        UserEntity updatedUser = userService.resetPasswordByAdmin(id);
+        WebResponseEntity<UserEntity> response = WebResponseEntity.success(
+                updatedUser,
+                "Senha redefinida com sucesso! Uma nova senha foi enviada por e-mail ao usuário."
+        );
+        return ResponseEntity.ok(response);
+    }
+
     @PutMapping("/{id}/clients")
     public ResponseEntity<WebResponseEntity<UserEntity>> updateUserClients(
             @PathVariable Long id,

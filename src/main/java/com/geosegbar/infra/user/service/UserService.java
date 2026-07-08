@@ -456,6 +456,24 @@ public class UserService {
         existingUser.setPhone(userDTO.getPhone());
         existingUser.setSex(userDTO.getSex());
 
+        // MFA: null = não alterar (preserva valor atual); explícito true/false só
+        // é aceito para colaboradores. Administradores NUNCA podem ter o MFA
+        // desabilitado — se o papel final for ADMIN (já era ou está sendo
+        // promovido agora), rejeita uma tentativa explícita de desabilitar e, em
+        // qualquer caso, força true (cobre também um valor false remanescente de
+        // quando o usuário ainda era colaborador).
+        boolean explicitlyDisablingMfa = Boolean.FALSE.equals(userDTO.getMfaEnabled());
+        if (userDTO.getMfaEnabled() != null) {
+            existingUser.setMfaEnabled(userDTO.getMfaEnabled());
+        }
+        if (newRole == RoleEnum.ADMIN) {
+            if (explicitlyDisablingMfa) {
+                throw new InvalidInputException(
+                        "Autenticação multifator não pode ser desabilitada para usuários administradores.");
+            }
+            existingUser.setMfaEnabled(true);
+        }
+
         UserEntity savedUser = userRepository.save(existingUser);
 
         if (roleChanged) {
@@ -490,6 +508,41 @@ public class UserService {
         }
 
         return userRepository.save(existingUser);
+    }
+
+    /**
+     * Redefine a senha de um usuário por ação de um administrador — sem precisar
+     * conhecer a senha atual (diferente de {@link #updatePassword}, que é
+     * autoatendimento e exige a senha atual). Gera uma nova senha aleatória,
+     * força troca no próximo acesso e envia por e-mail (mesmo fluxo usado na
+     * criação de usuário). Invalida o token/sessão ativa como medida de
+     * segurança — um reset forçado não deve manter sessões antigas válidas.
+     */
+    @Transactional
+    public UserEntity resetPasswordByAdmin(Long id) {
+        AuthenticatedUserUtil.checkAdminPermission();
+
+        UserEntity user = findEntityByIdWithAllDetails(id);
+
+        if (isSystemUser(user)) {
+            throw new InvalidInputException("A senha do usuário SISTEMA não pode ser redefinida por aqui.");
+        }
+
+        if (user.getRole().getName() == RoleEnum.ADMIN) {
+            throw new InvalidInputException("Administradores não podem redefinir a senha de outros administradores.");
+        }
+
+        String generatedPassword = GenerateRandomPassword.execute();
+        user.setPassword(passwordEncoder.encode(generatedPassword));
+        user.setIsFirstAccess(true);
+        user.setLastToken(null);
+        user.setTokenExpiryDate(null);
+
+        UserEntity saved = userRepository.save(user);
+
+        emailService.sendFirstAccessPassword(saved.getEmail(), generatedPassword, saved.getName());
+
+        return saved;
     }
 
     @Transactional
@@ -613,51 +666,29 @@ public class UserService {
             throw new InvalidInputException("Credenciais incorretas!");
         }
 
-        // MOBILE: nunca pede MFA, faz login direto
+        // MOBILE: nunca pede MFA, faz login direto (admin via mobile já foi bloqueado acima)
         if (origin == LoginOriginEnum.MOBILE) {
-            UserEntity fullUser = userRepository.findByEmailWithAllPermissions(userDTO.email())
-                    .orElseThrow(() -> new NotFoundException("Erro ao carregar perfil do usuário"));
-
-            String token = tokenService.generateToken(fullUser);
-            updateLastLoginAsync(fullUser.getId(), token);
-
-            return new LoginResponseDTO(
-                    fullUser.getId(), fullUser.getName(), fullUser.getEmail(), fullUser.getPhone(),
-                    fullUser.getSex(), fullUser.getRole().getName(), fullUser.getIsFirstAccess(),
-                    token, new ArrayList<>(fullUser.getClients())
-            );
+            return buildDirectLoginResponse(userDTO.email());
         }
 
-        // WEB: pula MFA se já verificou nos últimos 30 dias
-        if (mfaEnabled
+        // MFA desabilitado no perfil do usuário (checkbox — só é possível para
+        // colaboradores, ver validação em update()): login direto, sem enviar
+        // e-mail nem solicitar código.
+        boolean userMfaEnabled = authUser.getMfaEnabled() == null || authUser.getMfaEnabled();
+        if (mfaEnabled && !userMfaEnabled) {
+            return buildDirectLoginResponse(userDTO.email());
+        }
+
+        // WEB: pula MFA se já verificou nos últimos 30 dias (regra mantida para
+        // usuários com MFA ativado)
+        if (mfaEnabled && userMfaEnabled
                 && authUser.getLastMfaVerifiedAt() != null
                 && authUser.getLastMfaVerifiedAt().isAfter(LocalDateTime.now().minusDays(30))) {
-
-            UserEntity fullUser = userRepository.findByEmailWithAllPermissions(userDTO.email())
-                    .orElseThrow(() -> new NotFoundException("Erro ao carregar perfil do usuário"));
-
-            String token = tokenService.generateToken(fullUser);
-            updateLastLoginAsync(fullUser.getId(), token);
-
-            return new LoginResponseDTO(
-                    fullUser.getId(), fullUser.getName(), fullUser.getEmail(), fullUser.getPhone(),
-                    fullUser.getSex(), fullUser.getRole().getName(), fullUser.getIsFirstAccess(),
-                    token, new ArrayList<>(fullUser.getClients())
-            );
+            return buildDirectLoginResponse(userDTO.email());
         }
 
         if (!mfaEnabled) {
-            UserEntity fullUser = userRepository.findByEmailWithAllPermissions(userDTO.email())
-                    .orElseThrow(() -> new NotFoundException("Erro ao carregar perfil do usuário"));
-
-            String token = tokenService.generateToken(fullUser);
-            updateLastLoginAsync(fullUser.getId(), token);
-
-            return new LoginResponseDTO(
-                    fullUser.getId(), fullUser.getName(), fullUser.getEmail(), fullUser.getPhone(),
-                    fullUser.getSex(), fullUser.getRole().getName(), fullUser.getIsFirstAccess(),
-                    token, new ArrayList<>(fullUser.getClients())
-            );
+            return buildDirectLoginResponse(userDTO.email());
         }
 
         String verificationCode = GenerateRandomCode.generateRandomCode();
@@ -667,6 +698,27 @@ public class UserService {
         emailService.sendVerificationCode(authUser.getEmail(), verificationCode);
 
         return null;
+    }
+
+    /**
+     * Monta a resposta de login direto (sem MFA): gera o token e atualiza o
+     * último login de forma assíncrona. Usado por todos os caminhos que
+     * dispensam MFA (origem mobile, MFA desabilitado no perfil, verificação
+     * recente nos últimos 30 dias, ou chave mestra de MFA desligada) — extraído
+     * para evitar duplicar a mesma lógica em cada caminho.
+     */
+    private LoginResponseDTO buildDirectLoginResponse(String email) {
+        UserEntity fullUser = userRepository.findByEmailWithAllPermissions(email)
+                .orElseThrow(() -> new NotFoundException("Erro ao carregar perfil do usuário"));
+
+        String token = tokenService.generateToken(fullUser);
+        updateLastLoginAsync(fullUser.getId(), token);
+
+        return new LoginResponseDTO(
+                fullUser.getId(), fullUser.getName(), fullUser.getEmail(), fullUser.getPhone(),
+                fullUser.getSex(), fullUser.getRole().getName(), fullUser.getIsFirstAccess(),
+                token, new ArrayList<>(fullUser.getClients())
+        );
     }
 
     @Transactional

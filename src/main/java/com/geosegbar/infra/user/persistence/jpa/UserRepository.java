@@ -127,6 +127,24 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
     @Query("SELECT u FROM UserEntity u WHERE u.email = :email")
     Optional<UserEntity> findByEmailWithAllPermissions(@Param("email") String email);
 
+    /**
+     * Mesmo fetch graph de {@link #findByEmailWithAllPermissions}, mas por ID
+     * (estável). Usado pelo {@code SecurityFilter} para resolver o usuário
+     * autenticado a partir do claim "id" do JWT — o ID nunca muda, diferente do
+     * e-mail, então uma troca de e-mail nunca invalida um token já emitido.
+     */
+    @EntityGraph(attributePaths = {
+        "clients", "sex", "status", "role", "createdBy",
+        "attributionsPermission",
+        "documentationPermission",
+        "instrumentationPermission",
+        "routineInspectionPermission",
+        "damPermissions",
+        "damPermissions.dam"
+    })
+    @Query("SELECT u FROM UserEntity u WHERE u.id = :id")
+    Optional<UserEntity> findByIdWithAllPermissions(@Param("id") Long id);
+
     @EntityGraph(attributePaths = {"clients", "sex", "status", "role", "createdBy"})
     @Query("SELECT u FROM UserEntity u WHERE u.email = :email")
     Optional<UserEntity> findByEmailWithClientsAndDetails(@Param("email") String email);

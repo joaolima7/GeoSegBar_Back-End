@@ -397,14 +397,31 @@ public class UserService {
             throw new InvalidInputException("O usuário SISTEMA não pode ser modificado.");
         }
 
+        UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
+        boolean isSelfEdit = userLogged.getId().equals(id);
+
         if (!AuthenticatedUserUtil.isAdmin()) {
-            UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (userLogged.getRole().getName() == RoleEnum.COLLABORATOR
                     && existingUser.getRole().getName() == RoleEnum.ADMIN) {
                 throw new UnauthorizedException("Colaborador não pode editar usuário administrador.");
             }
-            if (!userLogged.getId().equals(id) && !userLogged.getAttributionsPermission().getEditUser()) {
+            if (!isSelfEdit && !userLogged.getAttributionsPermission().getEditUser()) {
                 throw new UnauthorizedException("Usuário não tem permissão para editar usuários que não sejam ele mesmo!");
+            }
+        }
+
+        // E-mail e telefone só podem ser alterados pelo próprio dono da conta —
+        // mesmo administradores não podem mudar e-mail/telefone de outro usuário
+        // por aqui (mudar outros campos como nome/status/role/mfa continua
+        // permitido normalmente). Necessário porque o e-mail é usado como login e
+        // trocar o e-mail de outra pessoa sem ela saber seria um vetor de
+        // sequestro de conta.
+        if (!isSelfEdit) {
+            if (!existingUser.getEmail().equals(userDTO.getEmail())) {
+                throw new UnauthorizedException("Somente o próprio usuário pode alterar o e-mail da sua conta.");
+            }
+            if (phoneChanged(existingUser.getPhone(), userDTO.getPhone())) {
+                throw new UnauthorizedException("Somente o próprio usuário pode alterar o telefone da sua conta.");
             }
         }
 
@@ -612,6 +629,18 @@ public class UserService {
     @Transactional(readOnly = true)
     public boolean existsByEmailAndIdNot(String email, Long id) {
         return userRepository.existsByEmailAndIdNot(email, id);
+    }
+
+    /**
+     * Compara telefones tratando {@code null} e string em branco como
+     * equivalentes (ambos significam "sem telefone"), para não disparar falso
+     * positivo de "alteração" quando o front simplesmente reenvia o mesmo valor
+     * vazio.
+     */
+    private boolean phoneChanged(String oldPhone, String newPhone) {
+        String normalizedOld = (oldPhone == null || oldPhone.isBlank()) ? null : oldPhone;
+        String normalizedNew = (newPhone == null || newPhone.isBlank()) ? null : newPhone;
+        return !java.util.Objects.equals(normalizedOld, normalizedNew);
     }
 
     private UserEntity findEntityByIdWithAllDetails(Long id) {

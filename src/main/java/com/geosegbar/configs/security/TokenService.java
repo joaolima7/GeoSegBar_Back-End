@@ -48,13 +48,20 @@ public class TokenService {
         }
     }
 
-    public String validateToken(String token) {
+    /**
+     * Verifica o token e retorna o ID do usuário (claim "id") — nunca o e-mail
+     * (subject), que é mutável. Resolver por ID garante que uma troca de e-mail
+     * jamais invalide um token já emitido (a busca do usuário autenticado é
+     * sempre por ID, ver {@code SecurityFilter}).
+     */
+    public Long getUserIdFromToken(String token) {
         try {
             return JWT.require(algorithm)
                     .withIssuer(ISSUER)
                     .build()
                     .verify(token)
-                    .getSubject();
+                    .getClaim("id")
+                    .asLong();
         } catch (JWTVerificationException exception) {
             return null;
         }

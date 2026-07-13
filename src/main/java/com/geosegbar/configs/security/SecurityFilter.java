@@ -33,11 +33,11 @@ public class SecurityFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         var token = this.recoverToken(request);
-        var login = tokenService.validateToken(token);
+        var userId = tokenService.getUserIdFromToken(token);
 
-        if (login != null) {
+        if (userId != null) {
 
-            UserEntity user = userRepository.findByEmailWithAllPermissions(login)
+            UserEntity user = userRepository.findByIdWithAllPermissions(userId)
                     .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
             var authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"));
             var authentication = new UsernamePasswordAuthenticationToken(user, null, authorities);

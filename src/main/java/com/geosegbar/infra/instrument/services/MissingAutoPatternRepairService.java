@@ -5,7 +5,6 @@ import java.util.List;
 
 import org.springframework.context.annotation.DependsOn;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
@@ -27,11 +26,19 @@ public class MissingAutoPatternRepairService {
 
     @PostConstruct
     public void repairMissingAutoPatterns() {
+        // Cada fase tem seu próprio try/catch: uma falha no reparo de gráficos não
+        // pode impedir o reparo de tabelas de sequer executar (era o que acontecia
+        // com um único try envolvendo as duas chamadas).
         try {
             repairMissingGraphPatterns();
+        } catch (Exception e) {
+            log.error("[AutoPatternRepair] Erro durante reparo de padrões de gráfico: {}", e.getMessage(), e);
+        }
+
+        try {
             repairMissingTabulatePatterns();
         } catch (Exception e) {
-            log.error("[AutoPatternRepair] Erro durante reparo de padrões automáticos: {}", e.getMessage(), e);
+            log.error("[AutoPatternRepair] Erro durante reparo de padrões de tabela: {}", e.getMessage(), e);
         }
     }
 
@@ -65,7 +72,20 @@ public class MissingAutoPatternRepairService {
         log.info("[AutoPatternRepair] Padrões de tabela criados: {}/{}", repaired, ids.size());
     }
 
-    @Transactional
+    /**
+     * Reparo do padrão de gráfico.
+     * <p>
+     * <b>NÃO é transacional de propósito.</b> Antes este método era
+     * {@code @Transactional} e os 20 instrumentos do lote compartilhavam a MESMA
+     * transação: bastava um falhar para o Spring marcá-la como
+     * {@code rollback-only} e <b>os 20 serem perdidos</b> — inclusive os que
+     * tinham sido criados com sucesso (o {@code catch} do loop registrava a falha,
+     * mas o estrago já estava feito e os seguintes também falhavam em cascata com
+     * {@code UnexpectedRollbackException}).
+     * <p>
+     * Agora cada instrumento é persistido pela transação própria do
+     * {@code create}, então uma falha isolada não afeta os demais.
+     */
     public int repairGraphPatternBatch(List<Long> ids) {
         List<InstrumentEntity> instruments = instrumentRepository.findWithActiveOutputsByIdIn(ids);
         int count = 0;
@@ -81,7 +101,11 @@ public class MissingAutoPatternRepairService {
         return count;
     }
 
-    @Transactional
+    /**
+     * Reparo do padrão de tabela. Também deixou de ser transacional pelo lote,
+     * pelo mesmo motivo do reparo de gráfico — assim uma falha em um instrumento
+     * não derruba os outros 19 do lote.
+     */
     public int repairTabulatePatternBatch(List<Long> ids) {
         List<InstrumentEntity> instruments = instrumentRepository.findWithActiveOutputsByIdIn(ids);
         int count = 0;

@@ -42,6 +42,35 @@ public class AsyncConfig {
         return executor;
     }
 
+    /**
+     * Thread pool dedicado à criação automática de padrões (gráfico/tabela) de
+     * instrumentos.
+     * <p>
+     * Antes, o {@code @Async} de {@code AutoPatternCreationService} não tinha
+     * qualifier e caía no {@code SimpleAsyncTaskExecutor} padrão: uma thread NOVA
+     * por instrumento, sem limite nem fila. Numa importação em massa (ex.: 88
+     * instrumentos de uma vez) isso significava 88 threads simultâneas disputando
+     * as 15 conexões do pool Hikari — receita para timeout de conexão e criação
+     * de padrão falhando por esgotamento de recursos.
+     * <p>
+     * Com pool limitado + fila, os padrões são criados de forma controlada;
+     * {@code CallerRunsPolicy} garante que, sob carga extrema, nada seja
+     * descartado silenciosamente.
+     */
+    @Bean(name = "autoPatternExecutor")
+    public Executor autoPatternExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(1000);
+        executor.setThreadNamePrefix("auto-pattern-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(120);
+        executor.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        return executor;
+    }
+
     @Bean(name = "checklistPhotoUploadExecutor")
     public Executor checklistPhotoUploadExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

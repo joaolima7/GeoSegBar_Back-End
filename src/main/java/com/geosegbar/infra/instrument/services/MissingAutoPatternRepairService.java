@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.context.annotation.DependsOn;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.entities.InstrumentEntity;
@@ -42,10 +43,33 @@ public class MissingAutoPatternRepairService {
         }
     }
 
+    /**
+     * Rede de segurança: reexecuta o reparo dos padrões de GRÁFICO periodicamente.
+     * <p>
+     * O {@code @PostConstruct} só roda no boot da aplicação — se a criação
+     * automática de um padrão falhasse logo após um instrumento ser criado, ele
+     * ficaria sem padrão até o próximo deploy. Com este agendamento, qualquer
+     * instrumento ativo que fique sem padrão de gráfico é corrigido em, no
+     * máximo, 30 minutos, sem intervenção manual.
+     * <p>
+     * Só repara GRÁFICO de propósito: o reparo de tabela ainda esbarra na
+     * divergência entre o critério da query (associação) e o da validação (nome
+     * único na barragem), e reagendá-lo geraria erro recorrente em log/auditoria
+     * enquanto essa regra não é definida.
+     */
+    @Scheduled(initialDelay = 1_800_000L, fixedDelay = 1_800_000L)
+    public void scheduledGraphPatternRepair() {
+        try {
+            repairMissingGraphPatterns();
+        } catch (Exception e) {
+            log.error("[AutoPatternRepair] Erro no reparo periódico de padrões de gráfico: {}", e.getMessage(), e);
+        }
+    }
+
     private void repairMissingGraphPatterns() {
         List<Long> ids = instrumentRepository.findActiveNonLinimetricIdsWithoutAutoGraphPattern();
         if (ids.isEmpty()) {
-            log.info("[AutoPatternRepair] Nenhum instrumento sem padrão de gráfico automático.");
+            log.debug("[AutoPatternRepair] Nenhum instrumento sem padrão de gráfico automático.");
             return;
         }
         log.warn("[AutoPatternRepair] {} instrumento(s) sem padrão de gráfico automático. Iniciando reparo...", ids.size());

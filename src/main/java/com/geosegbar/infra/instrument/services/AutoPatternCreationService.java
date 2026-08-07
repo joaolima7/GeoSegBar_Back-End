@@ -61,7 +61,7 @@ public class AutoPatternCreationService {
      * {@code UnexpectedRollbackException} e <b>o padrão de gráfico já criado era
      * revertido junto</b> — perdendo silenciosamente os dois padrões.
      */
-    @Async
+    @Async("autoPatternExecutor")
     public void createPatternsForInstrument(InstrumentEntity detachedInstrument) {
 
         Long instrumentId = detachedInstrument.getId();

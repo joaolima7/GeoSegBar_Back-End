@@ -1,6 +1,7 @@
 package com.geosegbar.unit.configs.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import java.util.List;
 
@@ -91,6 +92,21 @@ class AuthStatusContractTest extends BaseUnitTest {
         // Se um código novo entrar no enum, este teste falha e obriga a decidir
         // conscientemente de que lado ele fica.
         assertThat(AuthErrorCodeEnum.values()).hasSize(deslogam.size() + 1);
+    }
+
+    @Test
+    @DisplayName("Desconexão do cliente não vira alerta de erro inesperado")
+    void clientDisconnectIsNotAnUnexpectedError() {
+        // Broken pipe em download é o cliente indo embora, não falha do servidor.
+        // Antes caía no handler genérico e disparava e-mail de "Erro Inesperado
+        // Detectado" — alerta que dispara para coisa normal treina a equipe a
+        // ignorar alerta.
+        var request = new org.springframework.mock.web.MockHttpServletRequest(
+                "GET", "/share/token-qualquer/files/30");
+
+        assertThatCode(() -> handler.handleClientDisconnect(
+                new org.apache.catalina.connector.ClientAbortException("Broken pipe"), request))
+                .doesNotThrowAnyException();
     }
 
     @Test

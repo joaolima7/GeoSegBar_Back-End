@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.apache.catalina.connector.ClientAbortException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -17,6 +18,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.TransactionSystemException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -282,6 +284,27 @@ public class RestExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(WebResponseEntity.error("Erro na transação: "
                         + (cause != null ? cause.getMessage() : ex.getMessage())));
+    }
+
+    /**
+     * Cliente desistiu no meio da resposta.
+     *
+     * Acontece o tempo todo em download: o usuário cancela, fecha a aba, perde
+     * a rede, ou o curl é interrompido. O servidor tenta escrever num socket que
+     * já não existe e o SO devolve "Broken pipe".
+     *
+     * Não é falha da aplicação — a requisição foi atendida, o cliente é que foi
+     * embora. Caía no handler genérico e disparava e-mail de "Erro Inesperado
+     * Detectado", que é ruído: alerta que dispara para coisa normal treina todo
+     * mundo a ignorar alerta.
+     *
+     * Retorna void de propósito: a conexão já morreu, tentar escrever uma
+     * resposta de erro provocaria outra exceção.
+     */
+    @ExceptionHandler({AsyncRequestNotUsableException.class, ClientAbortException.class})
+    public void handleClientDisconnect(Exception ex, HttpServletRequest request) {
+        logger.info("Cliente desconectou durante a resposta de {} {} — sem ação necessária",
+                request.getMethod(), request.getRequestURI());
     }
 
     @ExceptionHandler(Exception.class)

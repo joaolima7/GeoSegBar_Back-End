@@ -36,9 +36,9 @@ import com.geosegbar.entities.SectionEntity;
 import com.geosegbar.entities.StatisticalLimitEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
+import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
-import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.constant.persistence.jpa.ConstantRepository;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.deterministic_limit.persistence.jpa.DeterministicLimitRepository;
@@ -93,7 +93,7 @@ public class InstrumentService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getViewInstruments())) {
-                throw new UnauthorizedException("Usuário não tem permissão para visualizar instrumentos!");
+                throw new ForbiddenException("Usuário não tem permissão para visualizar instrumentos!");
             }
         }
         return mapToResponseDTOList(instrumentRepository.findAllByOrderByNameAsc());
@@ -104,7 +104,7 @@ public class InstrumentService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getViewInstruments())) {
-                throw new UnauthorizedException("Usuário não tem permissão para visualizar instrumentos!");
+                throw new ForbiddenException("Usuário não tem permissão para visualizar instrumentos!");
             }
         }
         return mapToResponseDTOList(instrumentRepository.findByDamId(damId));
@@ -156,7 +156,7 @@ public class InstrumentService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getViewInstruments())) {
-                throw new UnauthorizedException("Usuário não tem permissão para visualizar instrumentos!");
+                throw new ForbiddenException("Usuário não tem permissão para visualizar instrumentos!");
             }
         }
 
@@ -169,7 +169,7 @@ public class InstrumentService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getEditInstruments())) {
-                throw new UnauthorizedException("Usuário não tem permissão para criar instrumentos!");
+                throw new ForbiddenException("Usuário não tem permissão para criar instrumentos!");
             }
         }
 
@@ -231,11 +231,16 @@ public class InstrumentService {
 
         InstrumentTypeEntity instrumentType = instrumentTypeRepository.findById(request.getInstrumentTypeId())
                 .orElseThrow(() -> new NotFoundException("Tipo de instrumento não encontrado com ID: " + request.getInstrumentTypeId()));
+        validateInstrumentTypeBelongsToDamClient(instrumentType, dam);
 
         InstrumentEntity instrument = new InstrumentEntity();
         instrument.setName(request.getName().toUpperCase());
         instrument.setLocation(request.getLocation());
-        instrument.setLastUpdateVariablesDate(LocalDateTime.now());
+        // Mesmo instante nos dois campos: o cadastro não é uma "alteração de variáveis",
+        // então lastUpdateVariablesDate == createdAt significa "nada foi alterado ainda".
+        LocalDateTime creationMoment = LocalDateTime.now();
+        instrument.setCreatedAt(creationMoment);
+        instrument.setLastUpdateVariablesDate(creationMoment);
         instrument.setDistanceOffset(request.getDistanceOffset());
         instrument.setLatitude(request.getLatitude());
         instrument.setLongitude(request.getLongitude());
@@ -494,7 +499,7 @@ public class InstrumentService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getEditInstruments())) {
-                throw new UnauthorizedException("Usuário não tem permissão para editar instrumentos!");
+                throw new ForbiddenException("Usuário não tem permissão para editar instrumentos!");
             }
         }
 
@@ -743,6 +748,7 @@ public class InstrumentService {
         }
         InstrumentTypeEntity instrumentType = instrumentTypeRepository.findById(request.getInstrumentTypeId())
                 .orElseThrow(() -> new NotFoundException("Tipo de instrumento não encontrado com ID: " + request.getInstrumentTypeId()));
+        validateInstrumentTypeBelongsToDamClient(instrumentType, dam);
 
         instrument.setName(request.getName().toUpperCase());
         instrument.setLocation(request.getLocation());
@@ -768,7 +774,7 @@ public class InstrumentService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getEditInstruments())) {
-                throw new UnauthorizedException("Usuário não tem permissão para deletar instrumentos!");
+                throw new ForbiddenException("Usuário não tem permissão para deletar instrumentos!");
             }
         }
 
@@ -799,7 +805,7 @@ public class InstrumentService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getEditInstruments())) {
-                throw new UnauthorizedException("Usuário não tem permissão para alterar status de instrumentos!");
+                throw new ForbiddenException("Usuário não tem permissão para alterar status de instrumentos!");
             }
         }
 
@@ -853,11 +859,36 @@ public class InstrumentService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getViewInstruments())) {
-                throw new UnauthorizedException("Usuário não tem permissão para visualizar instrumentos!");
+                throw new ForbiddenException("Usuário não tem permissão para visualizar instrumentos!");
             }
         }
         List<InstrumentEntity> instruments = instrumentRepository.findByFiltersOptimized(damId, instrumentTypeId, sectionId, active, clientId);
         return mapToResponseDTOList(instruments);
+    }
+
+    /**
+     * Garante que a barragem só use tipo de instrumento do cliente dono dela.
+     * Sem isso, o catálogo de um cliente vazaria para as barragens de outro e
+     * renomear um tipo replicaria a alteração fora do cliente.
+     *
+     * Dois casos passam sem bloqueio, de propósito:
+     * - tipo legado (sem cliente), anterior à separação por cliente, que segue
+     *   válido nos instrumentos já cadastrados até ser migrado;
+     * - barragem sem cliente atrelado, em que não há dono para comparar.
+     */
+    private void validateInstrumentTypeBelongsToDamClient(InstrumentTypeEntity instrumentType, DamEntity dam) {
+        if (instrumentType.getClient() == null || dam.getClient() == null) {
+            return;
+        }
+
+        Long typeClientId = instrumentType.getClient().getId();
+        Long damClientId = dam.getClient().getId();
+
+        if (!typeClientId.equals(damClientId)) {
+            throw new InvalidInputException(
+                    "O tipo de instrumento '" + instrumentType.getName() + "' pertence a outro cliente e não pode ser "
+                    + "usado na barragem '" + dam.getName() + "'. Selecione um tipo do cliente dono da barragem.");
+        }
     }
 
     private void validateEquation(String equation, Set<String> inputAcronyms, Set<String> constantAcronyms) {
@@ -1445,7 +1476,7 @@ public class InstrumentService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!Boolean.TRUE.equals(userLogged.getInstrumentationPermission().getEditInstruments())) {
-                throw new UnauthorizedException("Usuário não tem permissão para alterar visibilidade de instrumentos nas seções!");
+                throw new ForbiddenException("Usuário não tem permissão para alterar visibilidade de instrumentos nas seções!");
             }
         }
 

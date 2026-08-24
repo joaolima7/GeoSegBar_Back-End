@@ -14,9 +14,9 @@ import com.geosegbar.entities.MapKmlFileEntity;
 import com.geosegbar.entities.MapKmlFolderEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.DuplicateResourceException;
+import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
-import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.file_storage.FileStorageService;
 import com.geosegbar.infra.map_kml.dtos.MapKmlFileResponseDTO;
@@ -212,7 +212,7 @@ public class MapKmlFolderService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity user = AuthenticatedUserUtil.getCurrentUser();
             if (!user.getAttributionsPermission().getEditDam()) {
-                throw new UnauthorizedException("Usuário não tem permissão para gerenciar camadas KML do mapa!");
+                throw new ForbiddenException("Usuário não tem permissão para gerenciar camadas KML do mapa!");
             }
         }
     }

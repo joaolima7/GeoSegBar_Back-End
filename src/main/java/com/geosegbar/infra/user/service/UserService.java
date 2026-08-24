@@ -30,6 +30,7 @@ import com.geosegbar.entities.UserEntity;
 import com.geosegbar.entities.VerificationCodeEntity;
 import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DuplicateResourceException;
+import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.MobileAdminLoginException;
 import com.geosegbar.exceptions.NotFoundException;
@@ -38,6 +39,7 @@ import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
 import com.geosegbar.infra.checklist_response.persistence.jpa.ChecklistResponseRepository;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
+import com.geosegbar.infra.password_setup.services.PasswordSetupService;
 import com.geosegbar.infra.permissions.atributions_permission.dtos.AttributionsPermissionDTO;
 import com.geosegbar.infra.permissions.atributions_permission.services.AttributionsPermissionService;
 import com.geosegbar.infra.permissions.dam_permissions.persistence.DamPermissionRepository;
@@ -85,6 +87,7 @@ public class UserService {
     private final TokenService tokenService;
     private final VerificationCodeRepository verificationCodeRepository;
     private final EmailService emailService;
+    private final PasswordSetupService passwordSetupService;
     private final DamRepository damRepository;
     private final DamPermissionRepository damPermissionRepository;
     private final DocumentationPermissionService documentationPermissionService;
@@ -167,7 +170,7 @@ public class UserService {
             adminUser.setIsFirstAccess(true);
 
             UserEntity saved = userRepository.save(adminUser);
-            emailService.sendFirstAccessPassword(saved.getEmail(), generatedPassword, saved.getName());
+            passwordSetupService.issueAndSendSetupLink(saved, true);
 
             log.info("Usuário admin {} criado com sucesso.", email);
         } catch (Exception e) {
@@ -186,7 +189,7 @@ public class UserService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getAttributionsPermission().getEditUser()) {
-                throw new UnauthorizedException("Usuário não tem permissão para modificar status de usuários!");
+                throw new ForbiddenException("Usuário não tem permissão para modificar status de usuários!");
             }
         }
 
@@ -215,7 +218,7 @@ public class UserService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getAttributionsPermission().getEditUser()) {
-                throw new UnauthorizedException("Usuário não tem permissão para excluir usuários!");
+                throw new ForbiddenException("Usuário não tem permissão para excluir usuários!");
             }
         }
 
@@ -308,7 +311,7 @@ public class UserService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getAttributionsPermission().getEditUser()) {
-                throw new UnauthorizedException("Usuário não tem permissão para editar/criar usuários!");
+                throw new ForbiddenException("Usuário não tem permissão para editar/criar usuários!");
             }
         }
 
@@ -364,13 +367,16 @@ public class UserService {
             userEntity.setClients(new HashSet<>());
         }
 
+        // A senha aleatória existe só para a conta nunca ficar sem hash: ela não é
+        // enviada a ninguém e é descartada quando o usuário define a própria senha
+        // pelo link. Nenhuma credencial trafega por e-mail.
         String generatedPassword = GenerateRandomPassword.execute();
         userEntity.setPassword(passwordEncoder.encode(generatedPassword));
         userEntity.setIsFirstAccess(true);
 
         UserEntity savedUser = userRepository.save(userEntity);
 
-        emailService.sendFirstAccessPassword(savedUser.getEmail(), generatedPassword, savedUser.getName());
+        passwordSetupService.issueAndSendSetupLink(savedUser, true);
 
         if (savedUser.getRole().getName() == RoleEnum.COLLABORATOR) {
             if (userDTO.getSourceUserId() != null) {
@@ -403,10 +409,10 @@ public class UserService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             if (userLogged.getRole().getName() == RoleEnum.COLLABORATOR
                     && existingUser.getRole().getName() == RoleEnum.ADMIN) {
-                throw new UnauthorizedException("Colaborador não pode editar usuário administrador.");
+                throw new ForbiddenException("Colaborador não pode editar usuário administrador.");
             }
             if (!isSelfEdit && !userLogged.getAttributionsPermission().getEditUser()) {
-                throw new UnauthorizedException("Usuário não tem permissão para editar usuários que não sejam ele mesmo!");
+                throw new ForbiddenException("Usuário não tem permissão para editar usuários que não sejam ele mesmo!");
             }
         }
 
@@ -418,10 +424,10 @@ public class UserService {
         // sequestro de conta.
         if (!isSelfEdit) {
             if (!existingUser.getEmail().equals(userDTO.getEmail())) {
-                throw new UnauthorizedException("Somente o próprio usuário pode alterar o e-mail da sua conta.");
+                throw new ForbiddenException("Somente o próprio usuário pode alterar o e-mail da sua conta.");
             }
             if (phoneChanged(existingUser.getPhone(), userDTO.getPhone())) {
-                throw new UnauthorizedException("Somente o próprio usuário pode alterar o telefone da sua conta.");
+                throw new ForbiddenException("Somente o próprio usuário pode alterar o telefone da sua conta.");
             }
         }
 
@@ -505,22 +511,41 @@ public class UserService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getId().equals(id) && !userLogged.getAttributionsPermission().getEditUser()) {
-                throw new UnauthorizedException("Usuário não tem permissão para atualizar a senha de outros usuários!");
+                throw new ForbiddenException("Usuário não tem permissão para atualizar a senha de outros usuários!");
             }
         }
 
         UserEntity existingUser = findEntityByIdWithAllDetails(id);
 
-        if (!passwordEncoder.matches(passwordDTO.getCurrentPassword(), existingUser.getPassword())) {
-            throw new InvalidInputException("Senha atual incorreta!");
-        }
+        // No primeiro acesso o usuário está trocando a senha temporária que ele nunca
+        // escolheu — pedir a "senha atual" não protege nada e trava o fluxo. A dispensa
+        // vale só para o próprio usuário: um terceiro com permissão de editar usuários
+        // continua obrigado a informar a senha atual, para não conseguir assumir a conta
+        // de quem ainda não fez o primeiro acesso.
+        UserEntity currentUser = AuthenticatedUserUtil.getCurrentUser();
+        boolean selfService = currentUser != null && currentUser.getId().equals(id);
+        boolean firstAccessFlow = selfService && Boolean.TRUE.equals(existingUser.getIsFirstAccess());
 
-        if (passwordDTO.getCurrentPassword().equals(passwordDTO.getNewPassword())) {
-            throw new InvalidInputException("A nova senha deve ser diferente da senha atual!");
+        if (firstAccessFlow) {
+            if (passwordEncoder.matches(passwordDTO.getNewPassword(), existingUser.getPassword())) {
+                throw new InvalidInputException("A nova senha deve ser diferente da senha atual!");
+            }
+        } else {
+            if (passwordDTO.getCurrentPassword() == null || passwordDTO.getCurrentPassword().isBlank()) {
+                throw new InvalidInputException("A senha atual é obrigatória!");
+            }
+
+            if (!passwordEncoder.matches(passwordDTO.getCurrentPassword(), existingUser.getPassword())) {
+                throw new InvalidInputException("Senha atual incorreta!");
+            }
+
+            if (passwordDTO.getCurrentPassword().equals(passwordDTO.getNewPassword())) {
+                throw new InvalidInputException("A nova senha deve ser diferente da senha atual!");
+            }
         }
 
         existingUser.setPassword(passwordEncoder.encode(passwordDTO.getNewPassword()));
-        if (existingUser.getIsFirstAccess()) {
+        if (Boolean.TRUE.equals(existingUser.getIsFirstAccess())) {
             existingUser.setIsFirstAccess(false);
         }
 
@@ -530,9 +555,10 @@ public class UserService {
     /**
      * Redefine a senha de um usuário por ação de um administrador — sem precisar
      * conhecer a senha atual (diferente de {@link #updatePassword}, que é
-     * autoatendimento e exige a senha atual). Gera uma nova senha aleatória,
-     * força troca no próximo acesso e envia por e-mail (mesmo fluxo usado na
-     * criação de usuário). Invalida o token/sessão ativa como medida de
+     * autoatendimento e exige a senha atual). A senha atual é substituída por uma
+     * aleatória que ninguém conhece e o usuário recebe um link de uso único para
+     * definir a própria senha (mesmo fluxo usado na criação de usuário) — nenhuma
+     * credencial trafega por e-mail. Invalida o token/sessão ativa como medida de
      * segurança — um reset forçado não deve manter sessões antigas válidas.
      */
     @Transactional
@@ -557,7 +583,7 @@ public class UserService {
 
         UserEntity saved = userRepository.save(user);
 
-        emailService.sendFirstAccessPassword(saved.getEmail(), generatedPassword, saved.getName());
+        passwordSetupService.issueAndSendSetupLink(saved, false);
 
         return saved;
     }

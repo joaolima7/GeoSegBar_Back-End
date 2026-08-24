@@ -14,7 +14,6 @@ import lombok.NoArgsConstructor;
 public class UpdateDamRequest {
 
     @NotBlank(message = "Nome é obrigatório!")
-    @Pattern(regexp = "^[A-Za-zÀ-ÿ\\s]+$", message = "O campo não pode conter números!")
     private String name;
 
     @NotNull(message = "Latitude é obrigatório!")

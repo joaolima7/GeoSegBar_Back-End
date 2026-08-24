@@ -27,8 +27,8 @@ import com.geosegbar.entities.StatusEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DuplicateResourceException;
+import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.NotFoundException;
-import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.classification_dam.persistence.ClassificationDamRepository;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.dtos.CreateDamCompleteRequest;
@@ -46,6 +46,7 @@ import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.dam.projections.DamQuickAccessProjection;
 import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
 import com.geosegbar.infra.documentation_dam.persistence.DocumentationDamRepository;
+import com.geosegbar.infra.instrument_type.services.InstrumentTypeService;
 import com.geosegbar.infra.map_kml.dtos.MapKmlFolderResponseDTO;
 import com.geosegbar.infra.map_kml.persistence.jpa.MapKmlFolderRepository;
 import com.geosegbar.infra.map_kml.services.MapKmlFolderService;
@@ -71,6 +72,7 @@ public class DamService {
 
     private final DamRepository damRepository;
     private final ClientRepository clientRepository;
+    private final InstrumentTypeService instrumentTypeService;
     private final StatusRepository statusRepository;
     private final SecurityLevelRepository securityLevelRepository;
     private final RiskCategoryRepository riskCategoryRepository;
@@ -229,7 +231,7 @@ public class DamService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getAttributionsPermission().getEditDam()) {
-                throw new UnauthorizedException("Usuário não tem permissão para modificar status de barragens!");
+                throw new ForbiddenException("Usuário não tem permissão para modificar status de barragens!");
             }
         }
 
@@ -250,7 +252,7 @@ public class DamService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getAttributionsPermission().getEditDam()) {
-                throw new UnauthorizedException("Usuário não tem permissão para criar barragens!");
+                throw new ForbiddenException("Usuário não tem permissão para criar barragens!");
             }
         }
 
@@ -426,7 +428,7 @@ public class DamService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getAttributionsPermission().getEditDam()) {
-                throw new UnauthorizedException("Usuário não tem permissão para editar barragens!");
+                throw new ForbiddenException("Usuário não tem permissão para editar barragens!");
             }
         }
 
@@ -508,6 +510,10 @@ public class DamService {
 
         if (clientChanged) {
             damPermissionService.syncPermissionsOnClientChange(updatedDam, oldClientId);
+            // Os tipos de instrumento são por cliente: os instrumentos precisam passar
+            // a apontar para o catálogo do cliente novo, senão a barragem fica presa ao
+            // catálogo do antigo e qualquer edição de instrumento passa a ser recusada.
+            instrumentTypeService.realignInstrumentTypesOnDamClientChange(updatedDam);
         }
 
         return findById(updatedDam.getId());
@@ -519,7 +525,7 @@ public class DamService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getAttributionsPermission().getEditDam()) {
-                throw new UnauthorizedException("Usuário não tem permissão para editar barragens!");
+                throw new ForbiddenException("Usuário não tem permissão para editar barragens!");
             }
         }
 
@@ -757,6 +763,7 @@ public class DamService {
 
         if (clientChanged) {
             damPermissionService.syncPermissionsOnClientChange(finalDam, oldClientId);
+            instrumentTypeService.realignInstrumentTypesOnDamClientChange(finalDam);
         }
 
         return findById(damId);

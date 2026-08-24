@@ -155,54 +155,44 @@ public class HistoricalDataJobScheduler {
         }
     }
 
+    /**
+     * Devolve à fila os jobs que ficaram PAUSED após um erro recuperável, e
+     * encerra de vez os que esgotaram as tentativas.
+     *
+     * Antes existiam DOIS caminhos para isso: este e
+     * HistoricalDataJobService#recoverOrphanedJobs. Este aqui nunca funcionou —
+     * findPausedJobs() era um esboço que devolvia lista vazia em qualquer
+     * situação — e o outro empurrava o job para o Redis sem gravar QUEUED, de
+     * modo que o consumidor descartava na sequência. O resultado foi o job 1
+     * girar 4 dias em 19/08/2026 sem sair do lugar.
+     *
+     * Agora a responsabilidade é uma só: recoverOrphanedJobs faz a transição
+     * PAUSED → QUEUED dentro de transação e só então enfileira. Aqui cuidamos
+     * apenas do encerramento de quem já não tem retry disponível.
+     */
     @Scheduled(cron = "0 */5 * * * *")
-    public void requeuePausedJobs() {
+    public void failExhaustedPausedJobs() {
         try {
-            List<HistoricalDataJobEntity> pausedJobs
-                    = jobService.getJobCountsByStatus().get(JobStatus.PAUSED) > 0
-                    ? findPausedJobs()
-                    : List.of();
+            List<HistoricalDataJobEntity> exhausted = jobService.findPausedJobsWithoutRetries();
 
-            if (pausedJobs.isEmpty()) {
+            if (exhausted.isEmpty()) {
                 return;
             }
 
-            log.info("🔄 Re-enfileirando {} job(s) pausado(s)", pausedJobs.size());
-
-            for (HistoricalDataJobEntity job : pausedJobs) {
+            for (HistoricalDataJobEntity job : exhausted) {
                 try {
-
-                    if (job.getRetryCount() >= 3) {
-                        jobService.markAsFailed(job.getId(),
-                                "Job pausado com retry count >= 3");
-                        log.warn("Job {} marcado como FAILED (retry limit reached)", job.getId());
-                        continue;
-                    }
-
-                    job.setStatus(JobStatus.QUEUED);
-                    jobService.pushToRedisQueue(job.getId());
-
-                    log.info("Job {} re-enfileirado (retry {}/3, instrumento: {})",
-                            job.getId(), job.getRetryCount(), job.getInstrumentName());
-
+                    jobService.markAsFailed(job.getId(),
+                            "Job pausado após esgotar as 3 tentativas. Último erro: "
+                            + job.getErrorMessage());
+                    log.warn("Job {} marcado como FAILED (limite de tentativas atingido)", job.getId());
                 } catch (Exception e) {
-                    log.error("Erro ao re-enfileirar job pausado {}: {}",
-                            job.getId(), e.getMessage());
+                    log.error("Erro ao encerrar job pausado {}: {}", job.getId(), e.getMessage());
                 }
             }
 
         } catch (Exception e) {
-            log.error("Erro ao re-enfileirar jobs pausados: {}", e.getMessage(), e);
+            log.error("Erro ao encerrar jobs pausados sem retry: {}", e.getMessage(), e);
         }
-    }
-
-    private List<HistoricalDataJobEntity> findPausedJobs() {
-
-        return jobService.findById(0L).map(job -> List.<HistoricalDataJobEntity>of())
-                .orElseGet(() -> {
-
-                    return List.of();
-                });
     }
 
     @Scheduled(cron = "0 */2 * * * *")

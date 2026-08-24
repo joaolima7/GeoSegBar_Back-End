@@ -48,3 +48,6 @@ logs/
 log.out
 keystore.p12
 
+
+# Estado de runtime do deploy (upstream ativo do nginx) — gerado no servidor
+runtime/

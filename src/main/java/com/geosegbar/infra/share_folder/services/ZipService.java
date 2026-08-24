@@ -2,9 +2,6 @@ package com.geosegbar.infra.share_folder.services;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.zip.ZipEntry;
@@ -15,6 +12,7 @@ import org.springframework.stereotype.Service;
 import com.geosegbar.entities.PSBFileEntity;
 import com.geosegbar.entities.PSBFolderEntity;
 import com.geosegbar.exceptions.FileStorageException;
+import com.geosegbar.infra.file_storage.FileStorageService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +21,8 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @Slf4j
 public class ZipService {
+
+    private final FileStorageService fileStorageService;
 
     public ByteArrayOutputStream createZipFromFolder(PSBFolderEntity folder) {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -33,8 +33,15 @@ public class ZipService {
 
             addFilesToZip(folder, "", zos, addedPaths);
 
+            if (addedPaths.isEmpty()) {
+                // Melhor um erro claro do que um .zip vazio que o usuário só descobre
+                // que está vazio depois de baixar.
+                throw new FileStorageException(
+                        "A pasta '" + folder.getName() + "' não possui arquivos para download.");
+            }
+
             zos.finish();
-            log.info("ZIP criado com sucesso para pasta: {}", folder.getName());
+            log.info("ZIP criado com {} arquivo(s) para a pasta: {}", addedPaths.size(), folder.getName());
 
         } catch (IOException e) {
             log.error("Erro ao criar ZIP para pasta {}: {}", folder.getName(), e.getMessage());
@@ -72,20 +79,25 @@ public class ZipService {
             return;
         }
 
-        Path filePath = Paths.get(file.getFilePath());
-
-        if (!Files.exists(filePath)) {
-            log.error("Arquivo não encontrado no storage: {}", file.getFilePath());
-
-            return;
+        // Os arquivos vivem no S3: filePath guarda a CHAVE do objeto, não um caminho
+        // de disco. A versão anterior fazia Paths.get(filePath) + Files.exists(), que
+        // é sempre falso dentro do container — e o "return" silencioso fazia o ZIP
+        // sair vazio, com HTTP 200 e sem nenhum aviso ao usuário.
+        byte[] conteudo;
+        try {
+            conteudo = fileStorageService.downloadFileBytes(file.getDownloadUrl());
+        } catch (RuntimeException e) {
+            log.error("Falha ao baixar do S3 o arquivo '{}' (url={}): {}",
+                    file.getOriginalFilename(), file.getDownloadUrl(), e.getMessage());
+            throw new IOException("Falha ao ler o arquivo " + file.getOriginalFilename() + " do storage", e);
         }
 
         try {
             ZipEntry zipEntry = new ZipEntry(zipEntryPath);
-            zipEntry.setSize(file.getSize());
+            zipEntry.setSize(conteudo.length);
             zos.putNextEntry(zipEntry);
 
-            Files.copy(filePath, zos);
+            zos.write(conteudo);
 
             zos.closeEntry();
             addedPaths.add(zipEntryPath);

@@ -36,9 +36,9 @@ import com.geosegbar.entities.OutputEntity;
 import com.geosegbar.entities.ReadingEntity;
 import com.geosegbar.entities.ReadingInputValueEntity;
 import com.geosegbar.entities.UserEntity;
+import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
-import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.reading.dtos.GroupedReadingData;
 import com.geosegbar.infra.reading.dtos.InputMetadata;
@@ -65,7 +65,7 @@ public class ReadingExportService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (userLogged.getInstrumentationPermission() == null || !userLogged.getInstrumentationPermission().getViewRead()) {
-                throw new UnauthorizedException("Usuário não tem permissão para exportar leituras!");
+                throw new ForbiddenException("Usuário não tem permissão para exportar leituras!");
             }
         }
 

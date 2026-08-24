@@ -149,7 +149,7 @@ public class UserController {
         UserEntity updatedUser = userService.resetPasswordByAdmin(id);
         WebResponseEntity<UserEntity> response = WebResponseEntity.success(
                 updatedUser,
-                "Senha redefinida com sucesso! Uma nova senha foi enviada por e-mail ao usuário."
+                "Um link para o usuário definir a própria senha foi enviado por e-mail. O acesso anterior foi invalidado."
         );
         return ResponseEntity.ok(response);
     }

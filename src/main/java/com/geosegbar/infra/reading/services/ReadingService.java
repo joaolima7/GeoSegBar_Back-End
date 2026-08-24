@@ -36,9 +36,9 @@ import com.geosegbar.entities.ReadingEntity;
 import com.geosegbar.entities.ReadingInputValueEntity;
 import com.geosegbar.entities.StatisticalLimitEntity;
 import com.geosegbar.entities.UserEntity;
+import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
-import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.reading.dtos.BulkToggleActiveResponseDTO;
@@ -436,13 +436,9 @@ public class ReadingService {
 
         boolean isUpdatingInputValues = request.getInputValues() != null && !request.getInputValues().isEmpty();
 
-        if (isUpdatingInputValues) {
-            LocalDateTime readingDateTime = LocalDateTime.of(originalDate, originalHour);
-            if (instrument.getLastUpdateVariablesDate() != null
-                    && instrument.getLastUpdateVariablesDate().isAfter(readingDateTime)) {
-                throw new InvalidInputException(
-                        "Não é possível editar os valores desta leitura pois as variáveis do instrumento foram alteradas após o registro.");
-            }
+        if (isUpdatingInputValues && variablesChangedAfterReading(instrument, originalDate, originalHour)) {
+            throw new InvalidInputException(
+                    "Não é possível editar os valores desta leitura pois as variáveis do instrumento foram alteradas após o registro.");
         }
 
         LocalDate newDate = request.getDate() != null ? request.getDate() : originalDate;
@@ -642,7 +638,7 @@ public class ReadingService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity user = AuthenticatedUserUtil.getCurrentUser();
             if (user == null || user.getInstrumentationPermission() == null || !user.getInstrumentationPermission().getViewRead()) {
-                throw new UnauthorizedException("Usuário não tem permissão para visualizar leituras!");
+                throw new ForbiddenException("Usuário não tem permissão para visualizar leituras!");
             }
         }
     }
@@ -651,7 +647,7 @@ public class ReadingService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity user = AuthenticatedUserUtil.getCurrentUser();
             if (user == null || user.getInstrumentationPermission() == null || !user.getInstrumentationPermission().getEditRead()) {
-                throw new UnauthorizedException("Usuário não autorizado a modificar leituras!");
+                throw new ForbiddenException("Usuário não autorizado a modificar leituras!");
             }
         }
     }
@@ -663,7 +659,7 @@ public class ReadingService {
         }
         UserEntity currentUser = AuthenticatedUserUtil.getCurrentUser();
         if (!AuthenticatedUserUtil.isAdmin() && (currentUser.getInstrumentationPermission() == null || !currentUser.getInstrumentationPermission().getEditRead())) {
-            throw new UnauthorizedException("Usuário não autorizado a criar leituras!");
+            throw new ForbiddenException("Usuário não autorizado a criar leituras!");
         }
         return currentUser;
     }
@@ -693,6 +689,37 @@ public class ReadingService {
                 throw new InvalidInputException("Input '" + providedInput + "' não existe neste instrumento");
             }
         }
+    }
+
+    /**
+     * Diz se as variáveis do instrumento foram realmente alteradas depois que a
+     * leitura foi registrada — única situação em que recalcular os valores usaria
+     * uma configuração diferente da vigente no momento do registro.
+     *
+     * Dois cuidados evitam o falso positivo que bloqueava a primeira leitura de um
+     * instrumento recém-criado:
+     *
+     * 1. O cadastro não conta como alteração. Na criação, createdAt e
+     *    lastUpdateVariablesDate recebem o mesmo instante; enquanto forem iguais
+     *    nenhuma variável foi mexida e não há o que proteger.
+     * 2. A comparação é feita no minuto. A leitura guarda date + hour com precisão
+     *    de minuto (14:30), enquanto lastUpdateVariablesDate é um LocalDateTime com
+     *    segundos (14:30:47). Sem truncar, qualquer alteração feita no mesmo minuto
+     *    do registro parecia posterior a ele.
+     */
+    private boolean variablesChangedAfterReading(InstrumentEntity instrument, LocalDate readingDate, LocalTime readingHour) {
+        LocalDateTime lastUpdate = instrument.getLastUpdateVariablesDate();
+        if (lastUpdate == null) {
+            return false;
+        }
+
+        LocalDateTime createdAt = instrument.getCreatedAt();
+        if (createdAt != null && !lastUpdate.isAfter(createdAt)) {
+            return false;
+        }
+
+        LocalDateTime readingDateTime = LocalDateTime.of(readingDate, readingHour).truncatedTo(ChronoUnit.MINUTES);
+        return lastUpdate.truncatedTo(ChronoUnit.MINUTES).isAfter(readingDateTime);
     }
 
     private void updateInputValuesForGroup(Long instrumentId, LocalDate date, LocalTime hour, Map<String, Double> newInputValues, InstrumentEntity instrument) {

@@ -22,9 +22,9 @@ import com.geosegbar.entities.SectionCustomLevelEntity;
 import com.geosegbar.entities.SectionEntity;
 import com.geosegbar.entities.SectionRenderingConfigEntity;
 import com.geosegbar.entities.UserEntity;
+import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
-import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.reading.persistence.jpa.ReadingRepository;
 import com.geosegbar.infra.reservoir.persistence.ReservoirRepository;
@@ -476,7 +476,7 @@ public class SectionRenderingConfigService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getInstrumentationPermission().getViewSections()) {
-                throw new UnauthorizedException("Usuário não autorizado a visualizar seções!");
+                throw new ForbiddenException("Usuário não autorizado a visualizar seções!");
             }
         }
     }
@@ -485,7 +485,7 @@ public class SectionRenderingConfigService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getInstrumentationPermission().getEditSections()) {
-                throw new UnauthorizedException("Usuário não autorizado a editar seções!");
+                throw new ForbiddenException("Usuário não autorizado a editar seções!");
             }
         }
     }

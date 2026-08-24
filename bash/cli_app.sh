@@ -15,8 +15,10 @@ Uso:
   ./bash/cli_app.sh help
 
 Ações disponíveis no menu:
-    - Deploy produção
-    - Backup banco produção
+    - Deploy produção (blue-green, sem downtime)
+    - Rollback produção (volta para a versão anterior)
+    - Backup banco produção (local + S3)
+    - Verificar estado dos backups
     - Configurar cron de backup
     - Reset completo de ambiente
 EOF

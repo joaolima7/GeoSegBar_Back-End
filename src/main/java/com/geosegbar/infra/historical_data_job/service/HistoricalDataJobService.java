@@ -28,6 +28,28 @@ public class HistoricalDataJobService {
     private static final int MAX_RETRY_ATTEMPTS = 3;
     private static final long STALLED_JOB_TIMEOUT_HOURS = 1;
 
+    /**
+     * Limite da coluna error_message (varchar(2000)).
+     *
+     * Em 19/08/2026 a API da ANA devolveu uma página HTML de erro; a mensagem
+     * inteira foi parar aqui e o UPDATE estourou com "value too long for type
+     * character varying(2000)". Como o save falhou, o job ficou preso em
+     * PROCESSING e a pausa nunca foi registrada. Truncar na fronteira de
+     * persistência garante que registrar o erro nunca seja, ele próprio, um erro.
+     */
+    private static final int MAX_ERROR_MESSAGE_LENGTH = 2000;
+
+    private static String truncateError(String errorMessage) {
+        if (errorMessage == null) {
+            return null;
+        }
+        String flat = errorMessage.replaceAll("\\s+", " ").trim();
+        if (flat.length() <= MAX_ERROR_MESSAGE_LENGTH) {
+            return flat;
+        }
+        return flat.substring(0, MAX_ERROR_MESSAGE_LENGTH - 3) + "...";
+    }
+
     private final HistoricalDataJobRepository jobRepository;
     private final RedisTemplate<String, Object> redisTemplate;
 
@@ -140,7 +162,7 @@ public class HistoricalDataJobService {
 
         job.setStatus(JobStatus.FAILED);
         job.setCompletedAt(LocalDateTime.now());
-        job.setErrorMessage(errorMessage);
+        job.setErrorMessage(truncateError(errorMessage));
         jobRepository.save(job);
 
         log.error("Job {} FALHOU: {} - Progresso: {:.1f}%",
@@ -153,7 +175,7 @@ public class HistoricalDataJobService {
                 .orElseThrow(() -> new IllegalArgumentException("Job não encontrado: " + jobId));
 
         job.setStatus(JobStatus.PAUSED);
-        job.setErrorMessage(errorMessage);
+        job.setErrorMessage(truncateError(errorMessage));
         jobRepository.save(job);
 
         log.warn("Job {} PAUSADO: {} - Retry count: {}", jobId, errorMessage, job.getRetryCount());
@@ -173,6 +195,17 @@ public class HistoricalDataJobService {
                 jobId, newRetryCount, MAX_RETRY_ATTEMPTS, canRetry);
 
         return canRetry;
+    }
+
+    /**
+     * Jobs PAUSED que já esgotaram as tentativas — não voltam para a fila e
+     * precisam ser encerrados como FAILED.
+     */
+    @Transactional(readOnly = true)
+    public List<HistoricalDataJobEntity> findPausedJobsWithoutRetries() {
+        return jobRepository.findByStatusOrderByCreatedAtAsc(JobStatus.PAUSED).stream()
+                .filter(job -> job.getRetryCount() >= MAX_RETRY_ATTEMPTS)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -229,7 +262,7 @@ public class HistoricalDataJobService {
      *
      * @return número de jobs re-enfileirados
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public int recoverOrphanedJobs() {
         List<HistoricalDataJobEntity> queuedJobs
                 = jobRepository.findByStatusOrderByCreatedAtAsc(JobStatus.QUEUED);
@@ -244,14 +277,25 @@ public class HistoricalDataJobService {
             log.info("🔄 Job {} (QUEUED) re-enfileirado na fila Redis (recovery)", job.getId());
         }
 
-        // Paused jobs com retry disponível também voltam para fila
+        // Job PAUSED precisa VOLTAR A SER QUEUED no banco antes de entrar na fila.
+        //
+        // Antes daqui só se empurrava o id para o Redis, sem tocar no status. O
+        // consumidor (processQueue) recusa tudo que não esteja QUEUED, então o
+        // job era enfileirado e descartado a cada 30s, indefinidamente — em
+        // 19/08/2026 o job 1 ficou 4 dias nesse laço, ~11.500 ciclos, sem nunca
+        // voltar a processar nem falhar de vez.
         for (HistoricalDataJobEntity job : pausedJobs) {
-            if (job.getRetryCount() < MAX_RETRY_ATTEMPTS) {
-                pushToRedisQueue(job.getId());
-                recovered++;
-                log.info("🔄 Job {} (PAUSED, retry {}/{}) re-enfileirado na fila Redis (recovery)",
-                        job.getId(), job.getRetryCount(), MAX_RETRY_ATTEMPTS);
+            if (job.getRetryCount() >= MAX_RETRY_ATTEMPTS) {
+                continue;
             }
+
+            job.setStatus(JobStatus.QUEUED);
+            jobRepository.save(job);
+            pushToRedisQueue(job.getId());
+            recovered++;
+
+            log.info("🔄 Job {} (PAUSED → QUEUED, retry {}/{}) re-enfileirado na fila Redis (recovery)",
+                    job.getId(), job.getRetryCount(), MAX_RETRY_ATTEMPTS);
         }
 
         return recovered;

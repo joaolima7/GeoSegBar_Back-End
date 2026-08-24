@@ -58,7 +58,6 @@ public class DamEntity {
     private Long id;
 
     @NotBlank(message = "Nome é obrigatório!")
-    @Pattern(regexp = "^[A-Za-zÀ-ÿ\\s]+$", message = "O campo não pode conter números!")
     @Column(nullable = false)
     private String name;
 

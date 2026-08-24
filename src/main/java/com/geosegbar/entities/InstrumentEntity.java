@@ -87,6 +87,14 @@ public class InstrumentEntity {
     @Column(nullable = false)
     private LocalDateTime lastUpdateVariablesDate;
 
+    /**
+     * Momento do cadastro do instrumento. Serve de âncora para distinguir "as
+     * variáveis nunca foram alteradas desde a criação" de "as variáveis foram
+     * alteradas depois". Nulo nos instrumentos criados antes desta coluna existir.
+     */
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
     @Column(name = "is_linimetric_ruler", nullable = false)
     private Boolean isLinimetricRuler;
 

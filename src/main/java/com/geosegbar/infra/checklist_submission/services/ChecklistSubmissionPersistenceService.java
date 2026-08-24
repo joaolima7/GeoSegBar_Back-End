@@ -31,9 +31,9 @@ import com.geosegbar.entities.QuestionEntity;
 import com.geosegbar.entities.QuestionnaireResponseEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
 import com.geosegbar.entities.UserEntity;
+import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
-import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
 import com.geosegbar.infra.anomaly_photo.persistence.jpa.AnomalyPhotoRepository;
 import com.geosegbar.infra.anomaly_status.persistence.jpa.AnomalyStatusRepository;
@@ -96,16 +96,16 @@ public class ChecklistSubmissionPersistenceService {
             }
 
             if (currentUser.getRoutineInspectionPermission() == null) {
-                throw new UnauthorizedException("Usuário não tem permissão para preencher checklist!");
+                throw new ForbiddenException("Usuário não tem permissão para preencher checklist!");
             }
 
             if (submissionDto.isMobile()) {
                 if (!Boolean.TRUE.equals(currentUser.getRoutineInspectionPermission().getIsFillMobile())) {
-                    throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via mobile!");
+                    throw new ForbiddenException("Usuário não tem permissão para preencher checklist via mobile!");
                 }
             } else {
                 if (!Boolean.TRUE.equals(currentUser.getRoutineInspectionPermission().getIsFillWeb())) {
-                    throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via web!");
+                    throw new ForbiddenException("Usuário não tem permissão para preencher checklist via web!");
                 }
             }
         }
@@ -211,16 +211,16 @@ public class ChecklistSubmissionPersistenceService {
             }
 
             if (currentUser.getRoutineInspectionPermission() == null) {
-                throw new UnauthorizedException("Usuário não tem permissão para preencher checklist!");
+                throw new ForbiddenException("Usuário não tem permissão para preencher checklist!");
             }
 
             if (submissionDto.isMobile()) {
                 if (!Boolean.TRUE.equals(currentUser.getRoutineInspectionPermission().getIsFillMobile())) {
-                    throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via mobile!");
+                    throw new ForbiddenException("Usuário não tem permissão para preencher checklist via mobile!");
                 }
             } else {
                 if (!Boolean.TRUE.equals(currentUser.getRoutineInspectionPermission().getIsFillWeb())) {
-                    throw new UnauthorizedException("Usuário não tem permissão para preencher checklist via web!");
+                    throw new ForbiddenException("Usuário não tem permissão para preencher checklist via web!");
                 }
             }
         }
@@ -543,7 +543,7 @@ public class ChecklistSubmissionPersistenceService {
                 .anyMatch(client -> client.getId().equals(dam.getClient().getId()));
 
         if (!userBelongsToClient) {
-            throw new UnauthorizedException(
+            throw new ForbiddenException(
                     "Usuário não tem permissão para acessar esta barragem. "
                     + "O usuário não pertence ao cliente proprietário da barragem."
             );
@@ -557,7 +557,7 @@ public class ChecklistSubmissionPersistenceService {
                 );
 
         if (!hasSpecificPermission) {
-            throw new UnauthorizedException(
+            throw new ForbiddenException(
                     "Usuário não tem permissão específica para acessar esta barragem. "
                     + "Verifique as permissões de acesso na administração do sistema."
             );

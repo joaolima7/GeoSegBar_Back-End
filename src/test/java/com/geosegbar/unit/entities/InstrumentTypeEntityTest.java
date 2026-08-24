@@ -8,6 +8,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.geosegbar.config.BaseUnitTest;
+import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.entities.InstrumentTypeEntity;
 import com.geosegbar.fixtures.TestDataBuilder;
@@ -38,14 +39,20 @@ class InstrumentTypeEntityTest extends BaseUnitTest {
     @DisplayName("Should create using all args constructor")
     void shouldCreateUsingAllArgsConstructor() {
 
+        ClientEntity client = new ClientEntity();
+        client.setId(7L);
+        client.setName("Cliente Teste");
+
         InstrumentTypeEntity type = new InstrumentTypeEntity(
                 1L,
                 "Piezômetro",
+                client,
                 new HashSet<>()
         );
 
         assertThat(type.getId()).isEqualTo(1L);
         assertThat(type.getName()).isEqualTo("Piezômetro");
+        assertThat(type.getClient()).isSameAs(client);
         assertThat(type.getInstruments()).isNotNull().isEmpty();
     }
 

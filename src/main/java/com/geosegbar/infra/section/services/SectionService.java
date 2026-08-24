@@ -13,9 +13,9 @@ import com.geosegbar.entities.SectionEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DuplicateResourceException;
+import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
-import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.file_storage.FileStorageService;
 import com.geosegbar.infra.section.dtos.CreateSectionDTO;
@@ -90,7 +90,7 @@ public class SectionService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getInstrumentationPermission().getViewSections()) {
-                throw new UnauthorizedException("Usuário não autorizado a visualizar seções!");
+                throw new ForbiddenException("Usuário não autorizado a visualizar seções!");
             }
         }
     }
@@ -111,7 +111,7 @@ public class SectionService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getInstrumentationPermission().getEditSections()) {
-                throw new UnauthorizedException("Usuário não autorizado a criar seções!");
+                throw new ForbiddenException("Usuário não autorizado a criar seções!");
             }
         }
         if (section.getDam() == null || section.getDam().getId() == null) {
@@ -172,7 +172,7 @@ public class SectionService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getInstrumentationPermission().getEditSections()) {
-                throw new UnauthorizedException("Usuário não autorizado a editar seções!");
+                throw new ForbiddenException("Usuário não autorizado a editar seções!");
             }
         }
 
@@ -229,7 +229,7 @@ public class SectionService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getInstrumentationPermission().getEditSections()) {
-                throw new UnauthorizedException("Usuário não autorizado a editar seções!");
+                throw new ForbiddenException("Usuário não autorizado a editar seções!");
             }
         }
 
@@ -268,7 +268,7 @@ public class SectionService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getInstrumentationPermission().getEditSections()) {
-                throw new UnauthorizedException("Usuário não autorizado a excluir seções!");
+                throw new ForbiddenException("Usuário não autorizado a excluir seções!");
             }
         }
 

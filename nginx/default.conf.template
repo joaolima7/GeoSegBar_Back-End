@@ -68,12 +68,29 @@ server {
         add_header Content-Type text/plain;
     }
 
+    # O actuator NÃO é público.
+    #
+    # /actuator/health e /actuator/prometheus são liberados no Spring para que o
+    # HEALTHCHECK do Docker e o Prometheus funcionem — ambos alcançam o container
+    # direto pela rede interna, sem passar por aqui. Da internet, tudo sob
+    # /actuator/ é negado: com management.endpoints.web.exposure.include=*, expor
+    # isso publicaria /actuator/env e /actuator/configprops, que carregam segredos.
+    location /actuator/ {
+        access_log off;
+        deny all;
+        return 404;
+    }
+
     location / {
-        # A variável força o nginx a resolver o upstream dinamicamente via
-        # resolver (em vez de travar no startup, como faz um bloco upstream
-        # com nome estático). Se a API estiver momentaneamente indisponível,
-        # o nginx retorna 502 pontual e se recupera sozinho — não morre.
-        set $upstream_server ${UPSTREAM_SERVER};
+        # O upstream ativo vem de um arquivo separado, reescrito pelo deploy e
+        # aplicado com `nginx -s reload`. O reload é gracioso: os workers antigos
+        # terminam as requisições em andamento e os novos já usam o upstream novo,
+        # então a troca de versão não derruba nem uma conexão.
+        #
+        # A variável (em vez de um bloco `upstream` estático) força a resolução
+        # dinâmica pelo resolver acima. Se a API ficar momentaneamente indisponível,
+        # o nginx devolve 502 pontual e se recupera sozinho — não morre.
+        include /etc/nginx/conf.d/upstream_active.conf;
         proxy_pass http://$upstream_server;
     }
 }

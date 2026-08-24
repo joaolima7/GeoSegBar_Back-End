@@ -25,6 +25,7 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.util.ContentCachingRequestWrapper;
 
 import com.geosegbar.common.email.EmailService;
+import com.geosegbar.common.enums.AuthErrorCodeEnum;
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.BusinessRuleException;
@@ -76,16 +77,26 @@ public class RestExceptionHandler {
                 .body(WebResponseEntity.error(ex.getMessage()));
     }
 
+    /**
+     * 401 — o usuário NÃO está autenticado (sem sessão, token vencido ou conta
+     * indisponível). É o único caso em que o front deve deslogar e mandar para
+     * o login. Falta de permissão é 403, tratado logo abaixo.
+     */
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<WebResponseEntity<String>> handleUnauthorizedException(UnauthorizedException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(WebResponseEntity.error(ex.getMessage()));
+                .body(WebResponseEntity.error(ex.getMessage(), AuthErrorCodeEnum.NOT_AUTHENTICATED));
     }
 
+    /**
+     * 403 — o usuário ESTÁ autenticado, mas não pode executar a operação ou não
+     * tem acesso ao recurso. A sessão continua válida: o front deve exibir a
+     * mensagem e permanecer onde está, nunca deslogar.
+     */
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<WebResponseEntity<String>> handleForbiddenException(ForbiddenException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(WebResponseEntity.error(ex.getMessage()));
+                .body(WebResponseEntity.error(ex.getMessage(), AuthErrorCodeEnum.FORBIDDEN));
     }
 
     @ExceptionHandler(MobileAdminLoginException.class)
@@ -127,16 +138,22 @@ public class RestExceptionHandler {
                 .body(WebResponseEntity.error(ex.getMessage()));
     }
 
+    /**
+     * 401 — token malformado/assinatura inválida.
+     */
     @ExceptionHandler(InvalidTokenException.class)
     public ResponseEntity<WebResponseEntity<String>> handleInvalidTokenException(InvalidTokenException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(WebResponseEntity.error(ex.getMessage()));
+                .body(WebResponseEntity.error(ex.getMessage(), AuthErrorCodeEnum.INVALID_TOKEN));
     }
 
+    /**
+     * 401 — token vencido. Sessão expirada.
+     */
     @ExceptionHandler(TokenExpiredException.class)
     public ResponseEntity<WebResponseEntity<String>> handleTokenException(TokenExpiredException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(WebResponseEntity.error(ex.getMessage()));
+                .body(WebResponseEntity.error(ex.getMessage(), AuthErrorCodeEnum.SESSION_EXPIRED));
     }
 
     @ExceptionHandler(UnsupportedFileTypeException.class)

@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 
 import com.geosegbar.entities.RoutineInspectionPermissionEntity;
 import com.geosegbar.entities.UserEntity;
+import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.UnauthorizedException;
 
 @Component
@@ -34,7 +35,7 @@ public class AuthenticatedUserUtil {
 
     public static void checkAdminPermission() {
         if (!isAdmin()) {
-            throw new UnauthorizedException("Acesso negado. Permissão de administrador necessária.");
+            throw new ForbiddenException("Acesso negado. Permissão de administrador necessária.");
         }
     }
 
@@ -48,7 +49,7 @@ public class AuthenticatedUserUtil {
             }
         }
 
-        throw new UnauthorizedException("Acesso negado. Permissão insuficiente para esta operação.");
+        throw new ForbiddenException("Acesso negado. Permissão insuficiente para esta operação.");
     }
 
     public static boolean hasRoutineInspectionPermission(boolean isMobile) {

@@ -6,6 +6,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,8 +17,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.geosegbar.common.response.WebResponseEntity;
+import com.geosegbar.entities.PSBFileEntity;
 import com.geosegbar.entities.PSBFolderEntity;
 import com.geosegbar.entities.ShareFolderEntity;
+import com.geosegbar.infra.psb.services.PSBFileService;
 import com.geosegbar.infra.share_folder.dtos.CreateShareFolderRequest;
 import com.geosegbar.infra.share_folder.services.ShareFolderService;
 
@@ -30,6 +33,7 @@ import lombok.RequiredArgsConstructor;
 public class ShareFolderController {
 
     private final ShareFolderService shareFolderService;
+    private final PSBFileService psbFileService;
 
     @GetMapping("/user/{userId}")
     public ResponseEntity<WebResponseEntity<List<ShareFolderEntity>>> getSharesByUser(@PathVariable Long userId) {
@@ -78,6 +82,32 @@ public class ShareFolderController {
         WebResponseEntity<List<ShareFolderEntity>> response = WebResponseEntity.success(
                 shares, "Compartilhamentos da barragem obtidos com sucesso!");
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Download de um arquivo especifico pelo link compartilhado, sem login.
+     * A rota carrega o token porque e ele que autoriza — /psb/files/download
+     * continua exigindo sessao, por ser a rota interna do sistema.
+     */
+    @GetMapping("/{token}/files/{fileId}")
+    public ResponseEntity<Resource> downloadSharedFile(
+            @PathVariable String token,
+            @PathVariable Long fileId) {
+
+        PSBFileEntity file = shareFolderService.resolveSharedFile(token, fileId);
+        Resource resource = psbFileService.downloadFileForSharedAccess(fileId);
+
+        String contentType = file.getContentType() != null
+                ? file.getContentType()
+                : "application/octet-stream";
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(contentType))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment()
+                                .filename(file.getOriginalFilename(), java.nio.charset.StandardCharsets.UTF_8)
+                                .build().toString())
+                .body(resource);
     }
 
     @GetMapping("/download/{token}")

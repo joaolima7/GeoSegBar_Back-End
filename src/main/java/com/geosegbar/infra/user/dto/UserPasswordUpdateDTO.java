@@ -10,7 +10,13 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UserPasswordUpdateDTO {
-    @NotBlank(message = "A senha atual é obrigatória!")
+
+    /**
+     * Opcional apenas no fluxo de primeiro acesso, quando o próprio usuário troca
+     * a senha temporária. Em qualquer outra troca continua sendo obrigatória — a
+     * exigência é validada em UserService.updatePassword, não aqui, porque depende
+     * do estado do usuário autenticado.
+     */
     private String currentPassword;
     
     @NotBlank(message = "A nova senha não pode estar em branco!")

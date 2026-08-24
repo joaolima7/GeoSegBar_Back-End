@@ -13,9 +13,10 @@ import com.geosegbar.entities.PAEProtectionElementEntity;
 import com.geosegbar.entities.PAEZoneContactEntity;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.UserEntity;
+import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.exceptions.DuplicateResourceException;
+import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.NotFoundException;
-import com.geosegbar.exceptions.UnauthorizedException;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.pae.dtos.PAEContactDTO;
 import com.geosegbar.infra.pae.dtos.PAEDTO;
@@ -60,7 +61,7 @@ public class PAEService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getAttributionsPermission().getEditPAE()) {
-                throw new UnauthorizedException("Usuário não tem permissão para criar ou editar PAE!");
+                throw new ForbiddenException("Usuário não tem permissão para criar ou editar PAE!");
             }
         }
 
@@ -68,13 +69,14 @@ public class PAEService {
                 .orElseThrow(() -> new NotFoundException("Barragem não encontrada com ID: " + dto.getDamId()));
 
         PAEEntity pae;
+        boolean isNew = dto.getId() == null;
 
         if (dto.getId() != null) {
             pae = paeRepository.findById(dto.getId())
                     .orElseThrow(() -> new NotFoundException("PAE não encontrado com ID: " + dto.getId()));
 
             if (!pae.getDam().getId().equals(dto.getDamId())) {
-                throw new UnauthorizedException("Não é permitido mudar a barragem associada ao PAE");
+                throw new BusinessRuleException("Não é permitido mudar a barragem associada ao PAE");
             }
         } else {
             if (paeRepository.existsByDamId(dto.getDamId())) {
@@ -124,10 +126,22 @@ public class PAEService {
             }
         }
 
-        PAEEntity saved = paeRepository.save(pae);
+        // Na edição o PAE já está gerenciado: chamar save() dispararia em.merge(), que
+        // duplicaria os filhos recém-criados (a cópia mesclada é inserida e a instância
+        // original da coleção é inserida de novo no flush) e devolveria id nulo para eles.
+        // Só o cadastro novo precisa de persist(); a edição é resolvida por dirty checking.
+        PAEEntity saved = isNew ? paeRepository.save(pae) : pae;
+
+        if (isNew) {
+            dam.setPae(saved);
+        }
+
+        // Garante que os orphan removals e os inserts dos filhos aconteçam antes de montar
+        // a resposta, para que os ids de elementos de proteção e contatos não voltem nulos.
+        paeRepository.flush();
 
         log.info("PAE {} para a barragem {}",
-                dto.getId() == null ? "criado" : "atualizado",
+                isNew ? "criado" : "atualizado",
                 dam.getName());
 
         return toResponseDTO(saved);
@@ -138,16 +152,29 @@ public class PAEService {
         if (!AuthenticatedUserUtil.isAdmin()) {
             UserEntity userLogged = AuthenticatedUserUtil.getCurrentUser();
             if (!userLogged.getAttributionsPermission().getEditPAE()) {
-                throw new UnauthorizedException("Usuário não tem permissão para excluir PAE!");
+                throw new ForbiddenException("Usuário não tem permissão para excluir PAE!");
             }
         }
 
         PAEEntity pae = paeRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("PAE não encontrado com ID: " + id));
 
-        log.info("PAE excluído para a barragem {}", pae.getDam().getName());
+        DamEntity dam = pae.getDam();
+        String damName = dam != null ? dam.getName() : null;
+
+        // DamEntity.pae é @OneToOne(mappedBy = "dam", cascade = ALL). Enquanto a barragem
+        // gerenciada continuar apontando para este PAE, o cascade de PERSIST executado no
+        // flush cancela a remoção ("un-scheduling entity deletion") e a transação encerra
+        // com sucesso sem apagar o registro. Zerar o lado inverso é o que faz o DELETE ir
+        // de fato ao banco.
+        if (dam != null) {
+            dam.setPae(null);
+        }
 
         paeRepository.delete(pae);
+        paeRepository.flush();
+
+        log.info("PAE excluído para a barragem {}", damName);
     }
 
     private PAEResponseDTO toResponseDTO(PAEEntity pae) {

@@ -1,5 +1,6 @@
 package com.geosegbar.unit.common.email;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -14,6 +15,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.springframework.mail.javamail.JavaMailSender;
+import java.util.concurrent.atomic.AtomicReference;
+
 import org.springframework.test.util.ReflectionTestUtils;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
@@ -169,67 +172,74 @@ class EmailServiceTest extends BaseUnitTest {
     }
 
     @Test
-    @DisplayName("Should send first access password email successfully")
-    void shouldSendFirstAccessPasswordEmailSuccessfully() throws MessagingException {
+    @DisplayName("Should send password setup link email successfully")
+    void shouldSendPasswordSetupLinkEmailSuccessfully() throws MessagingException {
         // Given
         String toEmail = "newuser@example.com";
-        String password = "P@ssw0rd!";
         String userName = "João Silva";
-        String htmlContent = "<html>Welcome João Silva! Password: P@ssw0rd!</html>";
+        String token = "abc123token";
+        String htmlContent = "<html>Bem-vindo João Silva</html>";
 
-        when(templateEngine.process(eq("emails/first-access-password"), any(Context.class)))
+        when(templateEngine.process(eq("emails/password-setup-link"), any(Context.class)))
                 .thenReturn(htmlContent);
         when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
 
         // When
-        assertThatCode(() -> emailService.sendFirstAccessPassword(toEmail, password, userName))
+        assertThatCode(() -> emailService.sendPasswordSetupLink(toEmail, userName, token, 48, true))
                 .doesNotThrowAnyException();
 
         // Then
-        verify(templateEngine).process(eq("emails/first-access-password"), any(Context.class));
+        verify(templateEngine).process(eq("emails/password-setup-link"), any(Context.class));
         verify(mailSender).createMimeMessage();
         verify(mailSender).send(mimeMessage);
     }
 
     @Test
-    @DisplayName("Should set correct context variables for first access password email")
-    void shouldSetCorrectContextVariablesForFirstAccessPassword() throws MessagingException {
+    @DisplayName("Should build setup URL from frontend URL and never expose a password")
+    void shouldSetCorrectContextVariablesForPasswordSetupLink() throws MessagingException {
         // Given
         String toEmail = "newuser@example.com";
-        String password = "TempPass123!";
         String userName = "Maria Santos";
+        String token = "tok-42";
+        AtomicReference<Context> captured = new AtomicReference<>();
 
         when(templateEngine.process(anyString(), any(Context.class)))
                 .thenAnswer(invocation -> {
-                    Context context = invocation.getArgument(1);
-                    // Verify context contains all required variables
-                    return "<html>User: " + context.getVariable("userName")
-                            + ", Email: " + context.getVariable("userEmail")
-                            + ", Password: " + context.getVariable("password") + "</html>";
+                    captured.set(invocation.getArgument(1));
+                    return "<html>Test</html>";
                 });
         when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
 
         // When
-        emailService.sendFirstAccessPassword(toEmail, password, userName);
+        emailService.sendPasswordSetupLink(toEmail, userName, token, 48, true);
 
         // Then
-        verify(templateEngine).process(eq("emails/first-access-password"), any(Context.class));
+        verify(templateEngine).process(eq("emails/password-setup-link"), any(Context.class));
+
+        Context context = captured.get();
+        assertThat(context.getVariable("userName")).isEqualTo(userName);
+        assertThat(context.getVariable("setupUrl")).isEqualTo(FRONTEND_URL + "/definir-senha?token=" + token);
+        assertThat(context.getVariable("validityHours")).isEqualTo(48);
+        assertThat(context.getVariable("welcome")).isEqualTo(true);
+        // Nenhuma credencial pode ir para o template: é isso que fazia o e-mail
+        // ser barrado como phishing pelos filtros de e-mail corporativo.
+        assertThat(context.getVariable("password")).isNull();
     }
 
     @Test
-    @DisplayName("Should send first access password with complex password")
-    void shouldSendFirstAccessPasswordWithComplexPassword() throws MessagingException {
+    @DisplayName("Should send password setup link for an admin-triggered reset")
+    void shouldSendPasswordSetupLinkForReset() throws MessagingException {
         // Given
         String toEmail = "newuser@example.com";
-        String password = "C0mpl3x!P@ssw0rd#2024$"; // Complex password
         String userName = "João Silva";
+        String token = "Zx9-_aBc123DeF456";
 
         when(templateEngine.process(anyString(), any(Context.class)))
                 .thenReturn("<html>Test</html>");
         when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
 
         // When & Then
-        assertThatCode(() -> emailService.sendFirstAccessPassword(toEmail, password, userName))
+        assertThatCode(() -> emailService.sendPasswordSetupLink(toEmail, userName, token, 48, false))
                 .doesNotThrowAnyException();
     }
 
@@ -355,7 +365,6 @@ class EmailServiceTest extends BaseUnitTest {
     void shouldHandlePortugueseCharactersInUserName() throws MessagingException {
         // Given
         String toEmail = "user@example.com";
-        String password = "P@ss123";
         String userName = "José da Silva Ção"; // Portuguese characters
 
         when(templateEngine.process(anyString(), any(Context.class)))
@@ -363,7 +372,7 @@ class EmailServiceTest extends BaseUnitTest {
         when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
 
         // When
-        emailService.sendFirstAccessPassword(toEmail, password, userName);
+        emailService.sendPasswordSetupLink(toEmail, userName, "tok", 48, true);
 
         // Then
         verify(mailSender).send(mimeMessage);
@@ -471,7 +480,7 @@ class EmailServiceTest extends BaseUnitTest {
         when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
 
         // When
-        emailService.sendFirstAccessPassword(toEmail, "pass", "User");
+        emailService.sendPasswordSetupLink(toEmail, "User", "tok", 48, true);
 
         // Then
         verify(mailSender).createMimeMessage();

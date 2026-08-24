@@ -53,6 +53,21 @@ public class PSBFileService {
     @Transactional(readOnly = true)
     public PSBFileEntity findById(Long id) {
         validateViewPermission();
+        return findByIdOrFail(id);
+    }
+
+    /**
+     * Busca o arquivo sem exigir sessão. Usado apenas pelo compartilhamento
+     * público, onde a autorização vem do token do link — ver
+     * ShareFolderService#downloadSharedFile, que confere se o arquivo realmente
+     * pertence à pasta compartilhada antes de chamar aqui.
+     */
+    @Transactional(readOnly = true)
+    public PSBFileEntity findByIdForSharedAccess(Long id) {
+        return findByIdOrFail(id);
+    }
+
+    private PSBFileEntity findByIdOrFail(Long id) {
         return psbFileRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Arquivo PSB não encontrado"));
     }
@@ -252,6 +267,19 @@ public class PSBFileService {
     @Transactional(readOnly = true)
     public Resource downloadFile(Long fileId) {
         validateViewPermission();
+        return openResource(fileId);
+    }
+
+    /**
+     * Abre o arquivo sem exigir sessão. Restrito ao compartilhamento público,
+     * que já validou o token e a pertinência do arquivo à pasta compartilhada.
+     */
+    @Transactional(readOnly = true)
+    public Resource downloadFileForSharedAccess(Long fileId) {
+        return openResource(fileId);
+    }
+
+    private Resource openResource(Long fileId) {
         try {
             PSBFileEntity file = psbFileRepository.findById(fileId)
                     .orElseThrow(() -> new NotFoundException("Arquivo PSB não encontrado"));

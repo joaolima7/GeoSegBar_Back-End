@@ -36,6 +36,12 @@ public class SecurityConfig {
     @Autowired
     SecurityFilter securityFilter;
 
+    @Autowired
+    RestAuthenticationEntryPoint restAuthenticationEntryPoint;
+
+    @Autowired
+    RestAccessDeniedHandler restAccessDeniedHandler;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -49,10 +55,39 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/user/forgot-password").permitAll()
                 .requestMatchers(HttpMethod.POST, "/user/verify-reset-code").permitAll()
                 .requestMatchers(HttpMethod.POST, "/user/reset-password").permitAll()
-                .requestMatchers(HttpMethod.GET, "/psb/files/download/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/password-setup/validate").permitAll()
+                .requestMatchers(HttpMethod.POST, "/password-setup/complete").permitAll()
+                // Compartilhamento publico de PSB: quem autoriza e o token do link,
+                // validado em ShareFolderService. /psb/files/download NAO entra aqui —
+                // e a rota interna e exige sessao; o publico usa /share/{token}/files.
                 .requestMatchers(HttpMethod.GET, "/share/access/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/share/download/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/share/*/files/**").permitAll()
+                // Sondas de saúde e métricas.
+                //
+                // Estavam sob anyRequest().authenticated() e respondiam 403: o
+                // HEALTHCHECK do Docker falhou 29.238 vezes seguidas (container
+                // "unhealthy" desde que subiu) e o Prometheus nunca coletou uma
+                // métrica sequer — os alertas e dashboards estavam cegos.
+                //
+                // Libera-se APENAS health e prometheus. O resto do actuator
+                // continua exigindo autenticação: com
+                // management.endpoints.web.exposure.include=*, expor /actuator/**
+                // publicaria /actuator/env e /actuator/configprops, que carregam
+                // segredos. O nginx ainda bloqueia /actuator/ vindo da internet —
+                // Prometheus e healthcheck alcançam pela rede interna do Docker.
+                .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll()
                 .anyRequest().authenticated()
+                )
+                // Sem isto o Spring usa o Http403ForbiddenEntryPoint e devolve 403
+                // para quem apenas não está autenticado, tornando impossível para o
+                // front distinguir sessão expirada de falta de permissão.
+                //   401 -> não autenticado / sessão expirada  -> front desloga
+                //   403 -> autenticado, sem permissão          -> front só avisa
+                .exceptionHandling(handling -> handling
+                .authenticationEntryPoint(restAuthenticationEntryPoint)
+                .accessDeniedHandler(restAccessDeniedHandler)
                 )
                 .addFilterBefore(securityFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();

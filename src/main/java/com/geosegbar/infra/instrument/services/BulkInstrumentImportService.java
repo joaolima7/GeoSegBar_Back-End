@@ -86,24 +86,42 @@ public class BulkInstrumentImportService {
                         (existing, duplicate) -> existing
                 ));
 
-        List<InstrumentTypeEntity> allTypes = instrumentTypeRepository.findAll();
-        log.info("[Import] Tipos de instrumento disponíveis no banco ({}): {}",
+        DamEntity dam = damService.findById(meta.getDamId());
+
+        // O catálogo de tipos é por cliente: a planilha só pode casar com os tipos do
+        // cliente dono desta barragem. Usar findAll() aqui faria dois clientes com um
+        // tipo de mesmo nome disputarem a mesma chave do mapa, e o import escolheria o
+        // tipo do cliente errado. Os legados (sem cliente) entram como fallback, para
+        // não quebrar importações enquanto a migração não roda.
+        Long damClientId = dam.getClient() != null ? dam.getClient().getId() : null;
+
+        List<InstrumentTypeEntity> allTypes = new ArrayList<>();
+        if (damClientId != null) {
+            allTypes.addAll(instrumentTypeRepository.findByClientIdOrderByNameAsc(damClientId));
+        }
+        List<InstrumentTypeEntity> legacyTypes = instrumentTypeRepository.findByClientIsNullOrderByNameAsc();
+
+        log.info("[Import] Tipos de instrumento disponíveis para o cliente {} ({} do cliente + {} legado(s)): {}",
+                damClientId,
                 allTypes.size(),
+                legacyTypes.size(),
                 allTypes.stream().map(t -> "'" + t.getName() + "'").collect(Collectors.joining(", ")));
 
-        Map<String, InstrumentTypeEntity> instrumentTypesByName = allTypes.stream()
+        // Os do cliente entram por último para vencerem um legado de mesmo nome.
+        List<InstrumentTypeEntity> resolvableTypes = new ArrayList<>(legacyTypes);
+        resolvableTypes.addAll(allTypes);
+
+        Map<String, InstrumentTypeEntity> instrumentTypesByName = resolvableTypes.stream()
                 .collect(Collectors.toMap(
                         type -> type.getName().toUpperCase(),
                         type -> type,
-                        (existing, duplicate) -> existing
+                        (existing, replacement) -> replacement
                 ));
 
         Map<String, SectionEntity> sectionsByName = sectionRepository
                 .findAllByDamId(meta.getDamId())
                 .stream()
                 .collect(Collectors.toMap(SectionEntity::getName, s -> s));
-
-        DamEntity dam = damService.findById(meta.getDamId());
 
         try (InputStream is = file.getInputStream()) {
             Workbook wb = WorkbookFactory.create(is);
@@ -157,7 +175,8 @@ public class BulkInstrumentImportService {
                 if (instrumentType == null) {
                     log.error("[Import] Tipo de instrumento '{}' (normalizado: '{}') não encontrado. Tipos disponíveis: {}",
                             ir.instrumentTypeName, instrumentTypeName, instrumentTypesByName.keySet());
-                    throw new InvalidInputException("Tipo de instrumento não encontrado: '" + ir.instrumentTypeName + "'. Verifique se o nome na planilha corresponde ao cadastro.");
+                    throw new InvalidInputException("Tipo de instrumento não encontrado: '" + ir.instrumentTypeName
+                            + "'. Os tipos são cadastrados por cliente — verifique se o nome existe no catálogo do cliente dono desta barragem.");
                 }
 
                 CreateInstrumentRequest req = ir.toRequest(meta, sectionId);

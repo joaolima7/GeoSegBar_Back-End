@@ -79,6 +79,27 @@ public class PSBFolderService {
     @Transactional(readOnly = true)
     public PSBFolderEntity findById(Long id) {
         validateViewPermission();
+        return loadFolderGraph(id);
+    }
+
+    /**
+     * Mesma carga de {@link #findById(Long)}, porém sem exigir usuário
+     * autenticado.
+     *
+     * Existe para o compartilhamento público de PSB: ali quem autoriza é o token
+     * do link, validado antes por ShareFolderService, e não há sessão nenhuma.
+     * Chamar findById nesse contexto derrubava o fluxo inteiro com 401, porque
+     * validateViewPermission -> isAdmin -> getCurrentUser lança quando a
+     * requisição é anônima.
+     *
+     * NÃO use fora do fluxo de compartilhamento: este método não verifica nada.
+     */
+    @Transactional(readOnly = true)
+    public PSBFolderEntity findByIdForSharedAccess(Long id) {
+        return loadFolderGraph(id);
+    }
+
+    private PSBFolderEntity loadFolderGraph(Long id) {
         PSBFolderEntity folder = psbFolderRepository.findById(id).orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
         if (folder.getParentFolder() != null) {
             folder.getParentFolder().getName();
@@ -162,6 +183,14 @@ public class PSBFolderService {
 
         PSBFolderEntity folderToDelete = psbFolderRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Pasta PSB não encontrada"));
+
+        // Pastas raiz (sem pasta pai) compõem a estrutura fixa do PSB da barragem e não
+        // podem ser excluídas por aqui — elas são gerenciadas apenas na configuração da
+        // barragem. Só subpastas e arquivos podem ser removidos neste endpoint.
+        if (folderToDelete.getParentFolder() == null) {
+            throw new BusinessRuleException(
+                    "Pastas raízes do PSB não podem ser excluídas. Apenas subpastas e arquivos podem ser removidos.");
+        }
 
         Long damId = folderToDelete.getDam().getId();
         Integer deletedFolderIndex = folderToDelete.getFolderIndex();

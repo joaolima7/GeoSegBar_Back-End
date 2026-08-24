@@ -45,6 +45,16 @@ public class AnaApiService {
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
 
+    /**
+     * Trecho máximo do corpo de erro que entra numa mensagem de exceção.
+     */
+    private static final int MAX_ERROR_BODY_LENGTH = 300;
+
+    /**
+     * Base da espera exponencial entre tentativas (2s, 4s, 8s).
+     */
+    private static final long BACKOFF_BASE_MILLIS = 2000L;
+
     public String getAuthToken() {
         try {
 
@@ -125,6 +135,40 @@ public class AnaApiService {
         }
     }
 
+    /**
+     * Resume o corpo de uma resposta de erro para caber numa mensagem de
+     * exceção.
+     *
+     * A API da ANA responde HTML quando está fora do ar ou barra a requisição.
+     * Em 19/08/2026 esse HTML inteiro virou a mensagem da exceção, foi parar em
+     * historical_data_job.error_message (varchar(2000)) e derrubou o UPDATE que
+     * registraria a pausa do job — o job ficou preso em PROCESSING.
+     */
+    private static String summarizeErrorBody(String body) {
+        if (body == null || body.isBlank()) {
+            return "(resposta vazia)";
+        }
+        String flat = body.replaceAll("\\s+", " ").trim();
+
+        String lowered = flat.toLowerCase();
+        if (lowered.startsWith("<!doctype html") || lowered.startsWith("<html")) {
+            return "resposta HTML (API indisponível ou requisição bloqueada), "
+                    + flat.length() + " caracteres";
+        }
+
+        return flat.length() <= MAX_ERROR_BODY_LENGTH
+                ? flat
+                : flat.substring(0, MAX_ERROR_BODY_LENGTH) + "...";
+    }
+
+    /**
+     * Espera crescente entre tentativas: 2s, 4s, 8s. Requisição em sequência sem
+     * folga é justamente o que faz a ANA começar a recusar.
+     */
+    private static void backoff(int attempt) throws InterruptedException {
+        Thread.sleep(BACKOFF_BASE_MILLIS * (1L << (attempt - 1)));
+    }
+
     public List<TelemetryItem> getTelemetryDataForHistoricalPeriod(String stationCode, LocalDate startDate, String authToken) {
         int maxRetries = 3;
         String currentToken = authToken;
@@ -162,19 +206,40 @@ public class AnaApiService {
                 }
 
                 if (statusCode != 200) {
-                    String errorBody = EntityUtils.toString(entity);
-                    log.error("Erro na resposta da API: {} - {}", statusCode, errorBody);
+                    String resumo = summarizeErrorBody(EntityUtils.toString(entity));
+                    log.error("Erro na resposta da API: {} - {}", statusCode, resumo);
 
-                    if (statusCode >= 500 || statusCode == 408) {
-                        if (attempt < maxRetries) {
-                            log.warn("Erro de servidor/timeout ({}). Tentando novamente em 2s... (tentativa {}/{})",
-                                    statusCode, attempt, maxRetries);
-                            Thread.sleep(2000);
-                            continue;
+                    // 429 é o caso do backfill: centenas de requisições seguidas fazem
+                    // a ANA limitar. Antes o 429 caía direto no throw, sem retry, e
+                    // derrubava o job inteiro. Agora respeita Retry-After, se houver.
+                    boolean retryable = statusCode == 429 || statusCode == 408 || statusCode >= 500;
+
+                    if (retryable && attempt < maxRetries) {
+                        long esperaMs = BACKOFF_BASE_MILLIS * (1L << (attempt - 1));
+
+                        if (statusCode == 429) {
+                            var retryAfter = response.getFirstHeader("Retry-After");
+                            if (retryAfter != null) {
+                                try {
+                                    esperaMs = Math.max(esperaMs,
+                                            Long.parseLong(retryAfter.getValue().trim()) * 1000L);
+                                } catch (NumberFormatException ignored) {
+                                    // cabeçalho em formato de data: mantém o backoff calculado
+                                }
+                            }
+                            log.warn("Limite de requisições da ANA (429). Aguardando {}ms... (tentativa {}/{})",
+                                    esperaMs, attempt, maxRetries);
+                        } else {
+                            log.warn("Erro de servidor/timeout ({}). Aguardando {}ms... (tentativa {}/{})",
+                                    statusCode, esperaMs, attempt, maxRetries);
                         }
+
+                        Thread.sleep(esperaMs);
+                        continue;
                     }
 
-                    throw new ExternalApiException("Erro ao obter dados históricos: " + errorBody);
+                    throw new ExternalApiException(
+                            "Erro ao obter dados históricos (HTTP " + statusCode + "): " + resumo);
                 }
 
                 String responseBody = EntityUtils.toString(entity);
@@ -198,7 +263,7 @@ public class AnaApiService {
 
                 if (attempt < maxRetries) {
                     try {
-                        Thread.sleep(2000);
+                        backoff(attempt);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         throw new ExternalApiException("Interrompido durante retry", ie);

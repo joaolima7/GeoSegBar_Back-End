@@ -177,33 +177,54 @@ public class EmailService {
         }
     }
 
+    /**
+     * E-mail de definição de senha — substitui o antigo envio da senha temporária
+     * em texto plano.
+     *
+     * O corpo não contém nenhuma credencial, apenas um link de uso único. Isso é
+     * o que tira a mensagem do padrão que faz filtros de anti-phishing
+     * (Microsoft Defender e equivalentes) classificarem o e-mail de boas-vindas
+     * como comprometimento de credencial e mandarem para quarentena.
+     *
+     * @param welcome true para o texto de conta recém-criada, false para
+     *                redefinição solicitada por um administrador.
+     */
     @Async("emailExecutor")
-    public void sendFirstAccessPassword(String toEmail, String password, String userName) {
+    public void sendPasswordSetupLink(String toEmail, String userName, String token, int validityHours, boolean welcome) {
         try {
-            Context context = new Context();
-            context.setVariable("password", password);
-            context.setVariable("userName", userName);
-            context.setVariable("userEmail", toEmail);
-            context.setVariable("frontendUrl", frontendUrl);
+            String setupUrl = frontendUrl + "/definir-senha?token=" + token;
 
-            String htmlContent = templateEngine.process("emails/first-access-password", context);
+            Context context = new Context();
+            context.setVariable("userName", userName);
+            context.setVariable("setupUrl", setupUrl);
+            context.setVariable("validityHours", validityHours);
+            context.setVariable("welcome", welcome);
+            context.setVariable("headerTitle", welcome ? "Acesso ao GeoSegBar" : "Definição de senha");
+            context.setVariable("headerStatus", welcome ? "Conta Criada" : "Definição de Senha");
+
+            String htmlContent = templateEngine.process("emails/password-setup-link", context);
 
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
             helper.setFrom(fromEmail);
             helper.setTo(toEmail);
-            helper.setSubject("Bem-vindo ao GeoSegBar - Sua senha de acesso");
+            // Assunto sem menção a senha/credencial: "Sua senha de acesso" era, por si só,
+            // um gatilho para os filtros que estavam barrando a mensagem.
+            helper.setSubject(welcome
+                    ? "GeoSegBar - Ative seu acesso"
+                    : "GeoSegBar - Definição de senha da sua conta");
             helper.setText(htmlContent, true);
 
-            log.info("[EMAIL] Enviando first-access-password → from={} to={} user='{}'", fromEmail, toEmail, userName);
+            log.info("[EMAIL] Enviando password-setup-link → from={} to={} user='{}' welcome={}",
+                    fromEmail, toEmail, userName, welcome);
             mailSender.send(message);
-            log.info("[EMAIL] ✓ first-access-password entregue ao SMTP → to={} user='{}'", toEmail, userName);
+            log.info("[EMAIL] ✓ password-setup-link entregue ao SMTP → to={} user='{}'", toEmail, userName);
         } catch (MessagingException | MailException e) {
-            log.error("[EMAIL] ✗ FALHA ao enviar first-access-password → to={} user='{}' cause={} message={}",
+            log.error("[EMAIL] ✗ FALHA ao enviar password-setup-link → to={} user='{}' cause={} message={}",
                     toEmail, userName, e.getClass().getSimpleName(), e.getMessage(), e);
-            auditEmailFailure("EMAIL_FAILED_FIRST_ACCESS",
-                    "Falha no envio de e-mail (primeiro acesso - usuário: " + userName + ")", toEmail, e);
+            auditEmailFailure("EMAIL_FAILED_PASSWORD_SETUP",
+                    "Falha no envio de e-mail (definição de senha - usuário: " + userName + ")", toEmail, e);
         }
     }
 

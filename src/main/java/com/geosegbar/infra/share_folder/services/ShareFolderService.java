@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.common.email.EmailService;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
+import com.geosegbar.entities.PSBFileEntity;
 import com.geosegbar.entities.PSBFolderEntity;
 import com.geosegbar.entities.ShareFolderEntity;
 import com.geosegbar.entities.UserEntity;
@@ -15,6 +16,7 @@ import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.exceptions.ShareFolderException;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.psb.persistence.PSBFolderRepository;
+import com.geosegbar.infra.psb.services.PSBFileService;
 import com.geosegbar.infra.psb.services.PSBFolderService;
 import com.geosegbar.infra.share_folder.dtos.CreateShareFolderRequest;
 import com.geosegbar.infra.share_folder.persistence.ShareFolderRepository;
@@ -29,6 +31,7 @@ public class ShareFolderService {
     private final ShareFolderRepository shareFolderRepository;
     private final PSBFolderRepository psbFolderRepository;
     private final PSBFolderService psbFolderService;
+    private final PSBFileService psbFileService;
     private final UserRepository userRepository;
     private final DamRepository damRepository;
     private final EmailService emailService;
@@ -99,8 +102,12 @@ public class ShareFolderService {
         return savedShare;
     }
 
-    @Transactional
-    public PSBFolderEntity registerAccessAndGetFolder(String token) {
+    /**
+     * Localiza o compartilhamento pelo token e recusa se estiver vencido. É o
+     * único ponto de autorização do fluxo público — nenhuma sessão é exigida
+     * daqui para frente, então tudo que for liberado precisa passar por aqui.
+     */
+    private ShareFolderEntity requireValidShare(String token) {
         ShareFolderEntity shareFolder = shareFolderRepository.findByToken(token)
                 .orElseThrow(() -> new NotFoundException("Link de compartilhamento não encontrado!"));
 
@@ -109,10 +116,58 @@ public class ShareFolderService {
             throw new ShareFolderException("Este link de compartilhamento expirou!");
         }
 
+        return shareFolder;
+    }
+
+    /**
+     * Baixa um arquivo específico pelo link compartilhado, sem exigir login.
+     *
+     * A autorização é o token — por isso é obrigatório conferir que o arquivo
+     * pertence mesmo à pasta compartilhada (ou a uma subpasta dela). Sem essa
+     * conferência, qualquer link válido viraria uma chave para baixar qualquer
+     * arquivo PSB do sistema, bastando adivinhar o id.
+     */
+    @Transactional
+    public PSBFileEntity resolveSharedFile(String token, Long fileId) {
+        ShareFolderEntity shareFolder = requireValidShare(token);
+
+        PSBFileEntity file = psbFileService.findByIdForSharedAccess(fileId);
+
+        if (!belongsToSharedFolder(file, shareFolder.getPsbFolder().getId())) {
+            throw new NotFoundException("Arquivo não encontrado nesta pasta compartilhada!");
+        }
+
+        return file;
+    }
+
+    /**
+     * Sobe a hierarquia a partir da pasta do arquivo até encontrar a pasta
+     * compartilhada. O compartilhamento cobre a subárvore inteira — é o mesmo
+     * conteúdo que o ZIP de "baixar tudo" entrega.
+     */
+    private boolean belongsToSharedFolder(PSBFileEntity file, Long sharedFolderId) {
+        PSBFolderEntity current = file.getPsbFolder();
+
+        // Guarda contra ciclo em dados corrompidos: a árvore de PSB é rasa, mas
+        // um laço aqui travaria a thread.
+        int maxDepth = 50;
+        while (current != null && maxDepth-- > 0) {
+            if (sharedFolderId.equals(current.getId())) {
+                return true;
+            }
+            current = current.getParentFolder();
+        }
+        return false;
+    }
+
+    @Transactional
+    public PSBFolderEntity registerAccessAndGetFolder(String token) {
+        ShareFolderEntity shareFolder = requireValidShare(token);
+
         shareFolder.incrementAccessCount();
         shareFolderRepository.save(shareFolder);
 
-        return psbFolderService.findById(shareFolder.getPsbFolder().getId());
+        return psbFolderService.findByIdForSharedAccess(shareFolder.getPsbFolder().getId());
     }
 
     @Transactional
@@ -136,18 +191,12 @@ public class ShareFolderService {
 
     @Transactional(readOnly = true)
     public java.io.ByteArrayOutputStream downloadAllFiles(String token) {
-        ShareFolderEntity shareFolder = shareFolderRepository.findByToken(token)
-                .orElseThrow(() -> new NotFoundException("Link de compartilhamento não encontrado!"));
-
-        if (shareFolder.getExpiresAt() != null
-                && LocalDateTime.now().isAfter(shareFolder.getExpiresAt())) {
-            throw new ShareFolderException("Este link de compartilhamento expirou!");
-        }
+        ShareFolderEntity shareFolder = requireValidShare(token);
 
         shareFolder.incrementAccessCount();
         shareFolderRepository.save(shareFolder);
 
-        PSBFolderEntity folder = psbFolderService.findById(shareFolder.getPsbFolder().getId());
+        PSBFolderEntity folder = psbFolderService.findByIdForSharedAccess(shareFolder.getPsbFolder().getId());
 
         return zipService.createZipFromFolder(folder);
     }

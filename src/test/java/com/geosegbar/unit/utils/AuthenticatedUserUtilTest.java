@@ -20,6 +20,7 @@ import com.geosegbar.config.BaseUnitTest;
 import com.geosegbar.entities.RoleEntity;
 import com.geosegbar.entities.RoutineInspectionPermissionEntity;
 import com.geosegbar.entities.UserEntity;
+import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.UnauthorizedException;
 
 @Tag("unit")
@@ -177,8 +178,10 @@ class AuthenticatedUserUtilTest extends BaseUnitTest {
         when(authentication.getPrincipal()).thenReturn(mockUser);
 
         // When & Then
+        // Permissão insuficiente é 403 (ForbiddenException), não 401: o usuário
+        // ESTÁ autenticado. 401 faria o front deslogar quem só não pode aquilo.
         assertThatThrownBy(() -> AuthenticatedUserUtil.checkAdminPermission())
-                .isInstanceOf(UnauthorizedException.class)
+                .isInstanceOf(ForbiddenException.class)
                 .hasMessage("Acesso negado. Permissão de administrador necessária.");
     }
 
@@ -219,7 +222,7 @@ class AuthenticatedUserUtilTest extends BaseUnitTest {
 
         // When & Then
         assertThatThrownBy(() -> AuthenticatedUserUtil.checkRole("ADMIN"))
-                .isInstanceOf(UnauthorizedException.class)
+                .isInstanceOf(ForbiddenException.class)
                 .hasMessage("Acesso negado. Permissão insuficiente para esta operação.");
     }
 

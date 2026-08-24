@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 
 import org.springframework.scheduling.annotation.Async;
@@ -128,6 +129,12 @@ public class HistoricalDataJobProcessor {
         int totalSkipped = 0;
         String currentToken = authToken;
 
+        // Maior data já gravada — o checkpoint nunca retrocede a partir dela.
+        LocalDate lastCommittedDate = null;
+        // Janelas que falharam por erro não previsto. Se sobrar alguma ao final,
+        // o job NÃO pode ser dado como concluído: há buraco na série.
+        List<LocalDate> failedWindows = new ArrayList<>();
+
         log.info("Processando período: {} até {} para instrumento {}",
                 currentDate, endDate, instrument.getName());
 
@@ -158,7 +165,12 @@ public class HistoricalDataJobProcessor {
                     continue;
                 }
 
-                Map<LocalDate, List<TelemetryItem>> itemsByDate = new HashMap<>();
+                // TreeMap, não HashMap: o checkpoint é gravado a partir das datas
+                // percorridas aqui. Com HashMap a ordem é arbitrária — no job 1 de
+                // 19/08/2026 as leituras saíram como 28, 26, 27, 24, 25 de fevereiro,
+                // e o checkpoint acabou apontando para uma data no meio da janela.
+                // Retomar dali pularia dias já vencidos ou reprocessaria outros.
+                Map<LocalDate, List<TelemetryItem>> itemsByDate = new TreeMap<>();
                 for (TelemetryItem item : telemetryData) {
                     if (item.getDataHoraMedicao() != null) {
                         String dateStr = item.getDataHoraMedicao().substring(0, 10);
@@ -221,7 +233,12 @@ public class HistoricalDataJobProcessor {
                         batchInsertReadings(instrument.getId(), readingBatch);
                         readingBatch.clear();
 
-                        jobService.updateProgress(job.getId(), date, BATCH_SIZE, totalSkipped);
+                        // O checkpoint só anda para frente. Como o batch fecha no meio
+                        // de uma janela, gravamos a maior data já efetivamente inserida.
+                        if (lastCommittedDate == null || date.isAfter(lastCommittedDate)) {
+                            lastCommittedDate = date;
+                        }
+                        jobService.updateProgress(job.getId(), lastCommittedDate, BATCH_SIZE, totalSkipped);
                         totalSkipped = 0;
                     }
                 }
@@ -237,8 +254,12 @@ public class HistoricalDataJobProcessor {
                 Thread.currentThread().interrupt();
                 throw new RuntimeException("Job interrompido", e);
             } catch (Exception e) {
+                // Antes esta janela era descartada em silêncio e o job seguia até
+                // COMPLETED — 30 dias sumiam da série sem qualquer sinal. Agora a
+                // falha fica registrada e impede que o job termine como concluído.
                 log.error("Erro ao processar período {} no job {}: {}",
                         currentDate, job.getId(), e.getMessage(), e);
+                failedWindows.add(currentDate);
                 currentDate = currentDate.plusDays(DAYS_PER_REQUEST);
             }
         }
@@ -250,6 +271,14 @@ public class HistoricalDataJobProcessor {
 
         log.info("Período processado: {} readings criados, {} dias pulados (job {})",
                 totalCreated, totalSkipped, job.getId());
+
+        if (!failedWindows.isEmpty()) {
+            throw new ExternalApiException(
+                    "Coleta incompleta: " + failedWindows.size()
+                    + " janela(s) de 30 dias falharam e ficaram sem dados. Início das janelas: "
+                    + failedWindows.stream().limit(10).map(LocalDate::toString).toList()
+                    + (failedWindows.size() > 10 ? " (e outras)" : ""));
+        }
     }
 
     /**

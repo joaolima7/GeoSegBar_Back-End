@@ -61,5 +61,9 @@ USER springboot
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar --server.port=9090"]
 
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:9090/actuator/health || exit 1
+# Sonda de liveness, não o /actuator/health composto: o health agregado fica DOWN
+# quando qualquer dependência oscila, o que reiniciaria o container por um soluço
+# do banco. liveness responde "o processo está vivo", que é o que o Docker precisa
+# saber. start-period generoso porque o boot roda migração de banco.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:9090/actuator/health/liveness || exit 1

@@ -94,6 +94,45 @@ class ActuatorExposureTest extends BaseUnitTest {
     }
 
     @Test
+    @DisplayName("A liberação das sondas não é restrita a GET — HEAD precisa passar")
+    void probesAreNotRestrictedToGet() {
+        // `wget --spider`, usado pelo HEALTHCHECK do Docker e pelo gate do deploy,
+        // envia HEAD. Com o matcher preso a HttpMethod.GET o HEAD cai em
+        // anyRequest().authenticated() e volta 401 — a aplicação sobe saudável e
+        // o deploy a rejeita assim mesmo. Aconteceu em homolog em 24/08/2026.
+        assertThat(configSemComentarios)
+                .withFailMessage("O matcher do actuator não pode ser restrito a um método HTTP: "
+                        + "sondas usam HEAD e seriam bloqueadas.")
+                .doesNotContain("HttpMethod.GET, \"/actuator");
+    }
+
+    @Test
+    @DisplayName("As sondas do deploy e do Docker usam GET, não HEAD")
+    void probeCommandsUseGet() throws IOException {
+        for (String caminho : List.of(
+                "bash/scripts/deploy_vps.sh",
+                "bash/scripts/rollback_prod.sh",
+                "Dockerfile")) {
+
+            String conteudo = Files.readString(Path.of(caminho), StandardCharsets.UTF_8);
+            if (!conteudo.contains("/actuator/health")) {
+                continue;
+            }
+
+            // Sem as linhas de comentário: elas explicam por que --spider foi
+            // abandonado, e citá-lo na explicação não pode reprovar o teste.
+            String comandos = conteudo.lines()
+                    .filter(linha -> !linha.strip().startsWith("#"))
+                    .reduce("", (a, b) -> a + "\n" + b);
+
+            assertThat(comandos)
+                    .withFailMessage("%s usa --spider (HEAD) para sondar o actuator; "
+                            + "use -O /dev/null (GET).", caminho)
+                    .doesNotContain("--spider");
+        }
+    }
+
+    @Test
     @DisplayName("O nginx bloqueia /actuator/ vindo da internet")
     void nginxBlocksActuatorPublicly() throws IOException {
         String nginx = Files.readString(

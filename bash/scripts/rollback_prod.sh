@@ -108,7 +108,7 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
     break
   fi
   if docker exec "$DESTINO" \
-       wget -q --spider -T 5 http://localhost:9090/actuator/health/readiness 2>/dev/null; then
+       wget -q -O /dev/null -T 5 http://localhost:9090/actuator/health/readiness 2>/dev/null; then
     SAUDAVEL=true
     break
   fi

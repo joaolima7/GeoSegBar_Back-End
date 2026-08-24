@@ -161,61 +161,31 @@ TAMANHO_GZIP="$(stat -c %s "$GZIP_FILE" 2>/dev/null || stat -f %z "$GZIP_FILE")"
 log "Dump local concluído e verificado: $GZIP_FILE ($((TAMANHO_GZIP / 1024)) KB)"
 
 # ------------------------------------------------------------------- upload S3
+#
+# O envio é feito por bash/scripts/lib/s3_put.py, que assina o SigV4 com a
+# biblioteca padrão do Python. O `--aws-sigv4` do curl 7.76 — versão do servidor
+# — não assina PUT com corpo corretamente: calcula o hash do payload por conta
+# própria e ignora o x-amz-content-sha256 informado, devolvendo 400 sem o header
+# e 403 SignatureDoesNotMatch com ele. O curl segue sendo usado só nas
+# requisições SEM corpo (HEAD e listagem), onde funciona.
+#
 # SHA-256 do payload vazio — valor fixo, exigido pelo S3 em requisições sem corpo.
 SHA256_VAZIO="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 upload_para_s3() {
-  local host="${AWS_BUCKET_NAME}.s3.${AWS_REGION}.amazonaws.com"
-  local url="https://${host}/${S3_KEY}"
+  local enviador="$SCRIPT_DIR/bash/scripts/lib/s3_put.py"
 
-  # O S3 exige x-amz-content-sha256 em toda requisição assinada, e o
-  # --aws-sigv4 do curl 7.76 não o envia sozinho: sem este header a resposta é
-  # 400 InvalidRequest. Para o PUT, o valor é o hash do arquivo — o que de
-  # quebra faz o S3 recusar o objeto se ele chegar corrompido no caminho.
-  local sha_arquivo
-  sha_arquivo="$(sha256sum "$GZIP_FILE" | cut -d" " -f1)"
+  if [[ ! -f "$enviador" ]]; then
+    log "ERRO: enviador não encontrado em ${enviador}"
+    return 1
+  fi
 
   local tentativa=1
   while [[ "$tentativa" -le "$S3_MAX_ATTEMPTS" ]]; do
     log "Enviando ao S3 (tentativa ${tentativa}/${S3_MAX_ATTEMPTS}): s3://${AWS_BUCKET_NAME}/${S3_KEY}"
 
-    # A resposta do S3 é capturada e registrada. A versão anterior mandava o
-    # stderr direto para o arquivo de log e só imprimia "falha ao enviar" — quem
-    # rodava o deploy via CLI não tinha como saber se era credencial, permissão,
-    # bucket errado ou rede.
-    local corpo_resposta http_code
-    corpo_resposta="$(mktemp)"
-
-    http_code="$(curl --silent --show-error \
-         --write-out '%{http_code}' \
-         --output "$corpo_resposta" \
-         --request PUT \
-         --upload-file "$GZIP_FILE" \
-         --aws-sigv4 "aws:amz:${AWS_REGION}:s3" \
-         --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" \
-         --header "x-amz-content-sha256: ${sha_arquivo}" \
-         --header "x-amz-server-side-encryption: AES256" \
-         --header "Content-Type: application/gzip" \
-         --max-time 900 \
-         "$url" 2>>"$LOG_FILE" || echo 000)"
-
-    if [[ "$http_code" != "200" ]]; then
-      local motivo
-      motivo="$(grep -oE '<Code>[^<]*</Code>|<Message>[^<]*</Message>' "$corpo_resposta" 2>/dev/null \
-                | sed 's/<[^>]*>//g' | paste -sd' — ' - )"
-      log "   S3 respondeu HTTP ${http_code}${motivo:+ — ${motivo}}"
-
-      case "$http_code" in
-        403) log "   → credencial sem permissão de PutObject em ${AWS_BUCKET_NAME}/${S3_PREFIX}/" ;;
-        404) log "   → bucket '${AWS_BUCKET_NAME}' não existe na região '${AWS_REGION}'" ;;
-        301) log "   → bucket existe, mas em OUTRA região (confira AWS_REGION)" ;;
-        400) log "   → requisição rejeitada; confira AWS_REGION e o header de assinatura" ;;
-        000) log "   → não houve resposta (rede, DNS ou timeout)" ;;
-      esac
-    fi
-    rm -f "$corpo_resposta"
-
-    if [[ "$http_code" == "200" ]]; then
+    local saida
+    if saida="$(python3 "$enviador" "$GZIP_FILE" "$AWS_BUCKET_NAME" "$AWS_REGION" "$S3_KEY" 2>&1)"; then
 
       # Confere o que chegou do outro lado. Um PUT que retorna 200 mas grava
       # menos bytes deixaria um backup inútil parecendo íntegro.
@@ -225,7 +195,7 @@ upload_para_s3() {
                           --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" \
                           --header "x-amz-content-sha256: ${SHA256_VAZIO}" \
                           --max-time 60 \
-                          "$url" 2>/dev/null \
+                          "https://${AWS_BUCKET_NAME}.s3.${AWS_REGION}.amazonaws.com/${S3_KEY}" 2>/dev/null \
                         | awk 'tolower($1) == "content-length:" {gsub(/\r/,"",$2); print $2}')"
 
       if [[ "$tamanho_remoto" == "$TAMANHO_GZIP" ]]; then
@@ -234,6 +204,8 @@ upload_para_s3() {
       fi
 
       log "AVISO: tamanho no S3 (${tamanho_remoto:-vazio}) difere do local (${TAMANHO_GZIP}). Repetindo."
+    else
+      log "   ${saida}"
     fi
 
     # Espera crescente: 5s, 10s, 20s. Falha de rede costuma ser transitória.

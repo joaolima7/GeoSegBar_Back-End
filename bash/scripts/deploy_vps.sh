@@ -534,8 +534,10 @@ while [ "$HEALTH_ELAPSED" -lt "$HEALTH_TIMEOUT_SECONDS" ]; do
     break
   fi
 
+  # -O /dev/null em vez de --spider: --spider faz HEAD, e HEAD é justamente o que
+  # tropeçava na regra de segurança. GET é o que o endpoint realmente serve.
   if docker exec "$IDLE_CONTAINER" \
-       wget -q --spider -T 5 http://localhost:9090/actuator/health/readiness 2>/dev/null; then
+       wget -q -O /dev/null -T 5 http://localhost:9090/actuator/health/readiness 2>/dev/null; then
     NEW_HEALTHY=true
     break
   fi

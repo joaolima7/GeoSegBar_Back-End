@@ -76,8 +76,14 @@ public class SecurityConfig {
                 // publicaria /actuator/env e /actuator/configprops, que carregam
                 // segredos. O nginx ainda bloqueia /actuator/ vindo da internet —
                 // Prometheus e healthcheck alcançam pela rede interna do Docker.
-                .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll()
+                //
+                // Sem restrição de método, de propósito: `wget --spider` — usado
+                // tanto pelo HEALTHCHECK do Docker quanto pelo gate do deploy —
+                // envia HEAD, não GET. Com o matcher preso a GET, o HEAD caía em
+                // anyRequest().authenticated() e voltava 401: a aplicação subia
+                // saudável e o deploy a rejeitava assim mesmo.
+                .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                .requestMatchers("/actuator/prometheus").permitAll()
                 .anyRequest().authenticated()
                 )
                 // Sem isto o Spring usa o Http403ForbiddenEntryPoint e devolve 403

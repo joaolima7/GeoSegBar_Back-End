@@ -66,4 +66,4 @@ ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar --server.port=9090"]
 # do banco. liveness responde "o processo está vivo", que é o que o Docker precisa
 # saber. start-period generoso porque o boot roda migração de banco.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:9090/actuator/health/liveness || exit 1
+    CMD wget --no-verbose --tries=1 -O /dev/null http://localhost:9090/actuator/health/liveness || exit 1

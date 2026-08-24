@@ -92,32 +92,21 @@ echo "☁️  CÓPIAS NO S3  (s3://${AWS_BUCKET_NAME:-?}/${S3_PREFIX}/)"
 if [[ -z "${AWS_BUCKET_NAME:-}" || -z "${AWS_ACCESS_KEY_ID:-}" ]]; then
   echo "   ⚠️  Credenciais AWS ausentes no .env.prod"
 else
-  # x-amz-content-sha256 do payload vazio: obrigatório para o S3 e não enviado
-  # automaticamente pelo --aws-sigv4 do curl 7.76.
-  RESPOSTA="$(curl --fail --silent --max-time 30 \
-      --aws-sigv4 "aws:amz:${AWS_REGION}:s3" \
-      --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" \
-      --header "x-amz-content-sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" \
-      "https://${AWS_BUCKET_NAME}.s3.${AWS_REGION}.amazonaws.com/?list-type=2&prefix=${S3_PREFIX}/&max-keys=1000" \
-      2>/dev/null || true)"
+  # Listagem pelo assinador próprio: o --aws-sigv4 do curl 7.76 erra a
+  # assinatura quando há query string, e listar exige ?list-type=2&prefix=...
+  LISTAGEM="$(python3 "$SCRIPT_DIR/bash/scripts/lib/s3_client.py" \
+                list "$AWS_BUCKET_NAME" "$AWS_REGION" "${S3_PREFIX}/" 2>&1)"
 
-  if [[ -z "$RESPOSTA" ]]; then
-    echo "   ❌ Não foi possível listar o bucket (credenciais, rede ou permissão)"
+  if [[ $? -ne 0 ]]; then
+    echo "   ❌ Não foi possível listar o bucket: ${LISTAGEM}"
+  elif [[ -z "$LISTAGEM" ]]; then
+    echo "   ❌ Nenhum backup no S3 ainda"
   else
-    QTD_S3="$(printf '%s' "$RESPOSTA" | grep -o '<Key>' | wc -l | tr -d ' ')"
-    if [[ "$QTD_S3" -eq 0 ]]; then
-      echo "   ❌ Nenhum backup no S3 ainda"
-    else
-      echo "   $QTD_S3 arquivo(s). Mais recentes:"
-      printf '%s' "$RESPOSTA" \
-        | tr '<' '\n' | grep -E '^(Key|LastModified|Size)>' \
-        | sed 's/^[A-Za-z]*>//' \
-        | paste - - - 2>/dev/null \
-        | sort -r | head -5 \
-        | while IFS=$'\t' read -r chave modificado tamanho; do
-            printf "   • %s  %6s KB  %s\n" "${modificado:0:16}" "$((tamanho / 1024))" "$(basename "$chave")"
-          done
-    fi
+    echo "   $(printf '%s\n' "$LISTAGEM" | wc -l | tr -d ' ') arquivo(s). Mais recentes:"
+    printf '%s\n' "$LISTAGEM" | sort -t$'\t' -k2 -r | head -5 \
+      | while IFS=$'\t' read -r tam data chave; do
+          printf "   • %s  %6s KB  %s\n" "${data:0:16}" "$((tam / 1024))" "$(basename "$chave")"
+        done
   fi
 fi
 

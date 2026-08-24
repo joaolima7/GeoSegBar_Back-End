@@ -162,7 +162,7 @@ log "Dump local concluído e verificado: $GZIP_FILE ($((TAMANHO_GZIP / 1024)) KB
 
 # ------------------------------------------------------------------- upload S3
 #
-# O envio é feito por bash/scripts/lib/s3_put.py, que assina o SigV4 com a
+# O envio é feito por bash/scripts/lib/s3_client.py, que assina o SigV4 com a
 # biblioteca padrão do Python. O `--aws-sigv4` do curl 7.76 — versão do servidor
 # — não assina PUT com corpo corretamente: calcula o hash do payload por conta
 # própria e ignora o x-amz-content-sha256 informado, devolvendo 400 sem o header
@@ -173,7 +173,7 @@ log "Dump local concluído e verificado: $GZIP_FILE ($((TAMANHO_GZIP / 1024)) KB
 SHA256_VAZIO="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 upload_para_s3() {
-  local enviador="$SCRIPT_DIR/bash/scripts/lib/s3_put.py"
+  local enviador="$SCRIPT_DIR/bash/scripts/lib/s3_client.py"
 
   if [[ ! -f "$enviador" ]]; then
     log "ERRO: enviador não encontrado em ${enviador}"
@@ -185,7 +185,7 @@ upload_para_s3() {
     log "Enviando ao S3 (tentativa ${tentativa}/${S3_MAX_ATTEMPTS}): s3://${AWS_BUCKET_NAME}/${S3_KEY}"
 
     local saida
-    if saida="$(python3 "$enviador" "$GZIP_FILE" "$AWS_BUCKET_NAME" "$AWS_REGION" "$S3_KEY" 2>&1)"; then
+    if saida="$(python3 "$enviador" put "$GZIP_FILE" "$AWS_BUCKET_NAME" "$AWS_REGION" "$S3_KEY" 2>&1)"; then
 
       # Confere o que chegou do outro lado. Um PUT que retorna 200 mas grava
       # menos bytes deixaria um backup inútil parecendo íntegro.

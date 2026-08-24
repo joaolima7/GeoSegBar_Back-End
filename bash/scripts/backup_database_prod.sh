@@ -179,7 +179,16 @@ upload_para_s3() {
   while [[ "$tentativa" -le "$S3_MAX_ATTEMPTS" ]]; do
     log "Enviando ao S3 (tentativa ${tentativa}/${S3_MAX_ATTEMPTS}): s3://${AWS_BUCKET_NAME}/${S3_KEY}"
 
-    if curl --fail --silent --show-error \
+    # A resposta do S3 é capturada e registrada. A versão anterior mandava o
+    # stderr direto para o arquivo de log e só imprimia "falha ao enviar" — quem
+    # rodava o deploy via CLI não tinha como saber se era credencial, permissão,
+    # bucket errado ou rede.
+    local corpo_resposta http_code
+    corpo_resposta="$(mktemp)"
+
+    http_code="$(curl --silent --show-error \
+         --write-out '%{http_code}' \
+         --output "$corpo_resposta" \
          --request PUT \
          --upload-file "$GZIP_FILE" \
          --aws-sigv4 "aws:amz:${AWS_REGION}:s3" \
@@ -188,7 +197,25 @@ upload_para_s3() {
          --header "x-amz-server-side-encryption: AES256" \
          --header "Content-Type: application/gzip" \
          --max-time 900 \
-         "$url" >/dev/null 2>>"$LOG_FILE"; then
+         "$url" 2>>"$LOG_FILE" || echo 000)"
+
+    if [[ "$http_code" != "200" ]]; then
+      local motivo
+      motivo="$(grep -oE '<Code>[^<]*</Code>|<Message>[^<]*</Message>' "$corpo_resposta" 2>/dev/null \
+                | sed 's/<[^>]*>//g' | paste -sd' — ' - )"
+      log "   S3 respondeu HTTP ${http_code}${motivo:+ — ${motivo}}"
+
+      case "$http_code" in
+        403) log "   → credencial sem permissão de PutObject em ${AWS_BUCKET_NAME}/${S3_PREFIX}/" ;;
+        404) log "   → bucket '${AWS_BUCKET_NAME}' não existe na região '${AWS_REGION}'" ;;
+        301) log "   → bucket existe, mas em OUTRA região (confira AWS_REGION)" ;;
+        400) log "   → requisição rejeitada; confira AWS_REGION e o header de assinatura" ;;
+        000) log "   → não houve resposta (rede, DNS ou timeout)" ;;
+      esac
+    fi
+    rm -f "$corpo_resposta"
+
+    if [[ "$http_code" == "200" ]]; then
 
       # Confere o que chegou do outro lado. Um PUT que retorna 200 mas grava
       # menos bytes deixaria um backup inútil parecendo íntegro.
@@ -259,8 +286,15 @@ log "Rotação local concluída (mantidos: ${BACKUP_KEEP_COUNT}, removidos: ${RE
 trap - ERR
 
 if [[ "$BACKUP_S3_ENABLED" == "true" && "$S3_OK" != true ]]; then
-  # Já avisado acima. Sai diferente de zero para que o cron e o deploy percebam.
-  exit 1
+  # Código 2 = dump local íntegro, cópia externa ausente.
+  #
+  # Distinto do 1 (nenhum backup) de propósito: para o gate pré-deploy, um dump
+  # local verificado já cumpre o papel de ponto de restauração, e travar a
+  # publicação por causa da cópia externa transforma um problema de durabilidade
+  # em indisponibilidade. Para o cron diário continua sendo falha — quem chama
+  # decide o peso.
+  log "⚠️  Backup PARCIAL: dump local íntegro, sem cópia no S3"
+  exit 2
 fi
 
 write_status "sucesso" "Backup concluído"

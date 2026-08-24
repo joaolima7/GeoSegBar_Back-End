@@ -343,13 +343,34 @@ if [ "${SKIP_PRE_DEPLOY_BACKUP:-false}" = "true" ]; then
     echo "⏭️ Pulando backup pré-deploy (SKIP_PRE_DEPLOY_BACKUP=true)"
 else
     echo "💾 Backup do banco antes do deploy..."
-    if bash "$SCRIPT_DIR/bash/scripts/backup_database_prod.sh"; then
-        echo "✅ Backup concluído. Prosseguindo com o deploy."
-    else
-        echo "❌ Backup pré-deploy FALHOU. Deploy abortado — a API continua no ar."
+    set +e
+    bash "$SCRIPT_DIR/bash/scripts/backup_database_prod.sh"
+    BACKUP_EXIT=$?
+    set -e
+
+    case "$BACKUP_EXIT" in
+      0)
+        echo "✅ Backup concluído (local + S3). Prosseguindo com o deploy."
+        ;;
+      2)
+        # Dump local íntegro, cópia no S3 ausente. O ponto de restauração que o
+        # deploy precisa existe — travar a publicação aqui trocaria um problema
+        # de durabilidade por indisponibilidade. Segue, mas sem disfarçar.
+        echo ""
+        echo "⚠️  ATENÇÃO: o backup local foi criado e verificado, mas NÃO subiu para o S3."
+        echo "   Existe apenas UMA cópia, no próprio servidor."
+        echo "   O deploy prossegue — o ponto de restauração existe —, mas resolva o S3."
+        echo "   Detalhes do erro: $SCRIPT_DIR/logs/backup.log"
+        echo ""
+        ;;
+      *)
+        echo "❌ Backup pré-deploy FALHOU: nenhum dump foi gerado."
+        echo "   Deploy abortado — a versão atual continua no ar, sem alteração."
+        echo "   Detalhes: $SCRIPT_DIR/logs/backup.log"
         echo "💡 Para prosseguir mesmo assim: SKIP_PRE_DEPLOY_BACKUP=true"
         exit 1
-    fi
+        ;;
+    esac
 fi
 
 # ============================================

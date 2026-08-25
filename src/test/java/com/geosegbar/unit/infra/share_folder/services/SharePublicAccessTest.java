@@ -31,7 +31,6 @@ import com.geosegbar.infra.psb.services.PSBFileService;
 import com.geosegbar.infra.psb.services.PSBFolderService;
 import com.geosegbar.infra.share_folder.persistence.ShareFolderRepository;
 import com.geosegbar.infra.share_folder.services.ShareFolderService;
-import com.geosegbar.infra.share_folder.services.ZipService;
 import com.geosegbar.infra.user.persistence.jpa.UserRepository;
 
 /**
@@ -65,8 +64,6 @@ class SharePublicAccessTest extends BaseUnitTest {
     private DamRepository damRepository;
     @Mock
     private EmailService emailService;
-    @Mock
-    private ZipService zipService;
 
     @InjectMocks
     private ShareFolderService shareFolderService;
@@ -217,15 +214,36 @@ class SharePublicAccessTest extends BaseUnitTest {
 
     // ------------------------------------------------------------------ zip
     @Test
-    @DisplayName("Baixar tudo também não passa por checagem de sessão")
+    @DisplayName("Preparar o ZIP também não passa por checagem de sessão")
     void zipDownloadDoesNotRequireAuthentication() {
         when(psbFolderService.findByIdForSharedAccess(PASTA_COMPARTILHADA)).thenReturn(pastaCompartilhada);
-        when(zipService.createZipFromFolder(pastaCompartilhada))
-                .thenReturn(new java.io.ByteArrayOutputStream());
 
-        assertThatCode(() -> shareFolderService.downloadAllFiles(TOKEN)).doesNotThrowAnyException();
+        assertThat(shareFolderService.prepareFolderDownload(TOKEN)).isSameAs(pastaCompartilhada);
 
         verify(psbFolderService, never()).findById(PASTA_COMPARTILHADA);
+    }
+
+    @Test
+    @DisplayName("Preparar o ZIP não monta nada em memória — só devolve a pasta")
+    void zipPreparationDoesNotBuildAnythingInMemory() {
+        // O serviço nao pode voltar a montar o ZIP: fazia isso num
+        // ByteArrayOutputStream, o controller duplicava com toByteArray(), e duas
+        // requisicoes derrubaram a aplicacao com OutOfMemoryError em 24/08/2026.
+        // Quem escreve o ZIP e o controller, direto na resposta HTTP.
+        assertThat(ShareFolderService.class.getDeclaredMethods())
+                .withFailMessage("ShareFolderService voltou a produzir o ZIP em memória")
+                .noneMatch(m -> java.io.ByteArrayOutputStream.class.isAssignableFrom(m.getReturnType()));
+    }
+
+    @Test
+    @DisplayName("Link expirado é recusado antes de preparar o ZIP")
+    void zipRefusedWhenLinkExpired() {
+        share.setExpiresAt(LocalDateTime.now().minusHours(1));
+
+        assertThatThrownBy(() -> shareFolderService.prepareFolderDownload(TOKEN))
+                .isInstanceOf(ShareFolderException.class);
+
+        verify(psbFolderService, never()).findByIdForSharedAccess(PASTA_COMPARTILHADA);
     }
 
     // ------------------------------------------------------------- fixtures

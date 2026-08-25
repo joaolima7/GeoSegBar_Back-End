@@ -16,12 +16,15 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.PSBFileEntity;
 import com.geosegbar.entities.PSBFolderEntity;
 import com.geosegbar.entities.ShareFolderEntity;
+import com.geosegbar.exceptions.BusinessRuleException;
 import com.geosegbar.infra.psb.services.PSBFileService;
 import com.geosegbar.infra.share_folder.dtos.CreateShareFolderRequest;
+import com.geosegbar.infra.share_folder.services.ZipService;
 import com.geosegbar.infra.share_folder.services.ShareFolderService;
 
 import jakarta.validation.Valid;
@@ -34,6 +37,7 @@ public class ShareFolderController {
 
     private final ShareFolderService shareFolderService;
     private final PSBFileService psbFileService;
+    private final ZipService zipService;
 
     @GetMapping("/user/{userId}")
     public ResponseEntity<WebResponseEntity<List<ShareFolderEntity>>> getSharesByUser(@PathVariable Long userId) {
@@ -110,22 +114,40 @@ public class ShareFolderController {
                 .body(resource);
     }
 
+    /**
+     * Baixa a pasta compartilhada inteira como ZIP.
+     *
+     * O ZIP é gerado e transmitido ao mesmo tempo, sem passar pela memória.
+     * Requisito, não otimização: a versão anterior montava o ZIP inteiro em um
+     * ByteArrayOutputStream e ainda fazia toByteArray() — duas cópias completas.
+     * Duas requisições derrubaram a aplicação com OutOfMemoryError em
+     * 24/08/2026, e ela ficou 18 horas fora do ar.
+     *
+     * Sem Content-Length: o tamanho final só se conhece no fim, e esperar por
+     * ele significaria justamente guardar tudo antes de enviar.
+     */
     @GetMapping("/download/{token}")
-    public ResponseEntity<Resource> downloadAllFiles(@PathVariable String token) {
-        java.io.ByteArrayOutputStream zipStream = shareFolderService.downloadAllFiles(token);
+    public ResponseEntity<StreamingResponseBody> downloadAllFiles(@PathVariable String token) {
+        PSBFolderEntity folder = shareFolderService.prepareFolderDownload(token);
 
-        org.springframework.core.io.ByteArrayResource resource
-                = new org.springframework.core.io.ByteArrayResource(zipStream.toByteArray());
+        // Pasta vazia é recusada ANTES de a resposta começar: depois do primeiro
+        // byte enviado já não há como trocar o status por um erro.
+        if (zipService.contarArquivos(folder) == 0) {
+            throw new BusinessRuleException(
+                    "A pasta '" + folder.getName() + "' não possui arquivos para download.");
+        }
 
-        ShareFolderEntity share = shareFolderService.findByToken(token);
-        String filename = sanitizeFilename(share.getPsbFolder().getName()) + "_arquivos.zip";
+        String filename = sanitizeFilename(folder.getName()) + "_arquivos.zip";
+
+        StreamingResponseBody corpo = saida -> zipService.writeZipToStream(folder, saida);
 
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("application/zip"))
                 .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"" + filename + "\"")
-                .contentLength(resource.contentLength())
-                .body(resource);
+                        ContentDisposition.attachment()
+                                .filename(filename, java.nio.charset.StandardCharsets.UTF_8)
+                                .build().toString())
+                .body(corpo);
     }
 
     private String sanitizeFilename(String filename) {

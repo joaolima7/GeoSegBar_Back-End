@@ -226,6 +226,39 @@ public class FileStorageService {
         }
     }
 
+    /**
+     * Abre o objeto do S3 para leitura em fluxo, sem trazer o arquivo inteiro
+     * para a memória.
+     *
+     * Use este método sempre que o destino for outro fluxo (resposta HTTP, ZIP).
+     * {@link #downloadFileBytes(String)} carrega tudo de uma vez e só serve para
+     * arquivos comprovadamente pequenos — foi o que derrubou a aplicação em
+     * 24/08/2026, ao montar o ZIP de uma pasta compartilhada.
+     *
+     * Quem chama é responsável por fechar o stream.
+     */
+    public java.io.InputStream openStream(String fileUrl) {
+        String key = extractKeyFromUrl(fileUrl);
+        if (key == null) {
+            throw new FileStorageException("URL inválida para download: " + fileUrl);
+        }
+        GetObjectRequest getReq = GetObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .build();
+        try {
+            return s3Client.getObject(getReq);
+        } catch (Exception ex) {
+            throw new FileStorageException("Erro ao abrir arquivo no S3: " + key, ex);
+        }
+    }
+
+    /**
+     * Carrega o arquivo inteiro na memória.
+     *
+     * CUIDADO: um arquivo de PSB pode ter até 512 MB. Para copiar de um fluxo
+     * para outro, use {@link #openStream(String)}.
+     */
     public byte[] downloadFileBytes(String fileUrl) {
         String key = extractKeyFromUrl(fileUrl);
         if (key == null) {

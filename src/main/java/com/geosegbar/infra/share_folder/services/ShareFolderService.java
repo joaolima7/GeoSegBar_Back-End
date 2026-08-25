@@ -35,7 +35,6 @@ public class ShareFolderService {
     private final UserRepository userRepository;
     private final DamRepository damRepository;
     private final EmailService emailService;
-    private final ZipService zipService;
 
     @Transactional(readOnly = true)
     public List<ShareFolderEntity> findAllByUser(Long userId) {
@@ -189,16 +188,24 @@ public class ShareFolderService {
         return shareFolderRepository.findByPsbFolderDamIdOrderByCreatedAtDesc(damId);
     }
 
-    @Transactional(readOnly = true)
-    public java.io.ByteArrayOutputStream downloadAllFiles(String token) {
+    /**
+     * Valida o link e devolve a pasta pronta para ser transmitida como ZIP.
+     *
+     * Não monta o ZIP: quem escreve é o controller, direto na resposta HTTP.
+     * Antes este método devolvia um ByteArrayOutputStream com o ZIP inteiro na
+     * memória, e o controller ainda fazia toByteArray() por cima — duas cópias
+     * completas, mais um byte[] por arquivo. Duas requisições bastaram para
+     * derrubar a aplicação com OutOfMemoryError em 24/08/2026, e o processo
+     * ficou 18 horas vivo sem aceitar conexões.
+     */
+    @Transactional
+    public PSBFolderEntity prepareFolderDownload(String token) {
         ShareFolderEntity shareFolder = requireValidShare(token);
 
         shareFolder.incrementAccessCount();
         shareFolderRepository.save(shareFolder);
 
-        PSBFolderEntity folder = psbFolderService.findByIdForSharedAccess(shareFolder.getPsbFolder().getId());
-
-        return zipService.createZipFromFolder(folder);
+        return psbFolderService.findByIdForSharedAccess(shareFolder.getPsbFolder().getId());
     }
 
     /**

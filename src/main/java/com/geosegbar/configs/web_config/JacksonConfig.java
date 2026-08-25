@@ -1,11 +1,14 @@
 package com.geosegbar.configs.web_config;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.hibernate5.jakarta.Hibernate5JakartaModule;
 
 @Configuration
@@ -31,6 +34,16 @@ public class JacksonConfig {
                 StreamReadConstraints.builder()
                         .maxStringLength(MAX_JSON_STRING_LENGTH)
                         .build());
+
+        // Datas toleradas em vários formatos. Sem isto, um campo preenchido por
+        // date picker ("2026-08-26") derruba a requisição inteira com
+        // DateTimeParseException — foi o que quebrou o compartilhamento de PSB
+        // em 25/08/2026. Vale para TODOS os DTOs, não só o do share: filtro de
+        // auditoria e qualquer outro campo de data têm a mesma exposição.
+        SimpleModule datasFlexiveis = new SimpleModule();
+        datasFlexiveis.addDeserializer(LocalDateTime.class, new LenientLocalDateTimeDeserializer());
+        datasFlexiveis.addDeserializer(LocalDate.class, new LenientLocalDateDeserializer());
+        objectMapper.registerModule(datasFlexiveis);
 
         Hibernate5JakartaModule hibernateModule = new Hibernate5JakartaModule();
         hibernateModule.configure(Hibernate5JakartaModule.Feature.FORCE_LAZY_LOADING, false);

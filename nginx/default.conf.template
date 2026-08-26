@@ -87,10 +87,15 @@ server {
         # terminam as requisições em andamento e os novos já usam o upstream novo,
         # então a troca de versão não derruba nem uma conexão.
         #
+        # O arquivo fica FORA de /etc/nginx/conf.d/ de propósito. O nginx.conf
+        # auto-inclui todo *.conf daquele diretório no contexto `http`, e a
+        # diretiva `set` só é válida dentro de server/location — montado lá, o
+        # nginx recusa a subir com "set directive is not allowed here".
+        #
         # A variável (em vez de um bloco `upstream` estático) força a resolução
         # dinâmica pelo resolver acima. Se a API ficar momentaneamente indisponível,
         # o nginx devolve 502 pontual e se recupera sozinho — não morre.
-        include /etc/nginx/conf.d/upstream_active.conf;
+        include /etc/nginx/upstream_active.conf;
         proxy_pass http://$upstream_server;
     }
 }

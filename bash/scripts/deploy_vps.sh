@@ -597,7 +597,7 @@ if ! container_running nginx-prod; then
     --network geosegbar-network \
     -p ${SERVER_PORT}:80 \
     -v $SCRIPT_DIR/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro \
-    -v $UPSTREAM_FILE:/etc/nginx/conf.d/upstream_active.conf:ro \
+    -v $UPSTREAM_FILE:/etc/nginx/upstream_active.conf:ro \
     nginx:alpine
 
   sleep 5

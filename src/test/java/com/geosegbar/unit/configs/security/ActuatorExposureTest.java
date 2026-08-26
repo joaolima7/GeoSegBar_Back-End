@@ -148,7 +148,13 @@ class ActuatorExposureTest extends BaseUnitTest {
         String nginx = Files.readString(
                 Path.of("nginx/default.conf.template"), StandardCharsets.UTF_8);
 
-        assertThat(nginx).contains("include /etc/nginx/conf.d/upstream_active.conf;");
+        // Fora de conf.d de propósito: lá o nginx auto-inclui no contexto http,
+        // onde `set` é inválido, e o servidor recusa a subir.
+        assertThat(nginx).contains("include /etc/nginx/upstream_active.conf;");
+        assertThat(nginx)
+                .withFailMessage("O upstream não pode ficar em conf.d — o nginx auto-inclui "
+                        + "no contexto http e a diretiva set é recusada lá.")
+                .doesNotContain("/etc/nginx/conf.d/upstream_active.conf");
         assertThat(nginx).contains("proxy_pass http://$upstream_server;");
 
         // O arquivo apontado pelo include é gerado em runtime/ pelo deploy — fora

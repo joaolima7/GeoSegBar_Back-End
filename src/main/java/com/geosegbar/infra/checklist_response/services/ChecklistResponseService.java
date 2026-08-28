@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -56,6 +57,12 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class ChecklistResponseService {
+
+    /**
+     * Mesma política da submissão — ver ChecklistOptionTransitionValidator.
+     */
+    @Value("${checklist.validation.require-observation-on-ni:false}")
+    private boolean requireObservationOnNi;
 
     private final ChecklistResponseRepository checklistResponseRepository;
     private final QuestionnaireResponseRepository questionnaireResponseRepository;
@@ -190,14 +197,25 @@ public class ChecklistResponseService {
                 .map(a -> a.getQuestion().getId())
                 .collect(Collectors.toList());
 
-        Map<Long, String> previousLabels = new HashMap<>();
-        List<Object[]> prevResults = answerRepository.findPreviousOptionLabels(
+        List<Long> templateIds = answers.stream()
+                .map(a -> a.getQuestionnaireResponse().getTemplateQuestionnaire().getId())
+                .distinct()
+                .collect(Collectors.toList());
+
+        // Chaveado por pergunta + questionário, não só por pergunta: a mesma
+        // pergunta pode estar em dois questionários do mesmo checklist, e
+        // guardar só o ID da pergunta faz um sobrescrever o outro.
+        Map<String, String> previousLabels = new HashMap<>();
+        List<Object[]> prevResults = answerRepository.findRelevantOptionLabelsBefore(
                 questionIds,
+                templateIds,
                 checklistResponse.getDam().getId(),
-                checklistResponse.getChecklistId(),
+                checklistResponseId,
                 checklistResponse.getCreatedAt());
         for (Object[] row : prevResults) {
-            previousLabels.put((Long) row[0], (String) row[1]);
+            Long questionId = ((Number) row[0]).longValue();
+            Long templateId = ((Number) row[1]).longValue();
+            previousLabels.put(questionId + "_" + templateId, (String) row[2]);
         }
 
         for (AnswerUpdateDTO updateDto : answerUpdates) {
@@ -206,7 +224,8 @@ public class ChecklistResponseService {
             String newLabel = newOption.getLabel();
             String questionText = answer.getQuestion().getQuestionText();
 
-            String previousLabel = previousLabels.get(answer.getQuestion().getId());
+            Long templateId = answer.getQuestionnaireResponse().getTemplateQuestionnaire().getId();
+            String previousLabel = previousLabels.get(answer.getQuestion().getId() + "_" + templateId);
             ChecklistOptionTransitionValidator.validateTransition(previousLabel, newLabel, questionText);
 
             // Determina valores efetivos pos-update para validacao de evidencia
@@ -218,7 +237,11 @@ public class ChecklistResponseService {
                 effectiveHasPhotos = answer.getPhotos() != null && !answer.getPhotos().isEmpty();
             }
 
-            ChecklistOptionTransitionValidator.validateEvidence(newLabel, effectiveComment, effectiveHasPhotos, questionText);
+            boolean effectiveHasLocation = answer.getLatitude() != null && answer.getLongitude() != null;
+
+            ChecklistOptionTransitionValidator.validateEditedAnswerFields(
+                    newLabel, effectiveComment, effectiveHasPhotos, effectiveHasLocation,
+                    requireObservationOnNi, questionText);
 
             // Aplica opcao selecionada
             answer.getSelectedOptions().clear();

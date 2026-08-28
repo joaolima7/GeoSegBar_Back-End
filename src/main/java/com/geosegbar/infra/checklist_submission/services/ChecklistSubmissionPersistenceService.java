@@ -11,10 +11,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.common.enums.AnomalyOriginEnum;
+import com.geosegbar.common.enums.TypeQuestionEnum;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.common.utils.ChecklistOptionTransitionValidator;
 import com.geosegbar.entities.AnomalyEntity;
@@ -110,35 +112,19 @@ public class ChecklistSubmissionPersistenceService {
             }
         }
 
-        Set<Long> allOptionIds = collectOptionIds(submissionDto);
-        Map<Long, String> optionsCache;
-        if (allOptionIds.isEmpty()) {
-            optionsCache = Map.of();
-        } else {
-            optionsCache = optionRepository.findAllById(allOptionIds).stream()
-                    .collect(Collectors.toMap(OptionEntity::getId, OptionEntity::getLabel));
-        }
+        Map<Long, String> optionsCache = loadOptionsCache(submissionDto);
+
+        validateSubmission(submissionDto, optionsCache);
 
         ChecklistResponseEntity checklistResponse = createChecklistResponse(submissionDto);
-
-        validateAllRequiredQuestionnaires(submissionDto);
-
-        validatePVAnswersHaveRequiredFields(submissionDto, optionsCache);
-
-        validateOthersHaveRequiredFields(submissionDto);
-
-        validateOptionTransitions(submissionDto, optionsCache);
 
         List<ChecklistResponseSubmissionService.PendingPhotoUpload> pendingUploads = new ArrayList<>();
 
         for (QuestionnaireResponseSubmissionDTO questionnaireDto : submissionDto.getQuestionnaireResponses()) {
-            validateAllQuestionsAnswered(questionnaireDto);
 
             QuestionnaireResponseEntity questionnaireResponse = createQuestionnaireResponse(questionnaireDto, checklistResponse);
 
             for (AnswerSubmissionDTO answerDto : questionnaireDto.getAnswers()) {
-
-                validateCriticalAnswerRequirements(answerDto, optionsCache);
 
                 createAnswer(answerDto, questionnaireResponse, optionsCache, pendingUploads);
 
@@ -225,33 +211,17 @@ public class ChecklistSubmissionPersistenceService {
             }
         }
 
-        Set<Long> allOptionIds = collectOptionIds(submissionDto);
-        Map<Long, String> optionsCache;
-        if (allOptionIds.isEmpty()) {
-            optionsCache = Map.of();
-        } else {
-            optionsCache = optionRepository.findAllById(allOptionIds).stream()
-                    .collect(Collectors.toMap(OptionEntity::getId, OptionEntity::getLabel));
-        }
+        Map<Long, String> optionsCache = loadOptionsCache(submissionDto);
+
+        validateSubmission(submissionDto, optionsCache);
 
         ChecklistResponseEntity checklistResponse = createChecklistResponse(submissionDto);
 
-        validateAllRequiredQuestionnaires(submissionDto);
-
-        validatePVAnswersHaveRequiredFields(submissionDto, optionsCache);
-
-        validateOthersHaveRequiredFields(submissionDto);
-
-        validateOptionTransitions(submissionDto, optionsCache);
-
         for (QuestionnaireResponseSubmissionDTO questionnaireDto : submissionDto.getQuestionnaireResponses()) {
-            validateAllQuestionsAnswered(questionnaireDto);
 
             QuestionnaireResponseEntity questionnaireResponse = createQuestionnaireResponse(questionnaireDto, checklistResponse);
 
             for (AnswerSubmissionDTO answerDto : questionnaireDto.getAnswers()) {
-
-                validateCriticalAnswerRequirements(answerDto, optionsCache);
 
                 createAnswerPresigned(answerDto, questionnaireResponse, optionsCache, urlByObjectKey);
 
@@ -404,6 +374,29 @@ public class ChecklistSubmissionPersistenceService {
         return url;
     }
 
+    /**
+     * Limite de fotos por pergunta. "Outros" não têm teto — a especificação é
+     * explícita quanto a essa diferença.
+     */
+    private static final int MAX_PHOTOS_PER_ANSWER = 15;
+
+    /**
+     * O app exige observação no NI; este servidor nunca exigiu. Ligar quando as
+     * duas pontas estiverem alinhadas — ver
+     * ChecklistOptionTransitionValidator.
+     */
+    @Value("${checklist.validation.require-observation-on-ni:false}")
+    private boolean requireObservationOnNi;
+
+    private Map<Long, String> loadOptionsCache(ChecklistResponseSubmissionDTO dto) {
+        Set<Long> allOptionIds = collectOptionIds(dto);
+        if (allOptionIds.isEmpty()) {
+            return Map.of();
+        }
+        return optionRepository.findAllById(allOptionIds).stream()
+                .collect(Collectors.toMap(OptionEntity::getId, OptionEntity::getLabel));
+    }
+
     private Set<Long> collectOptionIds(ChecklistResponseSubmissionDTO dto) {
         Set<Long> ids = new HashSet<>();
         if (dto.getQuestionnaireResponses() != null) {
@@ -420,105 +413,172 @@ public class ChecklistSubmissionPersistenceService {
         return ids;
     }
 
-    private void validateCriticalAnswerRequirements(AnswerSubmissionDTO answerDto, Map<Long, String> optionsCache) {
-        if (answerDto.getSelectedOptionIds() == null || answerDto.getSelectedOptionIds().isEmpty()) {
-            return;
-        }
+    /**
+     * Todas as regras de preenchimento, na ordem em que o inspetor precisa
+     * vê-las.
+     *
+     * A ordem não é decorativa. Uma transição inválida é um erro sobre a
+     * resposta em si; um campo faltando é um erro sobre o que acompanha a
+     * resposta. Reclamar do campo antes da transição faz o inspetor preencher
+     * foto e observação para só então descobrir que aquela opção nunca poderia
+     * ter sido escolhida.
+     *
+     * Pelo mesmo motivo, a checagem de perguntas não respondidas vem por último:
+     * é o que a UI resolve oferecendo "completar com NE", e não faz sentido
+     * oferecer isso enquanto o que já foi respondido está errado.
+     *
+     * Roda inteira ANTES de qualquer escrita — os dois fluxos (base64 e
+     * presigned) chamam este mesmo método, para não voltarem a divergir.
+     */
+    private void validateSubmission(ChecklistResponseSubmissionDTO submissionDto, Map<Long, String> optionsCache) {
 
-        boolean isCritical = false;
-        List<String> foundLabels = new ArrayList<>();
-        Set<String> criticalLabels = Set.of("AU", "DM", "PC", "DS");
+        validateAllRequiredQuestionnaires(submissionDto);
 
-        for (Long id : answerDto.getSelectedOptionIds()) {
-            String label = optionsCache.get(id);
-            if (label != null && criticalLabels.contains(label)) {
-                isCritical = true;
-                foundLabels.add(label);
-            }
-        }
-
-        if (isCritical) {
-            List<String> missingFields = new ArrayList<>();
-
-            if (answerDto.getComment() == null || answerDto.getComment().trim().isEmpty()) {
-                missingFields.add("Comentário/Observação");
-            }
-
-            if (answerDto.getPhotos() == null || answerDto.getPhotos().isEmpty()) {
-                missingFields.add("Foto");
-            }
-
-            if (!missingFields.isEmpty()) {
-                String questionText = questionRepository.findById(answerDto.getQuestionId())
-                        .map(QuestionEntity::getQuestionText)
-                        .orElse("Desconhecida");
-
-                throw new InvalidInputException(String.format(
-                        "A resposta para a pergunta '%s' foi marcada com %s e exige obrigatoriamente: %s.",
-                        questionText,
-                        foundLabels,
-                        String.join(" e ", missingFields)
-                ));
-            }
-        }
-    }
-
-    private void validatePVAnswersHaveRequiredFields(ChecklistResponseSubmissionDTO submissionDto, Map<Long, String> optionsCache) {
-        for (QuestionnaireResponseSubmissionDTO questionnaireDto : submissionDto.getQuestionnaireResponses()) {
-            for (AnswerSubmissionDTO answerDto : questionnaireDto.getAnswers()) {
-                if (pvAnswerValidator.isPVAnswer(answerDto, optionsCache)) {
-                    QuestionEntity question = questionRepository.findById(answerDto.getQuestionId())
-                            .orElseThrow(() -> new NotFoundException("Pergunta não encontrada: " + answerDto.getQuestionId()));
-                    pvAnswerValidator.validatePVAnswer(answerDto, question.getQuestionText(), optionsCache);
-                }
-            }
-        }
-    }
-
-    private void validateOptionTransitions(ChecklistResponseSubmissionDTO submissionDto, Map<Long, String> optionsCache) {
         List<Long> allQuestionIds = submissionDto.getQuestionnaireResponses().stream()
                 .flatMap(q -> q.getAnswers().stream())
                 .map(AnswerSubmissionDTO::getQuestionId)
                 .collect(Collectors.toList());
 
+        Map<Long, QuestionEntity> questions = questionRepository.findAllById(allQuestionIds).stream()
+                .collect(Collectors.toMap(QuestionEntity::getId, q -> q, (a, b) -> a));
+
+        Map<String, String> previousLabels = loadPreviousLabels(submissionDto, allQuestionIds);
+
+        for (QuestionnaireResponseSubmissionDTO qDto : submissionDto.getQuestionnaireResponses()) {
+            for (AnswerSubmissionDTO answerDto : qDto.getAnswers()) {
+                validateAnswerTransition(answerDto, qDto.getTemplateQuestionnaireId(),
+                        previousLabels, questions, optionsCache);
+            }
+        }
+
+        for (QuestionnaireResponseSubmissionDTO qDto : submissionDto.getQuestionnaireResponses()) {
+            for (AnswerSubmissionDTO answerDto : qDto.getAnswers()) {
+                validateAnswerFields(answerDto, questions, optionsCache);
+            }
+        }
+
+        validateOthersHaveRequiredFields(submissionDto);
+
+        for (QuestionnaireResponseSubmissionDTO qDto : submissionDto.getQuestionnaireResponses()) {
+            validateAllQuestionsAnswered(qDto);
+        }
+    }
+
+    private Map<String, String> loadPreviousLabels(
+            ChecklistResponseSubmissionDTO submissionDto, List<Long> allQuestionIds) {
+
         List<Long> allTemplateIds = submissionDto.getQuestionnaireResponses().stream()
                 .map(QuestionnaireResponseSubmissionDTO::getTemplateQuestionnaireId)
                 .collect(Collectors.toList());
 
-        List<Object[]> prevResults = answerRepository.findLatestOptionLabels(
-                allQuestionIds,
-                allTemplateIds,
-                submissionDto.getDamId(),
-                submissionDto.getChecklistId());
-
         Map<String, String> previousLabels = new java.util.HashMap<>();
-        for (Object[] row : prevResults) {
+
+        if (allQuestionIds.isEmpty() || allTemplateIds.isEmpty()) {
+            return previousLabels;
+        }
+
+        List<Object[]> rows = answerRepository.findLastRelevantOptionLabels(
+                allQuestionIds, allTemplateIds, submissionDto.getDamId());
+
+        for (Object[] row : rows) {
             Long questionId = ((Number) row[0]).longValue();
             Long templateId = ((Number) row[1]).longValue();
-            String label = (String) row[2];
-            previousLabels.put(questionId + "_" + templateId, label);
+            previousLabels.put(questionId + "_" + templateId, (String) row[2]);
         }
 
-        Map<Long, String> questionTexts = questionRepository.findAllById(allQuestionIds).stream()
-                .collect(Collectors.toMap(QuestionEntity::getId, QuestionEntity::getQuestionText));
+        return previousLabels;
+    }
 
-        for (QuestionnaireResponseSubmissionDTO qDto : submissionDto.getQuestionnaireResponses()) {
-            Long templateId = qDto.getTemplateQuestionnaireId();
-            for (AnswerSubmissionDTO answerDto : qDto.getAnswers()) {
-                if (answerDto.getSelectedOptionIds() != null) {
-                    String key = answerDto.getQuestionId() + "_" + templateId;
-                    String previousLabel = previousLabels.get(key);
-                    String questionText = questionTexts.getOrDefault(answerDto.getQuestionId(), "Desconhecida");
+    private void validateAnswerTransition(
+            AnswerSubmissionDTO answerDto,
+            Long templateId,
+            Map<String, String> previousLabels,
+            Map<Long, QuestionEntity> questions,
+            Map<Long, String> optionsCache) {
 
-                    for (Long optionId : answerDto.getSelectedOptionIds()) {
-                        String newLabel = optionsCache.get(optionId);
-                        if (newLabel != null) {
-                            ChecklistOptionTransitionValidator.validateTransition(previousLabel, newLabel, questionText);
-                        }
-                    }
-                }
+        if (answerDto.getSelectedOptionIds() == null || answerDto.getSelectedOptionIds().isEmpty()) {
+            return;
+        }
+
+        String questionText = questionText(answerDto.getQuestionId(), questions);
+        String previousLabel = previousLabels.get(answerDto.getQuestionId() + "_" + templateId);
+
+        for (Long optionId : answerDto.getSelectedOptionIds()) {
+            String newLabel = optionsCache.get(optionId);
+            if (newLabel != null) {
+                ChecklistOptionTransitionValidator.validateTransition(previousLabel, newLabel, questionText);
             }
         }
+    }
+
+    /**
+     * Forma da resposta (uma opção por pergunta, teto de fotos) e campos que a
+     * opção escolhida torna obrigatórios.
+     */
+    private void validateAnswerFields(
+            AnswerSubmissionDTO answerDto,
+            Map<Long, QuestionEntity> questions,
+            Map<Long, String> optionsCache) {
+
+        String questionText = questionText(answerDto.getQuestionId(), questions);
+
+        if (answerDto.getPhotos() != null && answerDto.getPhotos().size() > MAX_PHOTOS_PER_ANSWER) {
+            throw new InvalidInputException(
+                    "A pergunta '" + questionText + "' tem " + answerDto.getPhotos().size()
+                    + " fotos. O limite é de " + MAX_PHOTOS_PER_ANSWER + " por pergunta.");
+        }
+
+        QuestionEntity question = questions.get(answerDto.getQuestionId());
+        boolean isTextQuestion = question != null && TypeQuestionEnum.TEXT.equals(question.getType());
+
+        List<Long> selected = answerDto.getSelectedOptionIds();
+
+        if (isTextQuestion) {
+            if (selected != null && !selected.isEmpty()) {
+                throw new InvalidInputException(
+                        "A pergunta '" + questionText + "' é do tipo texto e não aceita opções selecionadas.");
+            }
+            if (answerDto.getComment() == null || answerDto.getComment().isBlank()) {
+                throw new InvalidInputException(
+                        "A pergunta '" + questionText + "' é do tipo texto e exige o campo de texto preenchido.");
+            }
+            return;
+        }
+
+        if (selected == null || selected.isEmpty()) {
+            throw new InvalidInputException(
+                    "A pergunta '" + questionText + "' não foi respondida: é obrigatório escolher uma opção.");
+        }
+
+        if (selected.size() > 1) {
+            throw new InvalidInputException(
+                    "A pergunta '" + questionText + "' recebeu " + selected.size()
+                    + " opções. Cada pergunta aceita exatamente uma.");
+        }
+
+        String label = optionsCache.get(selected.get(0));
+        if (label == null) {
+            throw new NotFoundException("Opção inválida: " + selected.get(0));
+        }
+
+        boolean hasPhotos = answerDto.getPhotos() != null && !answerDto.getPhotos().isEmpty();
+        boolean hasLocation = answerDto.getLatitude() != null && answerDto.getLongitude() != null;
+
+        ChecklistOptionTransitionValidator.validateAnswerFields(
+                label,
+                answerDto.getComment(),
+                hasPhotos,
+                hasLocation,
+                answerDto.getAnomalyRecommendation(),
+                answerDto.getAnomalyDangerLevelId(),
+                answerDto.getAnomalyStatusId(),
+                requireObservationOnNi,
+                questionText);
+    }
+
+    private String questionText(Long questionId, Map<Long, QuestionEntity> questions) {
+        QuestionEntity question = questions.get(questionId);
+        return question != null ? question.getQuestionText() : "Desconhecida";
     }
 
     private void updateLastAchievementChecklist(Long damId) {
@@ -619,21 +679,47 @@ public class ChecklistSubmissionPersistenceService {
                 photoDto.getFileName(), photoDto.getContentType(), "anomalies", damId));
     }
 
+    /**
+     * "Outros" — ocorrência sem pergunta associada. Exige a mesma tríade do PV:
+     * observação, ao menos uma foto e localização.
+     *
+     * As anotações de bean validation no DTO já cobrem isso quando a requisição
+     * entra pelo controller. A checagem é repetida aqui porque este serviço é o
+     * ponto por onde os dois fluxos passam, e uma ocorrência sem foto ou sem
+     * coordenada vira uma anomalia que ninguém consegue localizar em campo.
+     */
     private void validateOthersHaveRequiredFields(ChecklistResponseSubmissionDTO submissionDto) {
         for (QuestionnaireResponseSubmissionDTO qDto : submissionDto.getQuestionnaireResponses()) {
-            if (qDto.getOthers() == null) continue;
+            if (qDto.getOthers() == null) {
+                continue;
+            }
             for (OtherSubmissionDTO other : qDto.getOthers()) {
-                if (other.getPhotos() == null || other.getPhotos().isEmpty()) {
-                    throw new InvalidInputException("Each 'others' entry requires at least one photo.");
-                }
+                validateOther(other);
             }
         }
         if (submissionDto.getOthers() != null) {
             for (OtherSubmissionDTO other : submissionDto.getOthers()) {
-                if (other.getPhotos() == null || other.getPhotos().isEmpty()) {
-                    throw new InvalidInputException("Each 'others' entry requires at least one photo.");
-                }
+                validateOther(other);
             }
+        }
+    }
+
+    private void validateOther(OtherSubmissionDTO other) {
+        List<String> missing = new ArrayList<>();
+
+        if (other.getObservation() == null || other.getObservation().isBlank()) {
+            missing.add("Observação");
+        }
+        if (other.getPhotos() == null || other.getPhotos().isEmpty()) {
+            missing.add("Foto");
+        }
+        if (other.getLatitude() == null || other.getLongitude() == null) {
+            missing.add("Localização");
+        }
+
+        if (!missing.isEmpty()) {
+            throw new InvalidInputException(
+                    "Ocorrência em 'Outros' exige obrigatoriamente: " + String.join(", ", missing) + ".");
         }
     }
 

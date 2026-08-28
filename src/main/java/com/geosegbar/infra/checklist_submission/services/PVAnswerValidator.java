@@ -1,65 +1,41 @@
 package com.geosegbar.infra.checklist_submission.services;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 import org.springframework.stereotype.Component;
 
-import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.infra.checklist_submission.dtos.AnswerSubmissionDTO;
 
 import lombok.RequiredArgsConstructor;
 
+/**
+ * Identifica se uma resposta marca uma anomalia nova (PV — Primeira Vez).
+ *
+ * A validação dos campos obrigatórios do PV NÃO mora mais aqui: ela é um caso
+ * da tabela única de
+ * {@link com.geosegbar.common.utils.ChecklistOptionTransitionValidator}, junto
+ * com NE, NI e as opções de evolução. Manter duas listas de campos obrigatórios
+ * do PV em lugares diferentes foi o que deixou "Observação" de fora por muito
+ * tempo — o app sempre mandava, então ninguém percebeu.
+ *
+ * O que sobrou aqui é a pergunta que o fluxo de persistência precisa fazer:
+ * esta resposta gera uma anomalia?
+ */
 @Component
 @RequiredArgsConstructor
 public class PVAnswerValidator {
 
-    public void validatePVAnswer(AnswerSubmissionDTO answerDto, String questionText, Map<Long, String> optionsCache) {
-        boolean isPVAnswer = isPVAnswer(answerDto, optionsCache);
-
-        if (isPVAnswer) {
-            List<String> missingFields = new ArrayList<>();
-
-            if (answerDto.getAnomalyRecommendation() == null || answerDto.getAnomalyRecommendation().trim().isEmpty()) {
-                missingFields.add("Recomendação");
-            }
-
-            if (answerDto.getAnomalyDangerLevelId() == null) {
-                missingFields.add("Nível de Perigo");
-            }
-
-            if (answerDto.getAnomalyStatusId() == null) {
-                missingFields.add("Status");
-            }
-
-            if (answerDto.getPhotos() == null || answerDto.getPhotos().isEmpty()) {
-                missingFields.add("Foto");
-            }
-
-            if (answerDto.getLatitude() == null || answerDto.getLongitude() == null) {
-                missingFields.add("Localização (Lat/Long)");
-            }
-
-            if (!missingFields.isEmpty()) {
-                throw new InvalidInputException("A pergunta '" + questionText
-                        + "' foi marcada como PV (Patologia), mas faltam campos obrigatórios: "
-                        + String.join(", ", missingFields));
-            }
-        }
-    }
-
     public boolean isPVAnswer(AnswerSubmissionDTO answerDto, Map<Long, String> optionsCache) {
-        if (answerDto.getSelectedOptionIds() != null && !answerDto.getSelectedOptionIds().isEmpty()) {
-            for (Long optionId : answerDto.getSelectedOptionIds()) {
+        if (answerDto.getSelectedOptionIds() == null || answerDto.getSelectedOptionIds().isEmpty()) {
+            return false;
+        }
 
-                String label = optionsCache.get(optionId);
-
-                if ("PV".equals(label)) {
-                    return true;
-                }
+        for (Long optionId : answerDto.getSelectedOptionIds()) {
+            if ("PV".equals(optionsCache.get(optionId))) {
+                return true;
             }
         }
+
         return false;
     }
 }

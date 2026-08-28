@@ -32,29 +32,67 @@ public interface AnswerRepository extends JpaRepository<AnswerEntity, Long> {
     @Query("SELECT a FROM AnswerEntity a WHERE a.question.id = :questionId")
     List<AnswerEntity> findByQuestionIdWithDetails(@Param("questionId") Long questionId);
 
-    @EntityGraph(attributePaths = {"question", "selectedOptions", "photos"})
+    @EntityGraph(attributePaths = {"question", "selectedOptions", "photos",
+        "questionnaireResponse", "questionnaireResponse.templateQuestionnaire"})
     @Query("SELECT a FROM AnswerEntity a WHERE a.id IN :answerIds " +
            "AND a.questionnaireResponse.checklistResponse.id = :checklistResponseId")
     List<AnswerEntity> findByIdsAndChecklistResponseId(
             @Param("answerIds") List<Long> answerIds,
             @Param("checklistResponseId") Long checklistResponseId);
 
-    @Query("SELECT a.question.id, o.label FROM AnswerEntity a " +
-           "JOIN a.selectedOptions o " +
-           "WHERE a.question.id IN :questionIds " +
-           "AND a.questionnaireResponse.checklistResponse.dam.id = :damId " +
-           "AND a.questionnaireResponse.checklistResponse.checklistId = :checklistId " +
-           "AND a.questionnaireResponse.checklistResponse.createdAt = (" +
-           "  SELECT MAX(cr2.createdAt) FROM ChecklistResponseEntity cr2 " +
-           "  WHERE cr2.dam.id = :damId " +
-           "  AND cr2.checklistId = :checklistId " +
-           "  AND cr2.createdAt < :beforeDate)")
-    List<Object[]> findPreviousOptionLabels(
+    /**
+     * Última resposta relevante de cada ponto (pergunta + questionário), para a
+     * barragem — o mesmo valor que a API publica como {@code lastSelectedOption}
+     * e sobre o qual a UI monta as opções disponíveis.
+     *
+     * Precisa casar EXATAMENTE com {@code findLatestNonNIAnswer}, que alimenta o
+     * payload do checklist. Se as duas divergirem, a tela oferece uma opção que
+     * o servidor recusa no envio, e o inspetor só descobre no fim.
+     *
+     * Duas decisões estão embutidas aqui, e são as mesmas da consulta de
+     * leitura:
+     *
+     * - NI é ignorado. "Não Inspecionado" não é observação de campo: o ponto não
+     * foi visto, então quem manda na transição é a última vez que ele foi.
+     *
+     * - Não filtra por checklist. O ponto é a pergunta dentro do questionário;
+     * o histórico dele é o mesmo, seja qual for o checklist que o carrega.
+     */
+    @Query(value = """
+            SELECT DISTINCT ON (a.question_id, qr.template_questionnaire_id)
+                   a.question_id,
+                   qr.template_questionnaire_id,
+                   o.label
+            FROM answers a
+            JOIN answer_options ao ON ao.answer_id = a.id
+            JOIN options o ON o.id = ao.option_id
+            JOIN questionnaire_responses qr ON qr.id = a.questionnaire_response_id
+            WHERE a.question_id IN :questionIds
+              AND qr.template_questionnaire_id IN :templateIds
+              AND qr.dam_id = :damId
+              AND UPPER(o.label) <> 'NI'
+            ORDER BY a.question_id, qr.template_questionnaire_id, qr.created_at DESC, qr.id DESC
+            """, nativeQuery = true)
+    List<Object[]> findLastRelevantOptionLabels(
             @Param("questionIds") List<Long> questionIds,
-            @Param("damId") Long damId,
-            @Param("checklistId") Long checklistId,
-            @Param("beforeDate") LocalDateTime beforeDate);
+            @Param("templateIds") List<Long> templateIds,
+            @Param("damId") Long damId);
 
+    /**
+     * Mesma regra de {@link #findLastRelevantOptionLabels}, restrita ao que
+     * existia ANTES da inspeção sendo corrigida.
+     *
+     * Ao editar uma resposta já gravada, a transição precisa ser julgada contra
+     * o que havia na época daquela inspeção — não contra o que veio depois.
+     * Usar a "última resposta" aqui julgaria a correção contra o futuro dela.
+     *
+     * A fronteira exclui a própria resposta editada de duas formas
+     * independentes: pelo ID do checklist response, que é exato, e pela data.
+     * Só a data já bastaria hoje (o created_at do questionário é sempre
+     * posterior ao do checklist response, porque é gravado depois na mesma
+     * transação), mas essa é uma garantia acidental — a exclusão por ID não
+     * depende de como os dois timestamps se ordenam.
+     */
     @Query(value = """
             SELECT DISTINCT ON (a.question_id, qr.template_questionnaire_id)
                    a.question_id,
@@ -67,15 +105,18 @@ public interface AnswerRepository extends JpaRepository<AnswerEntity, Long> {
             JOIN checklist_responses cr ON cr.id = qr.checklist_response_id
             WHERE a.question_id IN :questionIds
               AND qr.template_questionnaire_id IN :templateIds
-              AND cr.dam_id = :damId
-              AND cr.checklist_id = :checklistId
-            ORDER BY a.question_id, qr.template_questionnaire_id, cr.created_at DESC, cr.id DESC
+              AND qr.dam_id = :damId
+              AND UPPER(o.label) <> 'NI'
+              AND cr.id <> :checklistResponseId
+              AND cr.created_at < :beforeDate
+            ORDER BY a.question_id, qr.template_questionnaire_id, qr.created_at DESC, qr.id DESC
             """, nativeQuery = true)
-    List<Object[]> findLatestOptionLabels(
+    List<Object[]> findRelevantOptionLabelsBefore(
             @Param("questionIds") List<Long> questionIds,
             @Param("templateIds") List<Long> templateIds,
             @Param("damId") Long damId,
-            @Param("checklistId") Long checklistId);
+            @Param("checklistResponseId") Long checklistResponseId,
+            @Param("beforeDate") LocalDateTime beforeDate);
 
     @Query("SELECT a FROM AnswerEntity a "
             + "LEFT JOIN FETCH a.selectedOptions o "

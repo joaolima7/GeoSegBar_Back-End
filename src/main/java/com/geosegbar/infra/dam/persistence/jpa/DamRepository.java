@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.StatusEntity;
+import com.geosegbar.infra.dam.projections.DamAccessibleProjection;
 import com.geosegbar.infra.dam.projections.DamQuickAccessProjection;
 
 @Repository
@@ -95,6 +96,82 @@ public interface DamRepository extends JpaRepository<DamEntity, Long> {
                         ORDER BY d.id ASC
                         """, nativeQuery = true)
     List<DamQuickAccessProjection> findAllQuickAccess();
+
+    /**
+     * Ids das barragens que o usuário pode acessar. Mesma regra do
+     * findQuickAccessByUserId — associação com o cliente E permissão com
+     * has_access — só que devolvendo id, para quem precisa apenas do recorte.
+     */
+    @Query(value = """
+                        SELECT DISTINCT d.id
+                        FROM dam_permissions dp
+                        INNER JOIN dam d ON d.id = dp.dam_id
+                        INNER JOIN user_client uc ON uc.client_id = d.client_id
+                        WHERE dp.user_id = :userId
+                          AND uc.user_id = :userId
+                          AND dp.has_access = true
+                        ORDER BY d.id ASC
+                        """, nativeQuery = true)
+    List<Long> findAccessibleDamIdsByUserId(@Param("userId") Long userId);
+
+    /**
+     * Atalho de ADMIN: todas as barragens.
+     */
+    @Query(value = "SELECT d.id FROM dam d ORDER BY d.id ASC", nativeQuery = true)
+    List<Long> findAllDamIds();
+
+    /**
+     * Barragens acessíveis com os 9 campos que o app usa: os 5 do
+     * quick-access mais city, state, latitude e longitude.
+     *
+     * O app pede um 10º campo, "acronym", que NÃO EXISTE em barragem — nem na
+     * entidade nem na tabela. Existe sigla de constante, de input e de output
+     * de instrumento, nunca de barragem. O DTO Dart declara o campo e sempre
+     * recebeu nulo; criar a coluna agora entregaria nulo para as 849 barragens
+     * do mesmo jeito, só que com migração no meio.
+     *
+     * Rota nova em vez de ampliar o DamQuickAccessDTO, que a web consome.
+     */
+    @Query(value = """
+                        SELECT DISTINCT
+                                d.id AS damId,
+                                d.name AS damName,
+                                s.status AS status,
+                                c.id AS clientId,
+                                c.name AS clientName,
+                                d.city AS city,
+                                d.state AS state,
+                                d.latitude AS latitude,
+                                d.longitude AS longitude
+                        FROM dam_permissions dp
+                        INNER JOIN dam d ON d.id = dp.dam_id
+                        INNER JOIN status s ON s.id = d.status_id
+                        INNER JOIN client c ON c.id = d.client_id
+                        INNER JOIN user_client uc ON uc.client_id = c.id
+                        WHERE dp.user_id = :userId
+                          AND uc.user_id = :userId
+                          AND dp.has_access = true
+                        ORDER BY d.id ASC
+                        """, nativeQuery = true)
+    List<DamAccessibleProjection> findAccessibleByUserId(@Param("userId") Long userId);
+
+    @Query(value = """
+                        SELECT
+                                d.id AS damId,
+                                d.name AS damName,
+                                s.status AS status,
+                                c.id AS clientId,
+                                c.name AS clientName,
+                                d.city AS city,
+                                d.state AS state,
+                                d.latitude AS latitude,
+                                d.longitude AS longitude
+                        FROM dam d
+                        INNER JOIN status s ON s.id = d.status_id
+                        INNER JOIN client c ON c.id = d.client_id
+                        ORDER BY d.id ASC
+                        """, nativeQuery = true)
+    List<DamAccessibleProjection> findAllAccessible();
 
     @Query(value = """
                         SELECT DISTINCT

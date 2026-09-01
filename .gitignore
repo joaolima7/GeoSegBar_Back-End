@@ -51,3 +51,6 @@ keystore.p12
 
 # Estado de runtime do deploy (upstream ativo do nginx) — gerado no servidor
 runtime/
+
+# Lixo do Finder do macOS
+.DS_Store

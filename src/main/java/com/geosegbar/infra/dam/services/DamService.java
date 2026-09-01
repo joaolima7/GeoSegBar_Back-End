@@ -33,7 +33,9 @@ import com.geosegbar.infra.classification_dam.persistence.ClassificationDamRepos
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.dam.dtos.CreateDamCompleteRequest;
 import com.geosegbar.infra.dam.dtos.DamMapDataDTO;
+import com.geosegbar.infra.dam.dtos.DamAccessibleDTO;
 import com.geosegbar.infra.dam.dtos.DamQuickAccessDTO;
+import com.geosegbar.infra.dam.projections.DamAccessibleProjection;
 import com.geosegbar.infra.dam.dtos.DamStatusUpdateDTO;
 import com.geosegbar.infra.dam.dtos.LevelRequestDTO;
 import com.geosegbar.infra.dam.dtos.MapAnomalyDTO;
@@ -201,6 +203,40 @@ public class DamService {
 
         Hibernate.initialize(dam.getPsbFolders());
 
+    }
+
+    /**
+     * As barragens que o usuário do token pode acessar, com os campos
+     * escalares que o app consome.
+     *
+     * Rota nova em vez de ampliar o DamQuickAccessDTO: acrescentar campo é
+     * aditivo e provavelmente não quebraria a web, mas o quick-access é
+     * consumido por ela e não há por que arriscar para atender o app.
+     */
+    @Transactional(readOnly = true)
+    public List<DamAccessibleDTO> findAccessibleByCurrentUser() {
+        List<DamAccessibleProjection> rows = AuthenticatedUserUtil.isAdmin()
+                ? damRepository.findAllAccessible()
+                : damRepository.findAccessibleByUserId(
+                        AuthenticatedUserUtil.getCurrentUser().getId());
+
+        return rows.stream()
+                .map(this::toAccessibleDTO)
+                .toList();
+    }
+
+    private DamAccessibleDTO toAccessibleDTO(DamAccessibleProjection row) {
+        return new DamAccessibleDTO(
+                row.getDamId(),
+                row.getDamName(),
+                StatusEnum.valueOf(row.getStatus()),
+                row.getClientId(),
+                row.getClientName(),
+                row.getCity(),
+                row.getState(),
+                row.getLatitude(),
+                row.getLongitude()
+        );
     }
 
     private DamQuickAccessDTO toQuickAccessDTO(DamQuickAccessProjection row) {

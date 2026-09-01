@@ -1,5 +1,8 @@
 package com.geosegbar.infra.permissions.permissions_main.services;
 
+import com.geosegbar.entities.ChecklistEntity;
+import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
+import com.geosegbar.infra.permissions.permissions_main.dtos.VerifyChecklistsDTO;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -53,6 +56,7 @@ public class UserPermissionsService {
     private final DamRepository damRepository;
     private final ClientRepository clientRepository;
     private final ChecklistService checklistService;
+    private final ChecklistRepository checklistRepository;
 
     @Transactional(readOnly = true)
     public UserPermissionsDTO getAllPermissionsForUser(Long userId) {
@@ -268,6 +272,64 @@ public class UserPermissionsService {
             log.error("Error updating dam permissions for user {}: {}", user.getId(), e.getMessage(), e);
             throw e;
         }
+    }
+
+    /**
+     * Verificação em lote para uma barragem inteira.
+     *
+     * Reaproveita exatamente a mesma regra e as mesmas mensagens do
+     * verifyChecklistPermission — o que muda é só o empacotamento e o código
+     * estável junto do texto.
+     */
+    @Transactional(readOnly = true)
+    public VerifyChecklistsDTO verifyChecklistsForDam(
+            Long userId, Long clientId, Long damId, boolean isMobile) {
+
+        ChecklistEntity checklist = checklistRepository.findByDamIdWithFullDetails(damId);
+
+        if (checklist == null) {
+            return new VerifyChecklistsDTO(damId, List.of());
+        }
+
+        String motivo = verifyChecklistPermission(userId, clientId, damId, checklist.getId(), isMobile);
+        boolean autorizado = "authorized".equals(motivo);
+
+        return new VerifyChecklistsDTO(damId, List.of(
+                new VerifyChecklistsDTO.ChecklistPermission(
+                        checklist.getId(),
+                        checklist.getName(),
+                        autorizado,
+                        autorizado ? null : reasonCodeFor(motivo),
+                        autorizado ? null : motivo)));
+    }
+
+    /**
+     * Traduz a mensagem para um código estável. O texto pode ser reescrito sem
+     * quebrar quem consome; o código, não.
+     */
+    private String reasonCodeFor(String motivo) {
+        if (motivo == null) {
+            return "UNKNOWN";
+        }
+        if (motivo.contains("não está associado ao cliente")) {
+            return "NOT_IN_CLIENT";
+        }
+        if (motivo.contains("permissão de acesso para esta barragem")) {
+            return "NO_DAM_ACCESS";
+        }
+        if (motivo.contains("não pertence à barragem")) {
+            return "CHECKLIST_NOT_IN_DAM";
+        }
+        if (motivo.contains("não possui permissões de inspeção de rotina")) {
+            return "NO_ROUTINE_PERMISSION";
+        }
+        if (motivo.contains("aplicativo móvel")) {
+            return "NO_MOBILE_FILL";
+        }
+        if (motivo.contains("aplicação web")) {
+            return "NO_WEB_FILL";
+        }
+        return "UNKNOWN";
     }
 
     @Transactional(readOnly = true)

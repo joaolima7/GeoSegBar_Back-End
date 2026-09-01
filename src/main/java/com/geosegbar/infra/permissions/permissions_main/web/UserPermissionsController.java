@@ -1,5 +1,6 @@
 package com.geosegbar.infra.permissions.permissions_main.web;
 
+import com.geosegbar.infra.permissions.permissions_main.dtos.VerifyChecklistsDTO;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -40,6 +41,24 @@ public class UserPermissionsController {
         WebResponseEntity<UserPermissionsDTO> response
                 = WebResponseEntity.success(updatedPermissions, "Permissões do usuário atualizadas com sucesso!");
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Todos os checklists da barragem numa resposta, com código de motivo.
+     * A rota unitária acima fica intacta.
+     */
+    @GetMapping("/verify-checklists")
+    public ResponseEntity<WebResponseEntity<VerifyChecklistsDTO>> verifyChecklistsForDam(
+            @RequestParam Long userId,
+            @RequestParam Long clientId,
+            @RequestParam Long damId,
+            @RequestParam boolean isMobile) {
+
+        VerifyChecklistsDTO resultado = userPermissionsService.verifyChecklistsForDam(
+                userId, clientId, damId, isMobile);
+
+        return ResponseEntity.ok(WebResponseEntity.success(
+                resultado, "Permissões de checklist da barragem obtidas com sucesso!"));
     }
 
     @GetMapping("/verify-checklist")

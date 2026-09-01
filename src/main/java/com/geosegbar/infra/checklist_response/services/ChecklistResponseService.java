@@ -38,6 +38,7 @@ import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseUpdateDTO;
 import com.geosegbar.infra.checklist_response.dtos.ClientDetailedChecklistResponsesDTO;
 import com.geosegbar.infra.checklist_response.dtos.DamInfoDTO;
 import com.geosegbar.infra.checklist_response.dtos.DamLastChecklistDTO;
+import com.geosegbar.infra.checklist_response.dtos.DamLastChecklistV2DTO;
 import com.geosegbar.infra.checklist_response.dtos.OptionInfoDTO;
 import com.geosegbar.infra.checklist_response.dtos.PagedChecklistResponseDTO;
 import com.geosegbar.infra.checklist_response.dtos.PhotoInfoDTO;
@@ -472,6 +473,20 @@ public class ChecklistResponseService {
                 page.isLast(),
                 page.isFirst()
         );
+    }
+
+    /**
+     * Mesma informação da v1, sem o sentinela de texto no campo de data e sem
+     * o laço com uma consulta por barragem.
+     */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public List<DamLastChecklistV2DTO> getLastChecklistDateByClientV2(Long clientId) {
+        return checklistResponseRepository.findLastChecklistDateByClient(clientId).stream()
+                .map(row -> new DamLastChecklistV2DTO(
+                row.getDamId(),
+                row.getDamName(),
+                row.getLastChecklistDate()))
+                .toList();
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)

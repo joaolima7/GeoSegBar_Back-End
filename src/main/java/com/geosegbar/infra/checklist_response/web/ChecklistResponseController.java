@@ -26,6 +26,7 @@ import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseDetailDTO;
 import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseUpdateDTO;
 import com.geosegbar.infra.checklist_response.dtos.ClientDetailedChecklistResponsesDTO;
 import com.geosegbar.infra.checklist_response.dtos.DamLastChecklistDTO;
+import com.geosegbar.infra.checklist_response.dtos.DamLastChecklistV2DTO;
 import com.geosegbar.infra.checklist_response.dtos.PagedChecklistResponseDTO;
 import com.geosegbar.infra.checklist_response.services.ChecklistResponseService;
 
@@ -58,6 +59,19 @@ public class ChecklistResponseController {
         List<ChecklistResponseEntity> responses = checklistResponseService.findByDamId(damId);
         WebResponseEntity<List<ChecklistResponseEntity>> response = WebResponseEntity.success(responses, "Respostas de checklist da barragem obtidas com sucesso!");
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * v2: data em ISO-8601, ou null quando a barragem nunca foi inspecionada.
+     * A v1 abaixo fica intacta — a web usa aquela rota e não tem prazo para
+     * migrar.
+     */
+    @GetMapping("/client/{clientId}/last-checklist/v2")
+    public ResponseEntity<WebResponseEntity<List<DamLastChecklistV2DTO>>> getLastChecklistDateByClientV2(
+            @PathVariable Long clientId) {
+        List<DamLastChecklistV2DTO> result = checklistResponseService.getLastChecklistDateByClientV2(clientId);
+        return ResponseEntity.ok(WebResponseEntity.success(
+                result, "Última inspeção de cada barragem do cliente obtida com sucesso!"));
     }
 
     @GetMapping("/client/{clientId}/last-checklist")

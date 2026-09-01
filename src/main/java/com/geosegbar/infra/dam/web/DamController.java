@@ -18,6 +18,7 @@ import com.geosegbar.common.response.WebResponseEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.infra.dam.dtos.CreateDamCompleteRequest;
 import com.geosegbar.infra.dam.dtos.DamMapDataDTO;
+import com.geosegbar.infra.dam.dtos.DamAccessibleDTO;
 import com.geosegbar.infra.dam.dtos.DamQuickAccessDTO;
 import com.geosegbar.infra.dam.dtos.DamStatusUpdateDTO;
 import com.geosegbar.infra.dam.dtos.UpdateDamCompleteRequest;
@@ -49,6 +50,17 @@ public class DamController {
                 "Barragens acessíveis obtidas com sucesso!"
         );
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * As barragens que o usuário do token pode acessar, com os campos que o
+     * app usa. Sem parâmetro: o escopo vem do token, nunca do cliente pedido.
+     */
+    @GetMapping("/accessible")
+    public ResponseEntity<WebResponseEntity<List<DamAccessibleDTO>>> getAccessibleDams() {
+        List<DamAccessibleDTO> dams = damService.findAccessibleByCurrentUser();
+        return ResponseEntity.ok(
+                new WebResponseEntity<>(true, "Barragens acessíveis obtidas com sucesso!", dams));
     }
 
     @GetMapping("/{id}")

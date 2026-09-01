@@ -1,5 +1,10 @@
 package com.geosegbar.infra.anomaly.web;
 
+import java.time.LocalDateTime;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.web.bind.annotation.RequestParam;
+import com.geosegbar.infra.anomaly.dtos.AnomalyListItemDTO;
+import com.geosegbar.infra.anomaly.dtos.PagedAnomalyDTO;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
@@ -35,6 +40,26 @@ public class AnomalyController {
         WebResponseEntity<List<AnomalyEntity>> response = WebResponseEntity.success(
                 anomalies, "Anomalias recuperadas com sucesso!");
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Listagem filtrada e paginada. Rota nova: a GET /anomalies existente
+     * devolve todas e não deve ganhar parâmetro.
+     */
+    @GetMapping("/filter")
+    public ResponseEntity<WebResponseEntity<PagedAnomalyDTO<AnomalyListItemDTO>>> getAnomaliesFiltered(
+            @RequestParam(required = false) List<Long> damIds,
+            @RequestParam(required = false) Long statusId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+
+        PagedAnomalyDTO<AnomalyListItemDTO> resultado = anomalyService.findByFilters(
+                damIds, statusId, startDate, endDate, page, size);
+
+        return ResponseEntity.ok(WebResponseEntity.success(
+                resultado, "Anomalias obtidas com sucesso!"));
     }
 
     @GetMapping("/{id}")

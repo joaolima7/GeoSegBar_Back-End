@@ -18,6 +18,7 @@ import com.geosegbar.entities.ChecklistResponseEntity;
 import com.geosegbar.infra.dashboard.projections.CategoryCountProjection;
 import com.geosegbar.infra.dashboard.projections.ChecklistResponseCountProjection;
 import com.geosegbar.infra.dashboard.projections.DamResponseCountProjection;
+import com.geosegbar.infra.checklist_response.projections.DamLastChecklistProjection;
 
 @Repository
 public interface ChecklistResponseRepository extends JpaRepository<ChecklistResponseEntity, Long> {
@@ -35,6 +36,26 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
     })
     @Query("SELECT cr FROM ChecklistResponseEntity cr WHERE cr.dam.id = :damId ORDER BY cr.createdAt DESC")
     List<ChecklistResponseEntity> findByDamIdWithFullDetails(@Param("damId") Long damId);
+
+    /**
+     * Data da última inspeção de cada barragem do cliente, numa consulta só.
+     *
+     * A versão anterior percorria as barragens e, para cada uma, carregava
+     * TODAS as respostas de checklist em memória só para tirar o max() em
+     * Java. Aqui o LEFT JOIN mantém na resposta a barragem que nunca foi
+     * inspecionada, com data nula — que é a informação que a tela precisa.
+     */
+    @Query(value = """
+                        SELECT d.id            AS damId,
+                               d.name          AS damName,
+                               MAX(cr.created_at) AS lastChecklistDate
+                        FROM dam d
+                        LEFT JOIN checklist_responses cr ON cr.dam_id = d.id
+                        WHERE d.client_id = :clientId
+                        GROUP BY d.id, d.name
+                        ORDER BY d.id ASC
+                        """, nativeQuery = true)
+    List<DamLastChecklistProjection> findLastChecklistDateByClient(@Param("clientId") Long clientId);
 
     @EntityGraph(attributePaths = {"user", "dam"})
     List<ChecklistResponseEntity> findByDamId(Long damId);

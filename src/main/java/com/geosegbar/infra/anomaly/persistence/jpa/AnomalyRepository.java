@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -33,6 +35,38 @@ public interface AnomalyRepository extends JpaRepository<AnomalyEntity, Long> {
 
     @EntityGraph(attributePaths = {"user", "dam", "dam.client", "photos", "dangerLevel", "status"})
     List<AnomalyEntity> findByDamId(Long damId);
+
+    /**
+     * Anomalias filtradas e paginadas.
+     *
+     * A única listagem fora do dashboard era findByDamId: TODAS as anomalias
+     * da barragem, sem filtro, sem período e sem paginação — impraticável em
+     * aparelho. Os parâmetros nulos são ignorados, então a mesma consulta
+     * serve para qualquer combinação.
+     *
+     * O EntityGraph traz as associações EAGER numa consulta só; sem ele o
+     * Hibernate dispara um SELECT por associação por linha.
+     *
+     * "photos" fica DE FORA de propósito, ao contrário das consultas vizinhas:
+     * é coleção, e coleção com paginação faz o Hibernate trazer o resultado
+     * inteiro e paginar em memória. Numa rota que existe justamente para
+     * paginar, isso anularia o motivo dela existir.
+     */
+    @EntityGraph(attributePaths = {"user", "dam", "dangerLevel", "status"})
+    @Query("""
+           SELECT a FROM AnomalyEntity a
+           WHERE a.dam.id IN :damIds
+             AND (:statusId IS NULL OR a.status.id = :statusId)
+             AND (CAST(:startDate AS timestamp) IS NULL OR a.createdAt >= :startDate)
+             AND (CAST(:endDate AS timestamp) IS NULL OR a.createdAt <= :endDate)
+           ORDER BY a.createdAt DESC
+           """)
+    Page<AnomalyEntity> findByFilters(
+            @Param("damIds") List<Long> damIds,
+            @Param("statusId") Long statusId,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate,
+            Pageable pageable);
 
     // ===================== Dashboard Queries =====================
     @Query("SELECT dl.name AS name, COUNT(a) AS count "

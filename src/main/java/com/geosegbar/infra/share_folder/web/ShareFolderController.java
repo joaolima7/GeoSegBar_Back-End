@@ -1,5 +1,7 @@
 package com.geosegbar.infra.share_folder.web;
 
+import com.geosegbar.infra.psb.dtos.PresignedDownloadResponse;
+import java.net.URI;
 import java.util.List;
 
 import org.springframework.core.io.Resource;
@@ -94,24 +96,38 @@ public class ShareFolderController {
      * continua exigindo sessao, por ser a rota interna do sistema.
      */
     @GetMapping("/{token}/files/{fileId}")
-    public ResponseEntity<Resource> downloadSharedFile(
+    public ResponseEntity<Void> downloadSharedFile(
+            @PathVariable String token,
+            @PathVariable Long fileId) {
+
+        // resolveSharedFile continua sendo a autorização: valida o token e que
+        // o arquivo pertence à pasta compartilhada. Só depois disso a URL
+        // pré-assinada é gerada.
+        shareFolderService.resolveSharedFile(token, fileId);
+        String presignedUrl = psbFileService.downloadFileForSharedAccess(fileId);
+
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .location(URI.create(presignedUrl))
+                .build();
+    }
+
+    /**
+     * A mesma URL em JSON, para o front que preferir navegar por conta própria
+     * em vez de seguir o redirect. Ver PSBController#getDownloadUrl.
+     */
+    @GetMapping("/{token}/files/{fileId}/url")
+    public ResponseEntity<WebResponseEntity<PresignedDownloadResponse>> getSharedDownloadUrl(
             @PathVariable String token,
             @PathVariable Long fileId) {
 
         PSBFileEntity file = shareFolderService.resolveSharedFile(token, fileId);
-        Resource resource = psbFileService.downloadFileForSharedAccess(fileId);
+        String presignedUrl = psbFileService.downloadFileForSharedAccess(fileId);
 
-        String contentType = file.getContentType() != null
-                ? file.getContentType()
-                : "application/octet-stream";
+        PresignedDownloadResponse dados = new PresignedDownloadResponse(
+                presignedUrl, file.getOriginalFilename(), file.getContentType(), file.getSize());
 
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(contentType))
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.attachment()
-                                .filename(file.getOriginalFilename(), java.nio.charset.StandardCharsets.UTF_8)
-                                .build().toString())
-                .body(resource);
+        return ResponseEntity.ok(WebResponseEntity.success(
+                dados, "URL de download gerada com sucesso!"));
     }
 
     /**

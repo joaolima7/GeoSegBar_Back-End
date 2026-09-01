@@ -2,6 +2,7 @@ package com.geosegbar.infra.file_storage;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -21,6 +22,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.model.AbortMultipartUploadRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest;
@@ -50,6 +53,7 @@ public class FileStorageService {
     private static final int MAX_CONCURRENT_PARTS = 4;
 
     private final S3Client s3Client;
+    private final S3Presigner s3Presigner;
 
     @Value("${aws.s3.bucket}")
     private String bucketName;
@@ -224,6 +228,90 @@ public class FileStorageService {
         } catch (Exception ex) {
             throw new FileStorageException("Erro ao enviar bytes para o S3.", ex);
         }
+    }
+
+    /**
+     * Prazo de validade da URL de download. Generoso de propósito: cobre o
+     * INÍCIO do download, não a duração dele — uma vez que o S3 aceitou a
+     * requisição, a transferência continua mesmo depois de a URL expirar.
+     */
+    private static final Duration DOWNLOAD_URL_TTL = Duration.ofMinutes(30);
+
+    /**
+     * URL pré-assinada de GET, para o cliente baixar direto do S3.
+     *
+     * Substitui o padrão anterior, em que o Spring abria a própria conexão com
+     * o S3 e repassava os bytes ao cliente. Aquilo fazia o arquivo trafegar em
+     * dobro (S3 -> Spring -> cliente), prendia uma thread do Tomcat pela
+     * transferência inteira e ainda esbarrava no proxy_read_timeout do nginx:
+     * 6,1 GB a 100 Mbps levam cerca de 8 minutos, e o limite era de 5.
+     *
+     * É o mesmo mecanismo que o upload já usa desde sempre, na direção
+     * contrária — o download é que não tinha equivalente.
+     *
+     * responseContentDisposition e responseContentType são sobrescritos na
+     * assinatura: sem eles o navegador receberia o nome interno do objeto no
+     * S3 (com o timestamp que o upload prefixa) em vez do nome original.
+     *
+     * @param fileUrl URL do objeto como está gravada no banco
+     * @param downloadFilename nome que o navegador deve dar ao arquivo
+     * @param contentType tipo a devolver; nulo cai no que o S3 tem gravado
+     */
+    public String generatePresignedDownloadUrl(String fileUrl, String downloadFilename, String contentType) {
+        String key = extractKeyFromUrl(fileUrl);
+        if (key == null) {
+            throw new FileStorageException("URL inválida para download: " + fileUrl);
+        }
+
+        GetObjectRequest.Builder getRequest = GetObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key);
+
+        if (downloadFilename != null && !downloadFilename.isBlank()) {
+            getRequest.responseContentDisposition(contentDisposition(downloadFilename));
+        }
+
+        if (contentType != null && !contentType.isBlank()) {
+            getRequest.responseContentType(contentType);
+        }
+
+        try {
+            String url = s3Presigner.presignGetObject(GetObjectPresignRequest.builder()
+                    .signatureDuration(DOWNLOAD_URL_TTL)
+                    .getObjectRequest(getRequest.build())
+                    .build())
+                    .url().toString();
+
+            log.info("[S3 PRESIGNED GET] URL gerada: key='{}', validade={}min", key, DOWNLOAD_URL_TTL.toMinutes());
+            return url;
+
+        } catch (Exception ex) {
+            throw new FileStorageException("Erro ao gerar URL de download para: " + key, ex);
+        }
+    }
+
+    /**
+     * Content-Disposition no formato do RFC 6266: um filename ASCII como
+     * reserva e um filename* com o nome real.
+     *
+     * Montado à mão em vez de usar o ContentDisposition do Spring porque ele
+     * codifica o filename simples como palavra-codificada do RFC 2047
+     * (=?UTF-8?Q?...?=), que navegador nenhum entende nesse campo. Com nome de
+     * arquivo acentuado — "Inspeção de Rotina.pdf", o caso comum aqui — o
+     * usuário receberia esse rótulo como nome do arquivo em qualquer cliente
+     * que não leia o filename*.
+     */
+    private String contentDisposition(String filename) {
+        String ascii = filename
+                .replaceAll("[^\\x20-\\x7E]", "_")
+                .replace("\\", "_")
+                .replace("\"", "_");
+
+        String utf8 = java.net.URLEncoder
+                .encode(filename, java.nio.charset.StandardCharsets.UTF_8)
+                .replace("+", "%20");
+
+        return "attachment; filename=\"" + ascii + "\"; filename*=UTF-8''" + utf8;
     }
 
     /**

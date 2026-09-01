@@ -620,15 +620,33 @@ if [ "$UPSTREAM_JA_TROCADO" != true ]; then
   echo "🔀 Direcionando o tráfego para ${IDLE_CONTAINER}..."
   write_upstream "$IDLE_CONTAINER"
 
+  # Regenera a configuração a partir do template versionado.
+  #
+  # Sem isto, mudança em nginx/default.conf.template NUNCA chega em produção:
+  # o volume atualiza o arquivo em /etc/nginx/templates/, mas quem transforma
+  # template em configuração é o entrypoint da imagem, e ele só roda quando o
+  # container SOBE. Como o nginx não é recriado a cada deploy (de propósito,
+  # para não abrir janela de indisponibilidade), o `nginx -s reload` relia o
+  # /etc/nginx/conf.d/default.conf antigo e a mudança passava despercebida —
+  # deploy verde, configuração velha. Foi o que aconteceu com os ajustes de
+  # timeout: o container subiu em 26/08 e seguiu com os valores daquele dia.
+  #
+  # O envsubst restrito a $UPSTREAM_SERVER imita o entrypoint da imagem: as
+  # variáveis do próprio nginx ($host, $remote_addr) precisam sobreviver.
+  docker exec nginx-prod cp /etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf.bak
+  docker exec nginx-prod sh -c \
+    'envsubst "$UPSTREAM_SERVER" < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf'
+
   if ! docker exec nginx-prod nginx -t >/dev/null 2>&1; then
     echo "❌ Configuração do nginx inválida. Revertendo e mantendo a versão anterior."
+    docker exec nginx-prod cp /etc/nginx/conf.d/default.conf.bak /etc/nginx/conf.d/default.conf
     [ -n "$PREVIOUS_UPSTREAM" ] && echo "$PREVIOUS_UPSTREAM" > "$UPSTREAM_FILE"
     docker rm -f "$IDLE_CONTAINER" >/dev/null 2>&1 || true
     exit 1
   fi
 
   docker exec nginx-prod nginx -s reload
-  echo "✅ Tráfego migrado (reload gracioso, nenhuma conexão derrubada)"
+  echo "✅ Tráfego migrado e configuração do nginx sincronizada (reload gracioso)"
 fi
 
 # ============================================

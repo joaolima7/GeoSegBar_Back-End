@@ -1,5 +1,7 @@
 package com.geosegbar.infra.psb.web;
 
+import com.geosegbar.infra.psb.dtos.PresignedDownloadResponse;
+import java.net.URI;
 import java.util.List;
 
 import org.springframework.core.io.Resource;
@@ -116,16 +118,47 @@ public class PSBController {
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
+    /**
+     * Redireciona para uma URL pré-assinada do S3, em vez de repassar os bytes.
+     *
+     * O cliente baixa direto do S3: os bytes não passam pelo nginx nem pelo
+     * Spring. Isso elimina de uma vez o proxy_read_timeout de 5 minutos, a
+     * thread do Tomcat presa pela transferência inteira e o tráfego em dobro.
+     *
+     * 302 e não 307 de propósito: o método é GET nos dois casos, e 302 é o que
+     * qualquer cliente HTTP — navegador, axios, curl — segue sem discussão.
+     *
+     * Se o cliente não puder seguir o redirect (política de CORS do bucket,
+     * por exemplo), use a rota /url abaixo, que devolve a mesma URL em JSON.
+     */
     @GetMapping("/files/download/{fileId}")
-    public ResponseEntity<Resource> downloadFile(@PathVariable Long fileId) {
-        PSBFileEntity file = psbFileService.findById(fileId);
-        Resource resource = psbFileService.downloadFile(fileId);
+    public ResponseEntity<Void> downloadFile(@PathVariable Long fileId) {
+        String presignedUrl = psbFileService.downloadFile(fileId);
 
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(file.getContentType()))
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"" + file.getOriginalFilename() + "\"")
-                .body(resource);
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .location(URI.create(presignedUrl))
+                .build();
+    }
+
+    /**
+     * A mesma URL pré-assinada, em JSON, para o front navegar por conta
+     * própria.
+     *
+     * Existe porque um XHR com Authorization que recebe 302 para outro domínio
+     * depende de o navegador remover o header na hora de seguir — e de o
+     * bucket responder o CORS. Aqui o front recebe a URL e faz
+     * window.location, que não passa por CORS nenhum.
+     */
+    @GetMapping("/files/download/{fileId}/url")
+    public ResponseEntity<WebResponseEntity<PresignedDownloadResponse>> getDownloadUrl(@PathVariable Long fileId) {
+        PSBFileEntity file = psbFileService.findById(fileId);
+        String presignedUrl = psbFileService.downloadFile(fileId);
+
+        PresignedDownloadResponse dados = new PresignedDownloadResponse(
+                presignedUrl, file.getOriginalFilename(), file.getContentType(), file.getSize());
+
+        return ResponseEntity.ok(WebResponseEntity.success(
+                dados, "URL de download gerada com sucesso!"));
     }
 
     @DeleteMapping("/files/{fileId}")

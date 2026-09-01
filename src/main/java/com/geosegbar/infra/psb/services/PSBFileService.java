@@ -4,8 +4,6 @@ import java.time.Instant;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -265,36 +263,42 @@ public class PSBFileService {
     }
 
     @Transactional(readOnly = true)
-    public Resource downloadFile(Long fileId) {
+    public String downloadFile(Long fileId) {
         validateViewPermission();
-        return openResource(fileId);
+        return presignedUrlFor(fileId);
     }
 
     /**
-     * Abre o arquivo sem exigir sessão. Restrito ao compartilhamento público,
-     * que já validou o token e a pertinência do arquivo à pasta compartilhada.
+     * Gera a URL sem exigir sessão. Restrito ao compartilhamento público, que
+     * já validou o token e a pertinência do arquivo à pasta compartilhada.
      */
     @Transactional(readOnly = true)
-    public Resource downloadFileForSharedAccess(Long fileId) {
-        return openResource(fileId);
+    public String downloadFileForSharedAccess(Long fileId) {
+        return presignedUrlFor(fileId);
     }
 
-    private Resource openResource(Long fileId) {
-        try {
-            PSBFileEntity file = psbFileRepository.findById(fileId)
-                    .orElseThrow(() -> new NotFoundException("Arquivo PSB não encontrado"));
+    /**
+     * URL pré-assinada para o cliente baixar direto do S3.
+     *
+     * A versão anterior devolvia um UrlResource e deixava o Spring repassar os
+     * bytes. Além do tráfego em dobro e da thread do Tomcat presa pela
+     * transferência inteira, ela ainda chamava resource.exists(), que abre uma
+     * conexão com o S3 só para conferir — uma ida e volta completa antes de o
+     * download sequer começar.
+     */
+    private String presignedUrlFor(Long fileId) {
+        PSBFileEntity file = psbFileRepository.findById(fileId)
+                .orElseThrow(() -> new NotFoundException("Arquivo PSB não encontrado"));
 
-            Resource resource = new UrlResource(java.net.URI.create(file.getDownloadUrl()));
-
-            if (resource.exists() || resource.isReadable()) {
-                return resource;
-            } else {
-                throw new FileStorageException("Não foi possível ler o arquivo do S3");
-            }
-
-        } catch (java.net.MalformedURLException ex) {
-            throw new FileStorageException("URL do arquivo inválida: " + ex.getMessage(), ex);
+        if (file.getDownloadUrl() == null || file.getDownloadUrl().isBlank()) {
+            throw new FileStorageException(
+                    "Arquivo PSB sem URL de armazenamento: " + fileId);
         }
+
+        return fileStorageService.generatePresignedDownloadUrl(
+                file.getDownloadUrl(),
+                file.getOriginalFilename(),
+                file.getContentType());
     }
 
     @Transactional

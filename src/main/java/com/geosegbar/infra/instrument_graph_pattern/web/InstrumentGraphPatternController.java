@@ -89,8 +89,7 @@ public class InstrumentGraphPatternController {
     @GetMapping("/simple/{id}")
     public ResponseEntity<WebResponseEntity<GraphPatternResponseDTO>> getSimpleById(
             @PathVariable Long id) {
-        GraphPatternResponseDTO dto = patternService.mapToResponseDTO(
-                patternService.findById(id));
+        GraphPatternResponseDTO dto = patternService.findSimpleById(id);
         return ResponseEntity.ok(
                 WebResponseEntity.success(dto, "Padrão de Gráfico obtido com sucesso!"));
     }

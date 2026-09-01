@@ -25,6 +25,7 @@ import com.geosegbar.infra.instrument_graph_pattern_folder.dtos.FolderWithPatter
 import com.geosegbar.infra.instrument_graph_pattern_folder.dtos.UpdateFolderRequestDTO;
 import com.geosegbar.infra.instrument_graph_pattern_folder.persistence.jpa.InstrumentGraphPatternFolderRepository;
 
+import com.geosegbar.infra.instrument_graph_pattern.services.GraphAccessGuard;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -37,10 +38,12 @@ public class InstrumentGraphPatternFolderService {
     private final InstrumentGraphPatternRepository patternRepository;
     private final DamService damService;
     private final InstrumentGraphPatternService patternService;
+    private final GraphAccessGuard graphAccessGuard;
 
     @Transactional
 
     public FolderResponseDTO create(CreateFolderRequestDTO request) {
+        graphAccessGuard.checkCreateFolderInDam(request.getDamId());
         if (folderRepository.existsByNameAndDamId(request.getName(), request.getDamId())) {
             throw new DuplicateResourceException(
                     "Já existe uma pasta com o nome '" + request.getName() + "' nesta barragem!");
@@ -62,6 +65,7 @@ public class InstrumentGraphPatternFolderService {
 
     @Transactional
     public FolderResponseDTO update(Long folderId, UpdateFolderRequestDTO request) {
+        graphAccessGuard.checkEditFolder(folderId);
         InstrumentGraphPatternFolder folder = findById(folderId);
 
         boolean nameExists = folderRepository.existsByNameAndDamId(request.getName(), folder.getDam().getId())
@@ -159,6 +163,7 @@ public class InstrumentGraphPatternFolderService {
     @Transactional
 
     public void delete(Long folderId) {
+        graphAccessGuard.checkEditFolder(folderId);
         InstrumentGraphPatternFolder folder = findById(folderId);
 
         List<InstrumentGraphPatternEntity> patterns = patternRepository.findByFolderId(folderId);
@@ -198,6 +203,7 @@ public class InstrumentGraphPatternFolderService {
 
     @Transactional(readOnly = true)
     public FolderWithPatternsDetailResponseDTO findByIdWithPatternsDetails(Long folderId) {
+        graphAccessGuard.checkViewByFolder(folderId);
         InstrumentGraphPatternFolder folder = folderRepository.findByIdWithDam(folderId)
                 .orElseThrow(() -> new NotFoundException("Pasta não encontrada com ID: " + folderId));
 
@@ -227,6 +233,7 @@ public class InstrumentGraphPatternFolderService {
 
     @Transactional(readOnly = true)
     public DamFoldersWithPatternsDetailResponseDTO findFoldersWithPatternsDetailsByDam(Long damId) {
+        graphAccessGuard.checkViewByDam(damId);
         DamEntity dam = damService.findById(damId);
 
         List<InstrumentGraphPatternFolder> folders = folderRepository.findByDamIdWithDamDetails(damId);

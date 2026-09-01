@@ -264,4 +264,8 @@ public interface InstrumentRepository extends JpaRepository<InstrumentEntity, Lo
     })
     @Query("SELECT i FROM InstrumentEntity i WHERE i.id = :id")
     Optional<InstrumentEntity> findByIdWithAllDetails(@Param("id") Long id);
+
+    @Query("SELECT i.dam.id FROM InstrumentEntity i WHERE i.id = :instrumentId")
+    Optional<Long> findDamIdById(@Param("instrumentId") Long instrumentId);
+
 }

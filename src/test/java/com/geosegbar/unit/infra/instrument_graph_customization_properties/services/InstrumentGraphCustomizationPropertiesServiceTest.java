@@ -36,6 +36,7 @@ import com.geosegbar.infra.instrument_graph_customization_properties.dtos.Update
 import com.geosegbar.infra.instrument_graph_customization_properties.persistence.jpa.InstrumentGraphCustomizationPropertiesRepository;
 import com.geosegbar.infra.instrument_graph_customization_properties.services.InstrumentGraphCustomizationPropertiesService;
 import com.geosegbar.infra.instrument_graph_pattern.services.InstrumentGraphPatternService;
+import com.geosegbar.infra.instrument_graph_pattern.services.GraphAccessGuard;
 
 @ExtendWith(MockitoExtension.class)
 @Tag("unit")
@@ -46,6 +47,14 @@ class InstrumentGraphCustomizationPropertiesServiceTest {
 
     @Mock
     private InstrumentGraphPatternService patternService;
+
+    /**
+     * O guard de autorização é dependência nova de todos os serviços de
+     * gráfico. Mock sem stub: os métodos são void, então por padrão não
+     * fazem nada — que é o comportamento de "usuário autorizado".
+     */
+    @Mock
+    private GraphAccessGuard graphAccessGuard;
 
     @InjectMocks
     private InstrumentGraphCustomizationPropertiesService service;

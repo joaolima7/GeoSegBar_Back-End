@@ -33,6 +33,7 @@ import com.geosegbar.infra.instrument_graph_pattern.dtos.GraphPatternResponseDTO
 import com.geosegbar.infra.instrument_graph_pattern.persistence.jpa.InstrumentGraphPatternRepository;
 import com.geosegbar.infra.instrument_graph_pattern.services.InstrumentGraphPatternService;
 import com.geosegbar.infra.instrument_graph_pattern_folder.persistence.jpa.InstrumentGraphPatternFolderRepository;
+import com.geosegbar.infra.instrument_graph_pattern.services.GraphAccessGuard;
 
 @ExtendWith(MockitoExtension.class)
 @Tag("unit")
@@ -53,6 +54,14 @@ class InstrumentGraphPatternServiceTest {
 
     @Mock
     private DamService damService;
+
+    /**
+     * O guard de autorização é dependência nova de todos os serviços de
+     * gráfico. Mock sem stub: os métodos são void, então por padrão não
+     * fazem nada — que é o comportamento de "usuário autorizado".
+     */
+    @Mock
+    private GraphAccessGuard graphAccessGuard;
 
     @InjectMocks
     private InstrumentGraphPatternService service;

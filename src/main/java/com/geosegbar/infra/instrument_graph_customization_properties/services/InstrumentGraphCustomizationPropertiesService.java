@@ -41,6 +41,7 @@ import com.geosegbar.infra.output.persistence.jpa.OutputRepository;
 import com.geosegbar.infra.output.services.OutputService;
 import com.geosegbar.infra.statistical_limit.services.StatisticalLimitService;
 
+import com.geosegbar.infra.instrument_graph_pattern.services.GraphAccessGuard;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -58,9 +59,25 @@ public class InstrumentGraphCustomizationPropertiesService {
     private final StatisticalLimitService statLimitService;
     private final DeterministicLimitService detLimitService;
     private final ConstantService constantService;
+    private final GraphAccessGuard graphAccessGuard;
 
     @Transactional
     public void updateProperties(Long patternId, UpdateGraphPropertiesRequestDTO req) {
+        graphAccessGuard.checkEditPattern(patternId);
+        updatePropertiesInternal(patternId, req);
+    }
+
+    /**
+     * Configuração SEM checagem de permissão, para uso interno do sistema.
+     *
+     * A rotina que cria o "Padrão Automático" junto com o instrumento configura
+     * as propriedades logo em seguida; barrar aqui por permissão de gráfico
+     * quebraria o cadastro de instrumento de quem não edita gráfico.
+     *
+     * Não exponha este método em controller.
+     */
+    @Transactional
+    public void updatePropertiesInternal(Long patternId, UpdateGraphPropertiesRequestDTO req) {
 
         InstrumentGraphPatternEntity pattern = patternService.findById(patternId);
 
@@ -182,6 +199,7 @@ public class InstrumentGraphCustomizationPropertiesService {
 
     @Transactional
     public PropertyResponseDTO updateProperty(Long propertyId, UpdatePropertyRequestDTO req) {
+        graphAccessGuard.checkEditProperty(propertyId);
 
         InstrumentGraphCustomizationPropertiesEntity property = propertiesRepository.findById(propertyId)
                 .orElseThrow(() -> new NotFoundException("Propriedade não encontrada com ID: " + propertyId));
@@ -199,6 +217,7 @@ public class InstrumentGraphCustomizationPropertiesService {
 
     @Transactional
     public UpdatePropertiesBatchResponseDTO updatePropertiesBatch(Long patternId, UpdatePropertiesBatchRequestDTO req) {
+        graphAccessGuard.checkEditPattern(patternId);
         patternService.findById(patternId);
 
         List<Long> propertyIds = req.getProperties().stream()
@@ -293,6 +312,7 @@ public class InstrumentGraphCustomizationPropertiesService {
 
     @Transactional(readOnly = true)
     public GraphPropertiesResponseDTO findByPatternId(Long patternId) {
+        graphAccessGuard.checkViewByPattern(patternId);
         patternService.findById(patternId);
 
         List<InstrumentGraphCustomizationPropertiesEntity> properties = propertiesRepository.findByPatternId(patternId);

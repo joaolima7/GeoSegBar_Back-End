@@ -36,9 +36,11 @@ public class InstrumentGraphPatternService {
     private final InstrumentGraphAxesRepository axesRepository;
     private final InstrumentGraphPatternFolderRepository folderRepository;
     private final DamService damService;
+    private final GraphAccessGuard graphAccessGuard;
 
     @Transactional(readOnly = true)
     public List<GraphPatternResponseDTO> findByInstrument(Long instrumentId) {
+        graphAccessGuard.checkViewByInstrument(instrumentId);
         return patternRepository.findByInstrumentId(instrumentId)
                 .stream()
                 .filter(p -> Boolean.TRUE.equals(p.getInstrument().getActive()))
@@ -48,6 +50,7 @@ public class InstrumentGraphPatternService {
 
     @Transactional(readOnly = true)
     public List<GraphPatternDetailResponseDTO> findByInstrumentWithDetails(Long instrumentId) {
+        graphAccessGuard.checkViewByInstrument(instrumentId);
         return patternRepository.findByInstrumentIdWithAllDetails(instrumentId)
                 .stream()
                 .filter(p -> Boolean.TRUE.equals(p.getInstrument().getActive()))
@@ -63,6 +66,7 @@ public class InstrumentGraphPatternService {
 
     @Transactional(readOnly = true)
     public List<GraphPatternDetailResponseDTO> findAllPatternsByDam(Long damId) {
+        graphAccessGuard.checkViewByDam(damId);
         damService.findById(damId);
 
         List<InstrumentGraphPatternEntity> patterns = patternRepository.findByInstrumentDamIdWithAllDetails(damId);
@@ -76,6 +80,7 @@ public class InstrumentGraphPatternService {
     @Transactional
 
     public GraphPatternDetailResponseDTO updateNameGraphPattern(Long id, String newName) {
+        graphAccessGuard.checkEditPattern(id);
         InstrumentGraphPatternEntity pattern = findById(id);
         if (patternRepository.existsByNameAndInstrumentId(newName, pattern.getInstrument().getId())) {
             throw new DuplicateResourceException(
@@ -89,6 +94,7 @@ public class InstrumentGraphPatternService {
 
     @Transactional(readOnly = true)
     public GraphPatternDetailResponseDTO findByIdWithDetails(Long id) {
+        graphAccessGuard.checkViewByPattern(id);
         InstrumentGraphPatternEntity pattern = patternRepository.findByIdWithAllDetails(id)
                 .orElseThrow(() -> new NotFoundException("Padrão de Gráfico não encontrado com ID: " + id + "."));
 
@@ -98,6 +104,7 @@ public class InstrumentGraphPatternService {
     @Transactional
 
     public void deleteById(Long patternId) {
+        graphAccessGuard.checkEditPattern(patternId);
         findById(patternId);
         patternRepository.deleteById(patternId);
         log.info("Pattern excluído: id={}", patternId);
@@ -106,6 +113,22 @@ public class InstrumentGraphPatternService {
     @Transactional
 
     public GraphPatternResponseDTO create(CreateGraphPatternRequest request) {
+        graphAccessGuard.checkCreatePatternForInstrument(request.getInstrumentId());
+        return createInternal(request);
+    }
+
+    /**
+     * Criação SEM checagem de permissão, para uso interno do sistema.
+     *
+     * O "Padrão Automático" nasce junto com o instrumento, dentro do cadastro
+     * do próprio instrumento, e quem já passou pela permissão de criar
+     * instrumento não pode ser barrado aqui por não ter permissão de gráfico —
+     * isso quebraria o cadastro.
+     *
+     * Não exponha este método em controller.
+     */
+    @Transactional
+    public GraphPatternResponseDTO createInternal(CreateGraphPatternRequest request) {
         if (patternRepository.existsByNameAndInstrumentId(request.getName(), request.getInstrumentId())) {
             throw new DuplicateResourceException(
                     "Já existe um Padrão de Gráfico com o nome '" + request.getName() + "' para este instrumento!");
@@ -141,6 +164,17 @@ public class InstrumentGraphPatternService {
         log.info("Pattern criado: id={}, name={}", pattern.getId(), pattern.getName());
 
         return mapToResponseDTO(pattern);
+    }
+
+    /**
+     * Versão guardada do par findById + mapToResponseDTO que o controller usava
+     * solto. findById continua sem checagem porque é helper interno — o
+     * renameAutoPattern do cadastro de instrumento passa por ele.
+     */
+    @Transactional(readOnly = true)
+    public GraphPatternResponseDTO findSimpleById(Long id) {
+        graphAccessGuard.checkViewByPattern(id);
+        return mapToResponseDTO(findById(id));
     }
 
     public GraphPatternResponseDTO mapToResponseDTO(InstrumentGraphPatternEntity pattern) {

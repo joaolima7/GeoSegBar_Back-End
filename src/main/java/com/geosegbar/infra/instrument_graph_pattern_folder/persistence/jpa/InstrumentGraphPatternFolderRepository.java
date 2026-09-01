@@ -58,4 +58,8 @@ public interface InstrumentGraphPatternFolderRepository extends JpaRepository<In
             + "WHERE f.dam.id = :damId "
             + "ORDER BY f.name ASC")
     List<InstrumentGraphPatternFolder> findByDamIdWithDamDetails(@Param("damId") Long damId);
+
+    @Query("SELECT f.dam.id FROM InstrumentGraphPatternFolder f WHERE f.id = :folderId")
+    Optional<Long> findDamIdById(@Param("folderId") Long folderId);
+
 }

@@ -101,7 +101,7 @@ public class AutoPatternCreationService {
 
         GraphPatternResponseDTO graphPattern = null;
         try {
-            graphPattern = graphPatternService.create(buildGraphPatternRequest(instrument));
+            graphPattern = graphPatternService.createInternal(buildGraphPatternRequest(instrument));
             log.debug("Padrão de gráfico criado para o instrumento: {}", instrument.getId());
         } catch (Exception e) {
             log.error("Erro ao criar padrão de gráfico para o instrumento {}: {}",
@@ -174,7 +174,7 @@ public class AutoPatternCreationService {
      * A exceção da criação é propagada para o chamador decidir o que fazer.
      */
     public void createGraphPatternOnly(InstrumentEntity instrument) {
-        GraphPatternResponseDTO graphPattern = graphPatternService.create(buildGraphPatternRequest(instrument));
+        GraphPatternResponseDTO graphPattern = graphPatternService.createInternal(buildGraphPatternRequest(instrument));
 
         try {
             configureGraphPatternProperties(instrument, graphPattern.getId());
@@ -245,7 +245,7 @@ public class AutoPatternCreationService {
         request.setStatisticalLimitValues(statLimits);
         request.setDeterministicLimitValues(detLimits);
 
-        propertiesService.updateProperties(patternId, request);
+        propertiesService.updatePropertiesInternal(patternId, request);
 
         log.info("Configuradas {} outputs, {} constantes, {} limites estatísticos e {} limites determinísticos para o padrão {} do instrumento {}",
                 outputIds.size(), constantIds.size(), statLimits.size(), detLimits.size(), patternId, instrument.getId());

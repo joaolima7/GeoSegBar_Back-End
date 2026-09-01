@@ -173,4 +173,14 @@ public interface InstrumentGraphPatternRepository extends JpaRepository<Instrume
             + "AND p.folder IS NULL "
             + "ORDER BY p.instrument.name ASC, p.name ASC")
     List<InstrumentGraphPatternEntity> findByInstrumentDamIdWithoutFolderWithAllDetails(@Param("damId") Long damId);
+
+    /**
+     * Só o que a autorização precisa: a barragem dona do padrão e o nome, que é
+     * onde vive a distinção entre padrão automático e padrão criado por gente.
+     */
+    @Query("SELECT p.instrument.dam.id AS damId, p.name AS name "
+            + "FROM InstrumentGraphPatternEntity p WHERE p.id = :patternId")
+    Optional<com.geosegbar.infra.instrument_graph_pattern.services.GraphAccessGuard.PatternScope> findScopeById(
+            @Param("patternId") Long patternId);
+
 }

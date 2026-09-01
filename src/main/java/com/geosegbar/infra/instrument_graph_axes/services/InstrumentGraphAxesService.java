@@ -10,6 +10,7 @@ import com.geosegbar.infra.instrument_graph_axes.dtos.UpdateGraphAxesRequestDTO;
 import com.geosegbar.infra.instrument_graph_axes.persistence.jpa.InstrumentGraphAxesRepository;
 import com.geosegbar.infra.instrument_graph_pattern.services.InstrumentGraphPatternService;
 
+import com.geosegbar.infra.instrument_graph_pattern.services.GraphAccessGuard;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -18,10 +19,12 @@ public class InstrumentGraphAxesService {
 
     private final InstrumentGraphAxesRepository axesRepository;
     private final InstrumentGraphPatternService patternService;
+    private final GraphAccessGuard graphAccessGuard;
 
     @Transactional
 
     public GraphAxesResponseDTO updateAxes(Long patternId, UpdateGraphAxesRequestDTO req) {
+        graphAccessGuard.checkEditPattern(patternId);
 
         patternService.findById(patternId);
 

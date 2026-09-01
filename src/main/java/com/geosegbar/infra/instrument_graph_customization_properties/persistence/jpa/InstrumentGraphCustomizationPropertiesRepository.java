@@ -97,4 +97,8 @@ public interface InstrumentGraphCustomizationPropertiesRepository extends JpaRep
             + "AND p.deterministicLimit.id = :limitId")
     List<InstrumentGraphCustomizationPropertiesEntity> findDeterministicLimitPropertiesByPatternAndLimit(
             @Param("patternId") Long patternId, @Param("limitId") Long limitId);
+
+    @Query("SELECT p.pattern.id FROM InstrumentGraphCustomizationPropertiesEntity p WHERE p.id = :propertyId")
+    Optional<Long> findPatternIdById(@Param("propertyId") Long propertyId);
+
 }

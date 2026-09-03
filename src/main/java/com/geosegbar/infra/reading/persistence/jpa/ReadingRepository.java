@@ -16,7 +16,11 @@ import org.springframework.stereotype.Repository;
 
 import com.geosegbar.common.enums.LimitStatusEnum;
 import com.geosegbar.entities.ReadingEntity;
+import com.geosegbar.infra.dashboard.projections.CategoryCountProjection;
 import com.geosegbar.infra.dashboard.projections.InstrumentStatusDistributionProjection;
+import com.geosegbar.infra.dashboard.projections.InstrumentTypeCountProjection;
+import com.geosegbar.infra.mobile_dashboard.projections.CriticalInstrumentProjection;
+import com.geosegbar.infra.mobile_dashboard.projections.MonthlyCountProjection;
 import com.geosegbar.infra.reading.projections.InstrumentLimitStatusProjection;
 
 @Repository
@@ -546,4 +550,185 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             SELECT r.id FROM ranked r WHERE r.rn = 1
             """, nativeQuery = true)
     List<Long> findLatestReadingIdsByOutputIds(@Param("outputIds") List<Long> outputIds);
+
+    // ===================== Painel do aplicativo (/mobile/dashboard) =====================
+    //
+    // Um cuidado que atravessa as quatro consultas abaixo: a tabela reading
+    // guarda UMA LINHA POR SAÍDA (output) do instrumento. Um piezômetro com
+    // três saídas grava três linhas para a mesma visita. Contar linhas
+    // responderia "quantos valores foram calculados", não "quantas leituras o
+    // inspetor fez" — que é a pergunta do painel. Por isso
+    // COUNT(DISTINCT (instrument_id, date, hour)): a visita é a chave.
+    /**
+     * Quantas leituras ESTE usuário registrou, mês a mês, nas barragens que
+     * ele acessa. No máximo 12 linhas de resposta.
+     */
+    @Query(value = """
+            SELECT to_char(r.date, 'YYYY-MM') AS bucket,
+                   CAST(COUNT(DISTINCT (r.instrument_id, r.date, r.hour)) AS BIGINT) AS total
+            FROM reading r
+            INNER JOIN instrument i ON i.id = r.instrument_id
+            WHERE r.user_id = :userId
+              AND r.active = true
+              AND i.dam_id IN (:damIds)
+              AND r.date >= :startDate
+              AND r.date <= :endDate
+            GROUP BY to_char(r.date, 'YYYY-MM')
+            ORDER BY 1 ASC
+            """, nativeQuery = true)
+    List<MonthlyCountProjection> countMyReadingsByMonth(
+            @Param("userId") Long userId,
+            @Param("damIds") List<Long> damIds,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
+
+    /**
+     * Onde o esforço de leitura deste usuário foi parar, por tipo de
+     * instrumento. Uma linha por tipo.
+     */
+    @Query(value = """
+            SELECT it.id AS typeId,
+                   it.name AS typeName,
+                   CAST(COUNT(DISTINCT (r.instrument_id, r.date, r.hour)) AS BIGINT) AS total
+            FROM reading r
+            INNER JOIN instrument i ON i.id = r.instrument_id
+            INNER JOIN instrument_type it ON it.id = i.instrument_type_id
+            WHERE r.user_id = :userId
+              AND r.active = true
+              AND i.dam_id IN (:damIds)
+              AND r.date >= :startDate
+              AND r.date <= :endDate
+            GROUP BY it.id, it.name
+            ORDER BY it.name ASC
+            """, nativeQuery = true)
+    List<InstrumentTypeCountProjection> countMyReadingsByInstrumentType(
+            @Param("userId") Long userId,
+            @Param("damIds") List<Long> damIds,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
+
+    /**
+     * Como estão os instrumentos AGORA: quantos em cada estado de limite,
+     * olhando a última leitura de cada um.
+     *
+     * Duas etapas, as duas resolvidas por DISTINCT ON sobre
+     * idx_reading_instrument_active_date_hour:
+     *
+     * 1. latest_per_instrument acha a visita mais recente de cada instrumento;
+     * 2. worst_status escolhe, ENTRE AS SAÍDAS daquela mesma visita, a de pior
+     *    estado. Sem isso um piezômetro com uma saída em EMERGENCIA e outra em
+     *    NORMAL poderia ser contado como normal, dependendo da ordem física das
+     *    linhas — e num app de segurança de barragem esse é o erro que não se
+     *    pode cometer. A ordem de gravidade é a mesma já usada pelo painel da
+     *    web, para os dois números não divergirem.
+     *
+     * Instrumento sem leitura no período simplesmente não aparece; quem fecha a
+     * conta com o total é o serviço, que expõe instrumentsWithoutReading.
+     */
+    @Query(value = """
+            WITH latest_per_instrument AS (
+                SELECT DISTINCT ON (r.instrument_id)
+                    r.instrument_id, r.date, r.hour
+                FROM reading r
+                INNER JOIN instrument i ON i.id = r.instrument_id
+                WHERE r.active = true
+                  AND i.active = true
+                  AND i.dam_id IN (:damIds)
+                  AND r.date >= :startDate
+                  AND r.date <= :endDate
+                ORDER BY r.instrument_id, r.date DESC, r.hour DESC
+            ),
+            worst_status AS (
+                SELECT DISTINCT ON (r.instrument_id)
+                    r.instrument_id, r.limit_status
+                FROM reading r
+                INNER JOIN latest_per_instrument lpi
+                    ON r.instrument_id = lpi.instrument_id
+                    AND r.date = lpi.date
+                    AND r.hour = lpi.hour
+                WHERE r.active = true
+                ORDER BY r.instrument_id,
+                    CASE r.limit_status
+                        WHEN 'EMERGENCIA' THEN 1
+                        WHEN 'ALERTA' THEN 2
+                        WHEN 'ATENCAO' THEN 3
+                        WHEN 'SUPERIOR' THEN 4
+                        WHEN 'INFERIOR' THEN 4
+                        ELSE 5
+                    END
+            )
+            SELECT w.limit_status AS name,
+                   CAST(COUNT(*) AS BIGINT) AS count
+            FROM worst_status w
+            GROUP BY w.limit_status
+            """, nativeQuery = true)
+    List<CategoryCountProjection> countInstrumentsByLimitStatus(
+            @Param("damIds") List<Long> damIds,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
+
+    /**
+     * Os instrumentos fora do normal, do mais grave para o menos, já com o nome
+     * da barragem. É o que o painel mostra como "precisa de atenção agora" e o
+     * que dá o toque único até o instrumento.
+     *
+     * Mesmas duas etapas da consulta acima; aqui a lista sai limitada, para o
+     * aparelho nunca receber uma lista longa que ele não vai desenhar.
+     */
+    @Query(value = """
+            WITH latest_per_instrument AS (
+                SELECT DISTINCT ON (r.instrument_id)
+                    r.instrument_id, r.date, r.hour
+                FROM reading r
+                INNER JOIN instrument i ON i.id = r.instrument_id
+                WHERE r.active = true
+                  AND i.active = true
+                  AND i.dam_id IN (:damIds)
+                  AND r.date >= :startDate
+                  AND r.date <= :endDate
+                ORDER BY r.instrument_id, r.date DESC, r.hour DESC
+            ),
+            worst_status AS (
+                SELECT DISTINCT ON (r.instrument_id)
+                    r.instrument_id, r.limit_status, r.date
+                FROM reading r
+                INNER JOIN latest_per_instrument lpi
+                    ON r.instrument_id = lpi.instrument_id
+                    AND r.date = lpi.date
+                    AND r.hour = lpi.hour
+                WHERE r.active = true
+                ORDER BY r.instrument_id,
+                    CASE r.limit_status
+                        WHEN 'EMERGENCIA' THEN 1
+                        WHEN 'ALERTA' THEN 2
+                        WHEN 'ATENCAO' THEN 3
+                        WHEN 'SUPERIOR' THEN 4
+                        WHEN 'INFERIOR' THEN 4
+                        ELSE 5
+                    END
+            )
+            SELECT i.id AS instrumentId,
+                   i.name AS instrumentName,
+                   d.id AS damId,
+                   d.name AS damName,
+                   w.limit_status AS limitStatus,
+                   w.date AS lastReadingDate
+            FROM worst_status w
+            INNER JOIN instrument i ON i.id = w.instrument_id
+            INNER JOIN dam d ON d.id = i.dam_id
+            WHERE w.limit_status IN ('EMERGENCIA', 'ALERTA', 'ATENCAO')
+            ORDER BY CASE w.limit_status
+                        WHEN 'EMERGENCIA' THEN 1
+                        WHEN 'ALERTA' THEN 2
+                        ELSE 3
+                     END,
+                     w.date DESC,
+                     i.name ASC
+            LIMIT :maxItems
+            """, nativeQuery = true)
+    List<CriticalInstrumentProjection> findCriticalInstruments(
+            @Param("damIds") List<Long> damIds,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("maxItems") int maxItems);
 }

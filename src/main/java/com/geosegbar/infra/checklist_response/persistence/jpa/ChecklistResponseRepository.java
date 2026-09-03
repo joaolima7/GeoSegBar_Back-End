@@ -19,6 +19,8 @@ import com.geosegbar.infra.dashboard.projections.CategoryCountProjection;
 import com.geosegbar.infra.dashboard.projections.ChecklistResponseCountProjection;
 import com.geosegbar.infra.dashboard.projections.DamResponseCountProjection;
 import com.geosegbar.infra.checklist_response.projections.DamLastChecklistProjection;
+import com.geosegbar.infra.mobile_dashboard.projections.DamInspectionProjection;
+import com.geosegbar.infra.mobile_dashboard.projections.MonthlyCountProjection;
 
 @Repository
 public interface ChecklistResponseRepository extends JpaRepository<ChecklistResponseEntity, Long> {
@@ -194,6 +196,66 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
             + "GROUP BY cr.dam.id, cr.dam.name "
             + "ORDER BY total DESC")
     List<DamResponseCountProjection> countByDamGrouped(
+            @Param("damIds") List<Long> damIds,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
+
+    // ===================== Painel do aplicativo (/mobile/dashboard) =====================
+    /**
+     * Quantas inspeções ESTE usuário registrou, mês a mês, nas barragens que
+     * ele acessa.
+     *
+     * Agrupa no banco: a resposta tem no máximo 12 linhas, uma por mês, em vez
+     * das inspeções inteiras. Usa idx_checklist_response_user_created (user_id,
+     * created_at), que cobre exatamente o filtro.
+     *
+     * Meses sem trabalho não aparecem aqui — quem densifica a série é o
+     * serviço, para o gráfico de linha não interpolar buraco.
+     */
+    @Query(value = """
+            SELECT to_char(cr.created_at, 'YYYY-MM') AS bucket,
+                   CAST(COUNT(*) AS BIGINT) AS total
+            FROM checklist_responses cr
+            WHERE cr.user_id = :userId
+              AND cr.dam_id IN (:damIds)
+              AND cr.created_at >= :startDate
+              AND cr.created_at <= :endDate
+            GROUP BY to_char(cr.created_at, 'YYYY-MM')
+            ORDER BY 1 ASC
+            """, nativeQuery = true)
+    List<MonthlyCountProjection> countMyResponsesByMonth(
+            @Param("userId") Long userId,
+            @Param("damIds") List<Long> damIds,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
+
+    /**
+     * Uma linha por barragem acessível, inspecionada ou não.
+     *
+     * LEFT JOIN de propósito: a barragem que ninguém inspecionou precisa
+     * aparecer com total zero e lastResponseAt nulo. É o que sustenta o "X de Y
+     * barragens inspecionadas este mês" e o "nunca inspecionada" sem sentinela
+     * de texto no campo de data.
+     *
+     * O FILTER conta só o período pedido, enquanto o MAX olha o histórico
+     * inteiro — são perguntas diferentes ("quanto se inspecionou agora" e "há
+     * quanto tempo esta barragem não é visitada") e seria desperdício resolver
+     * cada uma numa consulta. Ambas caem em idx_checklist_response_dam_created_desc.
+     */
+    @Query(value = """
+            SELECT d.id AS damId,
+                   d.name AS damName,
+                   CAST(COUNT(cr.id) FILTER (
+                       WHERE cr.created_at >= :startDate AND cr.created_at <= :endDate
+                   ) AS BIGINT) AS totalInPeriod,
+                   MAX(cr.created_at) AS lastResponseAt
+            FROM dam d
+            LEFT JOIN checklist_responses cr ON cr.dam_id = d.id
+            WHERE d.id IN (:damIds)
+            GROUP BY d.id, d.name
+            ORDER BY d.name ASC
+            """, nativeQuery = true)
+    List<DamInspectionProjection> findInspectionSummaryByDam(
             @Param("damIds") List<Long> damIds,
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate);

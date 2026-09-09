@@ -51,6 +51,14 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                 .requestMatchers(HttpMethod.POST, "/user/login/initiate").permitAll()
                 .requestMatchers(HttpMethod.POST, "/user/login/verify").permitAll()
+                // Renovação de sessão (V4-47). Pública **de propósito**: o
+                // token apresentado aqui pode estar vencido, e o SecurityFilter
+                // o recusaria antes do controller — o que deixaria o endpoint
+                // inútil justamente para quem precisa dele. Quem autentica é
+                // UserService.refreshSession, que exige assinatura válida,
+                // token igual ao lastToken (rotação), autenticação original
+                // dentro de 30 dias e conta ativa.
+                .requestMatchers(HttpMethod.POST, "/user/refresh-token").permitAll()
                 .requestMatchers(HttpMethod.POST, "/user/register").permitAll()
                 .requestMatchers(HttpMethod.POST, "/user/forgot-password").permitAll()
                 .requestMatchers(HttpMethod.POST, "/user/verify-reset-code").permitAll()

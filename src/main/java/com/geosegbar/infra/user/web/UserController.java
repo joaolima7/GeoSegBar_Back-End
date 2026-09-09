@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -104,6 +105,30 @@ public class UserController {
         WebResponseEntity<LoginResponseDTO> response = WebResponseEntity.success(loggedUser,
                 "Usuário autenticado com sucesso!");
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Renova a sessão a partir do token que o cliente já tem (V4-47).
+     *
+     * <p>O token vai no cabeçalho {@code Authorization: Bearer ...} como em
+     * qualquer outra chamada — a diferença é que aqui ele <b>pode estar
+     * vencido</b>, e é por isso que a rota é pública no {@code SecurityConfig}:
+     * o {@code SecurityFilter} recusaria um token expirado antes de o método
+     * ser chamado. Quem autentica é o próprio
+     * {@code UserService.refreshSession}, com quatro verificações que a nota
+     * dele detalha (assinatura, rotação, teto de 30 dias e conta ativa).</p>
+     */
+    @PostMapping("/refresh-token")
+    public ResponseEntity<WebResponseEntity<LoginResponseDTO>> refreshToken(
+            @RequestHeader(name = "Authorization", required = false) String authorization) {
+
+        String token = authorization != null && authorization.startsWith("Bearer ")
+                ? authorization.substring("Bearer ".length()).trim()
+                : null;
+
+        LoginResponseDTO renewed = userService.refreshSession(token);
+        return ResponseEntity.ok(WebResponseEntity.success(renewed,
+                "Sessão renovada com sucesso!"));
     }
 
     @PostMapping("/forgot-password")

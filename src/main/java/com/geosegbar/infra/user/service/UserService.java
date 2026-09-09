@@ -1,5 +1,6 @@
 package com.geosegbar.infra.user.service;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -773,6 +774,88 @@ public class UserService {
                 fullUser.getId(), fullUser.getName(), fullUser.getEmail(), fullUser.getPhone(),
                 fullUser.getSex(), fullUser.getRole().getName(), fullUser.getIsFirstAccess(),
                 token, new ArrayList<>(fullUser.getClients())
+        );
+    }
+
+    /**
+     * Renova a sessão a partir do token que o cliente já tem (V4-47).
+     *
+     * <h2>O defeito que ela fecha</h2>
+     *
+     * O dono do app de campo: <i>"volta e meia entro no app e ele desloga,
+     * mesmo com manter conectado"</i>. Não era bug de armazenamento: o token
+     * de acesso vale <b>12 horas</b> ({@link TokenService#ACCESS_TOKEN_TTL}) e
+     * não havia como renová-lo. Passado esse prazo, o app só sabia mandar o
+     * inspetor para a tela de login — no meio do campo, possivelmente sem
+     * sinal para autenticar.
+     *
+     * <h2>Por que ela aceita um token VENCIDO</h2>
+     *
+     * Porque é justamente esse o caso que precisa ser resolvido. Um endpoint
+     * que exigisse token válido só serviria a quem ainda não precisava dele.
+     *
+     * O que substitui a validade, e por isso a rota pode ser pública:
+     *
+     * <ol>
+     * <li><b>Assinatura e emissor</b> — verificados em
+     * {@link TokenService#verifyIgnoringExpiration}. Token forjado não passa.</li>
+     * <li><b>Rotação</b> — o token apresentado precisa ser exatamente o
+     * {@code lastToken} do usuário. Isso dá revogação de graça: logar em outro
+     * aparelho, ou renovar, invalida o anterior na hora. Um token vazado que
+     * já tenha sido rotacionado não vale nada.</li>
+     * <li><b>Teto absoluto</b> — a autenticação <b>original</b> precisa estar
+     * dentro de {@link TokenService#MAX_SESSION_AGE} (30 dias, a mesma janela
+     * do MFA na web). Como {@code auth_time} é preservado a cada renovação, a
+     * cadeia não se estende sozinha: no trigésimo primeiro dia o inspetor
+     * digita a senha.</li>
+     * <li><b>Conta viva</b> — usuário desativado não renova.</li>
+     * </ol>
+     *
+     * <h2>E o MFA?</h2>
+     *
+     * Não entra aqui, e não precisa: no mobile ele <b>nunca</b> é pedido —
+     * {@code initiateLogin} devolve login direto para
+     * {@code LoginOriginEnum.MOBILE}. Renovar não afrouxa nada que o login
+     * mobile já não fizesse.
+     *
+     * @throws UnauthorizedException quando qualquer um dos quatro falha. O app
+     * trata como "sessão realmente acabou" e manda para o login.
+     */
+    @Transactional
+    public LoginResponseDTO refreshSession(String token) {
+        TokenService.ExpiredTokenClaims claims = tokenService.verifyIgnoringExpiration(token);
+        if (claims == null) {
+            throw new UnauthorizedException("Sessão inválida. Entre novamente.");
+        }
+
+        UserEntity user = userRepository.findByIdWithAllPermissions(claims.userId())
+                .orElseThrow(() -> new UnauthorizedException("Sessão inválida. Entre novamente."));
+
+        if (user.getStatus() != null && user.getStatus().getStatus() == StatusEnum.DISABLED) {
+            throw new UnauthorizedException("Usuário não tem acesso ao sistema!");
+        }
+
+        // Rotação: só o último token emitido renova. Sem isto, qualquer token
+        // já substituído continuaria valendo por trinta dias.
+        if (user.getLastToken() == null || !user.getLastToken().equals(token)) {
+            throw new UnauthorizedException("Sessão substituída por outro acesso. Entre novamente.");
+        }
+
+        // Teto absoluto. `auth_time` ausente é token emitido ANTES do V4-47:
+        // ele renova uma vez, e a renovação já carimba o claim — assim a
+        // frota em campo não é deslogada em massa no dia do deploy.
+        Instant authTime = claims.authTime() != null ? claims.authTime() : Instant.now();
+        if (authTime.isBefore(Instant.now().minus(TokenService.MAX_SESSION_AGE))) {
+            throw new UnauthorizedException("Sua sessão passou de 30 dias. Entre novamente.");
+        }
+
+        String renewed = tokenService.generateRefreshedToken(user, authTime);
+        updateLastLoginAsync(user.getId(), renewed);
+
+        return new LoginResponseDTO(
+                user.getId(), user.getName(), user.getEmail(), user.getPhone(),
+                user.getSex(), user.getRole().getName(), user.getIsFirstAccess(),
+                renewed, new ArrayList<>(user.getClients())
         );
     }
 

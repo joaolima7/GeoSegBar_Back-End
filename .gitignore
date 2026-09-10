@@ -54,3 +54,6 @@ runtime/
 
 # Lixo do Finder do macOS
 .DS_Store
+
+# credencial do skill registrar-trabalho — nunca commitar
+.env.somosdevs

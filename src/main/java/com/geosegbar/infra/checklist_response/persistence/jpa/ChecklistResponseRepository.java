@@ -20,6 +20,7 @@ import com.geosegbar.infra.dashboard.projections.ChecklistResponseCountProjectio
 import com.geosegbar.infra.dashboard.projections.DamResponseCountProjection;
 import com.geosegbar.infra.checklist_response.projections.DamLastChecklistProjection;
 import com.geosegbar.infra.mobile_dashboard.projections.DamInspectionProjection;
+import com.geosegbar.infra.mobile_dashboard.projections.InspectionPaceProjection;
 import com.geosegbar.infra.mobile_dashboard.projections.MonthlyCountProjection;
 
 @Repository
@@ -256,6 +257,72 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
             ORDER BY d.name ASC
             """, nativeQuery = true)
     List<DamInspectionProjection> findInspectionSummaryByDam(
+            @Param("damIds") List<Long> damIds,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
+
+    /**
+     * QUANTO TEMPO LEVA PARA PREENCHER UMA INSPECAO - nos tres recortes que o
+     * app mostra, numa consulta so.
+     *
+     * GROUPING SETS em vez de tres consultas: os recortes sao a mesma
+     * varredura vista de tres alturas (o cliente inteiro, cada barragem, cada
+     * inspetor), e a mediana de um nivel nao se deduz do nivel de baixo -
+     * mediana de medianas nao e mediana. Com GROUPING SETS o banco faz uma
+     * passagem e devolve os tres; com tres @Query seriam tres varreduras do
+     * mesmo indice para responder a mesma pergunta.
+     *
+     * O QUE ENTRA NA CONTA, e por que o filtro nao e frescura:
+     *
+     * started_at e finished_at sao cronometrados pelo APLICATIVO - o rascunho
+     * marca quando o inspetor abriu e quando enviou. Tres situacoes precisam
+     * ficar de fora, senao o numero deixa de significar "tempo em campo":
+     *
+     * 1. inspecao antiga, gravada antes de o app cronometrar (ponta nula);
+     * 2. relogio do aparelho corrigido no meio (duracao negativa ou zero);
+     * 3. RASCUNHO RETOMADO NO DIA SEGUINTE - o caso real e o que mais
+     *    distorce: o inspetor abre a inspecao, o dia acaba, ele envia na
+     *    manha seguinte. Sao 18 horas de duracao para 40 minutos de trabalho.
+     *    O teto de 1 dia corta esse caso; ele nao corta jornada longa nenhuma,
+     *    porque nenhuma inspecao de campo dura 24h.
+     *
+     * Por isso a resposta carrega TAMBEM quantas inspecoes entraram na conta
+     * (inspections): o app diz "media de N inspecoes", e quem le sabe sobre
+     * quantas o numero fala.
+     *
+     * MEDIANA E MEDIA, as duas. A media e o que se pede em voz alta; a mediana
+     * e o que sobrevive a uma inspecao esquecida aberta por 20 horas dentro do
+     * teto. Sao duas linhas de SQL na mesma passagem - deixar so uma seria
+     * economizar no lugar errado.
+     */
+    @Query(value = """
+            SELECT CASE
+                       WHEN GROUPING(d.id) = 0 THEN 'DAM'
+                       WHEN GROUPING(u.id) = 0 THEN 'USER'
+                       ELSE 'ALL'
+                   END AS scope,
+                   COALESCE(d.id, u.id) AS groupId,
+                   COALESCE(d.name, u.name) AS groupName,
+                   CAST(COUNT(*) AS BIGINT) AS inspections,
+                   CAST(ROUND(AVG(
+                       EXTRACT(EPOCH FROM (cr.finished_at - cr.started_at))
+                   )) AS BIGINT) AS averageSeconds,
+                   CAST(ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (
+                       ORDER BY EXTRACT(EPOCH FROM (cr.finished_at - cr.started_at))
+                   )) AS BIGINT) AS medianSeconds
+            FROM checklist_responses cr
+            JOIN dam d ON d.id = cr.dam_id
+            JOIN users u ON u.id = cr.user_id
+            WHERE cr.dam_id IN (:damIds)
+              AND cr.created_at >= :startDate
+              AND cr.created_at <= :endDate
+              AND cr.started_at IS NOT NULL
+              AND cr.finished_at IS NOT NULL
+              AND cr.finished_at > cr.started_at
+              AND cr.finished_at <= cr.started_at + INTERVAL '1 day'
+            GROUP BY GROUPING SETS ((d.id, d.name), (u.id, u.name), ())
+            """, nativeQuery = true)
+    List<InspectionPaceProjection> findInspectionPace(
             @Param("damIds") List<Long> damIds,
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate);

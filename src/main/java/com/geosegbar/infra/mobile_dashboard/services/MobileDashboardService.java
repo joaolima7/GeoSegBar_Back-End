@@ -25,6 +25,7 @@ import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.mobile_dashboard.dtos.MobileDashboardDTO;
 import com.geosegbar.infra.mobile_dashboard.projections.CriticalInstrumentProjection;
 import com.geosegbar.infra.mobile_dashboard.projections.DamInspectionProjection;
+import com.geosegbar.infra.mobile_dashboard.projections.InspectionPaceProjection;
 import com.geosegbar.infra.mobile_dashboard.projections.MonthlyCountProjection;
 import com.geosegbar.infra.reading.persistence.jpa.ReadingRepository;
 
@@ -43,7 +44,7 @@ import lombok.RequiredArgsConstructor;
  * erro em campo. Aqui a permissão é lida na hora, e quem não tem barragem
  * nenhuma recebe 200 zerado, não 403.
  *
- * 2. TUDO AGREGADO NO BANCO. São nove consultas de GROUP BY sobre colunas
+ * 2. TUDO AGREGADO NO BANCO. São dez consultas de GROUP BY sobre colunas
  * indexadas. Nenhuma leitura, resposta ou anomalia individual trafega: a
  * resposta inteira fica na casa das poucas dezenas de linhas, o que importa
  * para um aparelho em rede de campo.
@@ -93,7 +94,7 @@ public class MobileDashboardService {
                     periodStart, periodEnd, denseSeries(periodStart, months, Map.of(), Map.of()));
         }
 
-        // ---- as nove agregações ----
+        // ---- as dez agregações ----
         Map<String, Long> checklistsByMonth = toMonthMap(
                 checklistResponseRepository.countMyResponsesByMonth(
                         user.getId(), damIds, periodStartTime, periodEndTime));
@@ -122,6 +123,10 @@ public class MobileDashboardService {
 
         List<CategoryCountProjection> dangerRows
                 = anomalyRepository.countByDangerLevelGrouped(damIds, periodStartTime, periodEndTime);
+
+        List<InspectionPaceProjection> paceRows
+                = checklistResponseRepository.findInspectionPace(
+                        damIds, periodStartTime, periodEndTime);
 
         // ---- montagem ----
         List<MobileDashboardDTO.ActivityPoint> activity
@@ -192,7 +197,64 @@ public class MobileDashboardService {
                 instrumentsByType,
                 myReadingsByType,
                 anomaliesByDangerLevel,
-                criticalInstruments);
+                criticalInstruments,
+                toPace(paceRows));
+    }
+
+    /**
+     * As linhas dos tres recortes, separadas pelo rotulo que a consulta
+     * carimbou.
+     *
+     * A ordenacao e do MAIS DEMORADO para o mais rapido, e de proposito: quem
+     * abre este cartao quer saber onde o tempo esta indo, nao quem e o mais
+     * rapido. E a ordem por tempo, nao por nome - um ranking alfabetico
+     * esconderia justamente a linha que motivou a pergunta.
+     */
+    private MobileDashboardDTO.InspectionPace toPace(List<InspectionPaceProjection> rows) {
+        if (rows.isEmpty()) {
+            return MobileDashboardDTO.InspectionPace.EMPTY;
+        }
+
+        MobileDashboardDTO.InspectionPace.Row overall = null;
+        List<MobileDashboardDTO.InspectionPace.Row> byDam = new ArrayList<>();
+        List<MobileDashboardDTO.InspectionPace.Row> byInspector = new ArrayList<>();
+
+        for (InspectionPaceProjection row : rows) {
+            MobileDashboardDTO.InspectionPace.Row parsed
+                    = new MobileDashboardDTO.InspectionPace.Row(
+                            row.getGroupId(),
+                            row.getGroupName(),
+                            row.getInspections() != null ? row.getInspections() : 0L,
+                            row.getAverageSeconds() != null ? row.getAverageSeconds() : 0L,
+                            row.getMedianSeconds() != null ? row.getMedianSeconds() : 0L);
+
+            switch (row.getScope()) {
+                case "DAM" ->
+                    byDam.add(parsed);
+                case "USER" ->
+                    byInspector.add(parsed);
+                default ->
+                    overall = parsed;
+            }
+        }
+
+        byDam.sort(MobileDashboardService::slowestFirst);
+        byInspector.sort(MobileDashboardService::slowestFirst);
+
+        return new MobileDashboardDTO.InspectionPace(overall, byDam, byInspector);
+    }
+
+    private static int slowestFirst(
+            MobileDashboardDTO.InspectionPace.Row a,
+            MobileDashboardDTO.InspectionPace.Row b) {
+
+        int byTime = Long.compare(b.medianSeconds(), a.medianSeconds());
+        if (byTime != 0) {
+            return byTime;
+        }
+        String nameA = a.name() != null ? a.name() : "";
+        String nameB = b.name() != null ? b.name() : "";
+        return nameA.compareToIgnoreCase(nameB);
     }
 
     /**

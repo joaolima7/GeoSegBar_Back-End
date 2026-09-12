@@ -14,7 +14,7 @@ import java.util.List;
  * damIds e devolvem 403 se UMA barragem da lista não for permitida; aqui isso é
  * impossível, porque o recorte nasce no servidor.
  *
- * Tudo aqui é agregado no banco. São nove consultas de GROUP BY sobre colunas
+ * Tudo aqui é agregado no banco. São dez consultas de GROUP BY sobre colunas
  * indexadas; nenhuma linha de leitura, resposta ou anomalia trafega.
  *
  * Datas seguem a convenção da API: ISO-8601 sem fuso, hora local do servidor.
@@ -31,7 +31,8 @@ public record MobileDashboardDTO(
         List<TypeCount> instrumentsByType,
         List<TypeCount> myReadingsByType,
         List<CategoryCount> anomaliesByDangerLevel,
-        List<CriticalInstrument> criticalInstruments) {
+        List<CriticalInstrument> criticalInstruments,
+        InspectionPace inspectionPace) {
 
     /**
      * O tamanho do mundo do usuário. Serve para o app dizer "5 barragens · 40
@@ -106,6 +107,46 @@ public record MobileDashboardDTO(
 
     }
 
+    /**
+     * QUANTO TEMPO LEVA PARA PREENCHER UMA INSPECAO.
+     *
+     * Tres recortes da mesma pergunta, porque sao tres decisoes diferentes:
+     * o total diz se a operacao esta ficando mais rapida; por barragem diz
+     * qual delas custa mais tempo de campo; por inspetor diz onde ha
+     * diferenca de metodo entre duas pessoas fazendo o mesmo roteiro.
+     *
+     * counted e quantas inspecoes do periodo entraram na conta - nem todas
+     * entram (ver ChecklistResponseRepository.findInspectionPace). O app mostra
+     * esse numero junto do tempo: um "42min" sobre 3 inspecoes e uma frase
+     * diferente de um "42min" sobre 120.
+     *
+     * Listas vazias e Row nulo quando nao ha nada cronometrado no periodo -
+     * nunca zero, que seria "leva zero minuto".
+     */
+    public record InspectionPace(
+            Row overall,
+            List<Row> byDam,
+            List<Row> byInspector) {
+
+        /**
+         * Um recorte. id e name sao nulos na linha do total.
+         *
+         * Os dois tempos vem em SEGUNDOS; quem formata "1h 20min" e o
+         * aplicativo, que conhece o idioma do aparelho.
+         */
+        public record Row(
+                Long id,
+                String name,
+                long inspections,
+                long averageSeconds,
+                long medianSeconds) {
+
+        }
+
+        public static final InspectionPace EMPTY
+                = new InspectionPace(null, List.of(), List.of());
+    }
+
     public record CriticalInstrument(
             Long instrumentId,
             String instrumentName,
@@ -135,6 +176,7 @@ public record MobileDashboardDTO(
                 List.of(),
                 List.of(),
                 List.of(),
-                List.of());
+                List.of(),
+                InspectionPace.EMPTY);
     }
 }

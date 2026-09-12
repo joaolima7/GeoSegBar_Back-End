@@ -294,6 +294,18 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
      * e o que sobrevive a uma inspecao esquecida aberta por 20 horas dentro do
      * teto. Sao duas linhas de SQL na mesma passagem - deixar so uma seria
      * economizar no lugar errado.
+     *
+     * INDICE: o WHERE e (dam_id IN ..., created_at BETWEEN ...), que e
+     * exatamente idx_checklist_response_dam_created_desc - o mesmo indice que
+     * findInspectionSummaryByDam usa. Nenhum indice novo. Os dois JOIN sao por
+     * chave primaria.
+     *
+     * O CAST PARA double precision e explicito de proposito: a partir do
+     * PostgreSQL 14 EXTRACT(EPOCH FROM interval) devolve NUMERIC, e
+     * percentile_cont nao tem sobrecarga para numeric - so para double
+     * precision e interval. A resolucao funcionaria pelo cast implicito, mas
+     * depender de cast implicito numa funcao de agregado ordenado e o tipo de
+     * coisa que quebra numa atualizacao de versao, longe daqui.
      */
     @Query(value = """
             SELECT CASE
@@ -304,12 +316,13 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
                    COALESCE(d.id, u.id) AS groupId,
                    COALESCE(d.name, u.name) AS groupName,
                    CAST(COUNT(*) AS BIGINT) AS inspections,
-                   CAST(ROUND(AVG(
+                   CAST(ROUND(AVG(CAST(
                        EXTRACT(EPOCH FROM (cr.finished_at - cr.started_at))
-                   )) AS BIGINT) AS averageSeconds,
+                       AS double precision))) AS BIGINT) AS averageSeconds,
                    CAST(ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (
-                       ORDER BY EXTRACT(EPOCH FROM (cr.finished_at - cr.started_at))
-                   )) AS BIGINT) AS medianSeconds
+                       ORDER BY CAST(
+                           EXTRACT(EPOCH FROM (cr.finished_at - cr.started_at))
+                           AS double precision))) AS BIGINT) AS medianSeconds
             FROM checklist_responses cr
             JOIN dam d ON d.id = cr.dam_id
             JOIN users u ON u.id = cr.user_id

@@ -1,6 +1,7 @@
 package com.geosegbar.infra.checklist_response.web;
 
 import java.time.LocalDateTime;
+import com.geosegbar.infra.checklist_response.dtos.InspectionDateDivergenceDTO;
 import java.util.List;
 
 import org.springframework.data.domain.PageRequest;
@@ -119,6 +120,19 @@ public class ChecklistResponseController {
             @Valid @RequestBody ChecklistResponseUpdateDTO dto) {
         updatePresignedService.updateChecklistResponse(id, dto);
         return ResponseEntity.ok(WebResponseEntity.success(null, "Resposta de checklist atualizada com sucesso!"));
+    }
+
+    /**
+     * Previa da mudanca de data, sem gravar nada: devolve o que passaria a estar
+     * irregular em inspecoes posteriores. Lista vazia = pode salvar direto.
+     */
+    @GetMapping("/{id}/inspection-date/preview")
+    public ResponseEntity<WebResponseEntity<InspectionDateDivergenceDTO>> previewInspectionDate(
+            @PathVariable Long id,
+            @RequestParam("newDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime newDate) {
+        InspectionDateDivergenceDTO preview = checklistResponseService
+                .previewInspectionDateChange(id, newDate);
+        return ResponseEntity.ok(WebResponseEntity.success(preview, "Prévia da mudança de data."));
     }
 
     @DeleteMapping("/{id}")

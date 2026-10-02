@@ -1,6 +1,8 @@
 package com.geosegbar.exceptions.exception_handler;
 
 import java.io.PrintWriter;
+import com.geosegbar.infra.checklist_response.dtos.InspectionDateDivergenceDTO;
+import com.geosegbar.exceptions.InspectionDateDivergenceException;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -411,5 +413,16 @@ public class RestExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(WebResponseEntity.error("Erro inesperado. Tente novamente mais tarde."));
+    }
+
+    /**
+     * 409: a mudanca de data e possivel, mas invalida respostas ja gravadas. O
+     * corpo leva a lista para a tela mostrar antes de pedir confirmacao.
+     */
+    @ExceptionHandler(InspectionDateDivergenceException.class)
+    public ResponseEntity<WebResponseEntity<InspectionDateDivergenceDTO>> handleInspectionDateDivergence(
+            InspectionDateDivergenceException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(WebResponseEntity.errorValidation(ex.getMessage(), ex.getPreview()));
     }
 }

@@ -24,6 +24,8 @@ import com.geosegbar.entities.ChecklistResponseEntity;
 import com.geosegbar.infra.checklist_response.dtos.ChecklistAnomalyDTO;
 import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
 import com.geosegbar.entities.AnomalyEntity;
+import com.geosegbar.exceptions.InspectionDateDivergenceException;
+import com.geosegbar.infra.checklist_response.dtos.InspectionDateDivergenceDTO;
 import com.geosegbar.infra.checklist_submission.dtos.OtherSubmissionDTO;
 import com.geosegbar.infra.danger_level.persistence.jpa.DangerLevelRepository;
 import com.geosegbar.infra.anomaly_status.persistence.jpa.AnomalyStatusRepository;
@@ -143,6 +145,45 @@ public class ChecklistResponseService {
         checklistResponseRepository.deleteById(id);
     }
 
+
+    /**
+     * Previa da mudanca de data: diz o que PASSARIA a estar irregular se esta
+     * inspecao fosse movida, sem gravar nada. Lista vazia = pode gravar direto.
+     */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public InspectionDateDivergenceDTO previewInspectionDateChange(Long checklistResponseId,
+            LocalDateTime newDate) {
+
+        ChecklistResponseEntity checklistResponse = checklistResponseRepository
+                .findByIdWithBasicInfo(checklistResponseId)
+                .orElseThrow(() -> new NotFoundException(
+                "Resposta de Checklist não encontrada para id: " + checklistResponseId));
+
+        InspectionDateChange.requireNotFuture(newDate);
+
+        List<InspectionDateDivergence.AnswerSnapshot> chain = answerRepository
+                .findLabelChainByDamId(checklistResponse.getDam().getId()).stream()
+                .map(row -> new InspectionDateDivergence.AnswerSnapshot(
+                ((Number) row[0]).longValue(),
+                ((java.sql.Timestamp) row[1]).toLocalDateTime(),
+                ((Number) row[2]).longValue(),
+                ((Number) row[3]).longValue(),
+                (String) row[4],
+                (String) row[5]))
+                .toList();
+
+        List<InspectionDateDivergenceDTO.Item> itens = InspectionDateDivergence
+                .compute(chain, checklistResponseId, newDate).stream()
+                .map(d -> new InspectionDateDivergenceDTO.Item(
+                d.checklistResponseId(), d.inspectionDate(), d.templateQuestionnaireId(),
+                d.questionId(), d.questionText(), d.label(),
+                d.previousLabelBefore(), d.previousLabelAfter(), d.motivo()))
+                .toList();
+
+        return new InspectionDateDivergenceDTO(
+                checklistResponse.getCreatedAt(), newDate, itens);
+    }
+
     @Transactional
     public void updateChecklistResponse(Long checklistResponseId, ChecklistResponseUpdateDTO dto) {
         updateChecklistResponse(checklistResponseId, dto, Map.of());
@@ -174,6 +215,15 @@ public class ChecklistResponseService {
         }
 
         if (dto.getCreatedAt() != null) {
+            // Mover a inspecao pode invalidar respostas de OUTRAS inspecoes ja
+            // gravadas. Sem confirmacao explicita, recusa e devolve o que mudaria.
+            if (!Boolean.TRUE.equals(dto.getConfirmDateDivergence())) {
+                InspectionDateDivergenceDTO previa = previewInspectionDateChange(
+                        checklistResponseId, dto.getCreatedAt());
+                if (!previa.getDivergences().isEmpty()) {
+                    throw new InspectionDateDivergenceException(previa);
+                }
+            }
             applyInspectionDate(checklistResponse, dto.getCreatedAt());
         }
 

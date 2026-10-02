@@ -41,6 +41,9 @@ public class ChecklistResponseUpdateDTO {
 
     private java.time.LocalDateTime createdAt;
 
+    /** Confirma a mudanca de data mesmo sabendo que ela invalida respostas posteriores. */
+    private Boolean confirmDateDivergence;
+
     @Valid
     private List<AnswerUpdateDTO> answers;
 

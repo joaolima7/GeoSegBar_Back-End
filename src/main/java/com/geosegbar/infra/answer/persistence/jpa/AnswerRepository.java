@@ -16,6 +16,27 @@ import com.geosegbar.entities.AnswerEntity;
 @Repository
 public interface AnswerRepository extends JpaRepository<AnswerEntity, Long> {
 
+    /**
+     * Cadeia completa de marcacoes da barragem, para simular o efeito de mover uma
+     * inspecao de data. Ordena por checklist_responses.created_at (a data da
+     * inspecao), nao por questionnaire_responses.created_at, que e o instante da
+     * gravacao e nao acompanha o lancamento retroativo.
+     */
+    @Query(value = """
+            SELECT cr.id, cr.created_at, qr.template_questionnaire_id, a.question_id, q.question_text, o.label
+            FROM answers a
+            JOIN answer_options ao ON ao.answer_id = a.id
+            JOIN options o ON o.id = ao.option_id
+            JOIN questions q ON q.id = a.question_id
+            JOIN questionnaire_responses qr ON qr.id = a.questionnaire_response_id
+            JOIN checklist_responses cr ON cr.id = qr.checklist_response_id
+            WHERE qr.dam_id = :damId
+              AND o.label IS NOT NULL
+            ORDER BY cr.created_at, cr.id
+            """, nativeQuery = true)
+    List<Object[]> findLabelChainByDamId(@Param("damId") Long damId);
+
+
     @EntityGraph(attributePaths = {"question", "selectedOptions", "photos", "questionnaireResponse"})
     @Query("SELECT a FROM AnswerEntity a WHERE a.id = :id")
     Optional<AnswerEntity> findByIdWithAllDetails(@Param("id") Long id);

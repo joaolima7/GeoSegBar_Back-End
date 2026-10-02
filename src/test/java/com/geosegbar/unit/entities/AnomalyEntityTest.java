@@ -263,6 +263,7 @@ class AnomalyEntityTest extends BaseUnitTest {
                 -46.6333,
                 100L,
                 50L,
+                7L,
                 AnomalyOriginEnum.CHECKLIST,
                 "Observação importante",
                 "Recomendação crítica",

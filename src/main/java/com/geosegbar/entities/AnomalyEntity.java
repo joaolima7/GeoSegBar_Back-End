@@ -4,7 +4,6 @@ import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.hibernate.annotations.CreationTimestamp;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
@@ -56,6 +55,7 @@ import lombok.Setter;
     @Index(name = "idx_anomaly_origin", columnList = "origin"),
     @Index(name = "idx_anomaly_questionnaire_id", columnList = "questionnaire_id"),
     @Index(name = "idx_anomaly_question_id", columnList = "question_id"),
+    @Index(name = "idx_anomaly_checklist_response_id", columnList = "checklist_response_id"),
     @Index(name = "idx_anomaly_origin_dam", columnList = "origin, dam_id"),
     @Index(name = "idx_anomaly_dam_danger_status", columnList = "dam_id, danger_level_id, status_id"),
     @Index(name = "idx_anomaly_complete_filter", columnList = "dam_id, status_id, danger_level_id, created_at DESC")
@@ -90,8 +90,7 @@ public class AnomalyEntity {
     @NotNull(message = "Barragem é obrigatória!")
     private DamEntity dam;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
-    @CreationTimestamp
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
 
     @Column(nullable = false)
@@ -107,6 +106,9 @@ public class AnomalyEntity {
 
     @Column(name = "question_id")
     private Long questionId;
+
+    @Column(name = "checklist_response_id")
+    private Long checklistResponseId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "origin", nullable = false)

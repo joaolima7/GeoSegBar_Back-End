@@ -19,6 +19,11 @@ import com.geosegbar.infra.dashboard.projections.RecentAnomalyProjection;
 @Repository
 public interface AnomalyRepository extends JpaRepository<AnomalyEntity, Long> {
 
+    List<AnomalyEntity> findByChecklistResponseIdOrderByIdAsc(Long checklistResponseId);
+
+    List<AnomalyEntity> findByChecklistResponseIdInOrderByIdAsc(List<Long> checklistResponseIds);
+
+
     @EntityGraph(attributePaths = {"user", "dam", "dam.client", "photos", "dangerLevel", "status"})
     List<AnomalyEntity> findByUserId(Long userId);
 

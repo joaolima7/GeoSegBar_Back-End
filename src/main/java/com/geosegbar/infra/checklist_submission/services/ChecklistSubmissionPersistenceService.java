@@ -134,6 +134,7 @@ public class ChecklistSubmissionPersistenceService {
                             submissionDto.getUserId(),
                             submissionDto.getDamId(),
                             questionnaireDto.getTemplateQuestionnaireId(),
+                            checklistResponse,
                             pendingUploads
                     );
                 }
@@ -142,7 +143,7 @@ public class ChecklistSubmissionPersistenceService {
             if (questionnaireDto.getOthers() != null) {
                 for (OtherSubmissionDTO other : questionnaireDto.getOthers()) {
                     createAnomalyFromOther(other, submissionDto.getUserId(), submissionDto.getDamId(),
-                            questionnaireDto.getTemplateQuestionnaireId(), pendingUploads);
+                            questionnaireDto.getTemplateQuestionnaireId(), checklistResponse, pendingUploads);
                 }
             }
         }
@@ -150,7 +151,7 @@ public class ChecklistSubmissionPersistenceService {
         if (submissionDto.getOthers() != null) {
             for (OtherSubmissionDTO other : submissionDto.getOthers()) {
                 createAnomalyFromOther(other, submissionDto.getUserId(), submissionDto.getDamId(),
-                        null, pendingUploads);
+                        null, checklistResponse, pendingUploads);
             }
         }
 
@@ -231,6 +232,7 @@ public class ChecklistSubmissionPersistenceService {
                             submissionDto.getUserId(),
                             submissionDto.getDamId(),
                             questionnaireDto.getTemplateQuestionnaireId(),
+                            checklistResponse,
                             urlByObjectKey
                     );
                 }
@@ -239,7 +241,7 @@ public class ChecklistSubmissionPersistenceService {
             if (questionnaireDto.getOthers() != null) {
                 for (OtherSubmissionDTO other : questionnaireDto.getOthers()) {
                     createAnomalyFromOtherPresigned(other, submissionDto.getUserId(), submissionDto.getDamId(),
-                            questionnaireDto.getTemplateQuestionnaireId(), urlByObjectKey);
+                            questionnaireDto.getTemplateQuestionnaireId(), checklistResponse, urlByObjectKey);
                 }
             }
         }
@@ -247,7 +249,7 @@ public class ChecklistSubmissionPersistenceService {
         if (submissionDto.getOthers() != null) {
             for (OtherSubmissionDTO other : submissionDto.getOthers()) {
                 createAnomalyFromOtherPresigned(other, submissionDto.getUserId(), submissionDto.getDamId(),
-                        null, urlByObjectKey);
+                        null, checklistResponse, urlByObjectKey);
             }
         }
 
@@ -297,7 +299,7 @@ public class ChecklistSubmissionPersistenceService {
     }
 
     private void createAnomalyFromPVAnswerPresigned(AnswerSubmissionDTO answerDto, Long userId, Long damId,
-            Long questionnaireId, Map<String, String> urlByObjectKey) {
+            Long questionnaireId, ChecklistResponseEntity checklistResponse, Map<String, String> urlByObjectKey) {
 
         UserEntity user = userRepository.getReferenceById(userId);
         DamEntity dam = damRepository.getReferenceById(damId);
@@ -319,6 +321,8 @@ public class ChecklistSubmissionPersistenceService {
         anomaly.setDangerLevel(dangerLevel);
         anomaly.setStatus(status);
 
+        ChecklistAnomalyLinker.link(anomaly, checklistResponse);
+
         AnomalyEntity savedAnomaly = anomalyRepository.save(anomaly);
 
         if (answerDto.getPhotos() != null && !answerDto.getPhotos().isEmpty()) {
@@ -329,7 +333,7 @@ public class ChecklistSubmissionPersistenceService {
     }
 
     private void createAnomalyFromOtherPresigned(OtherSubmissionDTO otherDto, Long userId, Long damId,
-            Long questionnaireId, Map<String, String> urlByObjectKey) {
+            Long questionnaireId, ChecklistResponseEntity checklistResponse, Map<String, String> urlByObjectKey) {
 
         UserEntity user = userRepository.getReferenceById(userId);
         DamEntity dam = damRepository.getReferenceById(damId);
@@ -348,6 +352,8 @@ public class ChecklistSubmissionPersistenceService {
         anomaly.setRecommendation(otherDto.getRecommendation());
         anomaly.setDangerLevel(dangerLevel);
         anomaly.setStatus(status);
+
+        ChecklistAnomalyLinker.link(anomaly, checklistResponse);
 
         AnomalyEntity saved = anomalyRepository.save(anomaly);
 
@@ -629,6 +635,7 @@ public class ChecklistSubmissionPersistenceService {
             Long userId,
             Long damId,
             Long questionnaireId,
+            ChecklistResponseEntity checklistResponse,
             List<ChecklistResponseSubmissionService.PendingPhotoUpload> pendingUploads) {
 
         UserEntity user = userRepository.getReferenceById(userId);
@@ -650,6 +657,8 @@ public class ChecklistSubmissionPersistenceService {
         anomaly.setRecommendation(pvRecommendation != null && !pvRecommendation.trim().isEmpty() ? pvRecommendation : null);
         anomaly.setDangerLevel(dangerLevel);
         anomaly.setStatus(status);
+
+        ChecklistAnomalyLinker.link(anomaly, checklistResponse);
 
         AnomalyEntity savedAnomaly = anomalyRepository.save(anomaly);
 
@@ -728,6 +737,7 @@ public class ChecklistSubmissionPersistenceService {
             Long userId,
             Long damId,
             Long questionnaireId,
+            ChecklistResponseEntity checklistResponse,
             List<ChecklistResponseSubmissionService.PendingPhotoUpload> pendingUploads) {
 
         UserEntity user = userRepository.getReferenceById(userId);
@@ -747,6 +757,8 @@ public class ChecklistSubmissionPersistenceService {
         anomaly.setRecommendation(otherDto.getRecommendation());
         anomaly.setDangerLevel(dangerLevel);
         anomaly.setStatus(status);
+
+        ChecklistAnomalyLinker.link(anomaly, checklistResponse);
 
         AnomalyEntity saved = anomalyRepository.save(anomaly);
 

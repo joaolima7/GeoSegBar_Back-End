@@ -313,13 +313,8 @@ public class ChecklistResponseService {
                 answer.setComment(updateDto.getComment().trim().isEmpty() ? null : updateDto.getComment());
             }
 
-            if (updateDto.getLatitude() != null) {
-                answer.setLatitude(updateDto.getLatitude());
-            }
-
-            if (updateDto.getLongitude() != null) {
-                answer.setLongitude(updateDto.getLongitude());
-            }
+            answer.setLatitude(AnswerLocationResolver.resolveLatitude(answer, updateDto));
+            answer.setLongitude(AnswerLocationResolver.resolveLongitude(answer, updateDto));
 
             // Aplica fotos se enviadas: apaga antigas do S3 + DB e salva novas
             if (updateDto.getPhotos() != null) {

@@ -35,6 +35,8 @@ import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.client.dtos.ClientDTO;
 import com.geosegbar.infra.client.dtos.ClientStatusUpdateDTO;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
+import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
+import com.geosegbar.infra.instrument_type.persistence.jpa.InstrumentTypeRepository;
 import com.geosegbar.infra.client.service.ClientService;
 import com.geosegbar.infra.client.utils.ClientStatusChangeHandler;
 import com.geosegbar.infra.file_storage.FileStorageService;
@@ -64,6 +66,12 @@ class ClientServiceTest extends BaseUnitTest {
 
     @Mock
     private ClientStatusChangeHandler statusChangeHandler;
+
+    @Mock
+    private QuestionRepository questionRepository;
+
+    @Mock
+    private InstrumentTypeRepository instrumentTypeRepository;
 
     @InjectMocks
     private ClientService clientService;

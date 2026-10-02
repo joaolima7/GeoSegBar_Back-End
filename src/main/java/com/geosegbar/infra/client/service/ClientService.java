@@ -20,6 +20,10 @@ import com.geosegbar.infra.client.dtos.ClientDTO;
 import com.geosegbar.infra.client.dtos.ClientStatusUpdateDTO;
 import com.geosegbar.infra.client.dtos.LogoUpdateDTO;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
+import com.geosegbar.entities.QuestionEntity;
+import com.geosegbar.entities.InstrumentTypeEntity;
+import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
+import com.geosegbar.infra.instrument_type.persistence.jpa.InstrumentTypeRepository;
 import com.geosegbar.infra.client.utils.ClientStatusChangeHandler;
 import com.geosegbar.infra.file_storage.FileStorageService;
 import com.geosegbar.infra.status.persistence.jpa.StatusRepository;
@@ -39,6 +43,8 @@ public class ClientService {
     private final UserService userService;
     private final StatusRepository statusRepository;
     private final ClientStatusChangeHandler statusChangeHandler;
+    private final QuestionRepository questionRepository;
+    private final InstrumentTypeRepository instrumentTypeRepository;
 
     @Transactional
     public void deleteById(Long id) {
@@ -50,6 +56,20 @@ public class ClientService {
                 || clientRepository.countUsersByClientId(id) > 0) {
             throw new BusinessRuleException(
                     "Não é possível excluir cliente devido as dependências existentes, recomenda-se inativar o cliente se necessário.");
+        }
+
+        // O catalogo do cliente - perguntas e tipos de instrumento - nao tem
+        // significado sem ele, e so pode ser apagado aqui porque o guard acima ja
+        // garantiu que nao ha barragem: questionario, resposta e instrumento pendem
+        // todos de barragem, entao nada referencia essas linhas.
+        List<QuestionEntity> questions = questionRepository.findByClientId(id);
+        if (!questions.isEmpty()) {
+            questionRepository.deleteAll(questions);
+        }
+
+        List<InstrumentTypeEntity> instrumentTypes = instrumentTypeRepository.findByClientIdOrderByNameAsc(id);
+        if (!instrumentTypes.isEmpty()) {
+            instrumentTypeRepository.deleteAll(instrumentTypes);
         }
 
         if (client.getLogoPath() != null) {

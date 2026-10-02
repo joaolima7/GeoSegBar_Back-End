@@ -30,4 +30,7 @@ public class AnswerUpdateDTO {
     private List<PhotoSubmissionDTO> photos;
     private Double latitude;
     private Double longitude;
+
+    /** Nulo significa "nao mexer", entao apagar a localizacao precisa de sinal proprio. */
+    private Boolean clearLocation;
 }

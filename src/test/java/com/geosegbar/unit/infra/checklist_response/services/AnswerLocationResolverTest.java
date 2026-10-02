@@ -67,4 +67,24 @@ class AnswerLocationResolverTest extends BaseUnitTest {
 
         assertThat(AnswerLocationResolver.hasLocation(answer, sent(-23.5, null))).isFalse();
     }
+
+    @Test
+    @DisplayName("clearLocation apaga a localizacao que estava gravada")
+    void clearLocationWipesStored() {
+        AnswerEntity answer = stored(-10.0, -20.0);
+        AnswerUpdateDTO dto = sent(null, null);
+        dto.setClearLocation(true);
+
+        assertThat(AnswerLocationResolver.resolveLatitude(answer, dto)).isNull();
+        assertThat(AnswerLocationResolver.resolveLongitude(answer, dto)).isNull();
+        assertThat(AnswerLocationResolver.hasLocation(answer, dto)).isFalse();
+    }
+
+    @Test
+    @DisplayName("sem clearLocation, nulo continua significando nao mexer")
+    void nullStillMeansKeep() {
+        AnswerEntity answer = stored(-10.0, -20.0);
+
+        assertThat(AnswerLocationResolver.resolveLatitude(answer, sent(null, null))).isEqualTo(-10.0);
+    }
 }

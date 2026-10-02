@@ -15,11 +15,21 @@ public final class AnswerLocationResolver {
     }
 
     public static Double resolveLatitude(AnswerEntity answer, AnswerUpdateDTO update) {
+        if (isClearRequested(update)) {
+            return null;
+        }
         return update.getLatitude() != null ? update.getLatitude() : answer.getLatitude();
     }
 
     public static Double resolveLongitude(AnswerEntity answer, AnswerUpdateDTO update) {
+        if (isClearRequested(update)) {
+            return null;
+        }
         return update.getLongitude() != null ? update.getLongitude() : answer.getLongitude();
+    }
+
+    public static boolean isClearRequested(AnswerUpdateDTO update) {
+        return Boolean.TRUE.equals(update.getClearLocation());
     }
 
     public static boolean hasLocation(AnswerEntity answer, AnswerUpdateDTO update) {

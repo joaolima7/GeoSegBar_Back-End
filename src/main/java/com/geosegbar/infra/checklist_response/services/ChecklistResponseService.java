@@ -21,6 +21,9 @@ import com.geosegbar.common.utils.ChecklistOptionTransitionValidator;
 import com.geosegbar.entities.AnswerEntity;
 import com.geosegbar.entities.AnswerPhotoEntity;
 import com.geosegbar.entities.ChecklistResponseEntity;
+import com.geosegbar.infra.checklist_response.dtos.ChecklistAnomalyDTO;
+import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
+import com.geosegbar.entities.AnomalyEntity;
 import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.OptionEntity;
@@ -73,6 +76,7 @@ public class ChecklistResponseService {
     private final FileStorageService fileStorageService;
     private final DamService damService;
     private final ClientRepository clientRepository;
+    private final AnomalyRepository anomalyRepository;
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<ChecklistResponseEntity> findAll() {
@@ -306,9 +310,7 @@ public class ChecklistResponseService {
 
         List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByDamIdWithFullDetails(damId);
 
-        return checklistResponses.stream()
-                .map(this::convertToDetailDto)
-                .collect(Collectors.toList());
+        return convertAllToDetailDto(checklistResponses);
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
@@ -333,6 +335,38 @@ public class ChecklistResponseService {
      * N+1.
      */
     private ChecklistResponseDetailDTO convertToDetailDto(ChecklistResponseEntity checklistResponse) {
+        return convertToDetailDto(checklistResponse,
+                loadAnomaliesFor(List.of(checklistResponse)));
+    }
+
+    /**
+     * As anomalias chegam prontas num mapa porque os endpoints de lista
+     * convertem varias respostas: uma consulta por resposta viraria N+1.
+     */
+    private Map<Long, List<AnomalyEntity>> loadAnomaliesFor(List<ChecklistResponseEntity> responses) {
+        if (responses.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> ids = responses.stream()
+                .map(ChecklistResponseEntity::getId)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return anomalyRepository.findByChecklistResponseIdInOrderByIdAsc(ids).stream()
+                .collect(Collectors.groupingBy(AnomalyEntity::getChecklistResponseId));
+    }
+
+    private List<ChecklistResponseDetailDTO> convertAllToDetailDto(List<ChecklistResponseEntity> responses) {
+        Map<Long, List<AnomalyEntity>> anomalies = loadAnomaliesFor(responses);
+        return responses.stream()
+                .map(response -> convertToDetailDto(response, anomalies))
+                .toList();
+    }
+
+    private ChecklistResponseDetailDTO convertToDetailDto(ChecklistResponseEntity checklistResponse,
+            Map<Long, List<AnomalyEntity>> anomaliesByResponse) {
         ChecklistResponseDetailDTO dto = new ChecklistResponseDetailDTO();
         dto.setId(checklistResponse.getId());
         dto.setChecklistName(checklistResponse.getChecklistName());
@@ -416,21 +450,21 @@ public class ChecklistResponseService {
         }
 
         dto.setTemplates(new ArrayList<>(templateMap.values()));
+        dto.setAnomalies(
+                anomaliesByResponse.getOrDefault(checklistResponse.getId(), List.of()).stream()
+                        .map(ChecklistAnomalyMapper::toDto)
+                        .toList());
         return dto;
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByUserId(Long userId) {
-        return checklistResponseRepository.findByUserId(userId).stream()
-                .map(this::convertToDetailDto)
-                .collect(Collectors.toList());
+        return convertAllToDetailDto(checklistResponseRepository.findByUserId(userId));
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByDateRange(LocalDateTime startDate, LocalDateTime endDate) {
-        return checklistResponseRepository.findByCreatedAtBetween(startDate, endDate).stream()
-                .map(this::convertToDetailDto)
-                .collect(Collectors.toList());
+        return convertAllToDetailDto(checklistResponseRepository.findByCreatedAtBetween(startDate, endDate));
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
@@ -460,9 +494,7 @@ public class ChecklistResponseService {
     }
 
     private PagedChecklistResponseDTO<ChecklistResponseDetailDTO> convertPageToResponse(Page<ChecklistResponseEntity> page) {
-        List<ChecklistResponseDetailDTO> dtos = page.getContent().stream()
-                .map(this::convertToDetailDto)
-                .collect(Collectors.toList());
+        List<ChecklistResponseDetailDTO> dtos = convertAllToDetailDto(page.getContent());
 
         return new PagedChecklistResponseDTO<>(
                 dtos,

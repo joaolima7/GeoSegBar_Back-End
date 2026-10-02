@@ -30,4 +30,5 @@ public class ChecklistResponseDetailDTO {
     private Double accumulatedRainfall;
     private WeatherConditionEnum weatherCondition;
     private List<TemplateWithAnswersDTO> templates;
+    private List<ChecklistAnomalyDTO> anomalies;
 }

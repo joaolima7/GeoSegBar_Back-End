@@ -31,15 +31,22 @@ DECLARE
     qtd_ligadas   BIGINT;
     qtd_orfas     BIGINT;
 BEGIN
+    -- Banco novo: o Flyway roda ANTES do Hibernate, entao a tabela ainda nem existe.
+    -- O schema nasce correto a partir das entidades e nao ha historico a preencher.
     IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = current_schema()
-          AND table_name = 'anomalies'
-          AND column_name = 'checklist_response_id'
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema() AND table_name = 'anomalies'
     ) THEN
-        RAISE NOTICE 'V5: coluna checklist_response_id ainda não existe (banco novo) — nada a fazer.';
+        RAISE NOTICE 'V5: tabela "anomalies" ainda não existe (banco novo) — nada a fazer.';
         RETURN;
     END IF;
+
+    -- A coluna e criada AQUI, nao pelo ddl-auto: o Hibernate so roda depois do
+    -- Flyway, entao esperar por ele faria esta migracao sair pelo early return e
+    -- ser marcada como aplicada sem nunca ter preenchido nada.
+    ALTER TABLE anomalies ADD COLUMN IF NOT EXISTS checklist_response_id BIGINT;
+    CREATE INDEX IF NOT EXISTS idx_anomaly_checklist_response_id
+        ON anomalies (checklist_response_id);
 
     SELECT COUNT(*) INTO qtd_alvo
     FROM anomalies

@@ -42,10 +42,15 @@ public final class InspectionDateChange {
             return;
         }
 
+        // A data da resposta ja foi barrada no futuro, mas as anomalias ficam alguns
+        // minutos depois dela: somar o mesmo deslocamento pode estourar o agora.
+        LocalDateTime limite = LocalDateTime.now();
         for (AnomalyEntity anomaly : anomalies) {
-            if (anomaly.getCreatedAt() != null) {
-                anomaly.setCreatedAt(anomaly.getCreatedAt().plus(shift));
+            if (anomaly.getCreatedAt() == null) {
+                continue;
             }
+            LocalDateTime deslocada = anomaly.getCreatedAt().plus(shift);
+            anomaly.setCreatedAt(deslocada.isAfter(limite) ? limite : deslocada);
         }
     }
 }

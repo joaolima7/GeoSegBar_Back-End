@@ -29,6 +29,7 @@ import com.geosegbar.infra.checklist_response.dtos.DamLastChecklistDTO;
 import com.geosegbar.infra.checklist_response.dtos.DamLastChecklistV2DTO;
 import com.geosegbar.infra.checklist_response.dtos.PagedChecklistResponseDTO;
 import com.geosegbar.infra.checklist_response.services.ChecklistResponseService;
+import com.geosegbar.infra.checklist_response.services.ChecklistResponseUpdatePresignedService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +40,7 @@ import lombok.RequiredArgsConstructor;
 public class ChecklistResponseController {
 
     private final ChecklistResponseService checklistResponseService;
+    private final ChecklistResponseUpdatePresignedService updatePresignedService;
 
     @GetMapping
     public ResponseEntity<WebResponseEntity<List<ChecklistResponseEntity>>> getAllChecklistResponses() {
@@ -103,6 +105,19 @@ public class ChecklistResponseController {
             @PathVariable Long id,
             @Valid @RequestBody ChecklistResponseUpdateDTO dto) {
         checklistResponseService.updateChecklistResponse(id, dto);
+        return ResponseEntity.ok(WebResponseEntity.success(null, "Resposta de checklist atualizada com sucesso!"));
+    }
+
+    /**
+     * Edição com fotos já enviadas ao S3 (cada foto chega por objectKey). O front
+     * chama esta rota desde a v1.24.0; o PATCH /{id} acima continua aceitando
+     * base64, para quem ainda usa aquele caminho.
+     */
+    @PatchMapping("/{id}/presigned")
+    public ResponseEntity<WebResponseEntity<Void>> updateChecklistResponsePresigned(
+            @PathVariable Long id,
+            @Valid @RequestBody ChecklistResponseUpdateDTO dto) {
+        updatePresignedService.updateChecklistResponse(id, dto);
         return ResponseEntity.ok(WebResponseEntity.success(null, "Resposta de checklist atualizada com sucesso!"));
     }
 

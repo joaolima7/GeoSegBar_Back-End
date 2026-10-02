@@ -27,6 +27,7 @@ import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.anomaly.dtos.AnomalyDTO;
 import com.geosegbar.infra.anomaly.dtos.UpdateAnomalyRequestDTO;
+import com.geosegbar.infra.template_questionnaire.persistence.jpa.TemplateQuestionnaireRepository;
 import com.geosegbar.infra.template_questionnaire_question.persistence.jpa.TemplateQuestionnaireQuestionRepository;
 import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
 import com.geosegbar.infra.anomaly_photo.persistence.jpa.AnomalyPhotoRepository;
@@ -53,6 +54,7 @@ public class AnomalyService {
     private final AnomalyPhotoRepository anomalyPhotoRepository;
     private final DamAccessService damAccessService;
     private final TemplateQuestionnaireQuestionRepository templateQuestionnaireQuestionRepository;
+    private final TemplateQuestionnaireRepository templateQuestionnaireRepository;
 
     @PostConstruct
     public void init() {
@@ -248,7 +250,7 @@ public class AnomalyService {
         }
 
         if (request.getQuestionnaireId() != null) {
-            anomaly.setQuestionnaireId(request.getQuestionnaireId() == 0L ? null : request.getQuestionnaireId());
+            applyQuestionnaireChange(anomaly, request.getQuestionnaireId());
         }
 
         if (request.getQuestionId() != null) {
@@ -265,6 +267,32 @@ public class AnomalyService {
 
         AnomalyEntity saved = anomalyRepository.save(anomaly);
         return findById(saved.getId());
+    }
+
+    /**
+     * Trocar o questionário sem olhar a pergunta deixaria a anomalia apontando para
+     * uma pergunta que não existe no questionário novo — o mesmo estrago que
+     * {@link #applyQuestionLink} impede pelo caminho direto.
+     */
+    private void applyQuestionnaireChange(AnomalyEntity anomaly, Long requestedQuestionnaireId) {
+        if (requestedQuestionnaireId == 0L) {
+            anomaly.setQuestionnaireId(null);
+            anomaly.setQuestionId(null);
+            return;
+        }
+
+        if (!templateQuestionnaireRepository.existsById(requestedQuestionnaireId)) {
+            throw new InvalidInputException(
+                    "Questionário não encontrado: " + requestedQuestionnaireId);
+        }
+
+        Long anterior = anomaly.getQuestionnaireId();
+        anomaly.setQuestionnaireId(requestedQuestionnaireId);
+
+        boolean mudou = anterior == null || !anterior.equals(requestedQuestionnaireId);
+        if (mudou && anomaly.getQuestionId() != null) {
+            anomaly.setQuestionId(null);
+        }
     }
 
     /**

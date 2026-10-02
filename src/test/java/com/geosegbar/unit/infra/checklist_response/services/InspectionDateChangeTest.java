@@ -72,4 +72,16 @@ class InspectionDateChangeTest extends BaseUnitTest {
 
         assertThat(anomaly.getCreatedAt()).isEqualTo(OUTUBRO);
     }
+
+    @Test
+    @DisplayName("o deslocamento nunca joga a anomalia para o futuro")
+    void neverShiftsAnomalyIntoTheFuture() {
+        LocalDateTime agora = LocalDateTime.now();
+        LocalDateTime respostaAntiga = agora.minusDays(31);
+        AnomalyEntity anomaly = anomalyAt(respostaAntiga.plusMinutes(14));
+
+        InspectionDateChange.shiftAnomalies(List.of(anomaly), respostaAntiga, agora.minusMinutes(1));
+
+        assertThat(anomaly.getCreatedAt()).isBeforeOrEqualTo(LocalDateTime.now());
+    }
 }

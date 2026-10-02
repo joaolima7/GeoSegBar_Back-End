@@ -145,6 +145,12 @@ public class ChecklistResponseService {
 
     @Transactional
     public void updateChecklistResponse(Long checklistResponseId, ChecklistResponseUpdateDTO dto) {
+        updateChecklistResponse(checklistResponseId, dto, Map.of());
+    }
+
+    @Transactional
+    public void updateChecklistResponse(Long checklistResponseId, ChecklistResponseUpdateDTO dto,
+            Map<String, String> urlByObjectKey) {
 
         ChecklistResponseEntity checklistResponse = checklistResponseRepository.findByIdWithBasicInfo(checklistResponseId)
                 .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para id: " + checklistResponseId));
@@ -172,15 +178,16 @@ public class ChecklistResponseService {
         }
 
         if (dto.getAnswers() != null && !dto.getAnswers().isEmpty()) {
-            updateAnswers(checklistResponse, dto.getAnswers());
+            updateAnswers(checklistResponse, dto.getAnswers(), urlByObjectKey);
         }
 
         if (dto.getOthers() != null && !dto.getOthers().isEmpty()) {
-            createEditedOthers(checklistResponse, dto.getOthers());
+            createEditedOthers(checklistResponse, dto.getOthers(), urlByObjectKey);
         }
     }
 
-    private void createEditedOthers(ChecklistResponseEntity checklistResponse, List<OtherSubmissionDTO> others) {
+    private void createEditedOthers(ChecklistResponseEntity checklistResponse, List<OtherSubmissionDTO> others,
+            Map<String, String> urlByObjectKey) {
         for (OtherSubmissionDTO other : others) {
             DangerLevelEntity dangerLevel = dangerLevelRepository.findById(other.getAnomalyDangerLevelId())
                     .orElseThrow(() -> new NotFoundException(
@@ -190,16 +197,20 @@ public class ChecklistResponseService {
                     "Status de anomalia não encontrado: " + other.getAnomalyStatusId()));
 
             anomalyRepository.save(
-                    EditedOtherAnomalyFactory.build(other, checklistResponse, dangerLevel, status));
+                    EditedOtherAnomalyFactory.build(other, checklistResponse, dangerLevel, status,
+                            other.getTemplateQuestionnaireId(), urlByObjectKey));
         }
     }
 
     private void applyInspectionDate(ChecklistResponseEntity checklistResponse, LocalDateTime inspectionDate) {
         InspectionDateChange.requireNotFuture(inspectionDate);
 
+        // O update dos campos de ambiente roda como bulk @Modifying(clearAutomatically),
+        // que desanexa esta entidade. Um save() aqui faria merge do estado obsoleto e
+        // desfaria os niveis recem-gravados, entao a data vai por query dedicada.
         LocalDateTime previousDate = checklistResponse.getCreatedAt();
+        checklistResponseRepository.updateCreatedAt(checklistResponse.getId(), inspectionDate);
         checklistResponse.setCreatedAt(inspectionDate);
-        checklistResponseRepository.save(checklistResponse);
 
         List<AnomalyEntity> linked = anomalyRepository
                 .findByChecklistResponseIdOrderByIdAsc(checklistResponse.getId());
@@ -209,7 +220,8 @@ public class ChecklistResponseService {
         }
     }
 
-    private void updateAnswers(ChecklistResponseEntity checklistResponse, List<AnswerUpdateDTO> answerUpdates) {
+    private void updateAnswers(ChecklistResponseEntity checklistResponse, List<AnswerUpdateDTO> answerUpdates,
+            Map<String, String> urlByObjectKey) {
         Long checklistResponseId = checklistResponse.getId();
 
         List<Long> answerIds = answerUpdates.stream()
@@ -311,12 +323,13 @@ public class ChecklistResponseService {
 
             // Aplica fotos se enviadas: apaga antigas do S3 + DB e salva novas
             if (updateDto.getPhotos() != null) {
-                replaceAnswerPhotos(answer, updateDto.getPhotos());
+                replaceAnswerPhotos(answer, updateDto.getPhotos(), urlByObjectKey);
             }
         }
     }
 
-    private void replaceAnswerPhotos(AnswerEntity answer, List<PhotoSubmissionDTO> newPhotos) {
+    private void replaceAnswerPhotos(AnswerEntity answer, List<PhotoSubmissionDTO> newPhotos,
+            Map<String, String> urlByObjectKey) {
         // Usa a coleção já carregada pelo EntityGraph para deletar do S3
         // (evita query extra via findByAnswerId)
         for (AnswerPhotoEntity existing : new ArrayList<>(answer.getPhotos())) {
@@ -327,6 +340,21 @@ public class ChecklistResponseService {
 
         // Salva novas fotos
         for (PhotoSubmissionDTO photoDto : newPhotos) {
+            String objectKey = photoDto.getObjectKey();
+            if (objectKey != null && !objectKey.isBlank()) {
+                String url = urlByObjectKey.get(objectKey);
+                if (url == null) {
+                    throw new InvalidInputException(
+                            "Imagem não encontrada no S3 para a chave: " + objectKey);
+                }
+                AnswerPhotoEntity presignedPhoto = new AnswerPhotoEntity();
+                presignedPhoto.setAnswer(answer);
+                presignedPhoto.setImagePath(url);
+                answerPhotoRepository.save(presignedPhoto);
+                answer.getPhotos().add(presignedPhoto);
+                continue;
+            }
+
             try {
                 String base64Image = photoDto.getBase64Image();
                 if (base64Image != null && base64Image.contains(",")) {
@@ -610,6 +638,12 @@ public class ChecklistResponseService {
 
         Map<Long, ClientDetailedChecklistResponsesDTO.ChecklistWithDetailedResponsesDTO> checklistMap = new HashMap<>();
 
+        // Uma consulta so para todas as respostas da pagina: dentro do laco viraria
+        // um SELECT de anomalias por resposta.
+        Map<Long, List<AnomalyEntity>> anomaliesByResponse = anomalyRepository
+                .findByChecklistResponseIdInOrderByIdAsc(responseIds).stream()
+                .collect(Collectors.groupingBy(AnomalyEntity::getChecklistResponseId));
+
         for (Long id : responseIds) {
 
             checklistResponseRepository.findByIdWithBasicInfo(id).ifPresent(response -> {
@@ -626,7 +660,7 @@ public class ChecklistResponseService {
                                 )
                         );
 
-                ChecklistResponseDetailDTO detailedDto = convertToDetailDto(response);
+                ChecklistResponseDetailDTO detailedDto = convertToDetailDto(response, anomaliesByResponse);
                 checklistDto.getLatestResponses().add(detailedDto);
             });
         }

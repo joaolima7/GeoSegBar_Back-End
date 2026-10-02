@@ -15,6 +15,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class OtherSubmissionDTO {
 
+    /** Preenchido so na edicao: diz em qual secao o apontamento foi registrado. */
+    private Long templateQuestionnaireId;
+
     @NotBlank(message = "Observation is required for 'others' entries!")
     private String observation;
 

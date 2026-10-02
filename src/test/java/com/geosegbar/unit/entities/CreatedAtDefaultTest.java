@@ -7,6 +7,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.geosegbar.config.BaseUnitTest;
+
+import jakarta.persistence.PrePersist;
 import com.geosegbar.entities.AnomalyEntity;
 import com.geosegbar.entities.ChecklistResponseEntity;
 
@@ -64,5 +66,18 @@ class CreatedAtDefaultTest extends BaseUnitTest {
         response.applyCreatedAtDefault();
 
         assertThat(response.getCreatedAt()).isEqualTo(abril);
+    }
+
+    @Test
+    @DisplayName("o metodo esta anotado com @PrePersist nas duas entidades")
+    void callbackIsRegisteredWithJpa() throws NoSuchMethodException {
+        assertThat(AnomalyEntity.class.getMethod("applyCreatedAtDefault")
+                .isAnnotationPresent(PrePersist.class))
+                .as("sem @PrePersist, created_at volta a ser gravado nulo e a V6 removeu o NOT NULL que pegaria isso")
+                .isTrue();
+        assertThat(ChecklistResponseEntity.class.getMethod("applyCreatedAtDefault")
+                .isAnnotationPresent(PrePersist.class))
+                .as("sem @PrePersist, created_at volta a ser gravado nulo")
+                .isTrue();
     }
 }

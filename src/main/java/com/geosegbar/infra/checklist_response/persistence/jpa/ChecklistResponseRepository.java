@@ -126,6 +126,14 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
             @Param("clientId") Long clientId,
             @Param("limit") int limit);
 
+    /**
+     * Query dedicada em vez de save(): o update de campos de ambiente roda como
+     * bulk @Modifying(clearAutomatically), que desanexa a entidade carregada.
+     */
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE ChecklistResponseEntity cr SET cr.createdAt = :createdAt WHERE cr.id = :id")
+    int updateCreatedAt(@Param("id") Long id, @Param("createdAt") LocalDateTime createdAt);
+
     @Modifying(clearAutomatically = true)
     @Query("UPDATE ChecklistResponseEntity cr SET "
             + "cr.upstreamLevel = COALESCE(:upstreamLevel, cr.upstreamLevel), "

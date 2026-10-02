@@ -4,7 +4,6 @@ import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.hibernate.annotations.CreationTimestamp;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
@@ -24,6 +23,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.PrePersist;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -61,8 +61,7 @@ public class ChecklistResponseEntity {
     @Column(name = "checklist_id", nullable = false)
     private Long checklistId;
 
-    @Column(name = "created_at", updatable = false)
-    @CreationTimestamp
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
 
     @NotNull(message = "Informe a barragem que corresponde a essa resposta de checklist!")
@@ -104,4 +103,11 @@ public class ChecklistResponseEntity {
 
     @Column(name = "finished_at")
     private LocalDateTime finishedAt;
+
+    @PrePersist
+    public void applyCreatedAtDefault() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+    }
 }

@@ -66,6 +66,7 @@ public class ChecklistResponseSubmissionDTO {
 
     private WeatherConditionEnum weatherCondition;
 
+    private LocalDateTime createdAt;
     private LocalDateTime startedAt;
 
     private LocalDateTime finishedAt;

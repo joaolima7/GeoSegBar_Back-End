@@ -3,6 +3,7 @@ package com.geosegbar.infra.checklist_submission.services;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashSet;
@@ -45,6 +46,7 @@ import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
 import com.geosegbar.infra.checklist_response.persistence.jpa.ChecklistResponseRepository;
 import com.geosegbar.infra.checklist_submission.dtos.AnswerSubmissionDTO;
 import com.geosegbar.infra.checklist_submission.dtos.ChecklistResponseSubmissionDTO;
+import com.geosegbar.infra.checklist_response.services.InspectionDateChange;
 import com.geosegbar.infra.checklist_submission.dtos.OtherSubmissionDTO;
 import com.geosegbar.infra.checklist_submission.dtos.PhotoSubmissionDTO;
 import com.geosegbar.infra.checklist_submission.dtos.QuestionnaireResponseSubmissionDTO;
@@ -857,6 +859,11 @@ public class ChecklistSubmissionPersistenceService {
         checklistResponse.setWeatherCondition(submissionDto.getWeatherCondition());
         checklistResponse.setStartedAt(submissionDto.getStartedAt());
         checklistResponse.setFinishedAt(submissionDto.getFinishedAt());
+
+        InspectionDateChange.requireNotFuture(submissionDto.getCreatedAt());
+        checklistResponse.setCreatedAt(submissionDto.getCreatedAt() != null
+                ? submissionDto.getCreatedAt()
+                : LocalDateTime.now());
 
         return checklistResponseRepository.save(checklistResponse);
     }

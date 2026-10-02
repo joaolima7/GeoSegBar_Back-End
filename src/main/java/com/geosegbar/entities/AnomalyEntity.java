@@ -26,6 +26,7 @@ import jakarta.persistence.NamedEntityGraph;
 import jakarta.persistence.NamedEntityGraphs;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.PrePersist;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -134,4 +135,11 @@ public class AnomalyEntity {
             cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference(value = "anomaly-photos")
     private Set<AnomalyPhotoEntity> photos = new HashSet<>();
+
+    @PrePersist
+    public void applyCreatedAtDefault() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+    }
 }

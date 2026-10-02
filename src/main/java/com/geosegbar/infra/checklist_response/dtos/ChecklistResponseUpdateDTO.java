@@ -38,6 +38,8 @@ public class ChecklistResponseUpdateDTO {
 
     private WeatherConditionEnum weatherCondition;
 
+    private java.time.LocalDateTime createdAt;
+
     @Valid
     private List<AnswerUpdateDTO> answers;
 }

@@ -160,8 +160,27 @@ public class ChecklistResponseService {
                     dto.getWeatherCondition());
         }
 
+        if (dto.getCreatedAt() != null) {
+            applyInspectionDate(checklistResponse, dto.getCreatedAt());
+        }
+
         if (dto.getAnswers() != null && !dto.getAnswers().isEmpty()) {
             updateAnswers(checklistResponse, dto.getAnswers());
+        }
+    }
+
+    private void applyInspectionDate(ChecklistResponseEntity checklistResponse, LocalDateTime inspectionDate) {
+        InspectionDateChange.requireNotFuture(inspectionDate);
+
+        LocalDateTime previousDate = checklistResponse.getCreatedAt();
+        checklistResponse.setCreatedAt(inspectionDate);
+        checklistResponseRepository.save(checklistResponse);
+
+        List<AnomalyEntity> linked = anomalyRepository
+                .findByChecklistResponseIdOrderByIdAsc(checklistResponse.getId());
+        if (!linked.isEmpty()) {
+            InspectionDateChange.shiftAnomalies(linked, previousDate, inspectionDate);
+            anomalyRepository.saveAll(linked);
         }
     }
 

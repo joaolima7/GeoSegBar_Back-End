@@ -27,6 +27,7 @@ import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.anomaly.dtos.AnomalyDTO;
 import com.geosegbar.infra.anomaly.dtos.UpdateAnomalyRequestDTO;
+import com.geosegbar.infra.template_questionnaire_question.persistence.jpa.TemplateQuestionnaireQuestionRepository;
 import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
 import com.geosegbar.infra.anomaly_photo.persistence.jpa.AnomalyPhotoRepository;
 import com.geosegbar.infra.anomaly_status.persistence.jpa.AnomalyStatusRepository;
@@ -51,6 +52,7 @@ public class AnomalyService {
     private final FileStorageService fileStorageService;
     private final AnomalyPhotoRepository anomalyPhotoRepository;
     private final DamAccessService damAccessService;
+    private final TemplateQuestionnaireQuestionRepository templateQuestionnaireQuestionRepository;
 
     @PostConstruct
     public void init() {
@@ -215,10 +217,14 @@ public class AnomalyService {
         boolean hasAnyField = request.getObservation() != null
                 || request.getRecommendation() != null
                 || request.getDangerLevelId() != null
-                || request.getStatusId() != null;
+                || request.getStatusId() != null
+                || request.getQuestionId() != null
+                || request.getQuestionnaireId() != null
+                || request.getLatitude() != null
+                || request.getLongitude() != null;
 
         if (!hasAnyField) {
-            throw new InvalidInputException("Informe ao menos um campo para atualização: Observação, Recomendação, Nível de Perigo ou Status.");
+            throw new InvalidInputException("Informe ao menos um campo para atualização: Observação, Recomendação, Nível de Perigo, Status, Pergunta, Questionário ou Localização.");
         }
 
         if (request.getObservation() != null) {
@@ -241,8 +247,49 @@ public class AnomalyService {
             anomaly.setStatus(status);
         }
 
+        if (request.getQuestionnaireId() != null) {
+            anomaly.setQuestionnaireId(request.getQuestionnaireId() == 0L ? null : request.getQuestionnaireId());
+        }
+
+        if (request.getQuestionId() != null) {
+            applyQuestionLink(anomaly, request.getQuestionId());
+        }
+
+        if (request.getLatitude() != null) {
+            anomaly.setLatitude(request.getLatitude());
+        }
+
+        if (request.getLongitude() != null) {
+            anomaly.setLongitude(request.getLongitude());
+        }
+
         AnomalyEntity saved = anomalyRepository.save(anomaly);
         return findById(saved.getId());
+    }
+
+    /**
+     * Vincular a anomalia a uma pergunta de outro questionário corromperia o
+     * acompanhamento: a evolução do ponto passaria a ser lida numa pergunta que
+     * nunca foi feita naquela inspeção.
+     */
+    private void applyQuestionLink(AnomalyEntity anomaly, Long requestedQuestionId) {
+        if (requestedQuestionId == 0L) {
+            anomaly.setQuestionId(null);
+            return;
+        }
+
+        Long questionnaireId = anomaly.getQuestionnaireId();
+        if (questionnaireId == null) {
+            throw new InvalidInputException(
+                    "Informe o questionário antes de vincular a anomalia a uma pergunta.");
+        }
+
+        templateQuestionnaireQuestionRepository
+                .findByTemplateQuestionnaireIdAndQuestionId(questionnaireId, requestedQuestionId)
+                .orElseThrow(() -> new InvalidInputException(
+                "A pergunta informada não pertence ao questionário desta anomalia."));
+
+        anomaly.setQuestionId(requestedQuestionId);
     }
 
     @Transactional

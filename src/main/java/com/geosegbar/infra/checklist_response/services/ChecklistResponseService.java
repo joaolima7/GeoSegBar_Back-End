@@ -242,7 +242,7 @@ public class ChecklistResponseService {
                 effectiveHasPhotos = answer.getPhotos() != null && !answer.getPhotos().isEmpty();
             }
 
-            boolean effectiveHasLocation = answer.getLatitude() != null && answer.getLongitude() != null;
+            boolean effectiveHasLocation = AnswerLocationResolver.hasLocation(answer, updateDto);
 
             ChecklistOptionTransitionValidator.validateEditedAnswerFields(
                     newLabel, effectiveComment, effectiveHasPhotos, effectiveHasLocation,
@@ -255,6 +255,14 @@ public class ChecklistResponseService {
             // Aplica comentario se enviado
             if (updateDto.getComment() != null) {
                 answer.setComment(updateDto.getComment().trim().isEmpty() ? null : updateDto.getComment());
+            }
+
+            if (updateDto.getLatitude() != null) {
+                answer.setLatitude(updateDto.getLatitude());
+            }
+
+            if (updateDto.getLongitude() != null) {
+                answer.setLongitude(updateDto.getLongitude());
             }
 
             // Aplica fotos se enviadas: apaga antigas do S3 + DB e salva novas

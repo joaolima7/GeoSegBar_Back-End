@@ -28,4 +28,6 @@ public class AnswerUpdateDTO {
 
     // null = manter fotos existentes; lista (vazia ou com itens) = substituir todas as fotos
     private List<PhotoSubmissionDTO> photos;
+    private Double latitude;
+    private Double longitude;
 }

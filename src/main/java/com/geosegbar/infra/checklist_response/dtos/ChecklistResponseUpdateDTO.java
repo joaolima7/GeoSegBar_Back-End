@@ -3,6 +3,7 @@ package com.geosegbar.infra.checklist_response.dtos;
 import java.util.List;
 
 import com.geosegbar.common.enums.WeatherConditionEnum;
+import com.geosegbar.infra.checklist_submission.dtos.OtherSubmissionDTO;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
@@ -42,4 +43,7 @@ public class ChecklistResponseUpdateDTO {
 
     @Valid
     private List<AnswerUpdateDTO> answers;
+
+    @Valid
+    private List<OtherSubmissionDTO> others;
 }

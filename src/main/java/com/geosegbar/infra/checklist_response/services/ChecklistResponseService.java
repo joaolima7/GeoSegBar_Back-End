@@ -24,6 +24,11 @@ import com.geosegbar.entities.ChecklistResponseEntity;
 import com.geosegbar.infra.checklist_response.dtos.ChecklistAnomalyDTO;
 import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
 import com.geosegbar.entities.AnomalyEntity;
+import com.geosegbar.infra.checklist_submission.dtos.OtherSubmissionDTO;
+import com.geosegbar.infra.danger_level.persistence.jpa.DangerLevelRepository;
+import com.geosegbar.infra.anomaly_status.persistence.jpa.AnomalyStatusRepository;
+import com.geosegbar.entities.DangerLevelEntity;
+import com.geosegbar.entities.AnomalyStatusEntity;
 import com.geosegbar.entities.ClientEntity;
 import com.geosegbar.entities.DamEntity;
 import com.geosegbar.entities.OptionEntity;
@@ -77,6 +82,8 @@ public class ChecklistResponseService {
     private final DamService damService;
     private final ClientRepository clientRepository;
     private final AnomalyRepository anomalyRepository;
+    private final DangerLevelRepository dangerLevelRepository;
+    private final AnomalyStatusRepository anomalyStatusRepository;
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<ChecklistResponseEntity> findAll() {
@@ -166,6 +173,24 @@ public class ChecklistResponseService {
 
         if (dto.getAnswers() != null && !dto.getAnswers().isEmpty()) {
             updateAnswers(checklistResponse, dto.getAnswers());
+        }
+
+        if (dto.getOthers() != null && !dto.getOthers().isEmpty()) {
+            createEditedOthers(checklistResponse, dto.getOthers());
+        }
+    }
+
+    private void createEditedOthers(ChecklistResponseEntity checklistResponse, List<OtherSubmissionDTO> others) {
+        for (OtherSubmissionDTO other : others) {
+            DangerLevelEntity dangerLevel = dangerLevelRepository.findById(other.getAnomalyDangerLevelId())
+                    .orElseThrow(() -> new NotFoundException(
+                    "Nível de perigo não encontrado: " + other.getAnomalyDangerLevelId()));
+            AnomalyStatusEntity status = anomalyStatusRepository.findById(other.getAnomalyStatusId())
+                    .orElseThrow(() -> new NotFoundException(
+                    "Status de anomalia não encontrado: " + other.getAnomalyStatusId()));
+
+            anomalyRepository.save(
+                    EditedOtherAnomalyFactory.build(other, checklistResponse, dangerLevel, status));
         }
     }
 

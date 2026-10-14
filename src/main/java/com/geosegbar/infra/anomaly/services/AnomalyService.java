@@ -1,8 +1,11 @@
 package com.geosegbar.infra.anomaly.services;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
+import com.geosegbar.infra.anomaly.dtos.AnomalyLatestPhotoDTO;
 import com.geosegbar.infra.anomaly.dtos.AnomalyListItemDTO;
+import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyLatestPhotoProjection;
 import com.geosegbar.infra.dashboard.projections.AnomalyPhotoPathProjection;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -172,6 +175,19 @@ public class AnomalyService {
     @Transactional(readOnly = true)
     public List<AnomalyEntity> findByDamId(Long damId) {
         return anomalyRepository.findByDamId(damId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AnomalyLatestPhotoDTO> findLatestPhotosByDamId(Long damId) {
+        damAccessService.requireAccess(damId);
+
+        Map<Long, AnomalyLatestPhotoDTO> porAnomalia = new LinkedHashMap<>();
+        for (AnomalyLatestPhotoProjection linha : anomalyRepository.findLatestPhotosByDamId(damId)) {
+            porAnomalia.computeIfAbsent(linha.getAnomalyId(), id -> new AnomalyLatestPhotoDTO(
+                    id, linha.getChecklistResponseId(), linha.getPhotoDate(), new ArrayList<>()))
+                    .photoPaths().add(linha.getImagePath());
+        }
+        return List.copyOf(porAnomalia.values());
     }
 
     @Transactional

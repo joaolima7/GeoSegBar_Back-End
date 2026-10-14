@@ -3,6 +3,7 @@ package com.geosegbar.infra.anomaly.web;
 import java.time.LocalDateTime;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.RequestParam;
+import com.geosegbar.infra.anomaly.dtos.AnomalyLatestPhotoDTO;
 import com.geosegbar.infra.anomaly.dtos.AnomalyListItemDTO;
 import com.geosegbar.infra.anomaly.dtos.PagedAnomalyDTO;
 import java.util.List;
@@ -85,6 +86,14 @@ public class AnomalyController {
         WebResponseEntity<List<AnomalyEntity>> response = WebResponseEntity.success(
                 anomalies, "Anomalias recuperadas com sucesso!");
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/dam/{damId}/latest-photos")
+    public ResponseEntity<WebResponseEntity<List<AnomalyLatestPhotoDTO>>> getLatestPhotosByDamId(
+            @PathVariable Long damId) {
+        List<AnomalyLatestPhotoDTO> fotos = anomalyService.findLatestPhotosByDamId(damId);
+        return ResponseEntity.ok(WebResponseEntity.success(
+                fotos, "Fotos mais recentes das anomalias recuperadas com sucesso!"));
     }
 
     @PostMapping

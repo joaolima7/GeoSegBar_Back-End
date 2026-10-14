@@ -126,6 +126,55 @@ public interface AnomalyRepository extends JpaRepository<AnomalyEntity, Long> {
 
     boolean existsByUser_Id(Long userId);
 
+    /**
+     * Fotos da resposta mais recente, com foto, ao ponto de cada anomalia de
+     * checklist da barragem. O ponto é (barragem, questionário modelo,
+     * pergunta) — o mesmo que define a resposta anterior no preenchimento.
+     *
+     * A janela começa na inspeção que identificou a anomalia e termina antes
+     * da próxima anomalia do mesmo ponto: depois de um NE e de um novo PV, as
+     * fotos passam a ser da anomalia nova, não da antiga.
+     *
+     * A ordem segue a data da inspeção (checklist_responses.created_at), que é
+     * editável, e não o instante em que a resposta foi gravada.
+     */
+    @Query(value = """
+            SELECT an.id AS anomalyId,
+                   latest.checklist_response_id AS checklistResponseId,
+                   latest.inspected_at AS photoDate,
+                   ap.image_path AS imagePath
+            FROM anomalies an
+            CROSS JOIN LATERAL (
+                SELECT a.id AS answer_id,
+                       cr.id AS checklist_response_id,
+                       cr.created_at AS inspected_at
+                FROM questionnaire_responses qr
+                JOIN checklist_responses cr ON cr.id = qr.checklist_response_id
+                JOIN answers a ON a.questionnaire_response_id = qr.id
+                              AND a.question_id = an.question_id
+                WHERE qr.dam_id = an.dam_id
+                  AND qr.template_questionnaire_id = an.questionnaire_id
+                  AND (an.created_at IS NULL OR cr.created_at >= an.created_at)
+                  AND EXISTS (SELECT 1 FROM answer_photos p WHERE p.answer_id = a.id)
+                  AND NOT EXISTS (
+                      SELECT 1 FROM anomalies nx
+                      WHERE nx.dam_id = an.dam_id
+                        AND nx.question_id = an.question_id
+                        AND nx.questionnaire_id = an.questionnaire_id
+                        AND nx.id <> an.id
+                        AND nx.created_at > an.created_at
+                        AND nx.created_at <= cr.created_at)
+                ORDER BY cr.created_at DESC, cr.id DESC, a.id DESC
+                LIMIT 1
+            ) latest
+            JOIN answer_photos ap ON ap.answer_id = latest.answer_id
+            WHERE an.dam_id = :damId
+              AND an.question_id IS NOT NULL
+              AND an.questionnaire_id IS NOT NULL
+            ORDER BY an.id, ap.id
+            """, nativeQuery = true)
+    List<AnomalyLatestPhotoProjection> findLatestPhotosByDamId(@Param("damId") Long damId);
+
     @Query(value = """
             SELECT a.id, a.latitude, a.longitude,
                    a.question_id AS questionId,

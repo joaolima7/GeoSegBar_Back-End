@@ -56,6 +56,9 @@ class ChecklistResponseServiceTest extends BaseUnitTest {
     private DamService damService;
 
     @Mock
+    private com.geosegbar.infra.dam.services.DamAccessService damAccessService;
+
+    @Mock
     private CacheManager checklistCacheManager;
 
     @Mock

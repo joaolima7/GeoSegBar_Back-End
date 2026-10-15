@@ -18,4 +18,7 @@ public interface DamInspectionProjection {
     Long getTotalInPeriod();
 
     LocalDateTime getLastResponseAt();
+
+    /** Quem fez a inspeção mais recente da barragem; nulo se nunca houve. */
+    String getLastInspectionUserName();
 }

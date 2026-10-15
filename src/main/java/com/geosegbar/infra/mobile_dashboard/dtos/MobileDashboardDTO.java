@@ -61,7 +61,11 @@ public record MobileDashboardDTO(
             long instrumentsWithoutReading,
             long instrumentsAttention,
             long instrumentsCritical,
-            long anomaliesInPeriod) {
+            long anomaliesInPeriod,
+            long teamChecklistsThisMonth,
+            long teamReadingsThisMonth,
+            long teamChecklistsInPeriod,
+            long teamReadingsInPeriod) {
 
     }
 
@@ -77,7 +81,9 @@ public record MobileDashboardDTO(
             String month,
             LocalDate monthStart,
             long checklists,
-            long readings) {
+            long readings,
+            long teamChecklists,
+            long teamReadings) {
 
     }
 
@@ -89,7 +95,8 @@ public record MobileDashboardDTO(
             String damName,
             long responsesInPeriod,
             LocalDateTime lastInspectionAt,
-            boolean inspectedThisMonth) {
+            boolean inspectedThisMonth,
+            String lastInspectionUserName) {
 
     }
 
@@ -169,7 +176,7 @@ public record MobileDashboardDTO(
                 periodStart,
                 periodEnd,
                 new Scope(0L, 0L, List.of()),
-                new Kpis(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+                new Kpis(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
                 emptySeries,
                 List.of(),
                 List.of(),

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
+import com.geosegbar.entities.InstrumentationPermissionEntity;
 import com.geosegbar.entities.DamPermissionEntity;
 import com.geosegbar.entities.RoutineInspectionPermissionEntity;
 import com.geosegbar.entities.UserEntity;
@@ -66,7 +67,26 @@ public class MeService {
                 user.getRole() != null ? user.getRole().getName().name() : null,
                 routineDTO,
                 dams,
-                lastChangedAt(permissions));
+                lastChangedAt(permissions),
+                instrumentationOf(user));
+    }
+
+    /**
+     * ADMIN pode tudo, como no validateEditPermission das leituras; os demais
+     * levam o que está na permissão de instrumentação.
+     */
+    private MePermissionsDTO.Instrumentation instrumentationOf(UserEntity user) {
+        if (user.getRole() != null && "ADMIN".equals(user.getRole().getName().name())) {
+            return MePermissionsDTO.Instrumentation.ALL;
+        }
+        InstrumentationPermissionEntity permission = user.getInstrumentationPermission();
+        if (permission == null) {
+            return MePermissionsDTO.Instrumentation.NONE;
+        }
+        return new MePermissionsDTO.Instrumentation(
+                Boolean.TRUE.equals(permission.getViewInstruments()),
+                Boolean.TRUE.equals(permission.getViewRead()),
+                Boolean.TRUE.equals(permission.getEditRead()));
     }
 
     /**

@@ -91,7 +91,7 @@ public class MobileDashboardService {
 
         if (damIds.isEmpty()) {
             return MobileDashboardDTO.empty(
-                    periodStart, periodEnd, denseSeries(periodStart, months, Map.of(), Map.of()));
+                    periodStart, periodEnd, denseSeries(periodStart, months, Map.of(), Map.of(), Map.of(), Map.of()));
         }
 
         // ---- as dez agregações ----
@@ -102,6 +102,15 @@ public class MobileDashboardService {
         Map<String, Long> readingsByMonth = toMonthMap(
                 readingRepository.countMyReadingsByMonth(
                         user.getId(), damIds, periodStart, periodEnd));
+
+        // A equipe inteira (ele incluído) nas mesmas barragens: o painel põe
+        // os dois números lado a lado para ninguém refazer o que já foi feito.
+        Map<String, Long> teamChecklistsByMonth = toMonthMap(
+                checklistResponseRepository.countResponsesByMonth(
+                        damIds, periodStartTime, periodEndTime));
+
+        Map<String, Long> teamReadingsByMonth = toMonthMap(
+                readingRepository.countReadingsByMonth(damIds, periodStart, periodEnd));
 
         List<DamInspectionProjection> damRows
                 = checklistResponseRepository.findInspectionSummaryByDam(
@@ -130,7 +139,8 @@ public class MobileDashboardService {
 
         // ---- montagem ----
         List<MobileDashboardDTO.ActivityPoint> activity
-                = denseSeries(periodStart, months, checklistsByMonth, readingsByMonth);
+                = denseSeries(periodStart, months, checklistsByMonth, readingsByMonth,
+                        teamChecklistsByMonth, teamReadingsByMonth);
 
         List<MobileDashboardDTO.DamInspection> inspections = damRows.stream()
                 .map(row -> new MobileDashboardDTO.DamInspection(
@@ -139,7 +149,8 @@ public class MobileDashboardService {
                 row.getTotalInPeriod() != null ? row.getTotalInPeriod() : 0L,
                 row.getLastResponseAt(),
                 row.getLastResponseAt() != null
-                && !row.getLastResponseAt().isBefore(monthStartTime)))
+                && !row.getLastResponseAt().isBefore(monthStartTime),
+                row.getLastInspectionUserName()))
                 .sorted(MobileDashboardService::mostOverdueFirst)
                 .toList();
 
@@ -183,7 +194,11 @@ public class MobileDashboardService {
                 Math.max(0L, instrumentsTotal - instrumentsWithReading),
                 countOf(instrumentStatus, "ATENCAO"),
                 countOf(instrumentStatus, "ALERTA") + countOf(instrumentStatus, "EMERGENCIA"),
-                dangerRows.stream().mapToLong(CategoryCountProjection::getCount).sum());
+                dangerRows.stream().mapToLong(CategoryCountProjection::getCount).sum(),
+                teamChecklistsByMonth.getOrDefault(currentMonthKey, 0L),
+                teamReadingsByMonth.getOrDefault(currentMonthKey, 0L),
+                sum(teamChecklistsByMonth),
+                sum(teamReadingsByMonth));
 
         return new MobileDashboardDTO(
                 LocalDateTime.now(),
@@ -276,7 +291,8 @@ public class MobileDashboardService {
      */
     private List<MobileDashboardDTO.ActivityPoint> denseSeries(
             LocalDate periodStart, int months,
-            Map<String, Long> checklists, Map<String, Long> readings) {
+            Map<String, Long> checklists, Map<String, Long> readings,
+            Map<String, Long> teamChecklists, Map<String, Long> teamReadings) {
 
         List<MobileDashboardDTO.ActivityPoint> points = new ArrayList<>(months);
         YearMonth cursor = YearMonth.from(periodStart);
@@ -287,7 +303,9 @@ public class MobileDashboardService {
                     key,
                     cursor.atDay(1),
                     checklists.getOrDefault(key, 0L),
-                    readings.getOrDefault(key, 0L)));
+                    readings.getOrDefault(key, 0L),
+                    teamChecklists.getOrDefault(key, 0L),
+                    teamReadings.getOrDefault(key, 0L)));
             cursor = cursor.plusMonths(1);
         }
         return points;

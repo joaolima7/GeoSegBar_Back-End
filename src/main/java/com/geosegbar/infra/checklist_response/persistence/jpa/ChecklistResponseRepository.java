@@ -1,6 +1,7 @@
 package com.geosegbar.infra.checklist_response.persistence.jpa;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -106,24 +107,52 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
     @Query("SELECT cr FROM ChecklistResponseEntity cr JOIN cr.dam d WHERE d.client.id = :clientId ORDER BY cr.createdAt DESC")
     Page<ChecklistResponseEntity> findByClientIdOptimized(@Param("clientId") Long clientId, Pageable pageable);
 
+    /**
+     * Histórico do cliente restrito às barragens que o usuário acessa. A
+     * variante sem restrição ({@link #findByClientIdOptimized}) fica para o
+     * ADMIN, que vê todas.
+     */
+    @EntityGraph(attributePaths = {"user", "dam"})
+    @Query("SELECT cr FROM ChecklistResponseEntity cr JOIN cr.dam d "
+            + "WHERE d.client.id = :clientId AND d.id IN :damIds ORDER BY cr.createdAt DESC")
+    Page<ChecklistResponseEntity> findByClientIdAndDamIdsOptimized(
+            @Param("clientId") Long clientId,
+            @Param("damIds") Collection<Long> damIds,
+            Pageable pageable);
+
+    /**
+     * As N respostas mais recentes por checklist — ou por (barragem,
+     * checklist) quando {@code perDam} — de um cliente.
+     *
+     * {@code restricted = false} ignora {@code damIds} (ADMIN); o chamador
+     * passa uma lista com um id qualquer nesse caso, porque o Postgres não
+     * aceita IN vazio. Sem {@code perDam} a partição é a mesma da consulta
+     * antiga, que o app da main usa para as respostas anteriores.
+     */
     @Query(value = """
     WITH client_dams AS (
         SELECT d.id AS dam_id
         FROM dam d
         WHERE d.client_id = :clientId
+          AND (:restricted = false OR d.id IN (:damIds))
     ),
     latest_responses AS (
-        SELECT cr.id, cr.checklist_id,
-               ROW_NUMBER() OVER (PARTITION BY cr.checklist_id ORDER BY cr.created_at DESC) as row_num
+        SELECT cr.id, cr.checklist_id, cr.dam_id,
+               ROW_NUMBER() OVER (
+                   PARTITION BY CASE WHEN :perDam THEN cr.dam_id ELSE 0 END, cr.checklist_id
+                   ORDER BY cr.created_at DESC, cr.id DESC) AS row_num
         FROM checklist_responses cr
         JOIN client_dams cd ON cr.dam_id = cd.dam_id
     )
     SELECT id FROM latest_responses
     WHERE row_num <= :limit
-    ORDER BY checklist_id, row_num
+    ORDER BY checklist_id, dam_id, row_num
     """, nativeQuery = true)
-    List<Long> findLatestChecklistResponseIdsByClientIdAndLimit(
+    List<Long> findLatestChecklistResponseIdsByClientId(
             @Param("clientId") Long clientId,
+            @Param("restricted") boolean restricted,
+            @Param("damIds") Collection<Long> damIds,
+            @Param("perDam") boolean perDam,
             @Param("limit") int limit);
 
     /**
@@ -239,6 +268,28 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
             @Param("endDate") LocalDateTime endDate);
 
     /**
+     * Quantas inspeções a EQUIPE registrou, mês a mês, nas barragens que o
+     * usuário acessa — todos os colaboradores, ele incluído. É o par do
+     * {@link #countMyResponsesByMonth}: o painel mostra os dois lado a lado
+     * para o inspetor não repetir o que outro já fez. Cai em
+     * idx_checklist_response_dam_created_desc.
+     */
+    @Query(value = """
+            SELECT to_char(cr.created_at, 'YYYY-MM') AS bucket,
+                   CAST(COUNT(*) AS BIGINT) AS total
+            FROM checklist_responses cr
+            WHERE cr.dam_id IN (:damIds)
+              AND cr.created_at >= :startDate
+              AND cr.created_at <= :endDate
+            GROUP BY to_char(cr.created_at, 'YYYY-MM')
+            ORDER BY 1 ASC
+            """, nativeQuery = true)
+    List<MonthlyCountProjection> countResponsesByMonth(
+            @Param("damIds") List<Long> damIds,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
+
+    /**
      * Uma linha por barragem acessível, inspecionada ou não.
      *
      * LEFT JOIN de propósito: a barragem que ninguém inspecionou precisa
@@ -257,7 +308,13 @@ public interface ChecklistResponseRepository extends JpaRepository<ChecklistResp
                    CAST(COUNT(cr.id) FILTER (
                        WHERE cr.created_at >= :startDate AND cr.created_at <= :endDate
                    ) AS BIGINT) AS totalInPeriod,
-                   MAX(cr.created_at) AS lastResponseAt
+                   MAX(cr.created_at) AS lastResponseAt,
+                   (SELECT u.name
+                      FROM checklist_responses lr
+                      JOIN users u ON u.id = lr.user_id
+                     WHERE lr.dam_id = d.id
+                     ORDER BY lr.created_at DESC, lr.id DESC
+                     LIMIT 1) AS lastInspectionUserName
             FROM dam d
             LEFT JOIN checklist_responses cr ON cr.dam_id = d.id
             WHERE d.id IN (:damIds)

@@ -3,6 +3,7 @@ package com.geosegbar.infra.dam.services;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.stereotype.Service;
@@ -48,6 +49,24 @@ public class DamAccessService {
                         AuthenticatedUserUtil.getCurrentUser().getId());
 
         return new LinkedHashSet<>(ids);
+    }
+
+    /**
+     * Restrição de barragens para consultas de listagem.
+     *
+     * Vazio quando o usuário é ADMIN: as listagens seguem pela consulta sem
+     * filtro, em vez de receber um IN com todas as barragens da plataforma.
+     * Presente (e possivelmente vazio) para os demais — conjunto vazio quer
+     * dizer "não pode ver nenhuma", e quem consome devolve lista vazia sem ir
+     * ao banco (IN () é erro no Postgres).
+     */
+    @Transactional(readOnly = true)
+    public Optional<Set<Long>> listingRestriction() {
+        if (AuthenticatedUserUtil.isAdmin()) {
+            return Optional.empty();
+        }
+        return Optional.of(new LinkedHashSet<>(damRepository.findAccessibleDamIdsByUserId(
+                AuthenticatedUserUtil.getCurrentUser().getId())));
     }
 
     @Transactional(readOnly = true)

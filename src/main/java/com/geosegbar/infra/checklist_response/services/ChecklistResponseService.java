@@ -9,6 +9,7 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -37,13 +38,17 @@ import com.geosegbar.entities.OptionEntity;
 import com.geosegbar.entities.QuestionEntity;
 import com.geosegbar.entities.QuestionnaireResponseEntity;
 import com.geosegbar.entities.TemplateQuestionnaireEntity;
+import com.geosegbar.common.utils.AuthenticatedUserUtil;
+import com.geosegbar.entities.RoutineInspectionPermissionEntity;
 import com.geosegbar.exceptions.FileStorageException;
+import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.answer.persistence.jpa.AnswerRepository;
 import com.geosegbar.infra.answer_photo.persistence.jpa.AnswerPhotoRepository;
 import com.geosegbar.infra.checklist_response.dtos.AnswerUpdateDTO;
 import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseDetailDTO;
+import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseEditContextDTO;
 import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseUpdateDTO;
 import com.geosegbar.infra.checklist_response.dtos.ClientDetailedChecklistResponsesDTO;
 import com.geosegbar.infra.checklist_response.dtos.DamInfoDTO;
@@ -57,6 +62,7 @@ import com.geosegbar.infra.checklist_response.dtos.TemplateWithAnswersDTO;
 import com.geosegbar.infra.checklist_response.persistence.jpa.ChecklistResponseRepository;
 import com.geosegbar.infra.checklist_submission.dtos.PhotoSubmissionDTO;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
+import com.geosegbar.infra.dam.services.DamAccessService;
 import com.geosegbar.infra.dam.services.DamService;
 import com.geosegbar.infra.file_storage.FileStorageService;
 import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
@@ -82,6 +88,7 @@ public class ChecklistResponseService {
     private final OptionRepository optionRepository;
     private final FileStorageService fileStorageService;
     private final DamService damService;
+    private final DamAccessService damAccessService;
     private final ClientRepository clientRepository;
     private final AnomalyRepository anomalyRepository;
     private final DangerLevelRepository dangerLevelRepository;
@@ -101,6 +108,7 @@ public class ChecklistResponseService {
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<ChecklistResponseEntity> findByDamId(Long damId) {
         damService.findById(damId);
+        damAccessService.requireAccess(damId);
         return checklistResponseRepository.findByDamId(damId);
     }
 
@@ -158,6 +166,7 @@ public class ChecklistResponseService {
                 .findByIdWithBasicInfo(checklistResponseId)
                 .orElseThrow(() -> new NotFoundException(
                 "Resposta de Checklist não encontrada para id: " + checklistResponseId));
+        damAccessService.requireAccess(checklistResponse.getDam().getId());
 
         InspectionDateChange.requireNotFuture(newDate);
 
@@ -195,6 +204,7 @@ public class ChecklistResponseService {
 
         ChecklistResponseEntity checklistResponse = checklistResponseRepository.findByIdWithBasicInfo(checklistResponseId)
                 .orElseThrow(() -> new NotFoundException("Resposta de Checklist não encontrada para id: " + checklistResponseId));
+        requireEditAccess(checklistResponse);
 
         boolean hasTopLevelChanges = dto.getUpstreamLevel() != null
                 || dto.getDownstreamLevel() != null
@@ -233,6 +243,77 @@ public class ChecklistResponseService {
 
         if (dto.getOthers() != null && !dto.getOthers().isEmpty()) {
             createEditedOthers(checklistResponse, dto.getOthers(), urlByObjectKey);
+        }
+    }
+
+    /**
+     * Contexto para editar uma inspeção já enviada (V5-B03).
+     *
+     * @param date data de referência opcional: quando o usuário muda a data da
+     * inspeção na edição, as regras de transição passam a olhar para a inspeção
+     * anterior a essa nova data.
+     */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public ChecklistResponseEditContextDTO findEditContext(Long checklistResponseId, LocalDateTime date) {
+        ChecklistResponseEntity checklistResponse = findById(checklistResponseId);
+        requireEditAccess(checklistResponse);
+        InspectionDateChange.requireNotFuture(date);
+
+        LocalDateTime referenceDate = date != null ? date : checklistResponse.getCreatedAt();
+        ChecklistResponseDetailDTO detail = convertToDetailDto(checklistResponse);
+
+        List<TemplateWithAnswersDTO> templates = detail.getTemplates() == null ? List.of() : detail.getTemplates();
+        List<Long> templateIds = templates.stream()
+                .map(TemplateWithAnswersDTO::getTemplateId)
+                .distinct()
+                .toList();
+        List<Long> questionIds = templates.stream()
+                .filter(t -> t.getQuestionsWithAnswers() != null)
+                .flatMap(t -> t.getQuestionsWithAnswers().stream())
+                .map(QuestionWithAnswerDTO::getQuestionId)
+                .distinct()
+                .toList();
+
+        // IN () é erro no Postgres: sem pergunta não há o que consultar.
+        if (templateIds.isEmpty() || questionIds.isEmpty()) {
+            return new ChecklistResponseEditContextDTO(detail, referenceDate, List.of());
+        }
+
+        List<ChecklistResponseEditContextDTO.PreviousLabel> previousLabels = answerRepository
+                .findRelevantOptionLabelsBefore(
+                        questionIds,
+                        templateIds,
+                        checklistResponse.getDam().getId(),
+                        checklistResponseId,
+                        referenceDate)
+                .stream()
+                .map(row -> new ChecklistResponseEditContextDTO.PreviousLabel(
+                ((Number) row[1]).longValue(),
+                ((Number) row[0]).longValue(),
+                (String) row[2]))
+                .toList();
+
+        return new ChecklistResponseEditContextDTO(detail, referenceDate, previousLabels);
+    }
+
+    /**
+     * Editar uma inspeção já enviada exige acesso à barragem dela e permissão
+     * de preenchimento (web ou mobile). ADMIN passa direto. O web já só mostra
+     * a edição para quem tem isFillWeb, então nada que funcionava deixa de
+     * funcionar.
+     */
+    private void requireEditAccess(ChecklistResponseEntity checklistResponse) {
+        damAccessService.requireAccess(checklistResponse.getDam().getId());
+        if (AuthenticatedUserUtil.isAdmin()) {
+            return;
+        }
+        RoutineInspectionPermissionEntity permission = AuthenticatedUserUtil.getCurrentUser()
+                .getRoutineInspectionPermission();
+        boolean canFill = permission != null
+                && (Boolean.TRUE.equals(permission.getIsFillWeb())
+                || Boolean.TRUE.equals(permission.getIsFillMobile()));
+        if (!canFill) {
+            throw new ForbiddenException("Usuário não autorizado a editar inspeções.");
         }
     }
 
@@ -432,6 +513,7 @@ public class ChecklistResponseService {
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<ChecklistResponseDetailDTO> findChecklistResponsesByDamId(Long damId) {
         damService.findById(damId);
+        damAccessService.requireAccess(damId);
 
         List<ChecklistResponseEntity> checklistResponses = checklistResponseRepository.findByDamIdWithFullDetails(damId);
 
@@ -442,14 +524,23 @@ public class ChecklistResponseService {
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByClientIdPaged(
             Long clientId, Pageable pageable) {
 
-        Page<ChecklistResponseEntity> page = checklistResponseRepository.findByClientIdOptimized(clientId, pageable);
-        return convertPageToResponse(page);
+        // Histórico é só das barragens que o usuário acessa; ADMIN vê o cliente inteiro.
+        Optional<Set<Long>> restriction = damAccessService.listingRestriction();
+        if (restriction.isEmpty()) {
+            return convertPageToResponse(checklistResponseRepository.findByClientIdOptimized(clientId, pageable));
+        }
+        if (restriction.get().isEmpty()) {
+            return convertPageToResponse(Page.empty(pageable));
+        }
+        return convertPageToResponse(checklistResponseRepository
+                .findByClientIdAndDamIdsOptimized(clientId, restriction.get(), pageable));
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public ChecklistResponseDetailDTO findChecklistResponseById(Long checklistResponseId) {
 
         ChecklistResponseEntity checklistResponse = findById(checklistResponseId);
+        damAccessService.requireAccess(checklistResponse.getDam().getId());
 
         return convertToDetailDto(checklistResponse);
     }
@@ -595,6 +686,7 @@ public class ChecklistResponseService {
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public PagedChecklistResponseDTO<ChecklistResponseDetailDTO> findChecklistResponsesByDamIdPaged(Long damId, Pageable pageable) {
         damService.findById(damId);
+        damAccessService.requireAccess(damId);
         Page<ChecklistResponseEntity> page = checklistResponseRepository.findByDamIdOptimized(damId, pageable);
         return convertPageToResponse(page);
     }
@@ -671,11 +763,35 @@ public class ChecklistResponseService {
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public ClientDetailedChecklistResponsesDTO findLatestDetailedChecklistResponsesByClientId(Long clientId, int limit) {
+        return findLatestDetailedChecklistResponsesByClientId(clientId, limit, false);
+    }
+
+    /**
+     * As N respostas completas mais recentes do cliente, só das barragens que o
+     * usuário acessa (ADMIN vê todas).
+     *
+     * @param perDam {@code true} conta as N por (barragem, checklist) — é o que
+     * o pacote offline precisa para que toda barragem tenha as suas. Sem ele, a
+     * contagem é por checklist, como sempre foi para o app da main.
+     */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public ClientDetailedChecklistResponsesDTO findLatestDetailedChecklistResponsesByClientId(
+            Long clientId, int limit, boolean perDam) {
 
         ClientEntity client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new NotFoundException("Cliente não encontrado com ID: " + clientId));
 
-        List<Long> responseIds = checklistResponseRepository.findLatestChecklistResponseIdsByClientIdAndLimit(clientId, limit);
+        Optional<Set<Long>> restriction = damAccessService.listingRestriction();
+        if (restriction.isPresent() && restriction.get().isEmpty()) {
+            return new ClientDetailedChecklistResponsesDTO(clientId, client.getName(), List.of());
+        }
+
+        List<Long> responseIds = checklistResponseRepository.findLatestChecklistResponseIdsByClientId(
+                clientId,
+                restriction.isPresent(),
+                restriction.orElse(Set.of(-1L)),
+                perDam,
+                limit);
 
         if (responseIds.isEmpty()) {
             return new ClientDetailedChecklistResponsesDTO(clientId, client.getName(), List.of());

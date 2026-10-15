@@ -99,6 +99,34 @@ class DamAccessServiceTest {
     }
 
     @Test
+    @DisplayName("Restrição de listagem: ADMIN não tem restrição")
+    void restricaoDeListagemAdmin() {
+        auth.when(AuthenticatedUserUtil::isAdmin).thenReturn(true);
+
+        assertThat(damAccessService.listingRestriction()).isEmpty();
+        verify(damRepository, never()).findAccessibleDamIdsByUserId(anyLong());
+        verify(damRepository, never()).findAllDamIds();
+    }
+
+    @Test
+    @DisplayName("Restrição de listagem: demais usuários levam as barragens permitidas")
+    void restricaoDeListagemUsuario() {
+        comAcessoA(3L, 7L);
+
+        assertThat(damAccessService.listingRestriction()).hasValueSatisfying(
+                ids -> assertThat(ids).containsExactly(3L, 7L));
+    }
+
+    @Test
+    @DisplayName("Restrição de listagem: sem nenhuma barragem é conjunto vazio, não ausência")
+    void restricaoDeListagemVazia() {
+        comAcessoA();
+
+        assertThat(damAccessService.listingRestriction()).hasValueSatisfying(
+                ids -> assertThat(ids).isEmpty());
+    }
+
+    @Test
     @DisplayName("damId nulo nunca é acesso permitido")
     void damIdNuloNaoPassa() {
         comAcessoA(3L);

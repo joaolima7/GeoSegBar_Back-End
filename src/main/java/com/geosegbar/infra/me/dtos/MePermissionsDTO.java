@@ -22,10 +22,22 @@ public record MePermissionsDTO(
          * dizer "permissões conferidas há 2 dias" quando estiver offline, em
          * vez de fingir certeza.
          */
-        LocalDateTime updatedAt) {
+        LocalDateTime updatedAt,
+        /**
+         * O que o usuário pode fazer em instrumentação. Campo novo: quem lia o
+         * DTO antes simplesmente o ignora. O app usa editRead para oferecer a
+         * correção de uma leitura já registrada.
+         */
+        Instrumentation instrumentation) {
 
     public record RoutineInspection(Boolean isFillMobile, Boolean isFillWeb) {
 
+    }
+
+    public record Instrumentation(Boolean viewInstruments, Boolean viewRead, Boolean editRead) {
+
+        public static final Instrumentation NONE = new Instrumentation(false, false, false);
+        public static final Instrumentation ALL = new Instrumentation(true, true, true);
     }
 
     /**

@@ -14,6 +14,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -39,6 +40,7 @@ import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.ForbiddenException;
 import com.geosegbar.exceptions.InvalidInputException;
 import com.geosegbar.exceptions.NotFoundException;
+import com.geosegbar.infra.dam.services.DamAccessService;
 import com.geosegbar.infra.client.persistence.jpa.ClientRepository;
 import com.geosegbar.infra.instrument.persistence.jpa.InstrumentRepository;
 import com.geosegbar.infra.reading.dtos.BulkToggleActiveResponseDTO;
@@ -70,6 +72,7 @@ public class ReadingService {
     private final InstrumentRepository instrumentRepository;
     private final OutputCalculationService outputCalculationService;
     private final ClientRepository clientRepository;
+    private final DamAccessService damAccessService;
     private final UserRepository userRepository;
 
     @Value("${application.system-user-email}")
@@ -138,8 +141,24 @@ public class ReadingService {
             throw new NotFoundException("Cliente não encontrado com ID: " + clientId);
         }
 
+        // Só as barragens que o usuário acessa; ADMIN vê o cliente inteiro.
+        Optional<Set<Long>> restriction = damAccessService.listingRestriction();
+        if (restriction.isPresent() && restriction.get().isEmpty()) {
+            return List.of();
+        }
+
         List<InstrumentLimitStatusProjection> projections = readingRepository.findLatestLimitStatusByClientId(clientId, limit);
         List<InstrumentEntity> allActiveInstruments = instrumentRepository.findByFiltersOptimized(null, null, null, true, clientId);
+
+        if (restriction.isPresent()) {
+            Set<Long> allowed = restriction.get();
+            projections = projections.stream()
+                    .filter(p -> allowed.contains(p.getDamId()))
+                    .toList();
+            allActiveInstruments = allActiveInstruments.stream()
+                    .filter(i -> i.getDam() != null && allowed.contains(i.getDam().getId()))
+                    .toList();
+        }
 
         if (projections.isEmpty()) {
             return allActiveInstruments.stream()
@@ -280,6 +299,18 @@ public class ReadingService {
         Map<Long, InstrumentEntity> instrumentsMap = instrumentRepository.findAllById(instrumentIds)
                 .stream()
                 .collect(Collectors.toMap(InstrumentEntity::getId, Function.identity()));
+
+        // Só as barragens que o usuário acessa (ADMIN vê todas). O corte vem
+        // antes de carregar as leituras, para não buscar o que vai ser jogado fora.
+        Optional<Set<Long>> restriction = damAccessService.listingRestriction();
+        if (restriction.isPresent()) {
+            Set<Long> allowed = restriction.get();
+            instrumentsMap.values().removeIf(i -> i.getDam() == null || !allowed.contains(i.getDam().getId()));
+            instrumentIds.retainAll(instrumentsMap.keySet());
+            if (instrumentIds.isEmpty()) {
+                return List.of();
+            }
+        }
 
         List<ReadingEntity> allReadings = readingRepository
                 .findByInstrumentIdsAndActiveTrueWithAllRelations(new ArrayList<>(instrumentIds));
@@ -430,6 +461,10 @@ public class ReadingService {
         }
 
         InstrumentEntity instrument = reading.getInstrument();
+        // Corrigir leitura exige acesso à barragem do instrumento. A criação não
+        // ganhou a mesma trava: o app da main lista instrumentos do cliente
+        // inteiro e quebraria em campo para quem lê sem ter a barragem liberada.
+        damAccessService.requireAccess(instrument.getDam() != null ? instrument.getDam().getId() : null);
         Long instrumentId = instrument.getId();
         LocalDate originalDate = reading.getDate();
         LocalTime originalHour = reading.getHour();

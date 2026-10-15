@@ -27,6 +27,7 @@ import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseDetailDTO;
 import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseUpdateDTO;
 import com.geosegbar.infra.checklist_response.dtos.ClientDetailedChecklistResponsesDTO;
 import com.geosegbar.infra.checklist_response.dtos.DamLastChecklistDTO;
+import com.geosegbar.infra.checklist_response.dtos.ChecklistResponseEditContextDTO;
 import com.geosegbar.infra.checklist_response.dtos.DamLastChecklistV2DTO;
 import com.geosegbar.infra.checklist_response.dtos.PagedChecklistResponseDTO;
 import com.geosegbar.infra.checklist_response.services.ChecklistResponseService;
@@ -133,6 +134,19 @@ public class ChecklistResponseController {
         InspectionDateDivergenceDTO preview = checklistResponseService
                 .previewInspectionDateChange(id, newDate);
         return ResponseEntity.ok(WebResponseEntity.success(preview, "Prévia da mudança de data."));
+    }
+
+    /**
+     * Contexto para editar uma inspeção já enviada no app: a resposta completa
+     * e a opção anterior de cada pergunta na data de referência.
+     */
+    @GetMapping("/{id}/edit-context")
+    public ResponseEntity<WebResponseEntity<ChecklistResponseEditContextDTO>> getEditContext(
+            @PathVariable Long id,
+            @RequestParam(value = "date", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime date) {
+        ChecklistResponseEditContextDTO context = checklistResponseService.findEditContext(id, date);
+        return ResponseEntity.ok(WebResponseEntity.success(context, "Contexto de edição da inspeção."));
     }
 
     @DeleteMapping("/{id}")
@@ -306,7 +320,8 @@ public class ChecklistResponseController {
     @GetMapping("/client/{clientId}/latest-detailed-responses")
     public ResponseEntity<WebResponseEntity<ClientDetailedChecklistResponsesDTO>> getLatestDetailedChecklistResponsesByClientId(
             @PathVariable Long clientId,
-            @RequestParam(defaultValue = "3") int limit) {
+            @RequestParam(defaultValue = "3") int limit,
+            @RequestParam(defaultValue = "false") boolean perDam) {
 
         if (limit <= 0 || limit > 10) {
             return ResponseEntity.badRequest().body(
@@ -314,7 +329,7 @@ public class ChecklistResponseController {
             );
         }
 
-        ClientDetailedChecklistResponsesDTO result = checklistResponseService.findLatestDetailedChecklistResponsesByClientId(clientId, limit);
+        ClientDetailedChecklistResponsesDTO result = checklistResponseService.findLatestDetailedChecklistResponsesByClientId(clientId, limit, perDam);
 
         return ResponseEntity.ok(WebResponseEntity.success(
                 result,

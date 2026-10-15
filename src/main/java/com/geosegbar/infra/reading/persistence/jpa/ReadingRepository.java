@@ -560,6 +560,28 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
     // inspetor fez" — que é a pergunta do painel. Por isso
     // COUNT(DISTINCT (instrument_id, date, hour)): a visita é a chave.
     /**
+     * Quantas leituras a EQUIPE registrou, mês a mês, nas barragens que o
+     * usuário acessa — todos os colaboradores, ele incluído. Mesma contagem
+     * por visita do {@link #countMyReadingsByMonth}.
+     */
+    @Query(value = """
+            SELECT to_char(r.date, 'YYYY-MM') AS bucket,
+                   CAST(COUNT(DISTINCT (r.instrument_id, r.date, r.hour)) AS BIGINT) AS total
+            FROM reading r
+            INNER JOIN instrument i ON i.id = r.instrument_id
+            WHERE r.active = true
+              AND i.dam_id IN (:damIds)
+              AND r.date >= :startDate
+              AND r.date <= :endDate
+            GROUP BY to_char(r.date, 'YYYY-MM')
+            ORDER BY 1 ASC
+            """, nativeQuery = true)
+    List<MonthlyCountProjection> countReadingsByMonth(
+            @Param("damIds") List<Long> damIds,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
+
+    /**
      * Quantas leituras ESTE usuário registrou, mês a mês, nas barragens que
      * ele acessa. No máximo 12 linhas de resposta.
      */

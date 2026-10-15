@@ -81,7 +81,8 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
         "damPermissions",
         "damPermissions.dam",
         "damPermissions.client",
-        "routineInspectionPermission"
+        "routineInspectionPermission",
+        "instrumentationPermission"
     })
     @Query("SELECT u FROM UserEntity u WHERE u.id = :id")
     Optional<UserEntity> findByIdWithPermissions(@Param("id") Long id);

@@ -1,6 +1,7 @@
 package com.geosegbar.infra.answer.persistence.jpa;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -66,8 +67,8 @@ public interface AnswerRepository extends JpaRepository<AnswerEntity, Long> {
      * barragem — o mesmo valor que a API publica como {@code lastSelectedOption}
      * e sobre o qual a UI monta as opções disponíveis.
      *
-     * Precisa casar EXATAMENTE com {@code findLatestNonNIAnswer}, que alimenta o
-     * payload do checklist. Se as duas divergirem, a tela oferece uma opção que
+     * Precisa casar EXATAMENTE com {@link #findLastRelevantAnswers}, que alimenta
+     * o payload do checklist. Se as duas divergirem, a tela oferece uma opção que
      * o servidor recusa no envio, e o inspetor só descobre no fim.
      *
      * Duas decisões estão embutidas aqui, e são as mesmas da consulta de
@@ -165,23 +166,46 @@ public interface AnswerRepository extends JpaRepository<AnswerEntity, Long> {
             @Param("templateId") Long templateId,
             Pageable pageable);
 
-    @Query("SELECT a FROM AnswerEntity a "
-            + "JOIN a.selectedOptions o "
-            + "WHERE a.questionnaireResponse.dam.id = :damId "
-            + "AND a.question.id = :questionId "
-            + "AND a.questionnaireResponse.templateQuestionnaire.id = :templateId "
-            + "AND LOWER(o.label) != 'ni' "
-            + "AND a.questionnaireResponse.createdAt = ("
-            + "    SELECT MAX(qr.createdAt) FROM QuestionnaireResponseEntity qr "
-            + "    JOIN qr.answers a2 "
-            + "    JOIN a2.selectedOptions o2 "
-            + "    WHERE qr.dam.id = :damId "
-            + "    AND a2.question.id = :questionId "
-            + "    AND qr.templateQuestionnaire.id = :templateId "
-            + "    AND LOWER(o2.label) != 'ni')")
-    @EntityGraph(attributePaths = {"selectedOptions", "question", "questionnaireResponse"})
-    Optional<AnswerEntity> findLatestNonNIAnswer(
-            @Param("damId") Long damId,
-            @Param("questionId") Long questionId,
-            @Param("templateId") Long templateId);
+    /**
+     * Última resposta relevante (não-NI) de cada ponto — barragem + questionário
+     * + pergunta — publicada como {@code lastSelectedOption} e
+     * {@code answerResponseId} no payload "com últimas respostas" do checklist.
+     * Uma consulta para todos os pontos, no lugar de uma por pergunta.
+     *
+     * Mesma regra de {@link #findLastRelevantOptionLabels}, que valida o envio:
+     * ignora NI, não filtra por checklist e ordena por qr.created_at DESC,
+     * qr.id DESC. A diferença é o recorte por várias barragens (o payload do
+     * cliente cobre todas) e o desempate final por resposta e opção, que só
+     * importa se houver duas respostas no mesmo instante ou uma resposta com
+     * duas opções não-NI (nenhum caso em produção em 26/10/2026). Conferido
+     * contra a consulta antiga, por ponto, em todos os 3.943 pontos de
+     * produção: mesma resposta e mesma opção nos 2.763 que têm resposta.
+     *
+     * Colunas: 0 dam_id, 1 template_id, 2 question_id, 3 answer_id,
+     * 4 option_id, 5 option_label, 6 option_value.
+     */
+    @Query(value = """
+            SELECT DISTINCT ON (qr.dam_id, qr.template_questionnaire_id, a.question_id)
+                   qr.dam_id AS dam_id,
+                   qr.template_questionnaire_id AS template_id,
+                   a.question_id AS question_id,
+                   a.id AS answer_id,
+                   o.id AS option_id,
+                   o.label AS option_label,
+                   o.value AS option_value
+            FROM answers a
+            JOIN answer_options ao ON ao.answer_id = a.id
+            JOIN options o ON o.id = ao.option_id
+            JOIN questionnaire_responses qr ON qr.id = a.questionnaire_response_id
+            WHERE a.question_id IN :questionIds
+              AND qr.template_questionnaire_id IN :templateIds
+              AND qr.dam_id IN :damIds
+              AND UPPER(o.label) <> 'NI'
+            ORDER BY qr.dam_id, qr.template_questionnaire_id, a.question_id,
+                     qr.created_at DESC, qr.id DESC, a.id DESC, o.id
+            """, nativeQuery = true)
+    List<Object[]> findLastRelevantAnswers(
+            @Param("questionIds") Collection<Long> questionIds,
+            @Param("templateIds") Collection<Long> templateIds,
+            @Param("damIds") Collection<Long> damIds);
 }

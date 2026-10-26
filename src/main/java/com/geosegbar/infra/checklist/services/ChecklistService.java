@@ -1,12 +1,15 @@
 package com.geosegbar.infra.checklist.services;
 
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -16,7 +19,6 @@ import org.springframework.stereotype.Service;
 
 import com.geosegbar.common.enums.TypeQuestionEnum;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
-import com.geosegbar.entities.AnswerEntity;
 import com.geosegbar.entities.ChecklistEntity;
 import com.geosegbar.entities.ChecklistTemplateEntity;
 import com.geosegbar.entities.ClientEntity;
@@ -49,6 +51,7 @@ import com.geosegbar.infra.checklist.dtos.TemplateQuestionnaireWithAnswersDTO;
 import com.geosegbar.infra.checklist.dtos.TemplateReorderDTO;
 import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
 import com.geosegbar.infra.checklist_template.persistence.jpa.ChecklistTemplateRepository;
+import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.dam.services.DamService;
 import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
 import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
@@ -68,6 +71,7 @@ public class ChecklistService {
     private final ChecklistRepository checklistRepository;
     private final ChecklistTemplateRepository checklistTemplateRepository;
     private final DamService damService;
+    private final DamRepository damRepository;
     private final AnswerRepository answerRepository;
     private final TemplateQuestionnaireRepository templateQuestionnaireRepository;
     private final QuestionRepository questionRepository;
@@ -157,50 +161,28 @@ public class ChecklistService {
 
     @Transactional()
     public List<ChecklistWithLastAnswersDTO> findChecklistsWithLastAnswersForDam(Long damId) {
-        damService.findById(damId);
+        List<ChecklistWithLastAnswersAndDamDTO> checklists = assembleChecklistsWithLastAnswers(
+                checklistRepository.findLastAnswersStructureByDamId(damId));
 
-        ChecklistEntity checklist = checklistRepository.findByDamIdWithFullDetails(damId);
-
-        List<ChecklistWithLastAnswersDTO> result = new ArrayList<>();
-
-        if (checklist == null) {
-            return result;
+        // A estrutura só volta vazia se a barragem não tem checklist ou não
+        // existe; só aí vale a consulta extra para distinguir 404 de lista vazia.
+        if (checklists.isEmpty() && !damRepository.existsById(damId)) {
+            throw new NotFoundException("Barragem não encontrada!");
         }
 
-        result.add(buildChecklistWithAnswersDTO(checklist, damId));
+        List<ChecklistWithLastAnswersDTO> result = new ArrayList<>(checklists.size());
+        for (ChecklistWithLastAnswersAndDamDTO checklist : checklists) {
+            result.add(new ChecklistWithLastAnswersDTO(checklist.getId(), checklist.getName(),
+                    checklist.getCreatedAt(), checklist.getTemplateQuestionnaires()));
+        }
 
         return result;
     }
 
     @Transactional()
     public List<ChecklistWithLastAnswersAndDamDTO> findAllChecklistsWithLastAnswersByClientId(Long clientId) {
-
-        List<ChecklistEntity> allChecklistsEntities = checklistRepository.findAllByClientIdWithDetails(clientId);
-
-        List<ChecklistWithLastAnswersAndDamDTO> allChecklists = new ArrayList<>();
-
-        for (ChecklistEntity checklist : allChecklistsEntities) {
-
-            ChecklistWithLastAnswersAndDamDTO checklistDTO = new ChecklistWithLastAnswersAndDamDTO();
-            checklistDTO.setId(checklist.getId());
-            checklistDTO.setName(checklist.getName());
-            checklistDTO.setCreatedAt(checklist.getCreatedAt());
-
-            DamEntity dam = checklist.getDam();
-            ChecklistWithLastAnswersAndDamDTO.DamInfoDTO damInfo = new ChecklistWithLastAnswersAndDamDTO.DamInfoDTO(
-                    dam.getId(),
-                    dam.getName(),
-                    dam.getCity(),
-                    dam.getState(),
-                    dam.getLatitude(),
-                    dam.getLongitude()
-            );
-            checklistDTO.setDam(damInfo);
-
-            populateTemplatesWithAnswers(checklistDTO, checklist, dam.getId());
-
-            allChecklists.add(checklistDTO);
-        }
+        List<ChecklistWithLastAnswersAndDamDTO> allChecklists = assembleChecklistsWithLastAnswers(
+                checklistRepository.findLastAnswersStructureByClientId(clientId));
 
         allChecklists.sort((a, b) -> {
             int damComparison = a.getDam().getName().compareTo(b.getDam().getName());
@@ -210,74 +192,132 @@ public class ChecklistService {
         return allChecklists;
     }
 
-    private ChecklistWithLastAnswersDTO buildChecklistWithAnswersDTO(ChecklistEntity checklist, Long damId) {
-        ChecklistWithLastAnswersDTO checklistDTO = new ChecklistWithLastAnswersDTO();
-        checklistDTO.setId(checklist.getId());
-        checklistDTO.setName(checklist.getName());
-        checklistDTO.setCreatedAt(checklist.getCreatedAt());
-
-        populateTemplatesWithAnswers(checklistDTO, checklist, damId);
-
-        return checklistDTO;
+    /**
+     * Ponto do checklist: a pergunta dentro do questionário, na barragem. É a
+     * chave da última resposta (ver AnswerRepository.findLastRelevantAnswers).
+     */
+    private record LastAnswerPoint(Long damId, Long templateId, Long questionId) {
     }
 
-    private void populateTemplatesWithAnswers(Object checklistDTO, ChecklistEntity checklist, Long damId) {
-        List<TemplateQuestionnaireWithAnswersDTO> templateDTOs = new ArrayList<>();
+    /**
+     * Monta o payload "com últimas respostas" em três consultas, seja qual for o
+     * tamanho dos checklists: a estrutura (checklist, questionários e
+     * perguntas), as opções de cada pergunta e a última resposta não-NI de cada
+     * ponto. Antes era uma consulta por pergunta, mais as relações EAGER de cada
+     * barragem: no cliente 18, 368 queries e até 1,5 s por chamada.
+     *
+     * As linhas da estrutura vêm ordenadas por checklist, questionário e
+     * pergunta (ver ChecklistRepository.LAST_ANSWERS_STRUCTURE); os
+     * LinkedHashMap mantêm essa ordem.
+     */
+    private List<ChecklistWithLastAnswersAndDamDTO> assembleChecklistsWithLastAnswers(List<Object[]> rows) {
+        Map<Long, ChecklistWithLastAnswersAndDamDTO> checklists = new LinkedHashMap<>();
+        Map<Long, TemplateQuestionnaireWithAnswersDTO> templatesByChecklistTemplate = new HashMap<>();
+        Map<LastAnswerPoint, List<QuestionWithLastAnswerDTO>> questionsByPoint = new HashMap<>();
+        Set<Long> damIds = new LinkedHashSet<>();
+        Set<Long> templateIds = new LinkedHashSet<>();
+        Set<Long> questionIds = new LinkedHashSet<>();
 
-        Set<Long> seenCtIds = new HashSet<>();
-        for (ChecklistTemplateEntity ct : checklist.getChecklistTemplates()) {
-            if (!seenCtIds.add(ct.getId())) continue;
-            TemplateQuestionnaireEntity template = ct.getTemplateQuestionnaire();
+        for (Object[] row : rows) {
+            Long checklistId = toLong(row[0]);
+            Long damId = toLong(row[3]);
 
-            TemplateQuestionnaireWithAnswersDTO templateDTO = new TemplateQuestionnaireWithAnswersDTO();
-            templateDTO.setId(template.getId());
-            templateDTO.setName(template.getName());
-            templateDTO.setOrderIndex(ct.getOrderIndex());
-
-            List<QuestionWithLastAnswerDTO> questionDTOs = new ArrayList<>();
-
-            for (TemplateQuestionnaireQuestionEntity tqQuestion : template.getTemplateQuestions()) {
-                QuestionEntity question = tqQuestion.getQuestion();
-
-                QuestionWithLastAnswerDTO questionDTO = new QuestionWithLastAnswerDTO();
-                questionDTO.setId(question.getId());
-                questionDTO.setQuestionText(question.getQuestionText());
-                questionDTO.setType(question.getType());
-                questionDTO.setOrderIndex(tqQuestion.getOrderIndex());
-
-                List<OptionDTO> allOptionDTOs = question.getOptions().stream()
-                        .map(opt -> new OptionDTO(opt.getId(), opt.getLabel(), opt.getValue()))
-                        .collect(Collectors.toList());
-                questionDTO.setAllOptions(allOptionDTOs);
-
-                Optional<AnswerEntity> lastNonNIAnswer = answerRepository.findLatestNonNIAnswer(
-                        damId, question.getId(), template.getId());
-
-                lastNonNIAnswer.ifPresent(answer -> {
-                    Optional<OptionEntity> nonNIOption = answer.getSelectedOptions().stream()
-                            .filter(opt -> !"NI".equalsIgnoreCase(opt.getLabel()))
-                            .findFirst();
-
-                    nonNIOption.ifPresent(option -> {
-                        OptionDTO optionDTO = new OptionDTO(
-                                option.getId(), option.getLabel(), option.getValue());
-                        questionDTO.setLastSelectedOption(optionDTO);
-                        questionDTO.setAnswerResponseId(answer.getId());
-                    });
-                });
-
-                questionDTOs.add(questionDTO);
+            ChecklistWithLastAnswersAndDamDTO checklist = checklists.get(checklistId);
+            if (checklist == null) {
+                checklist = new ChecklistWithLastAnswersAndDamDTO(
+                        checklistId,
+                        (String) row[1],
+                        toLocalDateTime(row[2]),
+                        new ArrayList<>(),
+                        new ChecklistWithLastAnswersAndDamDTO.DamInfoDTO(
+                                damId, (String) row[4], (String) row[5], (String) row[6],
+                                toDouble(row[7]), toDouble(row[8])));
+                checklists.put(checklistId, checklist);
+                damIds.add(damId);
             }
 
-            templateDTO.setQuestions(questionDTOs);
-            templateDTOs.add(templateDTO);
+            if (row[9] == null) {
+                continue; // checklist sem questionário
+            }
+
+            Long checklistTemplateId = toLong(row[9]);
+            TemplateQuestionnaireWithAnswersDTO template = templatesByChecklistTemplate.get(checklistTemplateId);
+            if (template == null) {
+                template = new TemplateQuestionnaireWithAnswersDTO(
+                        toLong(row[11]), (String) row[12], toInteger(row[10]), new ArrayList<>());
+                templatesByChecklistTemplate.put(checklistTemplateId, template);
+                checklist.getTemplateQuestionnaires().add(template);
+                templateIds.add(template.getId());
+            }
+
+            if (row[14] == null) {
+                continue; // questionário sem pergunta
+            }
+
+            QuestionWithLastAnswerDTO question = new QuestionWithLastAnswerDTO();
+            question.setId(toLong(row[14]));
+            question.setQuestionText((String) row[15]);
+            question.setType(TypeQuestionEnum.valueOf((String) row[16]));
+            question.setOrderIndex(toInteger(row[13]));
+            question.setAllOptions(new ArrayList<>());
+            template.getQuestions().add(question);
+
+            questionIds.add(question.getId());
+            questionsByPoint
+                    .computeIfAbsent(new LastAnswerPoint(damId, template.getId(), question.getId()),
+                            k -> new ArrayList<>())
+                    .add(question);
         }
 
-        if (checklistDTO instanceof ChecklistWithLastAnswersDTO) {
-            ((ChecklistWithLastAnswersDTO) checklistDTO).setTemplateQuestionnaires(templateDTOs);
-        } else if (checklistDTO instanceof ChecklistWithLastAnswersAndDamDTO) {
-            ((ChecklistWithLastAnswersAndDamDTO) checklistDTO).setTemplateQuestionnaires(templateDTOs);
+        if (questionIds.isEmpty()) {
+            return new ArrayList<>(checklists.values());
         }
+
+        Map<Long, List<OptionDTO>> optionsByQuestion = new HashMap<>();
+        for (Object[] row : optionRepository.findOptionRowsByQuestionIds(questionIds)) {
+            optionsByQuestion
+                    .computeIfAbsent(toLong(row[0]), k -> new ArrayList<>())
+                    .add(new OptionDTO(toLong(row[1]), (String) row[2], (String) row[3]));
+        }
+
+        for (List<QuestionWithLastAnswerDTO> questions : questionsByPoint.values()) {
+            for (QuestionWithLastAnswerDTO question : questions) {
+                question.getAllOptions().addAll(optionsByQuestion.getOrDefault(question.getId(), List.of()));
+            }
+        }
+
+        for (Object[] row : answerRepository.findLastRelevantAnswers(questionIds, templateIds, damIds)) {
+            // O filtro por listas cruza barragem, questionário e pergunta; a
+            // combinação pode não ser um ponto de nenhum checklist.
+            List<QuestionWithLastAnswerDTO> questions = questionsByPoint.get(
+                    new LastAnswerPoint(toLong(row[0]), toLong(row[1]), toLong(row[2])));
+            if (questions == null) {
+                continue;
+            }
+
+            for (QuestionWithLastAnswerDTO question : questions) {
+                question.setAnswerResponseId(toLong(row[3]));
+                question.setLastSelectedOption(new OptionDTO(toLong(row[4]), (String) row[5], (String) row[6]));
+            }
+        }
+
+        return new ArrayList<>(checklists.values());
+    }
+
+    private static Long toLong(Object value) {
+        return value == null ? null : ((Number) value).longValue();
+    }
+
+    private static Integer toInteger(Object value) {
+        return value == null ? null : ((Number) value).intValue();
+    }
+
+    private static Double toDouble(Object value) {
+        return value == null ? null : ((Number) value).doubleValue();
+    }
+
+    private static LocalDateTime toLocalDateTime(Object value) {
+        return value instanceof Timestamp timestamp ? timestamp.toLocalDateTime() : (LocalDateTime) value;
     }
 
     @Transactional

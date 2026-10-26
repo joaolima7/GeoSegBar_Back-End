@@ -229,7 +229,7 @@ class RegrasPreenchimentoChecklistTest extends BaseUnitTest {
             corpo = corpo.substring(corpo.lastIndexOf("@Query"));
 
             assertThat(corpo)
-                    .withFailMessage("%s precisa ignorar NI, como findLatestNonNIAnswer faz — "
+                    .withFailMessage("%s precisa ignorar NI, como findLastRelevantAnswers faz — "
                             + "'não inspecionado' não é observação de campo.", consulta)
                     .contains("UPPER(o.label) <> 'NI'");
 
@@ -239,7 +239,7 @@ class RegrasPreenchimentoChecklistTest extends BaseUnitTest {
                             + "alimenta a UI não filtra por checklist.", consulta)
                     .doesNotContain("checklist_id");
 
-            // Mesmo escopo e mesma ordenação de findLatestNonNIAnswer, que é o
+            // Mesmo escopo e mesma ordenação de findLastRelevantAnswers, que é o
             // que a UI enxerga. Trocar por cr.created_at parece equivalente e
             // não é: são duas colunas distintas.
             assertThat(corpo)
@@ -248,6 +248,20 @@ class RegrasPreenchimentoChecklistTest extends BaseUnitTest {
                     .contains("qr.dam_id = :damId")
                     .contains("qr.created_at DESC");
         }
+
+        // E a consulta de leitura, que publica lastSelectedOption, segue a
+        // mesma regra: ignora NI, não filtra por checklist, recorta pela
+        // barragem do questionário e desempata pela mesma ordem.
+        int inicio = repo.indexOf("List<Object[]> findLastRelevantAnswers");
+        assertThat(inicio).as("consulta findLastRelevantAnswers existe").isGreaterThan(0);
+        String leitura = repo.substring(0, inicio);
+        leitura = leitura.substring(leitura.lastIndexOf("@Query"));
+
+        assertThat(leitura)
+                .contains("UPPER(o.label) <> 'NI'")
+                .doesNotContain("checklist_id")
+                .contains("qr.dam_id IN :damIds")
+                .contains("qr.created_at DESC, qr.id DESC");
     }
 
     @Test

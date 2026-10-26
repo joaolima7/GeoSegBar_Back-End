@@ -36,14 +36,63 @@ public interface ChecklistRepository extends JpaRepository<ChecklistEntity, Long
     @Query("SELECT DISTINCT c FROM ChecklistEntity c WHERE c.id = :id")
     Optional<ChecklistEntity> findByIdWithFullDetails(@Param("id") Long id);
 
-    @EntityGraph(attributePaths = {
-        "checklistTemplates",
-        "checklistTemplates.templateQuestionnaire",
-        "dam",
-        "dam.client"
-    })
-    @Query("SELECT DISTINCT c FROM ChecklistEntity c WHERE c.dam.client.id = :clientId")
-    List<ChecklistEntity> findAllByClientIdWithDetails(@Param("clientId") Long clientId);
+    /**
+     * Estrutura dos checklists para o payload "com últimas respostas": uma linha
+     * por pergunta de cada questionário de cada checklist. Checklist sem
+     * questionário vem uma vez, com as colunas do questionário nulas; questionário
+     * sem pergunta, idem com as da pergunta. Usada por
+     * ChecklistService.findChecklistsWithLastAnswersForDam e
+     * findAllChecklistsWithLastAnswersByClientId.
+     *
+     * Substitui o carregamento por entidade, que custava uma query por pergunta
+     * (última resposta) mais as relações EAGER de cada barragem: no cliente 18,
+     * 368 queries e até 1,5 s. Esta leva ~12 ms em produção (26/10/2026,
+     * cliente 18, 512 perguntas).
+     *
+     * Colunas (aliases únicos: o Hibernate recusa alias repetido em consulta
+     * nativa): 0 checklist_id, 1 checklist_name, 2 checklist_created_at,
+     * 3 dam_id, 4 dam_name, 5 dam_city, 6 dam_state, 7 dam_latitude,
+     * 8 dam_longitude, 9 checklist_template_id, 10 template_order_index,
+     * 11 template_id, 12 template_name, 13 question_order_index,
+     * 14 question_id, 15 question_text, 16 question_type.
+     */
+    String LAST_ANSWERS_STRUCTURE = """
+            SELECT c.id AS checklist_id,
+                   c.name AS checklist_name,
+                   c.created_at AS checklist_created_at,
+                   d.id AS dam_id,
+                   d.name AS dam_name,
+                   d.city AS dam_city,
+                   d.state AS dam_state,
+                   d.latitude AS dam_latitude,
+                   d.longitude AS dam_longitude,
+                   ct.id AS checklist_template_id,
+                   ct.order_index AS template_order_index,
+                   t.id AS template_id,
+                   t.name AS template_name,
+                   tqq.order_index AS question_order_index,
+                   q.id AS question_id,
+                   q.question_text AS question_text,
+                   q.type AS question_type
+            FROM checklists c
+            INNER JOIN dam d ON d.id = c.dam_id
+            LEFT JOIN checklist_templates ct ON ct.checklist_id = c.id
+            LEFT JOIN template_questionnaires t ON t.id = ct.template_questionnaire_id
+            LEFT JOIN template_questionnaire_questions tqq ON tqq.template_questionnaire_id = t.id
+            LEFT JOIN questions q ON q.id = tqq.question_id
+            """;
+
+    String LAST_ANSWERS_STRUCTURE_ORDER = """
+            ORDER BY c.id, ct.order_index, ct.id, tqq.order_index, tqq.id
+            """;
+
+    @Query(value = LAST_ANSWERS_STRUCTURE + "WHERE c.dam_id = :damId\n" + LAST_ANSWERS_STRUCTURE_ORDER,
+            nativeQuery = true)
+    List<Object[]> findLastAnswersStructureByDamId(@Param("damId") Long damId);
+
+    @Query(value = LAST_ANSWERS_STRUCTURE + "WHERE d.client_id = :clientId\n" + LAST_ANSWERS_STRUCTURE_ORDER,
+            nativeQuery = true)
+    List<Object[]> findLastAnswersStructureByClientId(@Param("clientId") Long clientId);
 
     @EntityGraph(attributePaths = {"dam"})
     @Query("SELECT c FROM ChecklistEntity c WHERE c.id = :checklistId")

@@ -17,7 +17,22 @@ separado do deploy da API. Nenhuma porta nova na internet.
 
 ## Como chegar ao Grafana
 
-**Pelo Tailscale (normal).** Com o app do Tailscale ligado no Mac ou no
+**Pelo script (sem instalar nada).** Na raiz do repositório, com o host
+`geosegbar-vps` no `~/.ssh/config`:
+
+```bash
+./bash/grafana.sh
+```
+
+O script abre o túnel SSH até o Grafana, mostra usuário e senha do admin no
+terminal (no Mac, copia a senha para a área de transferência) e abre o
+navegador em `http://localhost:3000`. Porta 3000 ocupada (o front em dev, por
+exemplo), ele usa a próxima livre; `./bash/grafana.sh 3100` escolhe outra.
+Ctrl+C fecha o túnel. Ele prefere Chrome ou Firefox porque o Safari recusa o
+cookie de sessão em `http://localhost` (ver abaixo). `GEOSEGBAR_SSH_HOST` troca
+o host; `GRAFANA_NO_BROWSER=1` não abre o navegador.
+
+**Pelo Tailscale.** Com o app do Tailscale ligado no Mac ou no
 celular, abra `https://geosegbar-prod.<sua-tailnet>.ts.net:8443/`. A URL exata
 fica em `GRAFANA_ROOT_URL`, em `/etc/geosegbar/monitoring/monitoring.env`.
 

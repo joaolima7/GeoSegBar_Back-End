@@ -135,6 +135,11 @@ read -rs v && printf '%s' "$v" > $S/telegram_chat_id; unset v            # cole 
 read -rs v && printf '%s' "$v" > $S/healthchecks_watchdog_url; unset v   # cole a URL do Watchdog
 ```
 
+Sem as contas ainda, dá para subir o resto antes: rode o deploy com
+`MONITORING_SEM_ALERTAS=1`. Métricas, logs, traces e painéis funcionam; o
+Alertmanager descarta tudo e o healthchecks.io não recebe o Watchdog até você
+preencher os três arquivos e rodar o deploy de novo, sem a variável.
+
 Revise `/etc/geosegbar/monitoring/monitoring.env` (`PG_EXPORTER_DATABASE` vem do
 `DB_NAME`; `BLACKBOX_TARGETS` lista as URLs públicas) e rode a opção 7 de novo.
 O deploy valida tudo com os binários das imagens antes de trocar qualquer coisa.

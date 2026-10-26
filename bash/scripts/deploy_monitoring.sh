@@ -109,7 +109,17 @@ for nome in "${EXTERNAL_SECRETS[@]}"; do
   fi
 done
 
-if [ "${#faltando[@]}" -gt 0 ]; then
+# Sem os segredos externos, o padrão é parar. MONITORING_SEM_ALERTAS=1 sobe a
+# stack mesmo assim (métricas, logs, traces e painéis funcionam), com o
+# Alertmanager num receptor que descarta: nenhum alerta chega a ninguém e o
+# Watchdog não pinga o healthchecks.io. Serve para não travar a instalação
+# enquanto as contas do Telegram e do healthchecks.io não existem; rodar de
+# novo com os segredos preenchidos liga a entrega.
+ALERTAS_DESLIGADOS=false
+if [ "${#faltando[@]}" -gt 0 ] && [ "${MONITORING_SEM_ALERTAS:-0}" = "1" ]; then
+  ALERTAS_DESLIGADOS=true
+  warn "MONITORING_SEM_ALERTAS=1: subindo SEM entrega de alertas (faltam: ${faltando[*]})."
+elif [ "${#faltando[@]}" -gt 0 ]; then
   echo ""
   warn "Faltam segredos externos. Preencha cada arquivo (sem quebra de linha no fim):"
   for nome in "${faltando[@]}"; do
@@ -120,6 +130,7 @@ if [ "${#faltando[@]}" -gt 0 ]; then
   echo "   Como obter cada um: docs/MONITORAMENTO.md, seção \"Primeira instalação\"."
   echo "   Revise também $ENV_FILE (GRAFANA_ROOT_URL, PG_EXPORTER_DATABASE, BLACKBOX_TARGETS)."
   echo "   Depois rode este deploy de novo."
+  echo "   Para subir já, sem entrega de alertas: MONITORING_SEM_ALERTAS=1."
   exit 3
 fi
 
@@ -133,10 +144,12 @@ for nome in "${GENERATED_SECRETS[@]}" "${EXTERNAL_SECRETS[@]}"; do
   chmod 444 "$arquivo"
 done
 
-grep -Eq '^[-0-9]+$' "$SECRETS_DIR/telegram_chat_id" \
-  || die "telegram_chat_id deve ser o id numérico do chat (ex. -1001234567890)."
-grep -Eq '^https://' "$SECRETS_DIR/healthchecks_watchdog_url" \
-  || die "healthchecks_watchdog_url deve começar com https://"
+if [ "$ALERTAS_DESLIGADOS" != true ]; then
+  grep -Eq '^[-0-9]+$' "$SECRETS_DIR/telegram_chat_id" \
+    || die "telegram_chat_id deve ser o id numérico do chat (ex. -1001234567890)."
+  grep -Eq '^https://' "$SECRETS_DIR/healthchecks_watchdog_url" \
+    || die "healthchecks_watchdog_url deve começar com https://"
+fi
 
 # Pasta que o script de backup usa para publicar a métrica de último sucesso.
 mkdir -p "$TEXTFILE_DIR"
@@ -177,6 +190,11 @@ echo "📦 Preparando cópia de monitoring/ em $STAGE_DIR..."
 rm -rf "$STAGE_DIR"
 mkdir -p "$STAGE_DIR"
 cp -a "$SRC_DIR/." "$STAGE_DIR/"
+# Sem segredos externos: Alertmanager com o receptor que descarta (o mesmo de
+# desenvolvimento). Os alertas continuam visíveis no Grafana e no Prometheus.
+if [ "$ALERTAS_DESLIGADOS" = true ]; then
+  cp "$STAGE_DIR/alertmanager/alertmanager.dev.yml" "$STAGE_DIR/alertmanager/alertmanager.yml"
+fi
 # O que é só de desenvolvimento não vai para produção.
 rm -rf "$STAGE_DIR/.secrets-dev" "$STAGE_DIR/.env" "$STAGE_DIR/.env.dev" \
        "$STAGE_DIR/docker-compose.dev.yml" "$STAGE_DIR/alertmanager/alertmanager.dev.yml" \
@@ -369,6 +387,12 @@ done
 
 echo ""
 ok "Monitoramento no ar."
+if [ "$ALERTAS_DESLIGADOS" = true ]; then
+  echo ""
+  warn "ALERTAS DESLIGADOS: nada chega no Telegram e o healthchecks.io não recebe o Watchdog."
+  warn "Preencha telegram_bot_token, telegram_chat_id e healthchecks_watchdog_url em $SECRETS_DIR"
+  warn "e rode este deploy de novo (sem MONITORING_SEM_ALERTAS) para ligar a entrega."
+fi
 echo ""
 echo "📈 Grafana: ${GRAFANA_ROOT_URL} (usuário ${GRAFANA_ADMIN_USER})"
 echo "   Senha inicial do admin: $SECRETS_DIR/grafana_admin_password (só root lê)."

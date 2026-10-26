@@ -161,7 +161,9 @@ def build_message(janela="24h"):
     linhas.append(("⚠️ " if bypass > 0 else "• ") + f"Uso do bypassKey: {num(bypass)}")
 
     # ------------------------------------------------------------ servidor e banco
-    cpu = scalar(f'1 - avg(rate(node_cpu_seconds_total{{job="node", mode="idle"}}[{w}]))')
+    # Média de taxas de 5 min, não rate(...[24h]): rate divide pelo intervalo
+    # inteiro e, com lacuna ou menos de 24 h de dados, a média sairia errada.
+    cpu = scalar(f'avg_over_time((1 - avg(rate(node_cpu_seconds_total{{job="node", mode="idle"}}[5m])))[{w}:5m])')
     cpu_max = scalar(f'max_over_time((1 - avg(rate(node_cpu_seconds_total{{job="node", mode="idle"}}[5m])))[{w}:5m])')
     mem_min = scalar(f'min_over_time((node_memory_MemAvailable_bytes{{job="node"}} / node_memory_MemTotal_bytes{{job="node"}})[{w}:5m])')
     disco = scalar('min(node_filesystem_avail_bytes{job="node", mountpoint="/"} / node_filesystem_size_bytes{job="node", mountpoint="/"})')

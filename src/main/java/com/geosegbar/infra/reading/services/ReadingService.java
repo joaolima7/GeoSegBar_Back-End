@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.common.enums.LimitStatusEnum;
+import com.geosegbar.common.metrics.BusinessMetrics;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.entities.DeterministicLimitEntity;
 import com.geosegbar.entities.InputEntity;
@@ -74,6 +75,7 @@ public class ReadingService {
     private final ClientRepository clientRepository;
     private final DamAccessService damAccessService;
     private final UserRepository userRepository;
+    private final BusinessMetrics businessMetrics;
 
     @Value("${application.system-user-email}")
     private String systemUserEmail;
@@ -443,6 +445,8 @@ public class ReadingService {
         }
 
         List<ReadingEntity> createdReadings = readingRepository.saveAll(readingsToSave);
+        // Todo caminho de criação (tela, importação Excel, coleta ANA, histórico) passa por aqui
+        businessMetrics.readingsCreated(createdReadings.size());
 
         return createdReadings.stream()
                 .map(this::mapToResponseDTO)

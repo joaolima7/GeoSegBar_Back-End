@@ -1,0 +1,191 @@
+# Alertas da API. Cada alerta aponta, em runbook_url, para a seção de
+# docs/MONITORAMENTO.md que diz o que fazer.
+#
+# severity: critical → avisa na hora, com som, em qualquer horário.
+#           warning  → mensagem silenciosa, para olhar no horário comercial.
+#
+# Textos sem os caracteres < > & crus: o Telegram recebe em HTML.
+
+groups:
+  - name: geosegbar-api
+    rules:
+      - alert: ApiSemColeta
+        expr: absent(up{job="geosegbar-api"} == 1)
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Nenhuma instância da API responde à coleta de métricas.
+          description: O Prometheus não alcança a porta de management (8081) de nenhum container geosegbar-api-prod. A API pode estar fora do ar, reiniciando, ou rodando uma imagem antiga sem a porta 8081 (rollback).
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#apisemcoleta
+
+      # SLO de disponibilidade: 99,5% das requisições sem 5xx no mês. Orçamento
+      # de erro = 0,5%. Alertas de queima em duas janelas (método do SRE
+      # Workbook do Google): a janela longa prova que não é soluço, a curta prova
+      # que ainda está acontecendo. A guarda de tráfego mínimo impede que 1 erro
+      # em 3 requisições de madrugada vire alarme.
+      - alert: SloDisponibilidadeQueimaRapida
+        expr: |
+          geosegbar:http_error_ratio:rate1h > (14.4 * 0.005)
+          and geosegbar:http_error_ratio:rate5m > (14.4 * 0.005)
+          and geosegbar:http_requests:rate1h > 0.02
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "A API está devolvendo 5xx em {{ $value | humanizePercentage }} das requisições."
+          description: Nesse ritmo o orçamento de erro do mês (0,5%) acaba em cerca de 2 dias. Abra o painel Erros.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#slodisponibilidadequeimarapida
+
+      - alert: SloDisponibilidadeQueimaLenta
+        expr: |
+          geosegbar:http_error_ratio:rate6h > (6 * 0.005)
+          and geosegbar:http_error_ratio:rate30m > (6 * 0.005)
+          and geosegbar:http_requests:rate6h > 0.02
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Taxa de 5xx de {{ $value | humanizePercentage }} nas últimas 6 horas."
+          description: Erro constante, abaixo do pico, que consome o orçamento do mês em cerca de 5 dias.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#slodisponibilidadequeimalenta
+
+      - alert: LatenciaAlta
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_server_requests_seconds_bucket{job="geosegbar-api", uri!~".*(export|download|upload|massive|import|zip).*"}[10m])))
+            > 1
+          and sum(rate(http_server_requests_seconds_count{job="geosegbar-api"}[10m])) > 0.05
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 da API em {{ $value | humanizeDuration }} há 15 minutos."
+          description: A meta é p95 até 1 s, fora as rotas de upload, download, exportação e importação. Abra o painel Endpoints, coluna Tempo total consumido.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#latenciaalta
+
+      - alert: EndpointLento
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, method, uri) (rate(http_server_requests_seconds_bucket{job="geosegbar-api", uri!~".*(export|download|upload|massive|import|zip).*"}[15m])))
+            > 3
+          and sum by (method, uri) (rate(http_server_requests_seconds_count{job="geosegbar-api"}[15m])) > 0.01
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.method }} {{ $labels.uri }} com p95 de {{ $value | humanizeDuration }}."
+          description: Endpoint com p95 acima de 3 s por 15 minutos e tráfego mínimo. Abra os traces lentos dele no painel Endpoints.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#endpointlento
+
+      - alert: PoolDoBancoEsgotando
+        expr: max(hikaricp_connections_pending{job="geosegbar-api"}) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Requisições esperando conexão do banco há 5 minutos ({{ $value }} na fila)."
+          description: As 15 conexões do HikariCP estão ocupadas. Costuma ser query lenta, transação longa ou vazamento de conexão.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#pooldobancoesgotando
+
+      - alert: PoolDoBancoTimeout
+        expr: sum(increase(hikaricp_connections_timeout_total{job="geosegbar-api"}[5m])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $value | humanize }} requisições desistiram de esperar conexão do banco em 5 minutos."
+          description: Cada timeout do HikariCP vira erro para o usuário.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#pooldobancoesgotando
+
+      - alert: HeapAlto
+        expr: max by (instance) (jvm_gc_live_data_size_bytes{job="geosegbar-api"} / jvm_gc_max_data_size_bytes{job="geosegbar-api"}) > 0.85
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }} com {{ $value | humanizePercentage }} do heap ocupado logo depois do GC."
+          description: Memória que o GC não consegue liberar. Se subir até o teto, a JVM morre por OutOfMemoryError e o Docker reinicia o container.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#heapalto
+
+      - alert: ThreadsDoTomcatSaturadas
+        expr: max by (instance) (tomcat_threads_busy_threads{job="geosegbar-api"} / tomcat_threads_config_max_threads{job="geosegbar-api"}) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }} com {{ $value | humanizePercentage }} das threads do Tomcat ocupadas."
+          description: Com o pool cheio, requisições novas esperam na fila de aceitação. Veja o painel Endpoints, coluna Tempo total consumido.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#threadsdotomcatsaturadas
+
+      - alert: ApiReiniciandoEmLoop
+        expr: changes(process_start_time_seconds{job="geosegbar-api"}[15m]) > 2
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} reiniciou {{ $value }} vezes em 15 minutos."
+          description: O processo Java morre e o Docker o sobe de novo. Causas comuns são OutOfMemoryError (há heap dump em logs/) e falha de boot.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#apireiniciandoemloop
+
+      - alert: ExecutorSaturado
+        expr: min by (instance, name) (executor_queue_remaining_tasks{job="geosegbar-api"}) == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Fila do executor {{ $labels.name }} cheia em {{ $labels.instance }}."
+          description: Tarefas @Async novas (e-mail, auditoria, jobs históricos) são recusadas enquanto a fila estiver cheia.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#executorsaturado
+
+      # Os jobs capturam a própria exceção e registram o erro na auditoria; a
+      # métrica geosegbar_job_runs_total vem dali (AuditService) e nasce com o par
+      # success/failure na primeira execução do job. Se essa primeira execução
+      # já for falha, a série nasce em 1 e o increase() não vê o degrau: o último
+      # ramo ("> 0 unless ... offset 30m") pega esse caso. A métrica do Spring
+      # (tasks_scheduled_execution) só vê exceção que escapa do método, com o
+      # mesmo problema de série nova, coberto pelo terceiro ramo.
+      - alert: JobAgendadoFalhando
+        expr: |
+          sum by (task) (increase(geosegbar_job_runs_total{job="geosegbar-api", result="failure"}[30m])) > 0
+          or
+          sum by (task) (label_replace(
+            increase(tasks_scheduled_execution_seconds_count{job="geosegbar-api", outcome="ERROR"}[30m]),
+            "task", "$1", "code_function", "(.*)")) > 0
+          or
+          count by (task) (label_replace(
+            tasks_scheduled_execution_seconds_count{job="geosegbar-api", outcome="ERROR"}
+              unless tasks_scheduled_execution_seconds_count{job="geosegbar-api", outcome="ERROR"} offset 30m,
+            "task", "$1", "code_function", "(.*)"))
+          or
+          count by (task) (
+            geosegbar_job_runs_total{job="geosegbar-api", result="failure"} > 0
+              unless geosegbar_job_runs_total{job="geosegbar-api", result="failure"} offset 30m)
+        labels:
+          severity: warning
+        annotations:
+          summary: "O job {{ $labels.task }} falhou nos últimos 30 minutos."
+          description: Abra o painel Jobs e negócio e os logs ERROR do mesmo horário.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#jobagendadofalhando
+
+      - alert: ErrosNoLogEmPico
+        expr: sum(increase(logback_events_total{job="geosegbar-api", level="error"}[10m])) > 20
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value | humanize }} linhas ERROR no log da API em 10 minutos."
+          description: Abra o painel Erros, quadro de logs ERROR.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#errosnologempico
+
+      # Comparação com a mesma janela da semana anterior. A guarda absoluta
+      # (1 por segundo) impede que um aumento de 0 para 3 requisições dispare.
+      - alert: PicoDeNegacoes
+        expr: |
+          sum(rate(http_server_requests_seconds_count{job="geosegbar-api", status=~"401|403|429"}[10m]))
+            > 5 * (sum(rate(http_server_requests_seconds_count{job="geosegbar-api", status=~"401|403|429"}[10m] offset 1w)) or vector(0))
+          and sum(rate(http_server_requests_seconds_count{job="geosegbar-api", status=~"401|403|429"}[10m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "401/403/429 em {{ $value | humanize }} por segundo, 5 vezes acima da semana passada."
+          description: Pode ser varredura, força bruta ou um front com token vencido em loop. Abra o painel Segurança, top IPs com 4xx.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#picodenegacoes

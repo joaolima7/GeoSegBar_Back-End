@@ -25,6 +25,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.geosegbar.configs.filters.GzipRequestDecompressingFilter;
 import com.geosegbar.configs.filters.RequestBodyCachingFilter;
+import com.geosegbar.configs.filters.RequestCorrelationFilter;
 import com.geosegbar.infra.audit.config.AuditProperties;
 import com.geosegbar.infra.audit.filter.AuditLogFilter;
 import com.geosegbar.infra.audit.services.AuditService;
@@ -78,12 +79,14 @@ public class SecurityConfig {
                 // "unhealthy" desde que subiu) e o Prometheus nunca coletou uma
                 // métrica sequer — os alertas e dashboards estavam cegos.
                 //
-                // Libera-se APENAS health e prometheus. O resto do actuator
-                // continua exigindo autenticação: com
-                // management.endpoints.web.exposure.include=*, expor /actuator/**
-                // publicaria /actuator/env e /actuator/configprops, que carregam
-                // segredos. O nginx ainda bloqueia /actuator/ vindo da internet —
-                // Prometheus e healthcheck alcançam pela rede interna do Docker.
+                // O actuator mora na porta de management (8081), que o nginx
+                // nunca encaminha, e publica só health, prometheus e info
+                // (management.endpoints.web.exposure.include). Esta cadeia de
+                // segurança também vale para a porta de management, então a
+                // liberação continua explícita e restrita a esses três: um
+                // curinga sobre /actuator/** liberaria o que um dia fosse
+                // exposto por engano, como /actuator/env e /actuator/configprops,
+                // que carregam segredos. O nginx ainda nega /actuator/ na 9090.
                 //
                 // Sem restrição de método, de propósito: `wget --spider` — usado
                 // tanto pelo HEALTHCHECK do Docker quanto pelo gate do deploy —
@@ -92,6 +95,7 @@ public class SecurityConfig {
                 // saudável e o deploy a rejeitava assim mesmo.
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers("/actuator/prometheus").permitAll()
+                .requestMatchers("/actuator/info").permitAll()
                 .anyRequest().authenticated()
                 )
                 // Sem isto o Spring usa o Http403ForbiddenEntryPoint e devolve 403
@@ -117,6 +121,12 @@ public class SecurityConfig {
 
         configuration.setAllowedHeaders(List.of("*"));
 
+        // Códigos de correlação (RequestCorrelationFilter). O front pode mostrá-los
+        // numa tela de erro para o suporte achar a requisição exata no Grafana.
+        configuration.setExposedHeaders(List.of(
+                RequestCorrelationFilter.REQUEST_ID_HEADER,
+                RequestCorrelationFilter.TRACE_ID_HEADER));
+
         configuration.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -124,12 +134,27 @@ public class SecurityConfig {
         return source;
     }
 
+    /**
+     * Ordem: ÚLTIMO filtro, de propósito explícito.
+     *
+     * O valor antigo era HIGHEST_PRECEDENCE - 1, que estoura (Integer.MIN_VALUE - 1
+     * vira Integer.MAX_VALUE): o filtro sempre rodou por último, não primeiro. É
+     * esse o comportamento em produção, e ele fica, porque protege: a
+     * descompressão lê o corpo inteiro para a memória, sem teto de tamanho, e
+     * rodando por último ela só acontece depois que a cadeia de segurança
+     * deixou a requisição passar.
+     *
+     * Efeito colateral conhecido: o RequestBodyCachingFilter e a auditoria, que
+     * rodam antes, guardam o corpo ainda compactado. Para descompactar primeiro,
+     * é preciso antes pôr um teto de tamanho no GzipRequestWrapper — senão um
+     * corpo pequeno que infla para GBs derruba a JVM sem autenticação.
+     */
     @Bean
     public FilterRegistrationBean<GzipRequestDecompressingFilter> gzipRequestDecompressingFilter() {
         FilterRegistrationBean<GzipRequestDecompressingFilter> registration = new FilterRegistrationBean<>();
         registration.setFilter(new GzipRequestDecompressingFilter());
         registration.addUrlPatterns("/*");
-        registration.setOrder(Ordered.HIGHEST_PRECEDENCE - 1);
+        registration.setOrder(Ordered.LOWEST_PRECEDENCE);
         return registration;
     }
 

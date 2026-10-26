@@ -1,0 +1,6 @@
+# Exemplo do arquivo que o deploy gera em prometheus/targets/blackbox.yml a partir
+# de BLACKBOX_TARGETS (lista separada por vírgula, em monitoring.env).
+- targets:
+    - https://api.geosegbar.com.br/nginx-health
+  labels:
+    probe: public

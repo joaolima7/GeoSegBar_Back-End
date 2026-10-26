@@ -18,6 +18,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.geosegbar.exceptions.FileStorageException;
 
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -54,9 +56,21 @@ public class FileStorageService {
 
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
+    private final ObservationRegistry observationRegistry;
 
     @Value("${aws.s3.bucket}")
     private String bucketName;
+
+    /**
+     * Cronometra uma chamada de rede ao S3: vira a métrica
+     * {@code geosegbar_s3_seconds{operation,error}} e um span no trace. A
+     * exceção da chamada sobe intacta — a observação só a registra na tag
+     * {@code error}. Presign não passa por aqui: é cálculo local, sem rede.
+     */
+    private Observation s3Observation(String operation) {
+        return Observation.createNotStarted("geosegbar.s3", observationRegistry)
+                .lowCardinalityKeyValue("operation", operation);
+    }
 
     public String storeFile(MultipartFile file, String subDirectory) {
         try {
@@ -79,14 +93,15 @@ public class FileStorageService {
             long start = System.currentTimeMillis();
 
             if (fileSizeBytes > MULTIPART_THRESHOLD) {
-                uploadMultipart(file, s3Key, fileSizeBytes);
+                s3Observation("multipartUpload").observeChecked(() -> uploadMultipart(file, s3Key, fileSizeBytes));
             } else {
                 PutObjectRequest putOb = PutObjectRequest.builder()
                         .bucket(bucketName)
                         .key(s3Key)
                         .contentType(file.getContentType())
                         .build();
-                s3Client.putObject(putOb, RequestBody.fromInputStream(file.getInputStream(), fileSizeBytes));
+                RequestBody body = RequestBody.fromInputStream(file.getInputStream(), fileSizeBytes);
+                s3Observation("putObject").observe(() -> s3Client.putObject(putOb, body));
             }
 
             long elapsed = System.currentTimeMillis() - start;
@@ -221,7 +236,7 @@ public class FileStorageService {
                     .contentType(contentType)
                     .build();
 
-            s3Client.putObject(putOb, RequestBody.fromBytes(fileBytes));
+            s3Observation("putObject").observe(() -> s3Client.putObject(putOb, RequestBody.fromBytes(fileBytes)));
 
             return getS3Url(s3Key);
 
@@ -335,7 +350,8 @@ public class FileStorageService {
                 .key(key)
                 .build();
         try {
-            return s3Client.getObject(getReq);
+            // Mede só até o S3 começar a responder; a leitura do fluxo fica por conta de quem chama
+            return s3Observation("getObject").observe(() -> s3Client.getObject(getReq));
         } catch (Exception ex) {
             throw new FileStorageException("Erro ao abrir arquivo no S3: " + key, ex);
         }
@@ -356,8 +372,12 @@ public class FileStorageService {
                 .bucket(bucketName)
                 .key(key)
                 .build();
-        try (var stream = s3Client.getObject(getReq)) {
-            return stream.readAllBytes();
+        try {
+            return s3Observation("getObject").observeChecked(() -> {
+                try (var stream = s3Client.getObject(getReq)) {
+                    return stream.readAllBytes();
+                }
+            });
         } catch (Exception ex) {
             throw new FileStorageException("Erro ao baixar arquivo do S3: " + key, ex);
         }
@@ -373,7 +393,7 @@ public class FileStorageService {
                 .key(key)
                 .contentType(contentType)
                 .build();
-        s3Client.putObject(putOb, RequestBody.fromBytes(newBytes));
+        s3Observation("putObject").observe(() -> s3Client.putObject(putOb, RequestBody.fromBytes(newBytes)));
         log.info("[S3 OVERWRITE] Arquivo sobrescrito: key='{}'", key);
     }
 
@@ -387,7 +407,7 @@ public class FileStorageService {
                         .bucket(bucketName)
                         .key(fileKey)
                         .build();
-                s3Client.deleteObject(deleteReq);
+                s3Observation("deleteObject").observe(() -> s3Client.deleteObject(deleteReq));
                 log.info("Arquivo deletado do S3: {}", fileKey);
             }
         } catch (Exception ex) {
@@ -420,20 +440,24 @@ public class FileStorageService {
      * infraestrutura (para não persistir referências não validadas).
      */
     public boolean objectExists(String key) {
-        try {
-            s3Client.headObject(HeadObjectRequest.builder()
-                    .bucket(bucketName)
-                    .key(key)
-                    .build());
-            return true;
-        } catch (NoSuchKeyException e) {
-            return false;
-        } catch (S3Exception e) {
-            if (e.statusCode() == 404) {
+        // O 404 é resposta esperada (objeto ausente), não erro: trata-se dentro da
+        // observação para a métrica não contá-lo na tag error.
+        return s3Observation("headObject").observe(() -> {
+            try {
+                s3Client.headObject(HeadObjectRequest.builder()
+                        .bucket(bucketName)
+                        .key(key)
+                        .build());
+                return true;
+            } catch (NoSuchKeyException e) {
                 return false;
+            } catch (S3Exception e) {
+                if (e.statusCode() == 404) {
+                    return false;
+                }
+                throw e;
             }
-            throw e;
-        }
+        });
     }
 
     private String extractKeyFromUrl(String fileUrl) {

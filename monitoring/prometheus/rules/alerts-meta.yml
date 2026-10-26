@@ -1,0 +1,57 @@
+# O monitoramento vigiando a si mesmo.
+
+groups:
+  - name: geosegbar-meta
+    rules:
+      # Sempre disparando. O Alertmanager entrega este alerta a cada minuto no
+      # healthchecks.io (dead man's switch). Se ele parar de chegar, o
+      # healthchecks.io avisa: servidor, Prometheus ou Alertmanager caiu.
+      - alert: Watchdog
+        expr: vector(1)
+        labels:
+          severity: none
+        annotations:
+          summary: Prova de vida do caminho de alertas.
+          description: Este alerta fica sempre ativo de propósito. Não silencie.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#watchdog
+
+      - alert: AlvoDeColetaFora
+        expr: up{job!~"geosegbar-api|blackbox"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "O Prometheus não coleta {{ $labels.job }} há 5 minutos."
+          description: Painéis desse componente ficam vazios e os alertas que dependem dele não disparam.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#alvodecoletafora
+
+      - alert: RegraDoPrometheusFalhando
+        expr: sum by (rule_group) (increase(prometheus_rule_evaluation_failures_total[10m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Regras do grupo {{ $labels.rule_group }} falhando na avaliação."
+          description: Um alerta que não avalia não dispara. Veja o log do geosegbar-prometheus.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#alvodecoletafora
+
+      - alert: NotificacaoDeAlertaFalhando
+        expr: sum by (integration) (increase(alertmanager_notifications_failed_total[15m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "O Alertmanager não conseguiu entregar notificações por {{ $labels.integration }}."
+          description: Token do bot do Telegram inválido, chat errado ou sem saída para a internet. Veja o log do geosegbar-alertmanager.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#notificacaodealertafalhando
+
+      - alert: PrometheusPertoDoLimiteDeDisco
+        # O teto de tamanho conta blocos, WAL e chunks da head, não só os blocos.
+        expr: |
+          (prometheus_tsdb_storage_blocks_bytes + prometheus_tsdb_wal_storage_size_bytes + prometheus_tsdb_head_chunks_storage_size_bytes)
+            / (prometheus_tsdb_retention_limit_bytes > 0) > 0.85
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "O Prometheus ocupa {{ $value | humanizePercentage }} do teto de disco (PROMETHEUS_RETENTION_SIZE)."
+          description: Acima do teto ele apaga os blocos mais antigos antes dos 30 dias. Revise a cardinalidade ou aumente PROMETHEUS_RETENTION_SIZE.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#alvodecoletafora

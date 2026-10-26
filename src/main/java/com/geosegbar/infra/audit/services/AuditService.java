@@ -14,6 +14,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import com.geosegbar.common.enums.AuditSource;
+import com.geosegbar.common.metrics.BusinessMetrics;
 import com.geosegbar.common.enums.AuditStatus;
 import com.geosegbar.entities.AuditLogEntity;
 import com.geosegbar.entities.UserEntity;
@@ -51,6 +52,7 @@ public class AuditService {
     private final AuditProperties auditProperties;
     private final AuditLogRepository auditLogRepository;
     private final UserRepository userRepository;
+    private final BusinessMetrics businessMetrics;
 
     @Value("${application.system-user-email}")
     private String systemUserEmail;
@@ -90,6 +92,7 @@ public class AuditService {
 
     public void recordJobSuccess(String action, String actionLabel, AuditSource source,
             String message, String traceId, Long durationMs) {
+        businessMetrics.jobRun(action, true);
         record(AuditContext.builder()
                 .action(action)
                 .actionLabel(actionLabel)
@@ -103,6 +106,7 @@ public class AuditService {
 
     public void recordJobError(String action, String actionLabel, AuditSource source,
             String message, Throwable error, String traceId, Long durationMs) {
+        businessMetrics.jobRun(action, false);
         record(AuditContext.builder()
                 .action(action)
                 .actionLabel(actionLabel)

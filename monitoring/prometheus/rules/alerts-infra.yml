@@ -1,0 +1,138 @@
+# Alertas de servidor, banco, Redis e sondas externas.
+
+groups:
+  - name: geosegbar-host
+    rules:
+      - alert: DiscoQuaseCheio
+        expr: |
+          (node_filesystem_avail_bytes{job="node", fstype!~"tmpfs|overlay|squashfs|ramfs"}
+            / node_filesystem_size_bytes{job="node", fstype!~"tmpfs|overlay|squashfs|ramfs"}) < 0.10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Partição {{ $labels.mountpoint }} com {{ $value | humanizePercentage }} livre."
+          description: Disco cheio derruba o Postgres e o Docker. Veja o que cresceu (backups, logs, volumes do Docker).
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#discoquasecheio
+
+      - alert: DiscoEnchendo
+        expr: |
+          predict_linear(node_filesystem_avail_bytes{job="node", fstype!~"tmpfs|overlay|squashfs|ramfs"}[6h], 24 * 3600) < 0
+          and (node_filesystem_avail_bytes{job="node", fstype!~"tmpfs|overlay|squashfs|ramfs"}
+                / node_filesystem_size_bytes{job="node", fstype!~"tmpfs|overlay|squashfs|ramfs"}) < 0.40
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Partição {{ $labels.mountpoint }} enche em menos de 24 horas no ritmo atual."
+          description: Projeção linear das últimas 6 horas.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#discoquasecheio
+
+      - alert: HostCpuAlta
+        expr: 1 - avg(rate(node_cpu_seconds_total{job="node", mode="idle"}[5m])) > 0.85
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU do servidor em {{ $value | humanizePercentage }} há 15 minutos."
+          description: Veja no painel Servidor e containers qual container consome.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#hostpressionado
+
+      - alert: HostMemoriaBaixa
+        expr: node_memory_MemAvailable_bytes{job="node"} / node_memory_MemTotal_bytes{job="node"} < 0.10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Só {{ $value | humanizePercentage }} da memória do servidor disponível."
+          description: Abaixo disso o kernel começa a matar processos (OOM killer).
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#hostpressionado
+
+      - alert: ContainerPertoDoLimiteDeMemoria
+        expr: |
+          (container_memory_working_set_bytes{job="cadvisor", name!=""}
+            / (container_spec_memory_limit_bytes{job="cadvisor", name!=""} > 0)) > 0.90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} usando {{ $value | humanizePercentage }} do limite de memória."
+          description: Ao bater no limite o kernel mata o processo do container.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#hostpressionado
+
+  - name: geosegbar-database
+    rules:
+      - alert: PostgresFora
+        expr: pg_up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: O postgres-exporter não consegue conectar no Postgres.
+          description: Com o banco fora a API responde erro em quase toda rota. Confira o container postgres-prod.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#postgresfora
+
+      - alert: TransacaoLongaNoBanco
+        # Só sessões de cliente, fora o pg_dump do backup noturno (e o autovacuum,
+        # que é outro backend_type): os dois passam de 5 minutos por natureza.
+        expr: |
+          max(pg_stat_activity_max_tx_duration{job="postgres", state=~"active|idle in transaction",
+              backend_type="client backend", application_name!~"pg_dump.*"}) > 300
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Transação aberta há {{ $value | humanizeDuration }} no Postgres."
+          description: Transação longa segura locks e impede o autovacuum. Em idle in transaction, a aplicação abriu e esqueceu.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#transacaolonganobanco
+
+      - alert: DeadlockNoBanco
+        expr: sum(increase(pg_stat_database_deadlocks{job="postgres"}[10m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value | humanize }} deadlocks no Postgres em 10 minutos."
+          description: O Postgres desfaz uma das transações; o usuário recebe erro. O log do postgres-prod mostra as queries envolvidas.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#transacaolonganobanco
+
+      - alert: ConexoesDoBancoAltas
+        expr: sum(pg_stat_activity_count{job="postgres"}) / max(pg_settings_max_connections{job="postgres"}) > 0.80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value | humanizePercentage }} do max_connections do Postgres em uso."
+          description: Duas instâncias da API no blue/green somam 30 conexões do HikariCP; o resto vem de backup, exporter e acessos manuais.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#postgresfora
+
+      - alert: RedisFora
+        expr: redis_up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: O Redis não responde.
+          description: O rate limit libera tudo quando o Redis cai (fail-open) e a fila de jobs históricos para.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#redisfora
+
+  - name: geosegbar-probes
+    rules:
+      - alert: SondaExternaFalhando
+        expr: probe_success{job="blackbox"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} não responde 2xx há 3 minutos."
+          description: Sonda feita de dentro do servidor pela URL pública (passa por DNS, Apache e nginx). O uptime externo confirma de fora.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#sondaexternafalhando
+
+      - alert: CertificadoTlsExpirando
+        expr: (probe_ssl_earliest_cert_expiry{job="blackbox"} - time()) / 86400 < 14
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Certificado de {{ $labels.instance }} vence em {{ $value | humanize }} dias."
+          description: O AutoSSL do cPanel deveria ter renovado. Confira no WHM.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#certificadotlsexpirando

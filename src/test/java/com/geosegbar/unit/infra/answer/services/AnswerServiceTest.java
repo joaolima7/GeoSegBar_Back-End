@@ -12,16 +12,12 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
 
 import com.geosegbar.common.enums.TypeQuestionEnum;
 import com.geosegbar.entities.AnswerEntity;
@@ -38,9 +34,6 @@ class AnswerServiceTest {
 
     @Mock
     private AnswerRepository answerRepository;
-
-    @Mock
-    private CacheManager checklistCacheManager;
 
     @InjectMocks
     private AnswerService answerService;
@@ -64,24 +57,23 @@ class AnswerServiceTest {
 
     @Test
     void shouldDeleteAnswerByIdSuccessfully() {
-        when(answerRepository.findById(1L)).thenReturn(Optional.of(mockAnswer));
-
-        Cache mockCache = mock(Cache.class);
-        when(checklistCacheManager.getCache(anyString())).thenReturn(mockCache);
+        when(answerRepository.existsById(1L)).thenReturn(true);
 
         answerService.deleteById(1L);
 
+        verify(answerRepository).existsById(1L);
         verify(answerRepository).deleteById(1L);
-        verify(mockCache, times(6)).clear();
     }
 
     @Test
     void shouldThrowNotFoundExceptionWhenDeletingNonExistentAnswer() {
-        when(answerRepository.findById(999L)).thenReturn(Optional.empty());
+        when(answerRepository.existsById(999L)).thenReturn(false);
 
         assertThatThrownBy(() -> answerService.deleteById(999L))
                 .isInstanceOf(NotFoundException.class)
                 .hasMessage("Resposta não encontrada para exclusão!");
+
+        verify(answerRepository, never()).deleteById(999L);
     }
 
     @Test
@@ -91,16 +83,14 @@ class AnswerServiceTest {
         mockAnswer.setSelectedOptions(new HashSet<>());
 
         when(answerRepository.save(any(AnswerEntity.class))).thenReturn(mockAnswer);
-
-        Cache mockCache = mock(Cache.class);
-        when(checklistCacheManager.getCache(anyString())).thenReturn(mockCache);
+        when(answerRepository.findByIdWithAllDetails(1L)).thenReturn(Optional.of(mockAnswer));
 
         AnswerEntity result = answerService.save(mockAnswer);
 
         assertThat(result).isNotNull();
         assertThat(result.getComment()).isEqualTo("Valid text answer");
         verify(answerRepository).save(mockAnswer);
-        verify(mockCache, times(6)).clear();
+        verify(answerRepository).findByIdWithAllDetails(1L);
     }
 
     @Test
@@ -147,15 +137,14 @@ class AnswerServiceTest {
         mockAnswer.setSelectedOptions(Set.of(option));
 
         when(answerRepository.save(any(AnswerEntity.class))).thenReturn(mockAnswer);
-
-        Cache mockCache = mock(Cache.class);
-        when(checklistCacheManager.getCache(anyString())).thenReturn(mockCache);
+        when(answerRepository.findByIdWithAllDetails(1L)).thenReturn(Optional.of(mockAnswer));
 
         AnswerEntity result = answerService.save(mockAnswer);
 
         assertThat(result).isNotNull();
         assertThat(result.getSelectedOptions()).hasSize(1);
         verify(answerRepository).save(mockAnswer);
+        verify(answerRepository).findByIdWithAllDetails(1L);
     }
 
     @Test
@@ -189,19 +178,26 @@ class AnswerServiceTest {
 
     @Test
     void shouldUpdateAnswerSuccessfully() {
-        when(answerRepository.findById(1L)).thenReturn(Optional.of(mockAnswer));
-        when(answerRepository.save(any(AnswerEntity.class))).thenReturn(mockAnswer);
-
-        Cache mockCache = mock(Cache.class);
-        when(checklistCacheManager.getCache(anyString())).thenReturn(mockCache);
+        // O update agora carrega a entidade existente, copia comment/selectedOptions
+        // para ela, salva a existente e devolve a releitura com todos os detalhes.
+        AnswerEntity existing = new AnswerEntity();
+        existing.setId(1L);
+        existing.setQuestion(mockQuestion);
+        existing.setComment("Old comment");
+        existing.setSelectedOptions(new HashSet<>());
 
         mockAnswer.setComment("Updated comment");
+
+        when(answerRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(answerRepository.save(existing)).thenReturn(existing);
+        when(answerRepository.findByIdWithAllDetails(1L)).thenReturn(Optional.of(existing));
 
         AnswerEntity result = answerService.update(mockAnswer);
 
         assertThat(result).isNotNull();
-        verify(answerRepository).save(mockAnswer);
-        verify(mockCache, times(6)).clear();
+        assertThat(result.getComment()).isEqualTo("Updated comment");
+        verify(answerRepository).save(existing);
+        verify(answerRepository).findByIdWithAllDetails(1L);
     }
 
     @Test
@@ -217,19 +213,19 @@ class AnswerServiceTest {
 
     @Test
     void shouldFindAnswerById() {
-        when(answerRepository.findById(1L)).thenReturn(Optional.of(mockAnswer));
+        when(answerRepository.findByIdWithAllDetails(1L)).thenReturn(Optional.of(mockAnswer));
 
         AnswerEntity result = answerService.findById(1L);
 
         assertThat(result).isNotNull();
         assertThat(result.getId()).isEqualTo(1L);
         assertThat(result.getComment()).isEqualTo("Test answer comment");
-        verify(answerRepository).findById(1L);
+        verify(answerRepository).findByIdWithAllDetails(1L);
     }
 
     @Test
     void shouldThrowNotFoundExceptionWhenAnswerNotFoundById() {
-        when(answerRepository.findById(999L)).thenReturn(Optional.empty());
+        when(answerRepository.findByIdWithAllDetails(999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> answerService.findById(999L))
                 .isInstanceOf(NotFoundException.class)
@@ -246,35 +242,6 @@ class AnswerServiceTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getId()).isEqualTo(1L);
         verify(answerRepository).findAll();
-    }
-
-    @Test
-    void shouldEvictAllCachesWhenSavingAnswer() {
-        mockQuestion.setType(TypeQuestionEnum.TEXT);
-        mockAnswer.setComment("Valid text");
-
-        Cache mockCache = mock(Cache.class);
-        when(checklistCacheManager.getCache("checklistResponseById")).thenReturn(mockCache);
-        when(checklistCacheManager.getCache("checklistResponseDetail")).thenReturn(mockCache);
-        when(checklistCacheManager.getCache("checklistResponsesByDam")).thenReturn(mockCache);
-        when(checklistCacheManager.getCache("checklistResponsesByUser")).thenReturn(mockCache);
-        when(checklistCacheManager.getCache("checklistsWithAnswersByDam")).thenReturn(mockCache);
-        when(checklistCacheManager.getCache("checklistsWithAnswersByClient")).thenReturn(mockCache);
-        when(answerRepository.save(any(AnswerEntity.class))).thenReturn(mockAnswer);
-
-        answerService.save(mockAnswer);
-
-        verify(mockCache, times(6)).clear();
-    }
-
-    @Test
-    void shouldEvictCachesByPatternWhenDeleting() {
-        when(answerRepository.findById(1L)).thenReturn(Optional.of(mockAnswer));
-
-        Cache mockCache = mock(Cache.class);
-        when(checklistCacheManager.getCache(anyString())).thenReturn(mockCache);
-
-        answerService.deleteById(1L);
     }
 
     @Test
@@ -295,28 +262,13 @@ class AnswerServiceTest {
         mockAnswer.setSelectedOptions(options);
 
         when(answerRepository.save(any(AnswerEntity.class))).thenReturn(mockAnswer);
-
-        Cache mockCache = mock(Cache.class);
-        when(checklistCacheManager.getCache(anyString())).thenReturn(mockCache);
+        when(answerRepository.findByIdWithAllDetails(1L)).thenReturn(Optional.of(mockAnswer));
 
         AnswerEntity result = answerService.save(mockAnswer);
 
         assertThat(result).isNotNull();
         assertThat(result.getSelectedOptions()).hasSize(3);
         verify(answerRepository).save(mockAnswer);
-    }
-
-    @Test
-    void shouldHandleNullCacheGracefully() {
-        mockQuestion.setType(TypeQuestionEnum.TEXT);
-        mockAnswer.setComment("Valid text");
-
-        when(checklistCacheManager.getCache(anyString())).thenReturn(null);
-        when(answerRepository.save(any(AnswerEntity.class))).thenReturn(mockAnswer);
-
-        AnswerEntity result = answerService.save(mockAnswer);
-
-        assertThat(result).isNotNull();
-        verify(answerRepository).save(mockAnswer);
+        verify(answerRepository).findByIdWithAllDetails(1L);
     }
 }

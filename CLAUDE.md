@@ -13,6 +13,7 @@ porta padrão `9090` (`SERVER_PORT`).
 - `docs/ACESSO_SERVIDOR.md` — acesso ao servidor
 - `docs/BACKUP.md` — rotina de backup
 - `docs/PRESIGNED_UPLOAD_GUIDE.md` — upload de arquivo (PSB, fotos de anomalia)
+- `docs/MONITORAMENTO.md` — Grafana, alertas, logs e traces (stack em `monitoring/`, deploy próprio; actuator na porta interna 8081)
 - `docs/checklist/`, `docs/db/`, `docs/audit/` — mais fundo em cada área
 
 `ENTREGA-BACKEND.md` e `SOLICITACOES-BACKEND.md`, na raiz: o contrato vivo

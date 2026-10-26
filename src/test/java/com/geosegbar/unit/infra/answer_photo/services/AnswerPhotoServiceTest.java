@@ -84,7 +84,8 @@ class AnswerPhotoServiceTest extends BaseUnitTest {
         Long answerId = 1L;
         String expectedUrl = "https://test.com/api/files/answer-photos/photo1.jpg";
 
-        when(answerRepository.findById(answerId)).thenReturn(Optional.of(mockAnswer));
+        when(answerRepository.existsById(answerId)).thenReturn(true);
+        when(answerRepository.getReferenceById(answerId)).thenReturn(mockAnswer);
         when(fileStorageService.storeFile(mockFile, "answer-photos")).thenReturn(expectedUrl);
         when(answerPhotoRepository.save(any(AnswerPhotoEntity.class))).thenAnswer(invocation -> {
             AnswerPhotoEntity photo = invocation.getArgument(0);
@@ -100,7 +101,8 @@ class AnswerPhotoServiceTest extends BaseUnitTest {
         assertThat(result.getAnswer()).isEqualTo(mockAnswer);
         assertThat(result.getImagePath()).isEqualTo(expectedUrl);
 
-        verify(answerRepository).findById(answerId);
+        verify(answerRepository).existsById(answerId);
+        verify(answerRepository).getReferenceById(answerId);
         verify(fileStorageService).storeFile(mockFile, "answer-photos");
         verify(answerPhotoRepository).save(any(AnswerPhotoEntity.class));
     }
@@ -110,12 +112,15 @@ class AnswerPhotoServiceTest extends BaseUnitTest {
     void shouldThrowNotFoundExceptionWhenAnswerNotFoundOnSave() {
         // Given
         Long answerId = 999L;
-        when(answerRepository.findById(answerId)).thenReturn(Optional.empty());
+        when(answerRepository.existsById(answerId)).thenReturn(false);
 
         // When/Then
         assertThatThrownBy(() -> answerPhotoService.savePhoto(answerId, mockFile))
                 .isInstanceOf(NotFoundException.class)
                 .hasMessage("Resposta não encontrada!");
+
+        verify(fileStorageService, never()).storeFile(any(), anyString());
+        verify(answerPhotoRepository, never()).save(any(AnswerPhotoEntity.class));
     }
 
     @Test
@@ -126,7 +131,8 @@ class AnswerPhotoServiceTest extends BaseUnitTest {
         String url1 = "https://test.com/api/files/answer-photos/photo1.jpg";
         String url2 = "https://test.com/api/files/answer-photos/photo2.jpg";
 
-        when(answerRepository.findById(answerId)).thenReturn(Optional.of(mockAnswer));
+        when(answerRepository.existsById(answerId)).thenReturn(true);
+        when(answerRepository.getReferenceById(answerId)).thenReturn(mockAnswer);
         when(fileStorageService.storeFile(mockFile, "answer-photos"))
                 .thenReturn(url1)
                 .thenReturn(url2);
@@ -143,7 +149,8 @@ class AnswerPhotoServiceTest extends BaseUnitTest {
         // Then
         assertThat(photo1.getImagePath()).isEqualTo(url1);
         assertThat(photo2.getImagePath()).isEqualTo(url2);
-        verify(answerRepository, times(2)).findById(answerId);
+        verify(answerRepository, times(2)).existsById(answerId);
+        verify(answerRepository, times(2)).getReferenceById(answerId);
         verify(fileStorageService, times(2)).storeFile(mockFile, "answer-photos");
     }
 
@@ -156,7 +163,7 @@ class AnswerPhotoServiceTest extends BaseUnitTest {
         updatedPhoto.setId(1L);
         updatedPhoto.setImagePath("https://test.com/api/files/answer-photos/updated.jpg");
 
-        when(answerPhotoRepository.findById(1L)).thenReturn(Optional.of(mockPhoto));
+        when(answerPhotoRepository.existsById(1L)).thenReturn(true);
         when(answerPhotoRepository.save(updatedPhoto)).thenReturn(updatedPhoto);
 
         // When
@@ -165,7 +172,7 @@ class AnswerPhotoServiceTest extends BaseUnitTest {
         // Then
         assertThat(result).isNotNull();
         assertThat(result.getId()).isEqualTo(1L);
-        verify(answerPhotoRepository).findById(1L);
+        verify(answerPhotoRepository).existsById(1L);
         verify(answerPhotoRepository).save(updatedPhoto);
     }
 
@@ -176,12 +183,14 @@ class AnswerPhotoServiceTest extends BaseUnitTest {
         AnswerPhotoEntity updatedPhoto = new AnswerPhotoEntity();
         updatedPhoto.setId(999L);
 
-        when(answerPhotoRepository.findById(999L)).thenReturn(Optional.empty());
+        when(answerPhotoRepository.existsById(999L)).thenReturn(false);
 
         // When/Then
         assertThatThrownBy(() -> answerPhotoService.update(updatedPhoto))
                 .isInstanceOf(NotFoundException.class)
                 .hasMessage("Foto da resposta não encontrada para atualização!");
+
+        verify(answerPhotoRepository, never()).save(any(AnswerPhotoEntity.class));
     }
 
     @Test
@@ -256,7 +265,6 @@ class AnswerPhotoServiceTest extends BaseUnitTest {
 
         when(answerPhotoRepository.findById(photoId)).thenReturn(Optional.of(mockPhoto));
         doNothing().when(fileStorageService).deleteFile(imagePath);
-        doNothing().when(answerPhotoRepository).deleteById(photoId);
 
         // When
         answerPhotoService.deleteById(photoId);
@@ -264,7 +272,7 @@ class AnswerPhotoServiceTest extends BaseUnitTest {
         // Then
         verify(answerPhotoRepository).findById(photoId);
         verify(fileStorageService).deleteFile(imagePath);
-        verify(answerPhotoRepository).deleteById(photoId);
+        verify(answerPhotoRepository).delete(mockPhoto);
     }
 
     @Test
@@ -288,14 +296,13 @@ class AnswerPhotoServiceTest extends BaseUnitTest {
         mockPhoto.setImagePath(null);
 
         when(answerPhotoRepository.findById(photoId)).thenReturn(Optional.of(mockPhoto));
-        doNothing().when(answerPhotoRepository).deleteById(photoId);
 
         // When
         answerPhotoService.deleteById(photoId);
 
         // Then
         verify(fileStorageService, never()).deleteFile(anyString());
-        verify(answerPhotoRepository).deleteById(photoId);
+        verify(answerPhotoRepository).delete(mockPhoto);
     }
 
     // ==================== Find Tests ====================
@@ -420,7 +427,8 @@ class AnswerPhotoServiceTest extends BaseUnitTest {
         Long answerId = 1L;
         String imagePathWithPortuguese = "https://test.com/api/files/answer-photos/foto_resposta_situação.jpg";
 
-        when(answerRepository.findById(answerId)).thenReturn(Optional.of(mockAnswer));
+        when(answerRepository.existsById(answerId)).thenReturn(true);
+        when(answerRepository.getReferenceById(answerId)).thenReturn(mockAnswer);
         when(fileStorageService.storeFile(mockFile, "answer-photos")).thenReturn(imagePathWithPortuguese);
         when(answerPhotoRepository.save(any(AnswerPhotoEntity.class))).thenAnswer(invocation -> {
             AnswerPhotoEntity photo = invocation.getArgument(0);

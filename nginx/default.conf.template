@@ -5,9 +5,42 @@
 # upstream" e MORRE — derrubando o proxy e, com ele, toda a API publicada.
 resolver 127.0.0.11 valid=10s ipv6=off;
 
+# Access log em JSON, uma linha por requisição, lido pelo Alloy e guardado no
+# Loki (painel "Tráfego"). Campos:
+#   rt / urt      tempo total e tempo do upstream (API), em segundos
+#   client_ip     IP do usuário, do X-Forwarded-For. Só é confiável porque o
+#                 Apache apaga o X-Forwarded-For que vem de fora antes de
+#                 encaminhar (endurecimento de 23/10/2026); se essa regra sair,
+#                 o cliente passa a escolher o IP que aparece aqui
+#   upstream      container que atendeu (blue ou green)
+#   request_id    o mesmo código que a API grava no log dela (X-Request-Id)
+#
+# Token não entra em log: o caminho registrado é $uri (sem query string, onde vai
+# o token de definição de senha) e, nas rotas de compartilhamento, que levam o
+# token no próprio caminho, o trecho do token vira ":token".
+map $uri $geosegbar_log_uri {
+    ~^/share/access/       /share/access/:token;
+    ~^/share/download/     /share/download/:token;
+    ~^/share/[^/]+/files(?<resto>/.*)?$   /share/:token/files$resto;
+    default                $uri;
+}
+
+log_format geosegbar_json escape=json
+    '{"ts":"$time_iso8601","method":"$request_method","uri":"$geosegbar_log_uri",'
+    '"status":"$status","rt":$request_time,"urt":"$upstream_response_time",'
+    '"bytes":$body_bytes_sent,"req_len":$request_length,'
+    '"client_ip":"$http_x_forwarded_for","remote_addr":"$remote_addr",'
+    '"ua":"$http_user_agent","upstream":"$upstream_addr",'
+    '"request_id":"$request_id","host":"$host"}';
+
 server {
     listen 80;
     server_name _;
+
+    # Sem versão do nginx no header Server nem nas páginas de erro.
+    server_tokens off;
+
+    access_log /var/log/nginx/access.log geosegbar_json;
 
     sendfile on;
     tcp_nopush on;
@@ -30,6 +63,9 @@ server {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Forwarded-Host $host;
+    # Código único da requisição, gerado aqui. A API o coloca no MDC e no header
+    # de resposta (RequestCorrelationFilter): uma busca no Loki acha as duas pontas.
+    proxy_set_header X-Request-Id $request_id;
     proxy_set_header Accept-Encoding "";
 
     proxy_connect_timeout 10s;

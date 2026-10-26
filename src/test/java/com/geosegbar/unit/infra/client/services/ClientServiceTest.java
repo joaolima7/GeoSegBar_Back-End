@@ -21,12 +21,14 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.geosegbar.config.BaseUnitTest;
 import com.geosegbar.entities.ClientEntity;
-import com.geosegbar.entities.DamEntity;
+import com.geosegbar.entities.InstrumentTypeEntity;
+import com.geosegbar.entities.QuestionEntity;
 import com.geosegbar.entities.StatusEntity;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.exceptions.BusinessRuleException;
@@ -130,7 +132,9 @@ class ClientServiceTest extends BaseUnitTest {
         // Given
         when(clientRepository.existsByName("Client Test")).thenReturn(false);
         when(clientRepository.existsByEmail("client@test.com")).thenReturn(false);
+        when(statusRepository.findById(1L)).thenReturn(Optional.of(mockStatus));
         when(clientRepository.save(any(ClientEntity.class))).thenReturn(mockClient);
+        when(clientRepository.findById(1L)).thenReturn(Optional.of(mockClient));
 
         // When
         ClientEntity result = clientService.save(mockClientDTO);
@@ -141,7 +145,9 @@ class ClientServiceTest extends BaseUnitTest {
         assertThat(result.getEmail()).isEqualTo("client@test.com");
         verify(clientRepository).existsByName("Client Test");
         verify(clientRepository).existsByEmail("client@test.com");
+        verify(statusRepository).findById(1L);
         verify(clientRepository).save(any(ClientEntity.class));
+        verify(clientRepository).findById(1L);
     }
 
     // Note: Tests involving logo Base64 processing are removed because processLogoUpdate()
@@ -194,7 +200,9 @@ class ClientServiceTest extends BaseUnitTest {
 
         when(clientRepository.existsByName("Client Test")).thenReturn(false);
         when(clientRepository.existsByEmail("client@test.com")).thenReturn(false);
+        when(statusRepository.findById(1L)).thenReturn(Optional.of(mockStatus));
         when(clientRepository.save(any(ClientEntity.class))).thenReturn(mockClient);
+        when(clientRepository.findById(1L)).thenReturn(Optional.of(mockClient));
         when(userRepository.findByIdInWithClients(userIds)).thenReturn(Arrays.asList(user1, user2));
 
         // When
@@ -218,6 +226,7 @@ class ClientServiceTest extends BaseUnitTest {
 
         when(clientRepository.existsByName("Client Test")).thenReturn(false);
         when(clientRepository.existsByEmail("client@test.com")).thenReturn(false);
+        when(statusRepository.findById(1L)).thenReturn(Optional.of(mockStatus));
         when(clientRepository.save(any(ClientEntity.class))).thenReturn(mockClient);
         when(userRepository.findByIdInWithClients(userIds)).thenReturn(Arrays.asList(user1)); // Only 1 found
 
@@ -239,6 +248,7 @@ class ClientServiceTest extends BaseUnitTest {
         when(clientRepository.findById(1L)).thenReturn(Optional.of(mockClient));
         when(clientRepository.existsByNameAndIdNot("Updated Client", 1L)).thenReturn(false);
         when(clientRepository.existsByEmailAndIdNot("client@test.com", 1L)).thenReturn(false);
+        when(statusRepository.findById(1L)).thenReturn(Optional.of(mockStatus));
         when(clientRepository.save(any(ClientEntity.class))).thenReturn(mockClient);
 
         // When
@@ -246,8 +256,11 @@ class ClientServiceTest extends BaseUnitTest {
 
         // Then
         assertThat(result).isNotNull();
-        verify(clientRepository).findById(1L);
+        // 1x para carregar o cliente existente e 1x na releitura que devolve o resultado
+        verify(clientRepository, times(2)).findById(1L);
         verify(clientRepository).save(any(ClientEntity.class));
+        // Mesmo status: o handler de mudança de status não deve ser acionado
+        verifyNoInteractions(statusChangeHandler);
     }
 
     @Test
@@ -318,6 +331,7 @@ class ClientServiceTest extends BaseUnitTest {
         when(clientRepository.findById(1L)).thenReturn(Optional.of(mockClient));
         when(clientRepository.existsByNameAndIdNot("Client Test", 1L)).thenReturn(false);
         when(clientRepository.existsByEmailAndIdNot("client@test.com", 1L)).thenReturn(false);
+        when(statusRepository.findById(2L)).thenReturn(Optional.of(newStatus));
         when(clientRepository.save(any(ClientEntity.class))).thenReturn(mockClient);
 
         // When
@@ -325,6 +339,7 @@ class ClientServiceTest extends BaseUnitTest {
 
         // Then
         verify(statusChangeHandler).handleStatusChange(mockClient, newStatus);
+        assertThat(result.getStatus()).isEqualTo(newStatus);
     }
 
     // ==================== Delete Tests ====================
@@ -362,6 +377,28 @@ class ClientServiceTest extends BaseUnitTest {
     }
 
     @Test
+    @DisplayName("Should delete client catalog (questions and instrument types) before deleting client")
+    void shouldDeleteClientCatalogBeforeDeletingClient() {
+        // Given
+        QuestionEntity question = new QuestionEntity();
+        question.setId(10L);
+        InstrumentTypeEntity instrumentType = new InstrumentTypeEntity();
+        instrumentType.setId(20L);
+
+        when(clientRepository.findById(1L)).thenReturn(Optional.of(mockClient));
+        when(questionRepository.findByClientId(1L)).thenReturn(List.of(question));
+        when(instrumentTypeRepository.findByClientIdOrderByNameAsc(1L)).thenReturn(List.of(instrumentType));
+
+        // When
+        clientService.deleteById(1L);
+
+        // Then
+        verify(questionRepository).deleteAll(List.of(question));
+        verify(instrumentTypeRepository).deleteAll(List.of(instrumentType));
+        verify(clientRepository).deleteById(1L);
+    }
+
+    @Test
     @DisplayName("Should throw NotFoundException when deleting non-existent client")
     void shouldThrowNotFoundExceptionWhenDeletingNonExistent() {
         // Given
@@ -380,10 +417,8 @@ class ClientServiceTest extends BaseUnitTest {
     @DisplayName("Should throw BusinessRuleException when deleting client with dams")
     void shouldThrowBusinessRuleExceptionWhenDeletingClientWithDams() {
         // Given
-        DamEntity dam = new DamEntity();
-        dam.setId(1L);
-        mockClient.getDams().add(dam);
         when(clientRepository.findById(1L)).thenReturn(Optional.of(mockClient));
+        when(clientRepository.countDamsByClientId(1L)).thenReturn(1L);
 
         // When/Then
         assertThatThrownBy(() -> clientService.deleteById(1L))
@@ -392,14 +427,15 @@ class ClientServiceTest extends BaseUnitTest {
 
         verify(clientRepository).findById(1L);
         verify(clientRepository, never()).deleteById(any());
+        verifyNoInteractions(questionRepository, instrumentTypeRepository);
     }
 
     @Test
-    @DisplayName("Should throw BusinessRuleException when deleting client with users")
-    void shouldThrowBusinessRuleExceptionWhenDeletingClientWithUsers() {
+    @DisplayName("Should throw BusinessRuleException when deleting client with dam permissions")
+    void shouldThrowBusinessRuleExceptionWhenDeletingClientWithDamPermissions() {
         // Given
-        mockClient.getUsers().add(mockUser);
         when(clientRepository.findById(1L)).thenReturn(Optional.of(mockClient));
+        when(clientRepository.countDamPermissionsByClientId(1L)).thenReturn(1L);
 
         // When/Then
         assertThatThrownBy(() -> clientService.deleteById(1L))
@@ -407,6 +443,23 @@ class ClientServiceTest extends BaseUnitTest {
                 .hasMessageContaining("Não é possível excluir cliente devido as dependências existentes");
 
         verify(clientRepository, never()).deleteById(any());
+        verifyNoInteractions(questionRepository, instrumentTypeRepository);
+    }
+
+    @Test
+    @DisplayName("Should throw BusinessRuleException when deleting client with users")
+    void shouldThrowBusinessRuleExceptionWhenDeletingClientWithUsers() {
+        // Given
+        when(clientRepository.findById(1L)).thenReturn(Optional.of(mockClient));
+        when(clientRepository.countUsersByClientId(1L)).thenReturn(1L);
+
+        // When/Then
+        assertThatThrownBy(() -> clientService.deleteById(1L))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Não é possível excluir cliente devido as dependências existentes");
+
+        verify(clientRepository, never()).deleteById(any());
+        verifyNoInteractions(questionRepository, instrumentTypeRepository);
     }
 
     // ==================== Update Status Tests ====================
@@ -534,7 +587,7 @@ class ClientServiceTest extends BaseUnitTest {
         // When/Then
         assertThatThrownBy(() -> clientService.findByStatus(null))
                 .isInstanceOf(NotFoundException.class)
-                .hasMessage("Status não informado para filtro de clientes!");
+                .hasMessage("Status não informado!");
 
         verify(clientRepository, never()).findByStatus(any());
     }

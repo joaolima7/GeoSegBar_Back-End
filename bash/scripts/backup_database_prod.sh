@@ -53,6 +53,49 @@ write_status() {
   "s3_habilitado": ${BACKUP_S3_ENABLED}
 }
 JSON
+  publish_monitoring "$resultado"
+}
+
+# Avisa o monitoramento (docs/MONITORAMENTO.md). Nunca derruba o backup: se o
+# monitoramento não estiver instalado, só não publica.
+#
+#   - textfile do node_exporter: geosegbar_backup_last_success_timestamp_seconds e
+#     ..._last_failure_timestamp_seconds, lidos pelo Prometheus. É o que dispara os
+#     alertas BackupAtrasado e BackupFalhou.
+#   - healthchecks.io (HEALTHCHECKS_BACKUP_URL no .env.prod): vigia independente do
+#     servidor. Se o cron sumir, os pings param e ele avisa sozinho.
+MONITORING_TEXTFILE_DIR="${MONITORING_TEXTFILE_DIR:-/var/lib/geosegbar-monitoring/textfile}"
+
+publish_monitoring() {
+  local resultado="$1"
+  local agora
+  agora="$(date +%s)"
+
+  if [[ -d "$MONITORING_TEXTFILE_DIR" && -w "$MONITORING_TEXTFILE_DIR" ]]; then
+    local metrica arquivo
+    if [[ "$resultado" == "sucesso" ]]; then
+      metrica="geosegbar_backup_last_success_timestamp_seconds"
+      arquivo="backup_success.prom"
+    else
+      metrica="geosegbar_backup_last_failure_timestamp_seconds"
+      arquivo="backup_failure.prom"
+    fi
+    # Escrita atômica: o node_exporter nunca lê um arquivo pela metade.
+    {
+      echo "# HELP ${metrica} Fim da última execução do backup do banco com esse desfecho."
+      echo "# TYPE ${metrica} gauge"
+      echo "${metrica} ${agora}"
+    } > "$MONITORING_TEXTFILE_DIR/.${arquivo}.tmp" \
+      && mv -f "$MONITORING_TEXTFILE_DIR/.${arquivo}.tmp" "$MONITORING_TEXTFILE_DIR/${arquivo}" \
+      || log "AVISO: não foi possível gravar a métrica do backup em $MONITORING_TEXTFILE_DIR"
+  fi
+
+  if [[ -n "${HEALTHCHECKS_BACKUP_URL:-}" ]]; then
+    local url="$HEALTHCHECKS_BACKUP_URL"
+    [[ "$resultado" == "sucesso" ]] || url="${url%/}/fail"
+    curl -fsS -m 10 --retry 3 -o /dev/null "$url" \
+      || log "AVISO: não foi possível avisar o healthchecks.io"
+  fi
 }
 
 # Aviso por e-mail usando o mesmo SMTP da aplicação. Sem isto, uma falha só

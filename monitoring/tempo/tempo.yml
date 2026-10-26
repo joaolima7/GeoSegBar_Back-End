@@ -1,0 +1,52 @@
+# Tempo em modo binário único, armazenamento local. Recebe os traces do Alloy
+# (OTLP gRPC na 4317), só pela rede interna. Ver docs/MONITORAMENTO.md.
+
+stream_over_http_enabled: true
+
+server:
+  http_listen_port: 3200
+  log_level: warn
+
+query_frontend:
+  search:
+    duration_slo: 5s
+  trace_by_id:
+    duration_slo: 5s
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        # Endereço explícito: as versões novas do receptor OTLP escutam só em
+        # localhost por padrão, e o Alloy chega de outro container.
+        grpc:
+          endpoint: "0.0.0.0:4317"
+
+ingester:
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    # 7 dias de traces.
+    block_retention: 168h
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+
+overrides:
+  defaults:
+    global:
+      # Um trace de exportação grande (milhares de queries) não pode estourar a
+      # memória do Tempo. Acima disso o span excedente é descartado.
+      max_bytes_per_trace: 5000000
+    ingestion:
+      rate_limit_bytes: 5000000
+      burst_size_bytes: 10000000
+
+usage_report:
+  reporting_enabled: false

@@ -81,6 +81,8 @@ class InstrumentGraphPatternServiceTest {
         instrumentEntity.setId(1L);
         instrumentEntity.setName("Test Instrument");
         instrumentEntity.setDam(damEntity);
+        // As listagens só devolvem padrões de instrumentos ativos (active == TRUE).
+        instrumentEntity.setActive(true);
 
         folderEntity = new InstrumentGraphPatternFolder();
         folderEntity.setId(1L);
@@ -109,7 +111,30 @@ class InstrumentGraphPatternServiceTest {
         assertEquals(2, results.size());
         assertEquals("Test Pattern", results.get(0).getName());
         assertEquals("Pattern 2", results.get(1).getName());
+        verify(graphAccessGuard).checkViewByInstrument(1L);
         verify(patternRepository).findByInstrumentId(1L);
+    }
+
+    @Test
+    @DisplayName("Should not return patterns of inactive instruments")
+    void shouldNotReturnPatternsOfInactiveInstruments() {
+        InstrumentEntity inactiveInstrument = new InstrumentEntity();
+        inactiveInstrument.setId(2L);
+        inactiveInstrument.setName("Inactive Instrument");
+        inactiveInstrument.setDam(damEntity);
+        inactiveInstrument.setActive(false);
+
+        InstrumentGraphPatternEntity inactivePattern = new InstrumentGraphPatternEntity();
+        inactivePattern.setId(3L);
+        inactivePattern.setName("Inactive Pattern");
+        inactivePattern.setInstrument(inactiveInstrument);
+
+        when(patternRepository.findByInstrumentId(1L)).thenReturn(Arrays.asList(patternEntity, inactivePattern));
+
+        List<GraphPatternResponseDTO> results = service.findByInstrument(1L);
+
+        assertEquals(1, results.size());
+        assertEquals("Test Pattern", results.get(0).getName());
     }
 
     @Test
@@ -158,6 +183,7 @@ class InstrumentGraphPatternServiceTest {
 
         assertNotNull(results);
         assertEquals(1, results.size());
+        verify(graphAccessGuard).checkViewByInstrument(1L);
         verify(patternRepository).findByInstrumentIdWithAllDetails(1L);
     }
 
@@ -171,6 +197,7 @@ class InstrumentGraphPatternServiceTest {
 
         assertNotNull(results);
         assertEquals(1, results.size());
+        verify(graphAccessGuard).checkViewByDam(1L);
         verify(damService).findById(1L);
         verify(patternRepository).findByInstrumentDamIdWithAllDetails(1L);
     }

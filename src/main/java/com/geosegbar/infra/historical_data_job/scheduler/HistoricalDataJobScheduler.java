@@ -11,6 +11,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.geosegbar.common.enums.JobStatus;
+import com.geosegbar.common.metrics.BusinessMetrics;
 import com.geosegbar.entities.HistoricalDataJobEntity;
 import com.geosegbar.infra.historical_data_job.processor.HistoricalDataJobProcessor;
 import com.geosegbar.infra.historical_data_job.service.HistoricalDataJobService;
@@ -30,6 +31,7 @@ public class HistoricalDataJobScheduler {
 
     private final HistoricalDataJobService jobService;
     private final HistoricalDataJobProcessor jobProcessor;
+    private final BusinessMetrics businessMetrics;
 
     /**
      * Executado após o contexto Spring estar completamente inicializado.
@@ -55,12 +57,15 @@ public class HistoricalDataJobScheduler {
         try {
 
             Long queueSize = jobService.getQueueSize();
+            // O gauge só lê este valor: o scrape do Prometheus não toca no Redis
+            businessMetrics.historicalJobsQueueSize(queueSize);
             if (queueSize == 0) {
                 // Fila Redis vazia — verifica se há jobs no banco (proteção contra Redis restart)
                 int recovered = jobService.recoverOrphanedJobs();
                 if (recovered == 0) {
                     return;
                 }
+                businessMetrics.historicalJobsQueueSize(recovered);
                 log.info("🔄 Recovery: {} job(s) re-enfileirado(s) ao detectar fila Redis vazia", recovered);
             }
 

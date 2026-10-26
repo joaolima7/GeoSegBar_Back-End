@@ -1,103 +1,62 @@
 package com.geosegbar.unit.infra.checklist_submission.services;
 
 import java.util.Arrays;
-import java.util.Optional;
+import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import org.mockito.Mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.cache.CacheManager;
 
-import com.geosegbar.entities.UserEntity;
+import com.geosegbar.entities.ChecklistResponseEntity;
 import com.geosegbar.exceptions.NotFoundException;
-import com.geosegbar.infra.anomaly.persistence.jpa.AnomalyRepository;
-import com.geosegbar.infra.anomaly_photo.persistence.jpa.AnomalyPhotoRepository;
-import com.geosegbar.infra.anomaly_status.persistence.jpa.AnomalyStatusRepository;
-import com.geosegbar.infra.answer.persistence.jpa.AnswerRepository;
-import com.geosegbar.infra.answer_photo.persistence.jpa.AnswerPhotoRepository;
-import com.geosegbar.infra.checklist.persistence.jpa.ChecklistRepository;
-import com.geosegbar.infra.checklist_response.persistence.jpa.ChecklistResponseRepository;
 import com.geosegbar.infra.checklist_submission.dtos.AnswerSubmissionDTO;
 import com.geosegbar.infra.checklist_submission.dtos.ChecklistResponseSubmissionDTO;
 import com.geosegbar.infra.checklist_submission.dtos.QuestionnaireResponseSubmissionDTO;
 import com.geosegbar.infra.checklist_submission.services.ChecklistResponseSubmissionService;
-import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
-import com.geosegbar.infra.danger_level.persistence.jpa.DangerLevelRepository;
-import com.geosegbar.infra.documentation_dam.persistence.DocumentationDamRepository;
-import com.geosegbar.infra.option.persistence.jpa.OptionRepository;
-import com.geosegbar.infra.question.persistence.jpa.QuestionRepository;
-import com.geosegbar.infra.questionnaire_response.persistence.jpa.QuestionnaireResponseRepository;
-import com.geosegbar.infra.template_questionnaire.persistence.jpa.TemplateQuestionnaireRepository;
-import com.geosegbar.infra.user.persistence.jpa.UserRepository;
+import com.geosegbar.infra.checklist_submission.services.ChecklistResponseSubmissionService.PendingPhotoUpload;
+import com.geosegbar.infra.checklist_submission.services.ChecklistResponseSubmissionService.SubmissionResult;
+import com.geosegbar.infra.checklist_submission.services.ChecklistSubmissionPersistenceService;
+import com.geosegbar.infra.file_storage.FileStorageService;
 
+/**
+ * ChecklistResponseSubmissionService é hoje a fachada da submissão: a
+ * persistência (e as validações de usuário/barragem) vive em
+ * ChecklistSubmissionPersistenceService — ver ChecklistSubmissionPersistenceServiceTest
+ * — e a fachada só delega e envia as fotos pendentes depois do commit.
+ */
 @ExtendWith(MockitoExtension.class)
 @Tag("unit")
 @DisplayName("ChecklistResponseSubmissionService Unit Tests - Simplified")
 class ChecklistResponseSubmissionServiceTest {
 
     @Mock
-    private ChecklistResponseRepository checklistResponseRepository;
+    private ChecklistSubmissionPersistenceService persistenceService;
 
     @Mock
-    private QuestionnaireResponseRepository questionnaireResponseRepository;
+    private FileStorageService fileStorageService;
 
-    @Mock
-    private AnswerRepository answerRepository;
-
-    @Mock
-    private AnswerPhotoRepository answerPhotoRepository;
-
-    @Mock
-    private AnomalyRepository anomalyRepository;
-
-    @Mock
-    private AnomalyPhotoRepository anomalyPhotoRepository;
-
-    @Mock
-    private UserRepository userRepository;
-
-    @Mock
-    private DamRepository damRepository;
-
-    @Mock
-    private ChecklistRepository checklistRepository;
-
-    @Mock
-    private TemplateQuestionnaireRepository templateQuestionnaireRepository;
-
-    @Mock
-    private OptionRepository optionRepository;
-
-    @Mock
-    private QuestionRepository questionRepository;
-
-    @Mock
-    private AnomalyStatusRepository anomalyStatusRepository;
-
-    @Mock
-    private DangerLevelRepository dangerLevelRepository;
-
-    @Mock
-    private DocumentationDamRepository documentationDamRepository;
-
-    @Mock
-    private CacheManager cacheManager;
-
-    @InjectMocks
     private ChecklistResponseSubmissionService service;
 
     private ChecklistResponseSubmissionDTO submissionDTO;
+    private ChecklistResponseEntity checklistResponse;
 
     @BeforeEach
     void setUp() {
+        // Executor síncrono: os uploads rodam na própria thread do teste.
+        service = new ChecklistResponseSubmissionService(persistenceService, fileStorageService, Runnable::run);
+
         AnswerSubmissionDTO answerDTO = new AnswerSubmissionDTO();
         answerDTO.setQuestionId(1L);
         answerDTO.setComment("Test Answer");
@@ -113,27 +72,87 @@ class ChecklistResponseSubmissionServiceTest {
         submissionDTO.setUserId(1L);
         submissionDTO.setQuestionnaireResponses(Arrays.asList(questionnaireDTO));
         submissionDTO.setMobile(false);
+
+        checklistResponse = new ChecklistResponseEntity();
+        checklistResponse.setId(10L);
     }
 
     @Test
     @DisplayName("Should throw NotFoundException when user not found")
     void shouldThrowNotFoundExceptionWhenUserNotFound() {
-        when(userRepository.findByIdWithClients(1L)).thenReturn(Optional.empty());
+        when(persistenceService.persistChecklistData(submissionDTO))
+                .thenThrow(new NotFoundException("Usuário não encontrado!"));
 
         assertThrows(NotFoundException.class, () -> service.submitChecklistResponse(submissionDTO));
-        verify(userRepository).findByIdWithClients(1L);
+
+        verify(persistenceService).persistChecklistData(submissionDTO);
+        verifyNoInteractions(fileStorageService);
     }
 
     @Test
     @DisplayName("Should throw NotFoundException when dam not found")
     void shouldThrowNotFoundExceptionWhenDamNotFound() {
-        UserEntity userEntity = new UserEntity();
-        userEntity.setId(1L);
-
-        when(userRepository.findByIdWithClients(1L)).thenReturn(Optional.of(userEntity));
-        when(damRepository.findById(1L)).thenReturn(Optional.empty());
+        when(persistenceService.persistChecklistData(submissionDTO))
+                .thenThrow(new NotFoundException("Barragem não encontrada!"));
 
         assertThrows(NotFoundException.class, () -> service.submitChecklistResponse(submissionDTO));
-        verify(damRepository).findById(1L);
+
+        verify(persistenceService).persistChecklistData(submissionDTO);
+        verifyNoInteractions(fileStorageService);
+    }
+
+    @Test
+    @DisplayName("Should return persisted checklist response without touching storage when there are no pending photos")
+    void shouldReturnChecklistResponseWhenThereAreNoPendingUploads() {
+        when(persistenceService.persistChecklistData(submissionDTO))
+                .thenReturn(new SubmissionResult(checklistResponse, List.of()));
+
+        ChecklistResponseEntity result = service.submitChecklistResponse(submissionDTO);
+
+        assertSame(checklistResponse, result);
+        verifyNoInteractions(fileStorageService);
+    }
+
+    @Test
+    @DisplayName("Should upload pending photos and update answer and anomaly photo paths")
+    void shouldUploadPendingPhotosAndUpdatePaths() {
+        byte[] answerBytes = new byte[]{1, 2, 3};
+        byte[] anomalyBytes = new byte[]{4, 5, 6};
+        PendingPhotoUpload answerPhoto = new PendingPhotoUpload(
+                100L, false, answerBytes, "answer.png", "image/png", "answer-photos", 1L);
+        PendingPhotoUpload anomalyPhoto = new PendingPhotoUpload(
+                200L, true, anomalyBytes, "anomaly.png", "image/png", "anomaly-photos", 1L);
+
+        when(persistenceService.persistChecklistData(submissionDTO))
+                .thenReturn(new SubmissionResult(checklistResponse, List.of(answerPhoto, anomalyPhoto)));
+        when(fileStorageService.storeFileFromBytes(answerBytes, "answer.png", "image/png", "answer-photos"))
+                .thenReturn("https://files.test/answer-photos/answer.png");
+        when(fileStorageService.storeFileFromBytes(anomalyBytes, "anomaly.png", "image/png", "anomaly-photos"))
+                .thenReturn("https://files.test/anomaly-photos/anomaly.png");
+
+        ChecklistResponseEntity result = service.submitChecklistResponse(submissionDTO);
+
+        assertSame(checklistResponse, result);
+        verify(persistenceService).updateAnswerPhotoPath(100L, "https://files.test/answer-photos/answer.png");
+        verify(persistenceService).updateAnomalyPhotoPath(200L, "https://files.test/anomaly-photos/anomaly.png");
+    }
+
+    @Test
+    @DisplayName("Should still return the checklist response when a photo upload fails")
+    void shouldReturnChecklistResponseWhenPhotoUploadFails() {
+        byte[] bytes = new byte[]{1, 2, 3};
+        PendingPhotoUpload photo = new PendingPhotoUpload(
+                100L, false, bytes, "answer.png", "image/png", "answer-photos", 1L);
+
+        when(persistenceService.persistChecklistData(submissionDTO))
+                .thenReturn(new SubmissionResult(checklistResponse, List.of(photo)));
+        when(fileStorageService.storeFileFromBytes(bytes, "answer.png", "image/png", "answer-photos"))
+                .thenThrow(new RuntimeException("S3 indisponível"));
+
+        ChecklistResponseEntity result = service.submitChecklistResponse(submissionDTO);
+
+        assertSame(checklistResponse, result);
+        verify(persistenceService, never()).updateAnswerPhotoPath(any(), anyString());
+        verify(persistenceService, never()).updateAnomalyPhotoPath(any(), anyString());
     }
 }

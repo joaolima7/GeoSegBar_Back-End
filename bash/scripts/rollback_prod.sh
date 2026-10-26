@@ -78,6 +78,24 @@ case "$resposta" in
 esac
 
 # ------------------------------------------------------- sobe a versão anterior
+# Porta da sonda de readiness: 8081 nas imagens com o actuator na porta de
+# management, 9090 nas anteriores a essa separação. Decidida uma vez pela imagem;
+# sondar a 9090 numa imagem nova só gera 404 a cada tentativa.
+if docker image inspect -f '{{json .Config.ExposedPorts}}' geosegbar-prod:previous 2>/dev/null | grep -q '8081'; then
+  PORTA_SONDA=8081
+else
+  PORTA_SONDA=9090
+fi
+
+# Tracing ligado só se o coletor (geosegbar-alloy) estiver no ar, como no deploy.
+if [ -n "${TRACING_ENABLED:-}" ]; then
+  TRACING_ENABLED_EFETIVO="$TRACING_ENABLED"
+elif [ -n "$(docker ps -q -f 'name=^geosegbar-alloy$')" ]; then
+  TRACING_ENABLED_EFETIVO=true
+else
+  TRACING_ENABLED_EFETIVO=false
+fi
+
 echo ""
 echo "🚀 Subindo a versão anterior em ${DESTINO}..."
 docker rm -f "$DESTINO" >/dev/null 2>&1 || true
@@ -90,8 +108,17 @@ docker run -d \
   --memory=2g \
   --cpus="1.5" \
   --expose 9090 \
+  --expose 8081 \
+  --label com.geosegbar.scrape=true \
+  --label com.geosegbar.service=api \
+  --label com.geosegbar.version=previous \
+  --log-driver json-file \
+  --log-opt max-size=50m \
+  --log-opt max-file=5 \
   --env-file "$SCRIPT_DIR/.env.prod" \
   -e SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE}" \
+  -e APP_VERSION=previous \
+  -e TRACING_ENABLED="${TRACING_ENABLED_EFETIVO}" \
   -e JAVA_OPTS="${JAVA_OPTS}" \
   -v "$SCRIPT_DIR/logs:/app/logs" \
   geosegbar-prod:previous
@@ -108,7 +135,7 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
     break
   fi
   if docker exec "$DESTINO" \
-       wget -q -O /dev/null -T 5 http://localhost:9090/actuator/health/readiness 2>/dev/null; then
+       wget -q -O /dev/null -T 5 "http://localhost:${PORTA_SONDA}/actuator/health/readiness" 2>/dev/null; then
     SAUDAVEL=true
     break
   fi

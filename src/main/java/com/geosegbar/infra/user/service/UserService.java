@@ -18,6 +18,10 @@ import com.geosegbar.common.email.EmailService;
 import com.geosegbar.common.enums.LoginOriginEnum;
 import com.geosegbar.common.enums.RoleEnum;
 import com.geosegbar.common.enums.StatusEnum;
+import com.geosegbar.common.metrics.BusinessMetrics;
+import com.geosegbar.common.metrics.BusinessMetrics.LoginResult;
+import com.geosegbar.common.metrics.BusinessMetrics.MfaResult;
+import com.geosegbar.common.metrics.BusinessMetrics.PasswordResetStep;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.common.utils.GenerateRandomCode;
 import com.geosegbar.common.utils.GenerateRandomPassword;
@@ -101,6 +105,15 @@ public class UserService {
     private final PSBFolderRepository psbFolderRepository;
     private final PSBFileRepository psbFileRepository;
     private final ShareFolderRepository shareFolderRepository;
+    private final BusinessMetrics businessMetrics;
+
+    // Mensagens que as métricas de login/MFA usam para distinguir o motivo da
+    // falha: ficam em constantes para a classificação não divergir do texto.
+    private static final String MSG_CREDENCIAIS_INCORRETAS = "Credenciais incorretas!";
+    private static final String MSG_SEM_ACESSO = "Usuário não tem acesso ao sistema!";
+    private static final String MSG_CODIGO_INVALIDO = "Código de verificação inválido!";
+    private static final String MSG_CODIGO_EXPIRADO = "Código de verificação expirado!";
+    private static final String MSG_CODIGO_NAO_ENCONTRADO = "Código de verificação não encontrado ou expirado!";
 
     @Value("${application.system-user-email}")
     private String systemUserEmail;
@@ -677,23 +690,36 @@ public class UserService {
 
     @Transactional
     public Object initiateLogin(LoginRequestDTO userDTO) {
+        Object response;
+        try {
+            response = doInitiateLogin(userDTO);
+        } catch (RuntimeException e) {
+            businessMetrics.loginAttempt(classifyLoginFailure(e));
+            throw e;
+        }
+        // null = código MFA enviado por e-mail; o login só termina em verifyCodeAndLogin
+        businessMetrics.loginAttempt(response == null ? LoginResult.MFA_REQUIRED : LoginResult.SUCCESS);
+        return response;
+    }
+
+    private Object doInitiateLogin(LoginRequestDTO userDTO) {
 
         // Desativa/Ativa MFA.
         final boolean mfaEnabled = true;
 
         if (systemUserEmail.equalsIgnoreCase(userDTO.email())) {
-            throw new InvalidInputException("Credenciais incorretas!");
+            throw new InvalidInputException(MSG_CREDENCIAIS_INCORRETAS);
         }
 
         UserEntity authUser = userRepository.findByEmailWithBasicDetails(userDTO.email())
-                .orElseThrow(() -> new NotFoundException("Credenciais incorretas!"));
+                .orElseThrow(() -> new NotFoundException(MSG_CREDENCIAIS_INCORRETAS));
 
         if (authUser.getStatus().getStatus() == StatusEnum.DISABLED) {
-            throw new UnauthorizedException("Usuário não tem acesso ao sistema!");
+            throw new UnauthorizedException(MSG_SEM_ACESSO);
         }
 
         if (!passwordEncoder.matches(userDTO.password(), authUser.getPassword())) {
-            throw new InvalidInputException("Credenciais incorretas!");
+            throw new InvalidInputException(MSG_CREDENCIAIS_INCORRETAS);
         }
 
         LoginOriginEnum origin = userDTO.origin() != null ? userDTO.origin() : LoginOriginEnum.WEB;
@@ -719,7 +745,7 @@ public class UserService {
         }
 
         if (isSystemUser(authUser)) {
-            throw new InvalidInputException("Credenciais incorretas!");
+            throw new InvalidInputException(MSG_CREDENCIAIS_INCORRETAS);
         }
 
         // MOBILE: nunca pede MFA, faz login direto (admin via mobile já foi bloqueado acima)
@@ -754,6 +780,44 @@ public class UserService {
         emailService.sendVerificationCode(authUser.getEmail(), verificationCode);
 
         return null;
+    }
+
+    /**
+     * Motivo da falha de login para a métrica. Só olha o tipo e a mensagem da
+     * exceção: nunca o e-mail, e nada muda no que é lançado. Credencial errada
+     * e usuário inexistente caem juntos de propósito (a resposta ao cliente já
+     * é a mesma, para não revelar quais e-mails existem).
+     */
+    private static LoginResult classifyLoginFailure(RuntimeException e) {
+        if (e instanceof InvalidInputException) {
+            return LoginResult.INVALID_CREDENTIALS;
+        }
+        if (e instanceof NotFoundException && MSG_CREDENCIAIS_INCORRETAS.equals(e.getMessage())) {
+            return LoginResult.INVALID_CREDENTIALS;
+        }
+        // Conta desativada, ou administrador tentando entrar pelo app mobile
+        if (e instanceof MobileAdminLoginException
+                || (e instanceof UnauthorizedException && MSG_SEM_ACESSO.equals(e.getMessage()))) {
+            return LoginResult.ACCOUNT_UNAVAILABLE;
+        }
+        if (e instanceof UnauthorizedException) {
+            return LoginResult.INVALID_CREDENTIALS;
+        }
+        return LoginResult.ERROR;
+    }
+
+    /**
+     * Motivo da falha na verificação do código MFA para a métrica. Código
+     * ausente (nenhum ativo para o usuário) conta como expirado: a mensagem ao
+     * cliente já diz "não encontrado ou expirado".
+     */
+    private static MfaResult classifyMfaFailure(RuntimeException e) {
+        if (e instanceof InvalidInputException || e instanceof NotFoundException) {
+            return MSG_CODIGO_EXPIRADO.equals(e.getMessage()) || MSG_CODIGO_NAO_ENCONTRADO.equals(e.getMessage())
+                    ? MfaResult.EXPIRED_CODE
+                    : MfaResult.INVALID_CODE;
+        }
+        return MfaResult.ERROR;
     }
 
     /**
@@ -823,6 +887,18 @@ public class UserService {
      */
     @Transactional
     public LoginResponseDTO refreshSession(String token) {
+        LoginResponseDTO response;
+        try {
+            response = doRefreshSession(token);
+        } catch (RuntimeException e) {
+            businessMetrics.sessionRefresh(false);
+            throw e;
+        }
+        businessMetrics.sessionRefresh(true);
+        return response;
+    }
+
+    private LoginResponseDTO doRefreshSession(String token) {
         TokenService.ExpiredTokenClaims claims = tokenService.verifyIgnoringExpiration(token);
         if (claims == null) {
             throw new UnauthorizedException("Sessão inválida. Entre novamente.");
@@ -832,7 +908,7 @@ public class UserService {
                 .orElseThrow(() -> new UnauthorizedException("Sessão inválida. Entre novamente."));
 
         if (user.getStatus() != null && user.getStatus().getStatus() == StatusEnum.DISABLED) {
-            throw new UnauthorizedException("Usuário não tem acesso ao sistema!");
+            throw new UnauthorizedException(MSG_SEM_ACESSO);
         }
 
         // Rotação: só o último token emitido renova. Sem isto, qualquer token
@@ -861,20 +937,32 @@ public class UserService {
 
     @Transactional
     public LoginResponseDTO verifyCodeAndLogin(VerifyCodeRequestDTO verifyRequest) {
+        LoginResponseDTO response;
+        try {
+            response = doVerifyCodeAndLogin(verifyRequest);
+        } catch (RuntimeException e) {
+            businessMetrics.mfaVerification(classifyMfaFailure(e));
+            throw e;
+        }
+        businessMetrics.mfaVerification(MfaResult.SUCCESS);
+        return response;
+    }
+
+    private LoginResponseDTO doVerifyCodeAndLogin(VerifyCodeRequestDTO verifyRequest) {
 
         UserEntity user = userRepository.findByEmailWithAllPermissions(verifyRequest.getEmail())
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
 
         VerificationCodeEntity codeEntity = verificationCodeRepository
                 .findLatestActiveByUser(user)
-                .orElseThrow(() -> new NotFoundException("Código de verificação não encontrado ou expirado!"));
+                .orElseThrow(() -> new NotFoundException(MSG_CODIGO_NAO_ENCONTRADO));
 
         if (!codeEntity.getCode().equals(verifyRequest.getCode())) {
-            throw new InvalidInputException("Código de verificação inválido!");
+            throw new InvalidInputException(MSG_CODIGO_INVALIDO);
         }
 
         if (LocalDateTime.now().isAfter(codeEntity.getExpiryDate())) {
-            throw new InvalidInputException("Código de verificação expirado!");
+            throw new InvalidInputException(MSG_CODIGO_EXPIRADO);
         }
 
         codeEntity.setUsed(true);
@@ -912,6 +1000,16 @@ public class UserService {
 
     @Transactional
     public void initiatePasswordReset(ForgotPasswordRequestDTO requestDTO) {
+        try {
+            doInitiatePasswordReset(requestDTO);
+        } catch (RuntimeException e) {
+            businessMetrics.passwordReset(PasswordResetStep.FAILED);
+            throw e;
+        }
+        businessMetrics.passwordReset(PasswordResetStep.REQUESTED);
+    }
+
+    private void doInitiatePasswordReset(ForgotPasswordRequestDTO requestDTO) {
         UserEntity user = userRepository.findByEmail(requestDTO.getEmail())
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com este email!"));
 
@@ -936,12 +1034,27 @@ public class UserService {
 
     @Transactional
     public void resetPassword(ResetPasswordRequestDTO requestDTO) {
+        try {
+            doResetPassword(requestDTO);
+        } catch (RuntimeException e) {
+            businessMetrics.passwordReset(PasswordResetStep.FAILED);
+            throw e;
+        }
+        businessMetrics.passwordReset(PasswordResetStep.COMPLETED);
+    }
+
+    private void doResetPassword(ResetPasswordRequestDTO requestDTO) {
         UserEntity user = userRepository.findByEmail(requestDTO.getEmail())
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado com este email!"));
 
         boolean bypassUsed = requestDTO.getBypassKey() != null
                 && !adminBypassKey.isBlank()
                 && adminBypassKey.equals(requestDTO.getBypassKey());
+
+        // Chave informada (aceita ou não) vira métrica + WARN para o alerta de segurança
+        if (requestDTO.getBypassKey() != null && !requestDTO.getBypassKey().isBlank()) {
+            businessMetrics.bypassKeyUsed(bypassUsed, user.getId());
+        }
 
         if (!bypassUsed) {
             if (requestDTO.getCode() == null || requestDTO.getCode().isBlank()) {
@@ -950,14 +1063,14 @@ public class UserService {
 
             VerificationCodeEntity codeEntity = verificationCodeRepository
                     .findLatestActiveByUser(user)
-                    .orElseThrow(() -> new NotFoundException("Código de verificação não encontrado ou expirado!"));
+                    .orElseThrow(() -> new NotFoundException(MSG_CODIGO_NAO_ENCONTRADO));
 
             if (!codeEntity.getCode().equals(requestDTO.getCode())) {
-                throw new InvalidInputException("Código de verificação inválido!");
+                throw new InvalidInputException(MSG_CODIGO_INVALIDO);
             }
 
             if (LocalDateTime.now().isAfter(codeEntity.getExpiryDate())) {
-                throw new InvalidInputException("Código de verificação expirado!");
+                throw new InvalidInputException(MSG_CODIGO_EXPIRADO);
             }
 
             codeEntity.setUsed(true);
@@ -973,19 +1086,31 @@ public class UserService {
 
     @Transactional
     public boolean verifyResetCode(VerifyCodeRequestDTO verifyRequest) {
+        boolean valid;
+        try {
+            valid = doVerifyResetCode(verifyRequest);
+        } catch (RuntimeException e) {
+            businessMetrics.passwordReset(PasswordResetStep.FAILED);
+            throw e;
+        }
+        businessMetrics.passwordReset(PasswordResetStep.CODE_VERIFIED);
+        return valid;
+    }
+
+    private boolean doVerifyResetCode(VerifyCodeRequestDTO verifyRequest) {
         UserEntity user = userRepository.findByEmail(verifyRequest.getEmail())
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado!"));
 
         VerificationCodeEntity codeEntity = verificationCodeRepository
                 .findLatestActiveByUser(user)
-                .orElseThrow(() -> new NotFoundException("Código de verificação não encontrado ou expirado!"));
+                .orElseThrow(() -> new NotFoundException(MSG_CODIGO_NAO_ENCONTRADO));
 
         if (!codeEntity.getCode().equals(verifyRequest.getCode())) {
-            throw new InvalidInputException("Código de verificação inválido!");
+            throw new InvalidInputException(MSG_CODIGO_INVALIDO);
         }
 
         if (LocalDateTime.now().isAfter(codeEntity.getExpiryDate())) {
-            throw new InvalidInputException("Código de verificação expirado!");
+            throw new InvalidInputException(MSG_CODIGO_EXPIRADO);
         }
 
         return true;

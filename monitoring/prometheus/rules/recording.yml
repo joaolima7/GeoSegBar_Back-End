@@ -1,0 +1,85 @@
+# Regras de gravação: séries pré-calculadas para os alertas de SLO e para os
+# painéis não recalcularem janelas longas a cada atualização.
+#
+# Rotas longas por natureza (upload, download, exportação, importação em massa)
+# ficam fora do SLO de latência: elas medem o tamanho do arquivo, não a saúde da
+# API. A lista está no regex LONG_ROUTES repetido abaixo; mude nos dois lugares.
+#   uri!~".*(export|download|upload|massive|import|zip).*"
+#
+# O Prometheus 3 normaliza o rótulo le dos histogramas clássicos para float:
+# a faixa de 1 s é le="1.0".
+
+groups:
+  - name: geosegbar-http-rates
+    interval: 30s
+    rules:
+      - record: geosegbar:http_requests:rate5m
+        expr: sum(rate(http_server_requests_seconds_count{job="geosegbar-api"}[5m]))
+      # "or vector(0)": sem nenhum 5xx a soma não teria série, e o SLO do mês
+      # apareceria vazio em vez de 100%.
+      - record: geosegbar:http_requests_5xx:rate5m
+        expr: sum(rate(http_server_requests_seconds_count{job="geosegbar-api", status=~"5.."}[5m])) or vector(0)
+      - record: geosegbar:http_error_ratio:rate5m
+        expr: geosegbar:http_requests_5xx:rate5m / geosegbar:http_requests:rate5m
+
+      - record: geosegbar:http_requests:rate30m
+        expr: sum(rate(http_server_requests_seconds_count{job="geosegbar-api"}[30m]))
+      - record: geosegbar:http_error_ratio:rate30m
+        expr: |
+          (sum(rate(http_server_requests_seconds_count{job="geosegbar-api", status=~"5.."}[30m])) or vector(0))
+            / geosegbar:http_requests:rate30m
+
+      - record: geosegbar:http_requests:rate1h
+        expr: sum(rate(http_server_requests_seconds_count{job="geosegbar-api"}[1h]))
+      - record: geosegbar:http_error_ratio:rate1h
+        expr: |
+          (sum(rate(http_server_requests_seconds_count{job="geosegbar-api", status=~"5.."}[1h])) or vector(0))
+            / geosegbar:http_requests:rate1h
+
+      - record: geosegbar:http_requests:rate6h
+        expr: sum(rate(http_server_requests_seconds_count{job="geosegbar-api"}[6h]))
+      - record: geosegbar:http_error_ratio:rate6h
+        expr: |
+          (sum(rate(http_server_requests_seconds_count{job="geosegbar-api", status=~"5.."}[6h])) or vector(0))
+            / geosegbar:http_requests:rate6h
+
+      # Requisições elegíveis ao SLO de latência (fora as rotas longas) e as que
+      # terminaram em até 1 s. Base do SLO de 30 dias.
+      - record: geosegbar:http_requests_slo_eligible:rate5m
+        expr: sum(rate(http_server_requests_seconds_count{job="geosegbar-api", uri!~".*(export|download|upload|massive|import|zip).*"}[5m]))
+      - record: geosegbar:http_requests_slo_fast:rate5m
+        expr: sum(rate(http_server_requests_seconds_bucket{job="geosegbar-api", le="1.0", uri!~".*(export|download|upload|massive|import|zip).*"}[5m]))
+
+      # Fração de requisições acima de 1 s (fora as rotas longas).
+      - record: geosegbar:http_slow_ratio:rate1h
+        expr: |
+          1 - (
+            sum(rate(http_server_requests_seconds_bucket{job="geosegbar-api", le="1.0", uri!~".*(export|download|upload|massive|import|zip).*"}[1h]))
+              / sum(rate(http_server_requests_seconds_count{job="geosegbar-api", uri!~".*(export|download|upload|massive|import|zip).*"}[1h]))
+          )
+      - record: geosegbar:http_slow_ratio:rate6h
+        expr: |
+          1 - (
+            sum(rate(http_server_requests_seconds_bucket{job="geosegbar-api", le="1.0", uri!~".*(export|download|upload|massive|import|zip).*"}[6h]))
+              / sum(rate(http_server_requests_seconds_count{job="geosegbar-api", uri!~".*(export|download|upload|massive|import|zip).*"}[6h]))
+          )
+
+  # Janelas de 30 dias sobre as séries gravadas acima (uma série cada, amostra a
+  # cada 30 s), não sobre os dados brutos de cada endpoint: o resultado é o
+  # mesmo a menos de arredondamento e a avaliação custa uma fração. Avaliadas a
+  # cada 5 minutos.
+  - name: geosegbar-slo-30d
+    interval: 5m
+    rules:
+      # Fração de requisições sem 5xx nos últimos 30 dias. Meta: 0.995.
+      - record: geosegbar:slo_availability:ratio_30d
+        expr: |
+          1 - (
+            sum_over_time(geosegbar:http_requests_5xx:rate5m[30d])
+              / sum_over_time(geosegbar:http_requests:rate5m[30d])
+          )
+      # Fração de requisições em até 1 s nos últimos 30 dias. Meta: 0.95.
+      - record: geosegbar:slo_latency:ratio_30d
+        expr: |
+          sum_over_time(geosegbar:http_requests_slo_fast:rate5m[30d])
+            / sum_over_time(geosegbar:http_requests_slo_eligible:rate5m[30d])

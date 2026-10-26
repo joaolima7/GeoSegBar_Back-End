@@ -22,8 +22,11 @@ import com.geosegbar.config.BaseUnitTest;
  * coletou uma métrica porque tudo sob /actuator respondia 403 —
  * anyRequest().authenticated() alcançava também as sondas. Liberar health e
  * prometheus resolve; liberar /actuator/** resolveria também, e publicaria
- * /actuator/env e /actuator/configprops, que expõem segredos, já que
- * management.endpoints.web.exposure.include=*.
+ * /actuator/env e /actuator/configprops, que expõem segredos.
+ *
+ * Desde 26/10/2026 o actuator escuta numa porta de management própria (8081),
+ * que o nginx não encaminha, e expõe só health, prometheus e info. Os testes
+ * abaixo travam as três camadas: liberação no Spring Security, exposição e porta.
  *
  * O teste lê a configuração como texto de propósito: o alvo aqui é a decisão de
  * quais caminhos são liberados, e é isso que precisa quebrar se alguém ampliar a
@@ -35,6 +38,9 @@ class ActuatorExposureTest extends BaseUnitTest {
 
     private static final Path SECURITY_CONFIG = Path.of(
             "src/main/java/com/geosegbar/configs/security/SecurityConfig.java");
+
+    private static final Path APPLICATION_PROPERTIES = Path.of(
+            "src/main/resources/application.properties");
 
     private static String config;
 
@@ -91,6 +97,48 @@ class ActuatorExposureTest extends BaseUnitTest {
         assertThat(configSemComentarios).doesNotContain("/actuator/configprops");
         assertThat(configSemComentarios).doesNotContain("/actuator/heapdump");
         assertThat(configSemComentarios).doesNotContain("/actuator/threaddump");
+    }
+
+    @Test
+    @DisplayName("O info do actuator é liberado só pelo caminho exato")
+    void infoEndpointIsPublic() {
+        assertThat(config).contains("\"/actuator/info\").permitAll()");
+    }
+
+    @Test
+    @DisplayName("O actuator mora numa porta de management separada da API")
+    void actuatorRunsOnSeparateManagementPort() throws IOException {
+        String props = Files.readString(APPLICATION_PROPERTIES, StandardCharsets.UTF_8);
+
+        assertThat(props).contains("management.server.port=${MANAGEMENT_PORT:8081}");
+        // O nginx encaminha só a 9090: a porta de management nunca aparece nele.
+        String nginx = Files.readString(Path.of("nginx/default.conf.template"), StandardCharsets.UTF_8);
+        assertThat(nginx)
+                .withFailMessage("O nginx não pode encaminhar para a porta de management (8081).")
+                .doesNotContain("8081");
+    }
+
+    @Test
+    @DisplayName("A exposição do actuator é a lista mínima, nunca curinga")
+    void exposureIsMinimal() throws IOException {
+        String props = Files.readString(APPLICATION_PROPERTIES, StandardCharsets.UTF_8);
+
+        assertThat(props).contains("management.endpoints.web.exposure.include=health,prometheus,info");
+        assertThat(props)
+                .withFailMessage("exposure.include=* publicaria env, configprops e heapdump.")
+                .doesNotContain("management.endpoints.web.exposure.include=*");
+        assertThat(props).contains("management.endpoint.health.show-details=never");
+    }
+
+    @Test
+    @DisplayName("HEALTHCHECK do Docker e gate do deploy sondam a porta de management")
+    void probesTargetManagementPort() throws IOException {
+        String dockerfile = Files.readString(Path.of("Dockerfile"), StandardCharsets.UTF_8);
+        assertThat(dockerfile).contains("http://localhost:8081/actuator/health/liveness");
+
+        String deploy = Files.readString(Path.of("bash/scripts/deploy_vps.sh"), StandardCharsets.UTF_8);
+        assertThat(deploy).contains("http://localhost:8081/actuator/health/readiness");
+        assertThat(deploy).doesNotContain("http://localhost:9090/actuator/health/readiness");
     }
 
     @Test

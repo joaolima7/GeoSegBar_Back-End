@@ -1,0 +1,31 @@
+{{/*
+  Mensagem dos alertas no Telegram (parse_mode HTML).
+
+  Todo texto vindo de rótulo ou anotação passa por `html`: um caminho como
+  /dam/{id} ou uma exceção com < > no nome quebraria o HTML do Telegram, e a
+  mensagem inteira seria recusada.
+
+  No máximo 6 alertas listados por mensagem. Acima de 4096 caracteres o
+  Alertmanager troca o texto por um aviso genérico de "mensagem longa demais",
+  sem o nome do alerta, e isso aconteceria justo num incidente com muitos alvos.
+  A descrição e o link "o que fazer" saem uma vez, das anotações comuns.
+*/}}
+{{ define "geosegbar.telegram.severity" -}}
+{{- if eq .Status "resolved" -}}✅{{- else if eq .CommonLabels.severity "critical" -}}🔴{{- else -}}🟡{{- end -}}
+{{- end }}
+
+{{ define "geosegbar.telegram.message" -}}
+{{ template "geosegbar.telegram.severity" . }} <b>{{ .CommonLabels.alertname | html }}</b>{{ if eq .Status "resolved" }} resolvido{{ else }} ({{ .Alerts.Firing | len }}){{ end }}
+{{- if eq .Status "firing" }}{{ with .CommonAnnotations.description }}
+{{ . | html }}
+{{- end }}{{ end }}
+{{ range $i, $a := .Alerts }}{{ if lt $i 6 }}
+• {{ $a.Annotations.summary | html }}{{ with $a.Labels.instance }} <i>({{ . | html }})</i>{{ end }}
+{{- end }}{{ end }}
+{{- if gt (len .Alerts) 6 }}
+… {{ len .Alerts }} no total; lista completa no Grafana.
+{{- end }}
+{{- if and (eq .Status "firing") .CommonAnnotations.runbook_url }}
+<a href="{{ .CommonAnnotations.runbook_url | html }}">o que fazer</a>
+{{- end }}
+{{- end }}

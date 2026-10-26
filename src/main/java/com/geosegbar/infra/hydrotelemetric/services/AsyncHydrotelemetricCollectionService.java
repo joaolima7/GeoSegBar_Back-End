@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import com.geosegbar.common.metrics.BusinessMetrics;
 import com.geosegbar.entities.InstrumentEntity;
 
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ public class AsyncHydrotelemetricCollectionService {
 
     private final AnaApiService anaApiService;
     private final HydrotelemetricCollectionService collectionService;
+    private final BusinessMetrics businessMetrics;
 
     @Async("hydrotelemetricTaskExecutor")
     public void collectInstrumentDataAsync(InstrumentEntity instrument) {
@@ -33,10 +35,12 @@ public class AsyncHydrotelemetricCollectionService {
                     today,
                     "após criação/atualização do instrumento."
             );
+            businessMetrics.anaStationCollected(true);
 
             log.info("Coleta assíncrona finalizada para instrumento: {}", instrument.getName());
 
         } catch (Exception e) {
+            businessMetrics.anaStationCollected(false);
             log.error("Erro na coleta assíncrona de dados para instrumento {}: {}",
                     instrument.getName(), e.getMessage(), e);
 

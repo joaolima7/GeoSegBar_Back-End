@@ -1,0 +1,84 @@
+# Alertas de segurança, jobs de negócio e backup.
+
+groups:
+  - name: geosegbar-security
+    rules:
+      # O bypassKey troca a senha de qualquer conta sem código
+      # (UserService.resetPassword). Qualquer uso, aceito ou não, merece olho
+      # humano até o recurso sair do código.
+      - alert: BypassKeyUsado
+        expr: sum by (result) (increase(geosegbar_auth_bypass_key_total[10m])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "Reset de senha com bypassKey ({{ $labels.result }}) nos últimos 10 minutos."
+          description: Confira no painel Segurança quem foi o alvo (log [SECURITY] bypassKey) e se o uso era esperado.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#bypasskeyusado
+
+      - alert: PicoDeFalhasDeLogin
+        expr: sum(increase(geosegbar_auth_login_total{result="invalid_credentials"}[15m])) > 30
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value | humanize }} logins com senha errada em 15 minutos."
+          description: Pode ser tentativa de força bruta. Veja os IPs no painel Segurança.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#picodefalhasdelogin
+
+  - name: geosegbar-jobs
+    rules:
+      # A coleta da ANA roda às 00:30. O contador soma blue e green, então um
+      # deploy no meio do dia não apaga a coleta da madrugada. A guarda do fim
+      # exige 25 horas de histórico da métrica, para não disparar no primeiro dia.
+      - alert: ColetaAnaParada
+        expr: |
+          sum(increase(geosegbar_ana_collection_runs_total{result="success"}[26h])) < 1
+          and on() count_over_time(sum(geosegbar_ana_collection_runs_total)[26h:1h]) >= 25
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: A coleta de telemetria da ANA não teve sucesso nas últimas 26 horas.
+          description: Os dados hidrotelemétricos das barragens deixam de atualizar. Veja o painel Jobs e negócio e os logs do job.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#coletaanaparada
+
+      - alert: ColetaAnaFalhou
+        expr: sum(increase(geosegbar_ana_collection_runs_total{result="failure"}[1h])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: A execução da coleta da ANA terminou com falha.
+          description: Veja o incidente de 19/08/2026 em docs/INCIDENTE_2026-08-19_COLETA_ANA.md antes de reprocessar.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#coletaanaparada
+
+  - name: geosegbar-backup
+    rules:
+      # Métricas gravadas pelo script de backup no textfile collector do
+      # node_exporter (/var/lib/geosegbar-monitoring/textfile).
+      - alert: BackupAtrasado
+        expr: time() - geosegbar_backup_last_success_timestamp_seconds > 26 * 3600
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Último backup do banco com sucesso foi há {{ $value | humanizeDuration }}."
+          description: O cron das 02:00 não completou. Rode ./bash/cli_app.sh → Verificar estado dos backups.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#backupatrasado
+
+      - alert: BackupFalhou
+        expr: geosegbar_backup_last_failure_timestamp_seconds > on() geosegbar_backup_last_success_timestamp_seconds
+        labels:
+          severity: critical
+        annotations:
+          summary: A última execução do backup do banco falhou.
+          description: Detalhes em logs/backup.log no servidor.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#backupatrasado
+
+      - alert: BackupSemMetrica
+        expr: absent(geosegbar_backup_last_success_timestamp_seconds)
+        for: 30h
+        labels:
+          severity: warning
+        annotations:
+          summary: O Prometheus não tem a métrica de backup há mais de 30 horas.
+          description: O script de backup não está gravando em /var/lib/geosegbar-monitoring/textfile, ou o node_exporter não lê a pasta.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#backupatrasado

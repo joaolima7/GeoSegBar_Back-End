@@ -1,0 +1,83 @@
+# Loki em modo binário único, armazenamento local. Ver docs/MONITORAMENTO.md.
+#
+# auth_enabled: false só é aceitável porque o Loki escuta apenas na rede interna
+# `geosegbar-monitoring`, sem porta publicada. O tenant implícito é "fake" (é o
+# nome da pasta das regras em loki/rules/fake/).
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2026-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # 30 dias: o mesmo prazo de retenção de IP e userId declarado na seção de LGPD.
+  retention_period: 720h
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  # Um log em loop (bug, ataque) não pode encher o disco nem a memória.
+  ingestion_rate_mb: 4
+  ingestion_burst_size_mb: 8
+  per_stream_rate_limit: 3MB
+  per_stream_rate_limit_burst: 6MB
+  max_line_size: 256KB
+  max_line_size_truncate: true
+  max_query_series: 2000
+  max_query_parallelism: 8
+  query_timeout: 2m
+  volume_enabled: true
+
+compactor:
+  working_directory: /loki/compactor
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  delete_request_store: filesystem
+
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 64
+
+ruler:
+  alertmanager_url: http://alertmanager:9093
+  enable_api: true
+  storage:
+    type: local
+    local:
+      directory: /etc/loki/rules
+  rule_path: /loki/rules-temp
+  ring:
+    kvstore:
+      store: inmemory
+
+frontend:
+  encoding: protobuf
+
+analytics:
+  reporting_enabled: false

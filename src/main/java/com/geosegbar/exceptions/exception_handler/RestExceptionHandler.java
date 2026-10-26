@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.util.ContentCachingRequestWrapper;
 
@@ -222,8 +223,12 @@ public class RestExceptionHandler {
         return false;
     }
 
-    @ExceptionHandler(NoResourceFoundException.class)
-    public ResponseEntity<WebResponseEntity<String>> handleNoResourceFoundException(NoResourceFoundException ex, HttpServletRequest request) {
+    // NoHandlerFoundException: rota sem controller com spring.web.resources.add-mappings=false.
+    // Sem ela no 404, qualquer caminho inexistente caía no handler genérico: 500,
+    // stack trace no log e e-mail de erro interno. Exemplo real: /actuator/* na 9090
+    // depois que o actuator foi para a porta de management (8081).
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<WebResponseEntity<String>> handleNoResourceFoundException(Exception ex, HttpServletRequest request) {
         logger.warn("Endpoint não encontrado: {} {}", request.getMethod(), request.getRequestURI());
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(WebResponseEntity.error("Endpoint não encontrado: " + request.getMethod() + " " + request.getRequestURI()));

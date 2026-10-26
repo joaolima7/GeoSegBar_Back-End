@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.Optional;
 
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -13,6 +14,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.geosegbar.common.enums.AuthErrorCodeEnum;
 import com.geosegbar.common.enums.StatusEnum;
+import com.geosegbar.configs.filters.RequestCorrelationFilter;
 import com.geosegbar.configs.security.TokenService.TokenVerification;
 import com.geosegbar.entities.UserEntity;
 import com.geosegbar.infra.audit.filter.AuditLogFilter;
@@ -86,7 +88,16 @@ public class SecurityFilter extends OncePerRequestFilter {
         // ter sido limpo) consiga vincular o ator ao ID correto.
         request.setAttribute(AuditLogFilter.AUDIT_ACTOR_USER_ID, user.getId());
 
-        filterChain.doFilter(request, response);
+        // Identifica o autor em cada linha de log desta requisição (campo userId
+        // do JSON). Só o id: e-mail e nome não vão para log. Limpo aqui mesmo:
+        // na porta de management (8081) esta cadeia roda sem o
+        // RequestCorrelationFilter em volta.
+        MDC.put(RequestCorrelationFilter.MDC_USER_ID, String.valueOf(user.getId()));
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            MDC.remove(RequestCorrelationFilter.MDC_USER_ID);
+        }
     }
 
     private String recoverToken(HttpServletRequest request) {

@@ -127,18 +127,23 @@ arquivos de até 512 MB, e um upload em curso é cortado se a drenagem for curta
 
 ## Sondas de saúde
 
-| Endpoint | Quem usa | Público? |
+O actuator escuta na **porta de management 8081**, separada da API (9090). O
+nginx só encaminha a 9090, então nada do actuator alcança a internet.
+
+| Endpoint (porta 8081) | Quem usa | Público? |
 | --- | --- | --- |
-| `/actuator/health/liveness` | HEALTHCHECK do Docker | Não — nginx bloqueia |
-| `/actuator/health/readiness` | Deploy e rollback | Não — nginx bloqueia |
-| `/actuator/prometheus` | Prometheus | Não — nginx bloqueia |
+| `/actuator/health/liveness` | HEALTHCHECK do Docker | Não |
+| `/actuator/health/readiness` | Deploy e rollback | Não |
+| `/actuator/prometheus` | Prometheus (docs/MONITORAMENTO.md) | Não |
+| `/actuator/info` | diagnóstico | Não |
 
-Todos são liberados no Spring, para que healthcheck e Prometheus alcancem o
-container pela rede interna do Docker. O nginx nega `/actuator/` vindo da
-internet: como `management.endpoints.web.exposure.include=*`, expor isso
-publicaria `/actuator/env` e `/actuator/configprops`, que carregam segredos.
+A exposição é só `health,prometheus,info`; `env`, `configprops` e `heapdump`,
+que carregam segredos, não existem nem na porta interna. O nginx ainda nega
+`/actuator/` na 9090. O rollback aceita a 9090 como sonda de readiness quando
+volta para uma imagem anterior a essa separação.
 
-`ActuatorExposureTest` quebra se alguém ampliar essa liberação sem querer.
+`ActuatorExposureTest` quebra se alguém ampliar a liberação, a exposição ou
+mudar a porta sem querer.
 
 > **Histórico:** essas rotas caíam em `anyRequest().authenticated()` e respondiam
 > 403. O HEALTHCHECK do Docker falhou 29.238 vezes seguidas (container
@@ -162,10 +167,12 @@ ssh geosegbar-vps 'cat ~/GeoSegBar_Back-End/runtime/upstream_active.conf'
 Deve apontar para o container que está no ar.
 
 ```bash
-ssh geosegbar-vps 'docker exec prometheus-prod wget -qO- "http://localhost:9090/api/v1/targets?state=any" | grep -o "\"health\":\"[a-z]*\"" | sort | uniq -c'
+ssh geosegbar-vps 'docker exec geosegbar-prometheus wget -qO- "http://localhost:9090/api/v1/targets?state=any" | grep -o "\"health\":\"[a-z]*\"" | sort | uniq -c'
 ```
 
-Os alvos devem estar `up`.
+Os alvos devem estar `up`. O monitoramento tem deploy próprio
+(`./bash/cli_app.sh` → 7) e não é reiniciado pelo deploy da API; ver
+`docs/MONITORAMENTO.md`.
 
 ---
 

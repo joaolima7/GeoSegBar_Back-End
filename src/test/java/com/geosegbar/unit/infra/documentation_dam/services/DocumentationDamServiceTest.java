@@ -19,6 +19,7 @@ import static org.mockito.ArgumentMatchers.any;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -136,6 +137,8 @@ class DocumentationDamServiceTest {
         when(damRepository.findById(1L)).thenReturn(Optional.of(damEntity));
         when(documentationDamRepository.existsByDam(damEntity)).thenReturn(false);
         when(documentationDamRepository.save(any(DocumentationDamEntity.class))).thenReturn(documentationEntity);
+        // O resultado é relido por findById(saved.getId()) depois do save.
+        when(documentationDamRepository.findById(1L)).thenReturn(Optional.of(documentationEntity));
 
         DocumentationDamEntity result = service.createOrUpdate(documentationDTO);
 
@@ -143,6 +146,7 @@ class DocumentationDamServiceTest {
         verify(damRepository).findById(1L);
         verify(documentationDamRepository).existsByDam(damEntity);
         verify(documentationDamRepository).save(any(DocumentationDamEntity.class));
+        verify(documentationDamRepository).findById(1L);
     }
 
     @Test
@@ -184,7 +188,8 @@ class DocumentationDamServiceTest {
         DocumentationDamEntity result = service.createOrUpdate(documentationDTO);
 
         assertNotNull(result);
-        verify(documentationDamRepository).findById(1L);
+        // 1x para carregar a documentação existente e 1x na releitura do resultado salvo
+        verify(documentationDamRepository, times(2)).findById(1L);
         verify(documentationDamRepository).save(any(DocumentationDamEntity.class));
     }
 

@@ -20,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.geosegbar.common.enums.JobStatus;
+import com.geosegbar.common.metrics.BusinessMetrics;
 import com.geosegbar.entities.HistoricalDataJobEntity;
 import com.geosegbar.infra.historical_data_job.processor.HistoricalDataJobProcessor;
 import com.geosegbar.infra.historical_data_job.service.HistoricalDataJobService;
@@ -35,6 +36,9 @@ class HistoricalDataJobSchedulerTest {
 
     @Mock
     private HistoricalDataJobProcessor jobProcessor;
+
+    @Mock
+    private BusinessMetrics businessMetrics;
 
     @InjectMocks
     private HistoricalDataJobScheduler scheduler;
@@ -105,6 +109,50 @@ class HistoricalDataJobSchedulerTest {
 
         // Then
         verify(jobProcessor, never()).processJob(anyLong());
+    }
+
+    @Test
+    @DisplayName("Deve publicar o tamanho da fila no gauge a cada passada do scheduler")
+    void shouldPublishQueueSizeToGauge() {
+        // Given
+        when(jobService.getQueueSize()).thenReturn(7L);
+        when(jobService.popFromRedisQueue()).thenReturn(Optional.empty());
+
+        // When
+        scheduler.processQueue();
+
+        // Then
+        verify(businessMetrics).historicalJobsQueueSize(7L);
+    }
+
+    @Test
+    @DisplayName("Deve publicar fila 0 quando está vazia e não há job órfão para recuperar")
+    void shouldPublishZeroWhenQueueEmptyAndNothingToRecover() {
+        // Given
+        when(jobService.getQueueSize()).thenReturn(0L);
+        when(jobService.recoverOrphanedJobs()).thenReturn(0);
+
+        // When
+        scheduler.processQueue();
+
+        // Then
+        verify(businessMetrics).historicalJobsQueueSize(0L);
+    }
+
+    @Test
+    @DisplayName("Deve publicar o total recuperado quando a fila Redis estava vazia")
+    void shouldPublishRecoveredCountWhenRedisQueueWasEmpty() {
+        // Given
+        when(jobService.getQueueSize()).thenReturn(0L);
+        when(jobService.recoverOrphanedJobs()).thenReturn(4);
+        when(jobService.popFromRedisQueue()).thenReturn(Optional.empty());
+
+        // When
+        scheduler.processQueue();
+
+        // Then
+        verify(businessMetrics).historicalJobsQueueSize(0L);
+        verify(businessMetrics).historicalJobsQueueSize(4L);
     }
 
     @Test

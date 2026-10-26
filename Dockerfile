@@ -67,7 +67,9 @@ ENV JAVA_OPTS="-XX:MaxRAMPercentage=70 -XX:+UseG1GC -XX:G1HeapRegionSize=16m -XX
 ENV JAVA_SAFETY_OPTS="-XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/app/logs"
 
 
-EXPOSE 9090
+# 9090: API, atrás do nginx. 8081: actuator (health, prometheus, info), só na
+# rede interna do Docker — o nginx nunca encaminha para ela.
+EXPOSE 9090 8081
 
 
 USER springboot
@@ -81,4 +83,4 @@ ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS $JAVA_SAFETY_OPTS -jar app.jar --server
 # do banco. liveness responde "o processo está vivo", que é o que o Docker precisa
 # saber. start-period generoso porque o boot roda migração de banco.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD wget --no-verbose --tries=1 -O /dev/null http://localhost:9090/actuator/health/liveness || exit 1
+    CMD wget --no-verbose --tries=1 -O /dev/null http://localhost:8081/actuator/health/liveness || exit 1

@@ -1,0 +1,78 @@
+# Alertmanager da API GeoSegBar.
+#
+# Nenhum segredo neste arquivo: token do bot, chat do Telegram e URL do
+# healthchecks.io vêm de compose secrets montados em /run/secrets/
+# (ver docs/MONITORAMENTO.md, "Primeira instalação").
+
+global:
+  resolve_timeout: 5m
+
+templates:
+  - /etc/alertmanager/templates/*.tmpl
+
+route:
+  receiver: telegram-critical
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # Dead man's switch: o healthchecks.io espera um ping por minuto.
+    - matchers:
+        - alertname="Watchdog"
+      receiver: healthchecks
+      group_wait: 0s
+      group_interval: 1m
+      repeat_interval: 1m
+
+    - matchers:
+        - severity="critical"
+      receiver: telegram-critical
+      repeat_interval: 1h
+
+    - matchers:
+        - severity="warning"
+      receiver: telegram-warning
+      repeat_interval: 12h
+
+inhibit_rules:
+  # Com a API fora, latência, SLO e pool viram consequência. Avisa a causa só.
+  - source_matchers:
+      - alertname="ApiSemColeta"
+    target_matchers:
+      - alertname=~"SloDisponibilidade.*|LatenciaAlta|EndpointLento|PoolDoBanco.*|ThreadsDoTomcatSaturadas|ExecutorSaturado|HeapAlto"
+  # Banco fora explica pool esgotado e erro 5xx.
+  - source_matchers:
+      - alertname="PostgresFora"
+    target_matchers:
+      - alertname=~"PoolDoBanco.*|SloDisponibilidade.*|TransacaoLongaNoBanco|ConexoesDoBancoAltas"
+  # Mesmo alerta em dois níveis: fica só o crítico.
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="warning"
+    equal: [alertname]
+
+receivers:
+  - name: telegram-critical
+    telegram_configs:
+      - bot_token_file: /run/secrets/telegram_bot_token
+        chat_id_file: /run/secrets/telegram_chat_id
+        parse_mode: HTML
+        message: '{{ template "geosegbar.telegram.message" . }}'
+        send_resolved: true
+
+  # Mesmo chat, notificação silenciosa: chega sem som.
+  - name: telegram-warning
+    telegram_configs:
+      - bot_token_file: /run/secrets/telegram_bot_token
+        chat_id_file: /run/secrets/telegram_chat_id
+        parse_mode: HTML
+        message: '{{ template "geosegbar.telegram.message" . }}'
+        disable_notifications: true
+        send_resolved: true
+
+  - name: healthchecks
+    webhook_configs:
+      - url_file: /run/secrets/healthchecks_watchdog_url
+        send_resolved: false

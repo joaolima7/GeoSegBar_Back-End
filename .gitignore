@@ -51,6 +51,11 @@ keystore.p12
 
 # Estado de runtime do deploy (upstream ativo do nginx) — gerado no servidor
 runtime/
+# Monitoramento: alvos do blackbox gerados pelo deploy e segredos/env locais
+monitoring/prometheus/targets/blackbox.yml
+monitoring/.secrets-dev/
+monitoring/.env.dev
+monitoring/.env
 
 # Lixo do Finder do macOS
 .DS_Store

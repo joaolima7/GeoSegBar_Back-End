@@ -21,6 +21,9 @@ Ações disponíveis no menu:
     - Verificar estado dos backups
     - Configurar cron de backup
     - Reset completo de ambiente
+    - Deploy do monitoramento (docs/MONITORAMENTO.md)
+    - Monitoramento: criar papel de leitura no banco
+    - Monitoramento: ligar pg_stat_statements
 EOF
 }
 

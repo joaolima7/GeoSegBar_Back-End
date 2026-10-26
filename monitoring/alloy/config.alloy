@@ -1,0 +1,206 @@
+// Grafana Alloy: o coletor da stack de observabilidade do GeoSegBar.
+//
+//   traces:  API --OTLP/HTTP :4318--> Alloy --OTLP/gRPC--> Tempo
+//   logs:    containers (via socket-proxy) e host (/var/log) --> Loki
+//
+// Rótulos do Loki são de baixa cardinalidade de propósito: container, service,
+// job, level e host. IP, usuário, rota e status ficam no corpo do log (JSON) e
+// são filtrados na consulta com `| json`. Um rótulo por IP criaria um stream por
+// visitante e derrubaria o Loki.
+
+logging {
+  level  = "warn"
+  format = "logfmt"
+}
+
+// ===========================================================================
+// Traces
+// ===========================================================================
+
+otelcol.receiver.otlp "api" {
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    traces = [otelcol.processor.memory_limiter.default.input]
+  }
+}
+
+otelcol.processor.memory_limiter "default" {
+  check_interval = "1s"
+  limit          = "200MiB"
+
+  output {
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+
+    // Tráfego só dentro da rede interna geosegbar-monitoring.
+    tls {
+      insecure = true
+    }
+  }
+}
+
+// ===========================================================================
+// Logs dos containers
+// ===========================================================================
+
+discovery.docker "containers" {
+  host             = "tcp://socket-proxy:2375"
+  refresh_interval = "15s"
+}
+
+discovery.relabel "containers" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  // service: nome do container por padrão, nome do serviço do compose quando
+  // houver, e o label com.geosegbar.service (a API publica "api") por cima.
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "(.+)"
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_geosegbar_service"]
+    regex         = "(.+)"
+    target_label  = "service"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "tcp://socket-proxy:2375"
+  targets       = discovery.docker.containers.targets
+  labels        = { job = "docker" }
+  relabel_rules = discovery.relabel.containers.rules
+  forward_to    = [loki.process.containers.receiver]
+}
+
+loki.process "containers" {
+  // Sem posição salva (primeira execução, volume novo), o Docker devolve o log
+  // inteiro de cada container desde que ele subiu. Isso reenviaria dias de
+  // histórico: linhas no formato antigo do nginx, que ainda tinham token na
+  // query string, e um pico que estoura o limite de ingestão do Loki. Fica só a
+  // última hora. Custo: se o Alloy ficar parado mais de 1 hora, a recuperação
+  // descarta o que for mais velho que isso.
+  stage.drop {
+    older_than          = "1h"
+    drop_counter_reason = "backfill"
+  }
+
+  // A API loga em JSON (formato Logstash do Spring Boot). O nível vira rótulo
+  // para o painel filtrar {service="api", level="error"} sem varrer tudo.
+  stage.match {
+    selector = "{service=\"api\"}"
+
+    stage.json {
+      expressions = { level = "level" }
+    }
+
+    stage.template {
+      source   = "level"
+      template = "{{ ToLower .Value }}"
+    }
+
+    stage.labels {
+      values = { level = "" }
+    }
+  }
+
+  stage.replace {
+    expression = `(eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})`
+    replace    = "[jwt]"
+  }
+
+  // Erro de rede do Alertmanager com o Telegram imprime a URL inteira, que leva
+  // o token do bot (https://api.telegram.org/bot<token>/sendMessage).
+  stage.replace {
+    expression = `/bot([0-9]{5,}:[A-Za-z0-9_-]{30,})`
+    replace    = "[telegram-token]"
+  }
+
+  forward_to = [loki.write.local.receiver]
+}
+
+// ===========================================================================
+// Logs do host (montados só para leitura em /host/var/log)
+// ===========================================================================
+//
+// Caminhos de um servidor cPanel (AlmaLinux): SSH em /var/log/secure, kernel em
+// /var/log/messages, Apache (EasyApache 4) em /var/log/apache2/error_log, onde o
+// ModSecurity registra cada bloqueio. Arquivo ausente não é erro: só não gera log.
+
+local.file_match "host" {
+  path_targets = [
+    { "__path__" = "/host/var/log/secure", "job" = "ssh", "host" = "prod" },
+    { "__path__" = "/host/var/log/messages", "job" = "kernel", "host" = "prod" },
+    { "__path__" = "/host/var/log/apache2/error_log", "job" = "apache-modsec", "host" = "prod" },
+  ]
+  sync_period = "30s"
+}
+
+loki.source.file "host" {
+  targets       = local.file_match.host.targets
+  // Na primeira leitura começa do fim: não reenvia meses de histórico.
+  tail_from_end = true
+  forward_to    = [loki.process.host.receiver]
+}
+
+loki.process "host" {
+  // De cada arquivo fica só o que interessa ao painel de segurança e aos alertas.
+  stage.match {
+    selector = "{job=\"ssh\"} !~ \"sshd\""
+    action   = "drop"
+  }
+
+  stage.match {
+    selector = "{job=\"kernel\"} !~ \"(?i)out of memory|oom-kill|oom_reaper|killed process\""
+    action   = "drop"
+  }
+
+  stage.match {
+    selector = "{job=\"apache-modsec\"} !~ \"ModSecurity\""
+    action   = "drop"
+  }
+
+  stage.replace {
+    expression = `(eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})`
+    replace    = "[jwt]"
+  }
+
+  forward_to = [loki.write.local.receiver]
+}
+
+// ===========================================================================
+// Saída
+// ===========================================================================
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

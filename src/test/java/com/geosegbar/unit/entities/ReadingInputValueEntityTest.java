@@ -260,9 +260,9 @@ class ReadingInputValueEntityTest extends BaseUnitTest {
         z.setInputAcronym("Z");
         z.setValue(BigDecimal.valueOf(1.0));
 
-        assertThat(x.getValue()).isEqualTo(10.0);
-        assertThat(y.getValue()).isEqualTo(6.0);
-        assertThat(z.getValue()).isEqualTo(1.0);
+        assertThat(x.getValue()).isEqualByComparingTo(BigDecimal.valueOf(10.0));
+        assertThat(y.getValue()).isEqualByComparingTo(BigDecimal.valueOf(6.0));
+        assertThat(z.getValue()).isEqualByComparingTo(BigDecimal.valueOf(1.0));
     }
 
     @Test

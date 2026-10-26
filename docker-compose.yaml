@@ -37,6 +37,12 @@ services:
       - .env
     expose:
       - "9090"
+      # Actuator (health, prometheus, info) na porta de management.
+      - "8081"
+    labels:
+      # Lidos pelo Prometheus e pelo Alloy de monitoring/ (docker-compose.dev.yml).
+      com.geosegbar.scrape: "true"
+      com.geosegbar.service: api
     networks:
       - geosegbar-network
     restart: unless-stopped
@@ -50,8 +56,9 @@ services:
           "wget",
           "--no-verbose",
           "--tries=1",
-          "--spider",
-          "http://localhost:9090/actuator/health",
+          "-O",
+          "/dev/null",
+          "http://localhost:8081/actuator/health/liveness",
         ]
       interval: 30s
       timeout: 10s
@@ -87,62 +94,8 @@ services:
       start_period: 10s
       retries: 3
 
-  prometheus:
-    image: prom/prometheus:v2.48.0
-    container_name: prometheus-dev
-    restart: unless-stopped
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-      - "--web.console.libraries=/etc/prometheus/console_libraries"
-      - "--web.console.templates=/etc/prometheus/consoles"
-      - "--web.enable-lifecycle"
-      - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}"
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
-      - prometheus-data:/prometheus
-    ports:
-      - "9091:9090"
-    networks:
-      - geosegbar-network
-    depends_on:
-      - geosegbar-api
-
-  grafana:
-    image: grafana/grafana:10.2.2
-    container_name: grafana-dev
-    restart: unless-stopped
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
-      - GF_INSTALL_PLUGINS=redis-datasource
-      - GF_SERVER_ROOT_URL=http://localhost:3001
-      - GF_USERS_ALLOW_SIGN_UP=false
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/etc/grafana/dashboards:ro
-    ports:
-      - "3001:3000"
-    networks:
-      - geosegbar-network
-    depends_on:
-      - prometheus
-
-  postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:v0.15.0
-    container_name: postgres-exporter-dev
-    restart: unless-stopped
-    environment:
-      DATA_SOURCE_NAME: "postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres-dev:5433\
-        /${DB_NAME}?sslmode=disable"
-    ports:
-      - "9187:9187"
-    networks:
-      - geosegbar-network
-    depends_on:
-      - postgres-dev
+  # Monitoramento (Prometheus, Grafana, Loki, Tempo, Alloy, exporters) mora em
+  # monitoring/. Para subir junto em dev, veja monitoring/docker-compose.dev.yml.
 
   redis-dev:
     image: redis:7-alpine
@@ -164,10 +117,11 @@ services:
 
 networks:
   geosegbar-network:
+    # Nome fixo: o compose de monitoring/ entra nesta rede como externa, igual
+    # em produção.
+    name: geosegbar-network
     driver: bridge
 
 volumes:
   postgres-dev-data:
-  prometheus-data:
-  grafana-data:
   redis-dev-data:

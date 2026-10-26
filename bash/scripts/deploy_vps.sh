@@ -7,7 +7,7 @@ if [ "${GEOSEGBAR_CLI_CONTEXT:-0}" != "1" ]; then
   exit 1
 fi
 
-echo "🚀 Iniciando deploy da API GeoSegBar em PRODUÇÃO com monitoramento..."
+echo "🚀 Iniciando deploy da API GeoSegBar em PRODUÇÃO..."
 
 DEPLOY_MODE="${DEPLOY_MODE:-FULL}"
 SKIP_GIT_PULL="${SKIP_GIT_PULL:-false}"
@@ -51,146 +51,6 @@ docker network create geosegbar-network 2>/dev/null || true
 
 # Criar diretórios necessários
 mkdir -p ./logs
-mkdir -p ./prometheus-prod
-mkdir -p ./grafana-prod/provisioning/datasources
-mkdir -p ./grafana-prod/provisioning/dashboards
-mkdir -p ./grafana-prod/dashboards
-
-# ============================================
-# CONFIGURAÇÕES DO PROMETHEUS (PRODUÇÃO)
-# ============================================
-if [ ! -f ./prometheus-prod/prometheus.yml ]; then
-    echo "📝 Criando configuração do Prometheus para produção..."
-    cat > ./prometheus-prod/prometheus.yml << 'EOF'
-global:
-  scrape_interval: 30s
-  evaluation_interval: 30s
-  external_labels:
-    environment: 'production'
-    cluster: 'geosegbar'
-
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets: []
-
-rule_files:
-  - 'alerts.yml'
-
-scrape_configs:
-  - job_name: 'prometheus'
-    static_configs:
-      - targets: ['prometheus-prod:9090']
-
-  - job_name: 'geosegbar-api'
-    metrics_path: '/actuator/prometheus'
-    static_configs:
-      - targets: ['geosegbar-api-prod:9090']
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: 'geosegbar-api-prod'
-
-  - job_name: 'postgres'
-    static_configs:
-      - targets: ['postgres-exporter-prod:9187']
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: 'postgres-prod'
-EOF
-    echo "✅ prometheus.yml criado para produção"
-fi
-
-if [ ! -f ./prometheus-prod/alerts.yml ]; then
-    echo "📝 Criando alertas do Prometheus para produção..."
-    cat > ./prometheus-prod/alerts.yml << 'EOF'
-groups:
-  - name: geosegbar_production_alerts
-    interval: 30s
-    rules:
-      - alert: APIDown
-        expr: up{job="geosegbar-api"} == 0
-        for: 2m
-        labels:
-          severity: critical
-        annotations:
-          summary: "API GeoSegBar PRODUÇÃO está DOWN"
-          description: "A API não está respondendo há mais de 2 minutos"
-
-      - alert: HighErrorRate
-        expr: rate(http_server_requests_seconds_count{status=~"5.."}[10m]) > 0.02
-        for: 10m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Taxa de erros 5xx alta em PRODUÇÃO"
-          description: "Taxa de erros 5xx acima de 2% nos últimos 10 minutos"
-
-      - alert: HighMemoryUsage
-        expr: (jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) > 0.85
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Uso de memória heap alto em PRODUÇÃO"
-          description: "Uso de memória heap acima de 85%"
-
-      - alert: DatabaseDown
-        expr: up{job="postgres"} == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "PostgreSQL está DOWN"
-          description: "Banco de dados PostgreSQL não está respondendo"
-EOF
-    echo "✅ alerts.yml criado para produção"
-fi
-
-echo "📝 Criando datasource do Prometheus para produção..."
-cat > ./grafana-prod/provisioning/datasources/prometheus.yml << 'EOF'
-apiVersion: 1
-
-datasources:
-  - name: Prometheus
-    type: prometheus
-    access: proxy
-    url: http://prometheus-prod:9090
-    isDefault: true
-    editable: true
-    jsonData:
-      timeInterval: "30s"
-      queryTimeout: "60s"
-EOF
-echo "✅ Datasource Prometheus configurado para produção"
-
-# Criar configuração de dashboards
-if [ ! -f ./grafana-prod/provisioning/dashboards/default.yml ]; then
-    echo "📝 Criando configuração de dashboards..."
-    cat > ./grafana-prod/provisioning/dashboards/default.yml << 'EOF'
-apiVersion: 1
-
-providers:
-  - name: 'Default'
-    orgId: 1
-    folder: ''
-    type: file
-    disableDeletion: false
-    updateIntervalSeconds: 10
-    allowUiUpdates: true
-    options:
-      path: /etc/grafana/dashboards
-EOF
-    echo "✅ Configuração de dashboards criada"
-fi
-
-# Copiar dashboards JSON
-if [ -d ./grafana/dashboards ]; then
-    mkdir -p ./grafana-prod/dashboards
-    cp -r ./grafana/dashboards/*.json ./grafana-prod/dashboards/ 2>/dev/null || true
-    echo "✅ Dashboards JSON copiados"
-fi
 
 # ============================================
 # POSTGRESQL
@@ -246,23 +106,6 @@ else
       
     echo "⏳ Aguardando banco de dados inicializar..."
     sleep 15
-fi
-
-# ============================================
-# POSTGRES EXPORTER
-# ============================================
-if docker ps --format '{{.Names}}' | grep -q '^postgres-exporter-prod$'; then
-    echo "✅ Postgres Exporter já está rodando"
-else
-    echo "🔄 Iniciando Postgres Exporter..."
-    docker rm -f postgres-exporter-prod 2>/dev/null || true
-    docker run -d \
-      --name postgres-exporter-prod \
-      --restart unless-stopped \
-      --network geosegbar-network \
-      -e DATA_SOURCE_NAME="postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres-prod:5432/${DB_NAME}?sslmode=disable" \
-      prometheuscommunity/postgres-exporter:v0.15.0
-    echo "✅ Postgres Exporter iniciado"
 fi
 
 # ============================================
@@ -426,7 +269,27 @@ if [ "$SKIP_GIT_PULL" = "true" ]; then
   echo "⏭️ Pulando git pull (SKIP_GIT_PULL=true)"
 else
   echo "📥 Atualizando código..."
+  SHA_ANTES_DO_PULL="$(git rev-parse HEAD 2>/dev/null || echo '')"
   git pull origin main
+
+  # O bash continua executando o corpo ANTIGO deste arquivo depois do pull (ele
+  # já está aberto; o git grava um arquivo novo no lugar). Se o pull mudou este
+  # script, reexecuta a versão nova a partir daqui: Postgres e Redis são
+  # conferidos de novo (idempotente) e o backup já foi feito.
+  if [ -n "$SHA_ANTES_DO_PULL" ] && \
+     ! git diff --quiet "$SHA_ANTES_DO_PULL" HEAD -- bash/scripts/deploy_vps.sh; then
+    echo "🔁 O deploy_vps.sh mudou no pull. Reexecutando a versão nova..."
+    exec env SKIP_GIT_PULL=true SKIP_PRE_DEPLOY_BACKUP=true bash "$SCRIPT_DIR/bash/scripts/deploy_vps.sh"
+  fi
+fi
+
+# O Prometheus legado (antes de monitoring/) coletava geosegbar-api-prod:9090
+# /actuator/prometheus. O actuator agora mora na 8081: na 9090 o caminho dá 404
+# e o container legado só gera ruído. O volume dele fica; o monitoramento novo
+# tem deploy próprio (docs/MONITORAMENTO.md).
+if docker ps -aq -f 'name=^prometheus-prod$' | grep -q .; then
+  docker rm -f prometheus-prod >/dev/null 2>&1 || true
+  echo "🧹 Prometheus legado (prometheus-prod) removido; volume mantido."
 fi
 
 GIT_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo manual)"
@@ -451,10 +314,14 @@ start_api_container() {
 
   docker rm -f "$nome" >/dev/null 2>&1 || true
 
-  # O alias fixo mantém o Prometheus funcionando sem saber de cor nenhuma: ele
-  # scrapeia geosegbar-api-prod:9090 e o DNS do Docker resolve para quem estiver
-  # com o alias. Durante a janela de sobreposição há duas instâncias saudáveis da
-  # mesma aplicação, o que é inofensivo para métrica.
+  # O alias fixo é o nome estável da API dentro da rede do Docker.
+  #
+  # O monitoramento (monitoring/, deploy separado) acha cada container pelo label
+  # com.geosegbar.scrape e coleta na porta de management 8081: blue e green viram
+  # instâncias distintas nos painéis, inclusive na janela de sobreposição.
+  #
+  # Log do Docker com rotação: sem max-size o json-file cresce sem limite e o
+  # disco enche. 5 x 50 MB por container.
   docker run -d \
     --name "$nome" \
     --restart unless-stopped \
@@ -463,7 +330,17 @@ start_api_container() {
     --memory=2g \
     --cpus="1.5" \
     --expose 9090 \
+    --expose 8081 \
+    --label com.geosegbar.scrape=true \
+    --label com.geosegbar.service=api \
+    --label "com.geosegbar.version=${GIT_SHA}" \
+    --log-driver json-file \
+    --log-opt max-size=50m \
+    --log-opt max-file=5 \
     -e SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE}" \
+    -e APP_VERSION="${GIT_SHA}" \
+    -e TRACING_ENABLED="${TRACING_ENABLED_EFETIVO}" \
+    -e TRACING_SAMPLING_PROBABILITY="${TRACING_SAMPLING_PROBABILITY:-1.0}" \
     -e JAVA_OPTS="${JAVA_OPTS}" \
     -e FLYWAY_ENABLED="${FLYWAY_ENABLED:-true}" \
     -e DB_HOST="${DB_HOST}" \
@@ -506,6 +383,18 @@ start_api_container() {
     "$imagem"
 }
 
+# Tracing: liga quando o coletor (geosegbar-alloy, de monitoring/) está no ar.
+# Sem ele o exportador OTLP só acumularia falhas de envio no log. TRACING_ENABLED
+# no .env.prod, se definido, vence a detecção.
+if [ -n "${TRACING_ENABLED:-}" ]; then
+  TRACING_ENABLED_EFETIVO="$TRACING_ENABLED"
+elif [ -n "$(docker ps -q -f 'name=^geosegbar-alloy$')" ]; then
+  TRACING_ENABLED_EFETIVO=true
+else
+  TRACING_ENABLED_EFETIVO=false
+fi
+echo "🔭 Tracing: ${TRACING_ENABLED_EFETIVO}"
+
 echo "🚀 Subindo nova versão em ${IDLE_CONTAINER}..."
 if ! start_api_container "$IDLE_CONTAINER" "$NEW_IMAGE"; then
   echo "❌ Não foi possível iniciar o novo container. Versão anterior segue no ar."
@@ -537,7 +426,7 @@ while [ "$HEALTH_ELAPSED" -lt "$HEALTH_TIMEOUT_SECONDS" ]; do
   # -O /dev/null em vez de --spider: --spider faz HEAD, e HEAD é justamente o que
   # tropeçava na regra de segurança. GET é o que o endpoint realmente serve.
   if docker exec "$IDLE_CONTAINER" \
-       wget -q -O /dev/null -T 5 http://localhost:9090/actuator/health/readiness 2>/dev/null; then
+       wget -q -O /dev/null -T 5 http://localhost:8081/actuator/health/readiness 2>/dev/null; then
     NEW_HEALTHY=true
     break
   fi
@@ -623,19 +512,27 @@ if [ "$UPSTREAM_JA_TROCADO" != true ]; then
   # Regenera a configuração a partir do template versionado.
   #
   # Sem isto, mudança em nginx/default.conf.template NUNCA chega em produção:
-  # o volume atualiza o arquivo em /etc/nginx/templates/, mas quem transforma
-  # template em configuração é o entrypoint da imagem, e ele só roda quando o
-  # container SOBE. Como o nginx não é recriado a cada deploy (de propósito,
-  # para não abrir janela de indisponibilidade), o `nginx -s reload` relia o
-  # /etc/nginx/conf.d/default.conf antigo e a mudança passava despercebida —
-  # deploy verde, configuração velha. Foi o que aconteceu com os ajustes de
-  # timeout: o container subiu em 26/08 e seguiu com os valores daquele dia.
+  # quem transforma template em configuração é o entrypoint da imagem, e ele só
+  # roda quando o container SOBE. Como o nginx não é recriado a cada deploy (de
+  # propósito, para não abrir janela de indisponibilidade), o `nginx -s reload`
+  # relia o /etc/nginx/conf.d/default.conf antigo e a mudança passava
+  # despercebida — deploy verde, configuração velha. Foi o que aconteceu com os
+  # ajustes de timeout: o container subiu em 26/08 e seguiu com os valores
+  # daquele dia.
   #
-  # O envsubst restrito a $UPSTREAM_SERVER imita o entrypoint da imagem: as
-  # variáveis do próprio nginx ($host, $remote_addr) precisam sobreviver.
+  # O template vai pela entrada padrão, lido do host. Ler o arquivo montado em
+  # /etc/nginx/templates/ não serve: o `git pull` troca o arquivo por outro
+  # (inode novo) e o bind mount de arquivo único continua apontando para o
+  # antigo até o container ser recriado.
+  #
+  # Dentro do sh -c, "$UPSTREAM_SERVER" é expandido pelo shell do container, onde
+  # a variável não existe: o comando vira `envsubst ""`, que não substitui nada.
+  # É o que precisa: as variáveis do próprio nginx ($host, $remote_addr,
+  # $request_id) passam intactas, e o template não usa ${VAR} de ambiente. Se um
+  # dia usar, troque por envsubst '${NOME}' com a lista explícita.
   docker exec nginx-prod cp /etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf.bak
-  docker exec nginx-prod sh -c \
-    'envsubst "$UPSTREAM_SERVER" < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf'
+  docker exec -i nginx-prod sh -c \
+    'envsubst "$UPSTREAM_SERVER" > /etc/nginx/conf.d/default.conf' < "$SCRIPT_DIR/nginx/default.conf.template"
 
   if ! docker exec nginx-prod nginx -t >/dev/null 2>&1; then
     echo "❌ Configuração do nginx inválida. Revertendo e mantendo a versão anterior."
@@ -714,66 +611,6 @@ echo "🏷️  Imagem publicada: ${NEW_IMAGE} (também marcada como :latest)"
 echo "🏷️  Versão anterior preservada como geosegbar-prod:previous"
 
 # ============================================
-# PROMETHEUS
-# ============================================
-if docker ps -q -f name=prometheus-prod | grep -q .; then
-    echo "🔄 Reiniciando Prometheus..."
-    docker stop prometheus-prod
-    docker rm prometheus-prod
-fi
-
-if ! docker volume ls -q -f name=prometheus-prod-data | grep -q .; then
-    docker volume create prometheus-prod-data
-fi
-
-echo "🚀 Iniciando Prometheus..."
-docker run -d \
-  --name prometheus-prod \
-  --restart unless-stopped \
-  --network geosegbar-network \
-  -v $SCRIPT_DIR/prometheus-prod/prometheus.yml:/etc/prometheus/prometheus.yml:ro \
-  -v $SCRIPT_DIR/prometheus-prod/alerts.yml:/etc/prometheus/alerts.yml:ro \
-  -v prometheus-prod-data:/prometheus \
-  prom/prometheus:v2.48.0 \
-  --config.file=/etc/prometheus/prometheus.yml \
-  --storage.tsdb.path=/prometheus \
-  --web.console.libraries=/etc/prometheus/console_libraries \
-  --web.console.templates=/etc/prometheus/consoles \
-  --web.enable-lifecycle \
-  --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}
-
-# ============================================
-# GRAFANA
-# ============================================
-if docker ps -q -f name=grafana-prod | grep -q .; then
-    echo "🔄 Reiniciando Grafana..."
-    docker stop grafana-prod
-    docker rm grafana-prod
-fi
-
-if ! docker volume ls -q -f name=grafana-prod-data | grep -q .; then
-    docker volume create grafana-prod-data
-fi
-
-echo "🚀 Iniciando Grafana..."
-docker run -d \
-  --name grafana-prod \
-  --restart unless-stopped \
-  --network geosegbar-network \
-  -e GF_SECURITY_ADMIN_USER=admin \
-  -e GF_SECURITY_ADMIN_PASSWORD="${GRAFANA_PASSWORD}" \
-  -e GF_INSTALL_PLUGINS=redis-datasource \
-  -e GF_SERVER_ROOT_URL=http://localhost:3001 \
-  -e GF_USERS_ALLOW_SIGN_UP=false \
-  -v grafana-prod-data:/var/lib/grafana \
-  -v $SCRIPT_DIR/grafana-prod/provisioning:/etc/grafana/provisioning:ro \
-  -v $SCRIPT_DIR/grafana-prod/dashboards:/etc/grafana/dashboards:ro \
-  grafana/grafana:10.2.2
-
-echo "⏳ Aguardando monitoramento inicializar..."
-sleep 10
-
-# ============================================
 # VERIFICAÇÃO
 # ============================================
 # A saúde da nova versão já foi validada antes da troca de tráfego, e um smoke
@@ -786,19 +623,18 @@ echo "📡 SERVIÇOS DISPONÍVEIS:"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🌐 API (nginx):   http://localhost:${SERVER_PORT}"
 echo "🎨 Versão no ar:  ${IDLE_CONTAINER}  (imagem ${NEW_IMAGE})"
-echo "📊 Prometheus:    http://localhost:9091"
-echo "📈 Grafana:       http://localhost:3001 (admin / ${GRAFANA_PASSWORD})"
+echo "📈 Monitoramento: Grafana pela tailnet ou túnel SSH (docs/MONITORAMENTO.md)"
 echo "🗄️  PostgreSQL:    localhost:${DB_PORT}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "↩️  Para voltar à versão anterior:  ./bash/cli_app.sh  →  Rollback produção"
 echo ""
 echo "📊 Status dos containers:"
-docker ps --filter "name=geosegbar" --filter "name=postgres-prod" --filter "name=nginx-prod" --filter "name=prometheus-prod" --filter "name=grafana-prod"
+docker ps --filter "name=geosegbar-api" --filter "name=postgres-prod" --filter "name=redis-prod" --filter "name=nginx-prod"
 
 echo ""
 echo "🧹 Limpando imagens órfãs (a :previous é preservada)..."
 docker image prune -f > /dev/null 2>&1 || true
 
 echo ""
-echo "🎉 Deploy em PRODUÇÃO concluído com monitoramento completo!"
+echo "🎉 Deploy em PRODUÇÃO concluído!"

@@ -181,7 +181,7 @@ class ClassificationDamServiceTest extends BaseUnitTest {
     void shouldUpdateClassificationSuccessfully() {
         // Given
         mockClassification.setClassification("B");
-        when(classificationDamRepository.findById(1L)).thenReturn(Optional.of(mockClassification));
+        when(classificationDamRepository.existsById(1L)).thenReturn(true);
         when(classificationDamRepository.existsByClassificationAndIdNot("B", 1L)).thenReturn(false);
         when(classificationDamRepository.save(mockClassification)).thenReturn(mockClassification);
 
@@ -191,7 +191,7 @@ class ClassificationDamServiceTest extends BaseUnitTest {
         // Then
         assertThat(result).isNotNull();
         assertThat(result.getClassification()).isEqualTo("B");
-        verify(classificationDamRepository).findById(1L);
+        verify(classificationDamRepository).existsById(1L);
         verify(classificationDamRepository).existsByClassificationAndIdNot("B", 1L);
         verify(classificationDamRepository).save(mockClassification);
     }
@@ -200,14 +200,14 @@ class ClassificationDamServiceTest extends BaseUnitTest {
     @DisplayName("Should throw NotFoundException when updating non-existent classification")
     void shouldThrowNotFoundExceptionWhenUpdatingNonExistent() {
         // Given
-        when(classificationDamRepository.findById(1L)).thenReturn(Optional.empty());
+        when(classificationDamRepository.existsById(1L)).thenReturn(false);
 
         // When/Then
         assertThatThrownBy(() -> classificationDamService.update(mockClassification))
                 .isInstanceOf(NotFoundException.class)
                 .hasMessage("Classificação de barragem não encontrada para atualização!");
 
-        verify(classificationDamRepository).findById(1L);
+        verify(classificationDamRepository).existsById(1L);
         verify(classificationDamRepository, never()).save(any());
     }
 
@@ -216,7 +216,7 @@ class ClassificationDamServiceTest extends BaseUnitTest {
     void shouldThrowDuplicateResourceExceptionWhenUpdatingToExistingName() {
         // Given
         mockClassification.setClassification("C");
-        when(classificationDamRepository.findById(1L)).thenReturn(Optional.of(mockClassification));
+        when(classificationDamRepository.existsById(1L)).thenReturn(true);
         when(classificationDamRepository.existsByClassificationAndIdNot("C", 1L)).thenReturn(true);
 
         // When/Then
@@ -224,7 +224,7 @@ class ClassificationDamServiceTest extends BaseUnitTest {
                 .isInstanceOf(DuplicateResourceException.class)
                 .hasMessage("Já existe uma classificação de barragem com este nome!");
 
-        verify(classificationDamRepository).findById(1L);
+        verify(classificationDamRepository).existsById(1L);
         verify(classificationDamRepository).existsByClassificationAndIdNot("C", 1L);
         verify(classificationDamRepository, never()).save(any());
     }
@@ -233,7 +233,7 @@ class ClassificationDamServiceTest extends BaseUnitTest {
     @DisplayName("Should allow update to same classification name")
     void shouldAllowUpdateToSameClassificationName() {
         // Given
-        when(classificationDamRepository.findById(1L)).thenReturn(Optional.of(mockClassification));
+        when(classificationDamRepository.existsById(1L)).thenReturn(true);
         when(classificationDamRepository.existsByClassificationAndIdNot("A", 1L)).thenReturn(false);
         when(classificationDamRepository.save(mockClassification)).thenReturn(mockClassification);
 
@@ -250,14 +250,14 @@ class ClassificationDamServiceTest extends BaseUnitTest {
     @DisplayName("Should delete classification successfully")
     void shouldDeleteClassificationSuccessfully() {
         // Given
-        when(classificationDamRepository.findById(1L)).thenReturn(Optional.of(mockClassification));
+        when(classificationDamRepository.existsById(1L)).thenReturn(true);
         doNothing().when(classificationDamRepository).deleteById(1L);
 
         // When
         classificationDamService.deleteById(1L);
 
         // Then
-        verify(classificationDamRepository).findById(1L);
+        verify(classificationDamRepository).existsById(1L);
         verify(classificationDamRepository).deleteById(1L);
     }
 
@@ -265,14 +265,14 @@ class ClassificationDamServiceTest extends BaseUnitTest {
     @DisplayName("Should throw NotFoundException when deleting non-existent classification")
     void shouldThrowNotFoundExceptionWhenDeletingNonExistent() {
         // Given
-        when(classificationDamRepository.findById(1L)).thenReturn(Optional.empty());
+        when(classificationDamRepository.existsById(1L)).thenReturn(false);
 
         // When/Then
         assertThatThrownBy(() -> classificationDamService.deleteById(1L))
                 .isInstanceOf(NotFoundException.class)
                 .hasMessage("Classificação de barragem não encontrada para exclusão!");
 
-        verify(classificationDamRepository).findById(1L);
+        verify(classificationDamRepository).existsById(1L);
         verify(classificationDamRepository, never()).deleteById(any());
     }
 

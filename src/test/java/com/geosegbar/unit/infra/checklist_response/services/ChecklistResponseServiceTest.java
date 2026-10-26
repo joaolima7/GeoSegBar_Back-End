@@ -6,25 +6,18 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import static org.mockito.Mockito.atLeast;
-import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
 
 import com.geosegbar.config.BaseUnitTest;
 import com.geosegbar.entities.ChecklistResponseEntity;
@@ -40,8 +33,7 @@ import com.geosegbar.infra.dam.services.DamService;
  * Testes unitários para ChecklistResponseService
  *
  * Cobertura: - CRUD operations (save/update/delete/findById/findAll) - Find
- * operations (findByDamId/findByClientId/findByUserId) - Cache eviction
- * strategies (multiple caches + pattern-based) - Paged queries -
+ * operations (findByDamId/findByClientId/findByUserId) - Paged queries -
  * NotFoundException scenarios - Dam change handling
  */
 @ExtendWith(MockitoExtension.class)
@@ -57,12 +49,6 @@ class ChecklistResponseServiceTest extends BaseUnitTest {
 
     @Mock
     private com.geosegbar.infra.dam.services.DamAccessService damAccessService;
-
-    @Mock
-    private CacheManager checklistCacheManager;
-
-    @Mock
-    private Cache mockCache;
 
     @InjectMocks
     private ChecklistResponseService checklistResponseService;
@@ -103,10 +89,9 @@ class ChecklistResponseServiceTest extends BaseUnitTest {
     @DisplayName("Should save checklist response successfully")
     void shouldSaveChecklistResponseSuccessfully() {
         // Given
-        when(checklistCacheManager.getCache(anyString())).thenReturn(mockCache);
-        doNothing().when(mockCache).evict(any());
         when(damService.findById(1L)).thenReturn(mockDam);
         when(checklistResponseRepository.save(mockResponse)).thenReturn(mockResponse);
+        when(checklistResponseRepository.findByIdWithBasicInfo(1L)).thenReturn(Optional.of(mockResponse));
 
         // When
         ChecklistResponseEntity result = checklistResponseService.save(mockResponse);
@@ -119,24 +104,7 @@ class ChecklistResponseServiceTest extends BaseUnitTest {
 
         verify(damService).findById(1L);
         verify(checklistResponseRepository).save(mockResponse);
-        verify(mockCache, atLeastOnce()).evict(any());
-    }
-
-    @Test
-    @DisplayName("Should evict cache after save")
-    void shouldEvictCacheAfterSave() {
-        // Given
-        when(checklistCacheManager.getCache(anyString())).thenReturn(mockCache);
-        doNothing().when(mockCache).evict(any());
-        when(damService.findById(1L)).thenReturn(mockDam);
-        when(checklistResponseRepository.save(mockResponse)).thenReturn(mockResponse);
-
-        // When
-        checklistResponseService.save(mockResponse);
-
-        // Then
-        verify(checklistCacheManager, atLeastOnce()).getCache(anyString());
-        verify(mockCache, atLeastOnce()).evict(any());
+        verify(checklistResponseRepository).findByIdWithBasicInfo(1L);
     }
 
     @Test
@@ -150,6 +118,7 @@ class ChecklistResponseServiceTest extends BaseUnitTest {
 
         when(damService.findById(1L)).thenReturn(fullDam);
         when(checklistResponseRepository.save(mockResponse)).thenReturn(mockResponse);
+        when(checklistResponseRepository.findByIdWithBasicInfo(1L)).thenReturn(Optional.of(mockResponse));
 
         // When
         ChecklistResponseEntity result = checklistResponseService.save(mockResponse);
@@ -169,11 +138,10 @@ class ChecklistResponseServiceTest extends BaseUnitTest {
         updatedResponse.setDam(mockDam);
         updatedResponse.setUser(mockUser);
 
-        when(checklistCacheManager.getCache(anyString())).thenReturn(mockCache);
-        doNothing().when(mockCache).evict(any());
         when(checklistResponseRepository.findById(1L)).thenReturn(Optional.of(mockResponse));
         when(damService.findById(1L)).thenReturn(mockDam);
         when(checklistResponseRepository.save(updatedResponse)).thenReturn(updatedResponse);
+        when(checklistResponseRepository.findByIdWithBasicInfo(1L)).thenReturn(Optional.of(updatedResponse));
 
         // When
         ChecklistResponseEntity result = checklistResponseService.update(updatedResponse);
@@ -182,6 +150,7 @@ class ChecklistResponseServiceTest extends BaseUnitTest {
         assertThat(result).isNotNull();
         assertThat(result.getId()).isEqualTo(1L);
         verify(checklistResponseRepository).save(updatedResponse);
+        verify(checklistResponseRepository).findByIdWithBasicInfo(1L);
     }
 
     @Test
@@ -197,26 +166,8 @@ class ChecklistResponseServiceTest extends BaseUnitTest {
     }
 
     @Test
-    @DisplayName("Should evict cache by id after update")
-    void shouldEvictCacheByIdAfterUpdate() {
-        // Given
-        when(checklistCacheManager.getCache(anyString())).thenReturn(mockCache);
-        doNothing().when(mockCache).evict(any());
-        when(checklistResponseRepository.findById(1L)).thenReturn(Optional.of(mockResponse));
-        when(damService.findById(1L)).thenReturn(mockDam);
-        when(checklistResponseRepository.save(mockResponse)).thenReturn(mockResponse);
-
-        // When
-        checklistResponseService.update(mockResponse);
-
-        // Then
-        verify(checklistCacheManager, atLeastOnce()).getCache(anyString());
-        verify(mockCache, atLeastOnce()).evict(1L);
-    }
-
-    @Test
-    @DisplayName("Should evict old and new dam caches when dam changes")
-    void shouldEvictOldAndNewDamCachesWhenDamChanges() {
+    @DisplayName("Should resolve the new dam when dam changes on update")
+    void shouldResolveNewDamWhenDamChangesOnUpdate() {
         // Given
         DamEntity newDam = new DamEntity();
         newDam.setId(2L);
@@ -226,57 +177,56 @@ class ChecklistResponseServiceTest extends BaseUnitTest {
         newClient.setId(2L);
         newDam.setClient(newClient);
 
+        // A barragem enviada no corpo é só uma referência (id); o service a resolve.
+        DamEntity damReference = new DamEntity();
+        damReference.setId(2L);
+
         ChecklistResponseEntity updatedResponse = new ChecklistResponseEntity();
         updatedResponse.setId(1L);
-        updatedResponse.setDam(newDam);
+        updatedResponse.setDam(damReference);
         updatedResponse.setUser(mockUser);
 
-        when(checklistCacheManager.getCache(anyString())).thenReturn(mockCache);
-        doNothing().when(mockCache).evict(any());
         when(checklistResponseRepository.findById(1L)).thenReturn(Optional.of(mockResponse));
-        when(damService.findById(1L)).thenReturn(mockDam); // Old dam
         when(damService.findById(2L)).thenReturn(newDam); // New dam
         when(checklistResponseRepository.save(updatedResponse)).thenReturn(updatedResponse);
+        when(checklistResponseRepository.findByIdWithBasicInfo(1L)).thenReturn(Optional.of(updatedResponse));
 
         // When
-        checklistResponseService.update(updatedResponse);
+        ChecklistResponseEntity result = checklistResponseService.update(updatedResponse);
 
         // Then
+        assertThat(result.getDam()).isEqualTo(newDam);
         verify(checklistResponseRepository).findById(1L);
-        verify(damService).findById(1L); // Old dam lookup
         verify(damService).findById(2L); // New dam lookup
         verify(checklistResponseRepository).save(updatedResponse);
-        verify(mockCache, atLeastOnce()).evict(any());
     }
 
     @Test
     @DisplayName("Should throw NotFoundException when response not found on delete")
     void shouldThrowNotFoundExceptionWhenResponseNotFoundOnDelete() {
         // Given
-        when(checklistResponseRepository.findById(1L)).thenReturn(Optional.empty());
+        when(checklistResponseRepository.existsById(1L)).thenReturn(false);
 
         // When/Then
         assertThatThrownBy(() -> checklistResponseService.deleteById(1L))
                 .isInstanceOf(NotFoundException.class)
                 .hasMessageContaining("não encontrada para exclusão");
+
+        verify(checklistResponseRepository, never()).deleteById(1L);
     }
 
     @Test
-    @DisplayName("Should evict cache after delete")
-    void shouldEvictCacheAfterDelete() {
+    @DisplayName("Should delete checklist response successfully")
+    void shouldDeleteChecklistResponseSuccessfully() {
         // Given
-        when(checklistCacheManager.getCache(anyString())).thenReturn(mockCache);
-        doNothing().when(mockCache).evict(any());
-        when(checklistResponseRepository.findById(1L)).thenReturn(Optional.of(mockResponse));
-        when(damService.findById(1L)).thenReturn(mockDam);
-        doNothing().when(checklistResponseRepository).deleteById(1L);
+        when(checklistResponseRepository.existsById(1L)).thenReturn(true);
 
         // When
         checklistResponseService.deleteById(1L);
 
         // Then
-        verify(checklistCacheManager, atLeastOnce()).getCache(anyString());
-        verify(mockCache, atLeastOnce()).evict(any());
+        verify(checklistResponseRepository).existsById(1L);
+        verify(checklistResponseRepository).deleteById(1L);
     }
 
     // ==================== Find Tests ====================
@@ -284,7 +234,7 @@ class ChecklistResponseServiceTest extends BaseUnitTest {
     @DisplayName("Should find checklist response by id successfully")
     void shouldFindChecklistResponseByIdSuccessfully() {
         // Given
-        when(checklistResponseRepository.findById(1L)).thenReturn(Optional.of(mockResponse));
+        when(checklistResponseRepository.findByIdWithBasicInfo(1L)).thenReturn(Optional.of(mockResponse));
 
         // When
         ChecklistResponseEntity result = checklistResponseService.findById(1L);
@@ -292,14 +242,14 @@ class ChecklistResponseServiceTest extends BaseUnitTest {
         // Then
         assertThat(result).isNotNull();
         assertThat(result.getId()).isEqualTo(1L);
-        verify(checklistResponseRepository).findById(1L);
+        verify(checklistResponseRepository).findByIdWithBasicInfo(1L);
     }
 
     @Test
     @DisplayName("Should throw NotFoundException when response not found by id")
     void shouldThrowNotFoundExceptionWhenResponseNotFoundById() {
         // Given
-        when(checklistResponseRepository.findById(999L)).thenReturn(Optional.empty());
+        when(checklistResponseRepository.findByIdWithBasicInfo(999L)).thenReturn(Optional.empty());
 
         // When/Then
         assertThatThrownBy(() -> checklistResponseService.findById(999L))
@@ -376,37 +326,6 @@ class ChecklistResponseServiceTest extends BaseUnitTest {
     }
 
     // Removed: Paged Query Tests - require complex DTO conversion with private methods
-    // ==================== Cache Tests ====================
-    @Test
-    @DisplayName("Should evict multiple cache entries on save")
-    void shouldEvictMultipleCacheEntriesOnSave() {
-        // Given
-        when(checklistCacheManager.getCache(anyString())).thenReturn(mockCache);
-        doNothing().when(mockCache).evict(any());
-        when(damService.findById(1L)).thenReturn(mockDam);
-        when(checklistResponseRepository.save(mockResponse)).thenReturn(mockResponse);
-
-        // When
-        checklistResponseService.save(mockResponse);
-
-        // Then
-        verify(checklistCacheManager, atLeast(2)).getCache(anyString());
-        verify(mockCache, atLeast(2)).evict(any());
-    }
-
-    @Test
-    @DisplayName("Should handle null cache gracefully")
-    void shouldHandleNullCacheGracefully() {
-        // Given
-        when(checklistCacheManager.getCache(anyString())).thenReturn(null);
-        when(damService.findById(1L)).thenReturn(mockDam);
-        when(checklistResponseRepository.save(mockResponse)).thenReturn(mockResponse);
-
-        // When/Then - Should not throw exception
-        assertThatCode(() -> checklistResponseService.save(mockResponse))
-                .doesNotThrowAnyException();
-    }
-
     // ==================== Edge Cases ====================
     @Test
     @DisplayName("Should handle response with timestamp")
@@ -417,6 +336,7 @@ class ChecklistResponseServiceTest extends BaseUnitTest {
 
         when(damService.findById(1L)).thenReturn(mockDam);
         when(checklistResponseRepository.save(mockResponse)).thenReturn(mockResponse);
+        when(checklistResponseRepository.findByIdWithBasicInfo(1L)).thenReturn(Optional.of(mockResponse));
 
         // When
         ChecklistResponseEntity result = checklistResponseService.save(mockResponse);

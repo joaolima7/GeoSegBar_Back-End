@@ -1,0 +1,442 @@
+# Stack de observabilidade da API GeoSegBar.
+#
+# Métricas (Prometheus), logs (Loki), traces (Tempo), alertas (Alertmanager),
+# coletor (Alloy) e painéis (Grafana). Desenho, acesso e operação em
+# docs/MONITORAMENTO.md.
+#
+# Não suba este arquivo direto em produção: use ./bash/cli_app.sh → "Deploy do
+# monitoramento". O script valida cada configuração com o binário da própria
+# imagem, copia tudo para /opt/geosegbar-monitoring (dono root, fora da home do
+# wwvpsb) e só então roda o compose de lá.
+#
+# Regras de segurança deste arquivo:
+#   - Nenhuma porta publicada na internet. O único `ports:` é o do Grafana, preso
+#     a 127.0.0.1; o acesso do time chega pelo Tailscale (tailscale serve) ou por
+#     túnel SSH.
+#   - Rede `monitoring` interna (sem rota para a internet). O Alertmanager
+#     (Telegram, healthchecks.io), o blackbox (sondas das URLs públicas) e o
+#     Grafana (publicação em 127.0.0.1) usam a rede `egress`. Prometheus, Alloy e
+#     os exporters de Postgres e Redis também entram na geosegbar-network (onde
+#     estão API, banco e Redis), que não é interna; nela, as portas do Prometheus
+#     (9090), do Alloy (12345, 4318) e dos exporters ficam visíveis para os
+#     outros containers dessa rede, nunca para fora do host.
+#   - Ninguém recebe o socket do Docker direto: Prometheus, Alloy e cAdvisor falam
+#     com o socket-proxy, que só aceita GET, numa rede interna só deles
+#     (docker-api). GET em /containers ainda lê o ambiente e os arquivos de
+#     qualquer container, segredos da API inclusive; por isso nenhum outro
+#     serviço alcança o proxy.
+#   - Segredos em arquivo (compose secrets), nunca em variável de ambiente.
+#   - Versões fixadas por tag e digest. Atualize as duas juntas.
+
+name: geosegbar-monitoring
+
+x-base: &base
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "3"
+
+networks:
+  monitoring:
+    name: geosegbar-monitoring
+    internal: true
+  egress:
+    name: geosegbar-monitoring-egress
+  # Só socket-proxy, Prometheus, Alloy e cAdvisor.
+  docker-api:
+    name: geosegbar-monitoring-docker-api
+    internal: true
+  # Criada pelo deploy da API (bash/scripts/deploy_vps.sh). É onde estão a API
+  # (porta de management 8081), o Postgres e o Redis.
+  geosegbar:
+    name: geosegbar-network
+    external: true
+
+volumes:
+  prometheus-data:
+    name: geosegbar-prometheus-data
+  alertmanager-data:
+    name: geosegbar-alertmanager-data
+  grafana-data:
+    name: geosegbar-grafana-data
+  loki-data:
+    name: geosegbar-loki-data
+  tempo-data:
+    name: geosegbar-tempo-data
+  alloy-data:
+    name: geosegbar-alloy-data
+
+secrets:
+  grafana_admin_password:
+    file: ${GSB_SECRETS_DIR:?defina GSB_SECRETS_DIR}/grafana_admin_password
+  pg_monitoring_password:
+    file: ${GSB_SECRETS_DIR}/pg_monitoring_password
+  telegram_bot_token:
+    file: ${GSB_SECRETS_DIR}/telegram_bot_token
+  telegram_chat_id:
+    file: ${GSB_SECRETS_DIR}/telegram_chat_id
+  healthchecks_watchdog_url:
+    file: ${GSB_SECRETS_DIR}/healthchecks_watchdog_url
+
+services:
+  # --------------------------------------------------------------------------
+  # Acesso só de leitura à API do Docker (descoberta de containers e logs).
+  # POST=0: nada aqui consegue criar, parar ou executar container. Mesmo só com
+  # GET, /containers/{id}/json devolve o ambiente (segredos da API) e
+  # /containers/{id}/archive devolve arquivos: por isso o proxy fica na rede
+  # docker-api, que só os três consumidores alcançam.
+  # --------------------------------------------------------------------------
+  socket-proxy:
+    <<: *base
+    image: tecnativa/docker-socket-proxy:v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
+    container_name: geosegbar-socket-proxy
+    environment:
+      CONTAINERS: "1"
+      NETWORKS: "1"
+      INFO: "1"
+      VERSION: "1"
+      PING: "1"
+      EVENTS: "0"
+      IMAGES: "0"
+      POST: "0"
+      # Sem isto o proxy escuta em [::]:2375 e falha se o kernel subir sem IPv6.
+      DISABLE_IPV6: "1"
+      # O padrão registra cada consulta de descoberta (a cada 15 s), e o Alloy
+      # mandaria tudo para o Loki.
+      LOG_LEVEL: warning
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - docker-api
+    mem_limit: 64m
+    cpus: 0.2
+
+  prometheus:
+    <<: *base
+    image: prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
+    container_name: geosegbar-prometheus
+    user: "65534:65534"
+    # Sem --web.enable-lifecycle e sem --web.enable-admin-api: ninguém na rede
+    # derruba o Prometheus nem apaga séries por HTTP. Recarga: SIGHUP.
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-30d}
+      - --storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE:-8GB}
+      - --enable-feature=exemplar-storage
+      - --web.listen-address=:9090
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - ./prometheus/targets:/etc/prometheus/targets:ro
+      - prometheus-data:/prometheus
+    # node_exporter roda na rede do host, escutando no IP da ponte docker0.
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    networks:
+      - monitoring
+      - geosegbar
+      - docker-api
+    read_only: true
+    cap_drop: [ALL]
+    mem_limit: 1g
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:9090/-/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      - socket-proxy
+
+  alertmanager:
+    <<: *base
+    image: prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a
+    container_name: geosegbar-alertmanager
+    user: "65534:65534"
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      # Instância única: sem a porta de cluster (gossip) aberta.
+      - --cluster.listen-address=
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./alertmanager/templates:/etc/alertmanager/templates:ro
+      - alertmanager-data:/alertmanager
+    secrets:
+      - telegram_bot_token
+      - telegram_chat_id
+      - healthchecks_watchdog_url
+    networks:
+      - monitoring
+      - egress
+    read_only: true
+    cap_drop: [ALL]
+    mem_limit: 128m
+    cpus: 0.25
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:9093/-/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  loki:
+    <<: *base
+    image: grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28
+    container_name: geosegbar-loki
+    command:
+      - -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./loki/loki.yml:/etc/loki/loki.yml:ro
+      - ./loki/rules:/etc/loki/rules:ro
+      - loki-data:/loki
+    networks:
+      - monitoring
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    mem_limit: 768m
+    cpus: 0.75
+    # Imagem distroless (sem wget): o próprio binário responde -health.
+    healthcheck:
+      test: ["CMD", "/usr/bin/loki", "-health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  # Imagem distroless, roda como 10001. O /var/tempo da imagem já é 10001:10001
+  # e o volume novo herda esse dono: não precisa de passo de chown.
+  tempo:
+    <<: *base
+    image: grafana/tempo:2.10.10@sha256:12b0820f13ffa10ce956b6e9acc3b03f3cffded99109be6cc09d106fe56e5d38
+    container_name: geosegbar-tempo
+    command:
+      - -config.file=/etc/tempo/tempo.yml
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo-data:/var/tempo
+    networks:
+      - monitoring
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    mem_limit: 768m
+    cpus: 0.75
+
+  # --------------------------------------------------------------------------
+  # Alloy: recebe os traces da API (OTLP/HTTP na 4318, só na rede do Docker),
+  # lê os logs dos containers pelo socket-proxy e os logs do host (SSH,
+  # ModSecurity, OOM do kernel) montados só para leitura.
+  #
+  # Roda como root, com as capabilities padrão do Docker: /var/log/secure e
+  # /var/log/messages são 0600 de root, e o /var/lib/alloy/data da imagem é do
+  # usuário 473 (root escreve ali por DAC_OVERRIDE). Não acrescente cap_drop.
+  # Sistema de arquivos só de leitura.
+  # --------------------------------------------------------------------------
+  alloy:
+    <<: *base
+    image: grafana/alloy:v1.21.2@sha256:89a5a320168387336b9ac3c850609c3ba7757eadd4ae5f1d819deb35e9854b18
+    container_name: geosegbar-alloy
+    user: "0:0"
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - --disable-reporting
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy/data
+      - ${HOST_LOG_DIR:-/var/log}:/host/var/log:ro
+    networks:
+      - monitoring
+      - geosegbar
+      - docker-api
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 384m
+    cpus: 0.5
+    depends_on:
+      - loki
+      - tempo
+      - socket-proxy
+
+  # --------------------------------------------------------------------------
+  # Métricas do host. Precisa da rede e do PID do host para ver interfaces e
+  # discos reais; por isso escuta só no IP da ponte docker0 (privado), que o
+  # deploy detecta e grava em NODE_EXPORTER_LISTEN. Nunca 0.0.0.0.
+  # --------------------------------------------------------------------------
+  node-exporter:
+    <<: *base
+    image: prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+    container_name: geosegbar-node-exporter
+    network_mode: host
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --web.listen-address=${NODE_EXPORTER_LISTEN:?defina NODE_EXPORTER_LISTEN (ex. 172.17.0.1:9100)}
+      - --collector.textfile.directory=/host/var/lib/geosegbar-monitoring/textfile
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|run|sys|var/lib/docker/.+|var/lib/containers/.+)($$|/)
+      - --collector.netdev.device-exclude=^(veth.*|br-.*|docker0|lo)$$
+    volumes:
+      - /:/host:ro,rslave
+    read_only: true
+    cap_drop: [ALL]
+    mem_limit: 64m
+    cpus: 0.2
+
+  # Consumo de CPU e memória por container. Sem privileged: o OOM vem do log do
+  # kernel (Alloy → Loki), não do /dev/kmsg.
+  cadvisor:
+    <<: *base
+    image: gcr.io/cadvisor/cadvisor:v0.55.1@sha256:3de2bd5203120b866d74a9b283b2ffb8ec382fbf9dc321814700c6ea6f44ec57
+    container_name: geosegbar-cadvisor
+    command:
+      - --docker=tcp://socket-proxy:2375
+      - --docker_only=true
+      - --housekeeping_interval=30s
+      - --store_container_labels=false
+      - --whitelisted_container_labels=com.docker.compose.service
+      - --disable_metrics=advtcp,cpu_topology,cpuset,hugetlb,memory_numa,percpu,perf_event,process,referenced_memory,resctrl,sched,tcp,udp
+      - --enable_load_reader=false
+    volumes:
+      - /:/rootfs:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - monitoring
+      - docker-api
+    mem_limit: 256m
+    cpus: 0.5
+    depends_on:
+      - socket-proxy
+
+  # Conecta com o papel `monitoring` (pg_monitor, só leitura de estatística),
+  # criado por bash/scripts/monitoring/create_pg_monitoring_role.sh.
+  postgres-exporter:
+    <<: *base
+    image: prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
+    container_name: geosegbar-postgres-exporter
+    environment:
+      DATA_SOURCE_URI: "${PG_EXPORTER_HOST:-postgres-prod}:5432/${PG_EXPORTER_DATABASE:?defina PG_EXPORTER_DATABASE}?sslmode=disable"
+      DATA_SOURCE_USER: ${PG_EXPORTER_USER:-monitoring}
+      DATA_SOURCE_PASS_FILE: /run/secrets/pg_monitoring_password
+      PG_EXPORTER_COLLECTION_TIMEOUT: 10s
+    command:
+      # Ligado só depois da Fase 4 (bash/scripts/monitoring/enable_pg_stat_statements.sh),
+      # que troca PG_STAT_STATEMENTS_FLAG para collector.stat_statements.
+      - --${PG_STAT_STATEMENTS_FLAG:-no-collector.stat_statements}
+      - --collector.stat_statements.include_query
+      - --collector.stat_statements.query_length=300
+      - --collector.stat_statements.limit=50
+    secrets:
+      - pg_monitoring_password
+    networks:
+      - monitoring
+      - geosegbar
+    read_only: true
+    cap_drop: [ALL]
+    mem_limit: 96m
+    cpus: 0.25
+
+  redis-exporter:
+    <<: *base
+    image: oliver006/redis_exporter:v1.96.0@sha256:3d57b9eb142a62ffc600063606a41cd471cd53d81bed10be5b56b3a8918f2c26
+    container_name: geosegbar-redis-exporter
+    environment:
+      REDIS_ADDR: "redis://${REDIS_EXPORTER_HOST:-redis-prod}:6379"
+    networks:
+      - monitoring
+      - geosegbar
+    read_only: true
+    cap_drop: [ALL]
+    mem_limit: 64m
+    cpus: 0.2
+
+  # Sonda as URLs públicas de fora para dentro (resposta e validade do TLS).
+  blackbox:
+    <<: *base
+    image: prom/blackbox-exporter:v0.29.1@sha256:ea1c7aa3ef3f307cd03e85f34abb604478ccb90b567fc690da0cd9776da76b13
+    container_name: geosegbar-blackbox
+    command:
+      - --config.file=/etc/blackbox/blackbox.yml
+    volumes:
+      - ./blackbox/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    networks:
+      - monitoring
+      - egress
+    read_only: true
+    cap_drop: [ALL]
+    mem_limit: 64m
+    cpus: 0.2
+
+  grafana:
+    <<: *base
+    image: grafana/grafana:13.2.4@sha256:dbbc38ea21103cefb50396340cd88afec779c7e070b0a7bf5a75b4ce46651d3f
+    container_name: geosegbar-grafana
+    user: "472"
+    environment:
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000/}
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?defina GRAFANA_ADMIN_USER}
+      # Lida só na criação do banco do Grafana (volume novo). Para trocar depois:
+      # docs/MONITORAMENTO.md, "Trocar a senha do admin".
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_SECURITY_COOKIE_SECURE: ${GRAFANA_COOKIE_SECURE:-true}
+      GF_SECURITY_COOKIE_SAMESITE: strict
+      GF_SECURITY_CONTENT_SECURITY_POLICY: "true"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_AUTH_LOGIN_MAXIMUM_INACTIVE_LIFETIME_DURATION: 12h
+      GF_AUTH_LOGIN_MAXIMUM_LIFETIME_DURATION: 7d
+      GF_SNAPSHOTS_ENABLED: "false"
+      GF_SNAPSHOTS_EXTERNAL_ENABLED: "false"
+      GF_PUBLIC_DASHBOARDS_ENABLED: "false"
+      GF_PLUGINS_PLUGIN_ADMIN_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_ANALYTICS_FEEDBACK_LINKS_ENABLED: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_LOG_MODE: console
+      GF_LOG_LEVEL: warn
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/geosegbar/overview.json
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards/geosegbar:ro
+    secrets:
+      - grafana_admin_password
+    ports:
+      # Só localhost. O time chega por `tailscale serve` (HTTPS dentro da
+      # tailnet) ou por túnel SSH. Nunca troque por 0.0.0.0.
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    networks:
+      - monitoring
+      - egress
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    mem_limit: 512m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      - prometheus
+      - loki
+      - tempo

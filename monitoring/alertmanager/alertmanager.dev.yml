@@ -1,0 +1,8 @@
+# Alertmanager de desenvolvimento: recebe tudo e não envia nada. Os alertas
+# aparecem no Grafana (Alerting) e em http://alertmanager:9093 dentro da rede.
+
+route:
+  receiver: descartar
+
+receivers:
+  - name: descartar

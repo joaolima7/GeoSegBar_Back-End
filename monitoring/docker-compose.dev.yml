@@ -1,0 +1,23 @@
+# Override para rodar a stack de monitoramento na máquina de desenvolvimento,
+# junto do docker-compose.yaml da raiz (API, Postgres e Redis de dev).
+#
+#   cp monitoring/.env.dev.example monitoring/.env.dev
+#   ./monitoring/scripts/dev-secrets.sh            # segredos falsos em .secrets-dev/
+#   docker compose up -d                           # API de dev (raiz)
+#   docker compose --env-file monitoring/.env.dev \
+#     -f monitoring/docker-compose.yml -f monitoring/docker-compose.dev.yml up -d
+#
+# Grafana em http://localhost:3000. Sem Telegram e sem healthchecks: o
+# Alertmanager de dev descarta tudo.
+
+services:
+  # Métricas de host e de container não fazem sentido no Docker Desktop (seria a
+  # VM do Docker, não o Mac). Ligue com --profile host-metrics se quiser.
+  node-exporter:
+    profiles: ["host-metrics"]
+  cadvisor:
+    profiles: ["host-metrics"]
+
+  alertmanager:
+    volumes:
+      - ./alertmanager/alertmanager.dev.yml:/etc/alertmanager/alertmanager.yml:ro

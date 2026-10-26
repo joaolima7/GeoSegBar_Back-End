@@ -14,6 +14,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import com.geosegbar.common.metrics.BusinessMetrics;
+import com.geosegbar.common.metrics.BusinessMetrics.UploadKind;
+import com.geosegbar.common.metrics.BusinessMetrics.UploadResult;
 import com.geosegbar.infra.checklist_submission.dtos.ChecklistPhotoKind;
 import com.geosegbar.infra.checklist_submission.dtos.ChecklistPhotoPresignRequestDTO;
 import com.geosegbar.infra.checklist_submission.dtos.ChecklistPhotoPresignResponseDTO;
@@ -56,6 +59,7 @@ public class ChecklistPhotoPresignService {
 
     private final S3Presigner s3Presigner;
     private final FileStorageService fileStorageService;
+    private final BusinessMetrics businessMetrics;
 
     @Value("${aws.s3.bucket}")
     private String bucketName;
@@ -93,6 +97,7 @@ public class ChecklistPhotoPresignService {
             PresignedPutObjectRequest presigned = s3Presigner.presignPutObject(presignRequest);
 
             pendingKeys.put(objectKey, now);
+            businessMetrics.uploadPresigned(UploadKind.CHECKLIST_PHOTO);
 
             out.add(ChecklistPhotoPresignResponseDTO.Item.builder()
                     .clientRef(item.getClientRef())
@@ -127,7 +132,12 @@ public class ChecklistPhotoPresignService {
      * Confirma no S3 (HEAD) que a imagem foi de fato enviada.
      */
     public boolean objectExists(String objectKey) {
-        return fileStorageService.objectExists(objectKey);
+        boolean exists = fileStorageService.objectExists(objectKey);
+        if (!exists) {
+            // Chave assinada, mas o PUT nunca chegou ao S3: o upload falhou
+            businessMetrics.uploadCompleted(UploadKind.CHECKLIST_PHOTO, UploadResult.FAILURE);
+        }
+        return exists;
     }
 
     /**
@@ -136,7 +146,14 @@ public class ChecklistPhotoPresignService {
      */
     public void confirmKeys(Collection<String> objectKeys) {
         if (objectKeys != null) {
-            objectKeys.forEach(pendingKeys::remove);
+            // Só conta quem estava de fato pendente: reconfirmar não conta duas vezes
+            long confirmed = 0;
+            for (String key : objectKeys) {
+                if (pendingKeys.remove(key) != null) {
+                    confirmed++;
+                }
+            }
+            businessMetrics.uploadCompleted(UploadKind.CHECKLIST_PHOTO, UploadResult.SUCCESS, confirmed);
         }
     }
 
@@ -158,10 +175,12 @@ public class ChecklistPhotoPresignService {
     public void cleanupOrphanUploads() {
         Instant cutoff = Instant.now().minus(ORPHAN_TTL);
         int removed = 0;
+        int expired = 0;
         for (Map.Entry<String, Instant> entry : pendingKeys.entrySet()) {
             if (entry.getValue().isBefore(cutoff)) {
                 String key = entry.getKey();
                 pendingKeys.remove(key);
+                expired++;
                 try {
                     fileStorageService.deleteFile(fileStorageService.publicUrlForKey(key));
                     removed++;
@@ -170,6 +189,7 @@ public class ChecklistPhotoPresignService {
                 }
             }
         }
+        businessMetrics.uploadCompleted(UploadKind.CHECKLIST_PHOTO, UploadResult.EXPIRED, expired);
         if (removed > 0) {
             log.info("[CHECKLIST-PRESIGN] Cleanup: {} upload(s) órfão(s) removido(s) (>{}h).",
                     removed, ORPHAN_TTL.toHours());

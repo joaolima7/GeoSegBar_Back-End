@@ -15,7 +15,10 @@ show_menu() {
     echo "4) Verificar estado dos backups"
     echo "5) Configurar cron de backup"
     echo "6) Reset completo de ambiente"
-    echo "7) Sair"
+    echo "7) Deploy do monitoramento (Prometheus, Grafana, Loki, Tempo)"
+    echo "8) Monitoramento: criar papel de leitura no banco"
+    echo "9) Monitoramento: ligar pg_stat_statements (reinicia o Postgres)"
+    echo "10) Sair"
     echo "==============================================="
 }
 
@@ -31,7 +34,10 @@ menu_loop() {
             4) bash "$ROOT_DIR/bash/commands/verify_backups.sh" ;;
             5) bash "$ROOT_DIR/bash/commands/setup_cron_backup.sh" ;;
             6) bash "$ROOT_DIR/bash/commands/reset_environment.sh" ;;
-            7)
+            7) bash "$ROOT_DIR/bash/commands/deploy_monitoring.sh" ;;
+            8) bash "$ROOT_DIR/bash/commands/monitoring_pg_role.sh" ;;
+            9) bash "$ROOT_DIR/bash/commands/monitoring_pg_stat_statements.sh" ;;
+            10)
                 info "Encerrando CLI."
                 exit 0
                 ;;

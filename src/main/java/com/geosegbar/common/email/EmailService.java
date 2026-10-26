@@ -28,6 +28,8 @@ import com.geosegbar.infra.audit.services.AuditService;
 import com.geosegbar.infra.user.dto.UserSupportInfoProjection;
 import com.geosegbar.infra.user.persistence.jpa.UserRepository;
 
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +47,7 @@ public class EmailService {
     private final TemplateEngine templateEngine;
     private final UserRepository userRepository;
     private final AuditService auditService;
+    private final ObservationRegistry observationRegistry;
 
     /**
      * Auto-injeção lazy para permitir que métodos @Async da mesma classe sejam
@@ -66,6 +69,18 @@ public class EmailService {
 
     @Value("${application.frontend-url}")
     private String frontendUrl;
+
+    /**
+     * Envia pelo SMTP dentro de uma observação: vira a métrica
+     * {@code geosegbar_email_seconds{template,error}} e um span no trace. A
+     * exceção sobe intacta para o catch de cada método de envio, que continua
+     * engolindo e auditando — a observação só a registra na tag {@code error}.
+     */
+    private void sendObserved(String template, MimeMessage message) {
+        Observation.createNotStarted("geosegbar.email", observationRegistry)
+                .lowCardinalityKeyValue("template", template)
+                .observe(() -> mailSender.send(message));
+    }
 
     /**
      * Registra a falha de envio na auditoria, para ficar visível no painel sem
@@ -116,7 +131,7 @@ public class EmailService {
             helper.setText(htmlContent, true);
 
             log.info("[EMAIL] Enviando error-report → to={} subject='[GeoSegBar] Erro Interno - {}'", logEmail, errorMessage);
-            mailSender.send(message);
+            sendObserved("error_report", message);
             log.info("[EMAIL] ✓ error-report entregue ao SMTP → to={}", logEmail);
         } catch (MessagingException | MailException e) {
             log.error("[EMAIL] ✗ FALHA ao enviar error-report → to={} cause={} message={}",
@@ -142,7 +157,7 @@ public class EmailService {
             helper.setText(htmlContent, true);
 
             log.info("[EMAIL] Enviando verification-code → from={} to={}", fromEmail, toEmail);
-            mailSender.send(message);
+            sendObserved("verification_code", message);
             log.info("[EMAIL] ✓ verification-code entregue ao SMTP → to={}", toEmail);
         } catch (MessagingException | MailException e) {
             log.error("[EMAIL] ✗ FALHA ao enviar verification-code → to={} cause={} message={}",
@@ -168,7 +183,7 @@ public class EmailService {
             helper.setText(htmlContent, true);
 
             log.info("[EMAIL] Enviando password-reset-code → from={} to={}", fromEmail, toEmail);
-            mailSender.send(message);
+            sendObserved("password_reset_code", message);
             log.info("[EMAIL] ✓ password-reset-code entregue ao SMTP → to={}", toEmail);
         } catch (MessagingException | MailException e) {
             log.error("[EMAIL] ✗ FALHA ao enviar password-reset-code → to={} cause={} message={}",
@@ -218,7 +233,7 @@ public class EmailService {
 
             log.info("[EMAIL] Enviando password-setup-link → from={} to={} user='{}' welcome={}",
                     fromEmail, toEmail, userName, welcome);
-            mailSender.send(message);
+            sendObserved("password_setup_link", message);
             log.info("[EMAIL] ✓ password-setup-link entregue ao SMTP → to={} user='{}'", toEmail, userName);
         } catch (MessagingException | MailException e) {
             log.error("[EMAIL] ✗ FALHA ao enviar password-setup-link → to={} user='{}' cause={} message={}",
@@ -249,7 +264,7 @@ public class EmailService {
 
             log.info("[EMAIL] Enviando share-folder → from={} to={} folder='{}' sharedBy='{}'",
                     fromEmail, to, folderName, sharedByName);
-            mailSender.send(mimeMessage);
+            sendObserved("share_folder", mimeMessage);
             log.info("[EMAIL] ✓ share-folder entregue ao SMTP → to={} folder='{}'", to, folderName);
         } catch (MessagingException | MailException e) {
             log.error("[EMAIL] ✗ FALHA ao enviar share-folder → to={} folder='{}' cause={} message={}",
@@ -319,7 +334,7 @@ public class EmailService {
             log.info("[EMAIL] Enviando support-request → from={} to={} sender='{}' <{}> attachments={}",
                     fromEmail, supportEmail, senderName, senderEmail,
                     attachments != null ? attachments.size() : 0);
-            mailSender.send(mimeMessage);
+            sendObserved("support_request", mimeMessage);
             log.info("[EMAIL] ✓ support-request entregue ao SMTP → to={} sender='{}' <{}>",
                     supportEmail, senderName, senderEmail);
         } catch (MessagingException | MailException e) {

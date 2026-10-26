@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.geosegbar.common.enums.AuditSource;
+import com.geosegbar.common.metrics.BusinessMetrics;
 import com.geosegbar.entities.InstrumentEntity;
 import com.geosegbar.infra.audit.services.AuditService;
 import com.geosegbar.infra.hydrotelemetric.services.AnaApiService;
@@ -29,6 +30,7 @@ public class HydrotelemetricDataCollectionJob {
     private final InstrumentRepository instrumentRepository;
     private final HydrotelemetricCollectionService collectionService;
     private final AuditService auditService;
+    private final BusinessMetrics businessMetrics;
 
     @Scheduled(cron = "0 30 0 * * ?")
     public void collectHydrotelemetricData() {
@@ -51,8 +53,10 @@ public class HydrotelemetricDataCollectionJob {
 
                     collectionService.collectInstrumentData(instrument, authToken, today, null);
                     success++;
+                    businessMetrics.anaStationCollected(true);
                 } catch (Exception e) {
                     failures++;
+                    businessMetrics.anaStationCollected(false);
                     log.error("Erro ao coletar dados para o instrumento {}: {}",
                             instrument.getName(), e.getMessage(), e);
                 }
@@ -63,7 +67,9 @@ public class HydrotelemetricDataCollectionJob {
                     "Coleta concluída: " + success + " instrumento(s) com sucesso, "
                     + failures + " com falha (de " + linimetricInstruments.size() + ").",
                     traceId, durationMs(start));
+            businessMetrics.anaCollectionRun(true);
         } catch (Exception e) {
+            businessMetrics.anaCollectionRun(false);
             log.error("Erro durante a coleta de dados hidrotelemétricos: {}", e.getMessage(), e);
             auditService.recordJobError(ACTION, ACTION_LABEL, AuditSource.SCHEDULED,
                     "Falha geral na coleta de dados hidrotelemétricos.", e, traceId, durationMs(start));

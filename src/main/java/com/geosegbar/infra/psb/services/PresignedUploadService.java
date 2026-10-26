@@ -13,6 +13,9 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import com.geosegbar.common.metrics.BusinessMetrics;
+import com.geosegbar.common.metrics.BusinessMetrics.UploadKind;
+import com.geosegbar.common.metrics.BusinessMetrics.UploadResult;
 import com.geosegbar.infra.psb.dtos.PresignedUploadCompleteRequest.CompletedPartDTO;
 import com.geosegbar.infra.psb.dtos.PresignedUploadInitResponse;
 import com.geosegbar.infra.psb.dtos.PresignedUploadInitResponse.PresignedPartUrl;
@@ -88,6 +91,7 @@ public class PresignedUploadService {
 
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
+    private final BusinessMetrics businessMetrics;
 
     @Value("${aws.s3.bucket}")
     private String bucketName;
@@ -160,6 +164,7 @@ public class PresignedUploadService {
                 s3UploadId, totalParts, Instant.now()
         );
         pendingUploads.put(uploadId, pending);
+        businessMetrics.uploadPresigned(UploadKind.PSB);
 
         long elapsedMs = (System.nanoTime() - startMs) / 1_000_000;
         log.info("[PRESIGNED] Init multipart: uploadId={}, s3UploadId={}, s3Key={}, "
@@ -211,12 +216,14 @@ public class PresignedUploadService {
 
         PendingUpload pending = pendingUploads.remove(uploadId);
         if (pending == null) {
+            businessMetrics.uploadCompleted(UploadKind.PSB, UploadResult.EXPIRED);
             throw new IllegalArgumentException(
                     "Upload não encontrado ou expirado: " + uploadId);
         }
 
         if (completedParts == null || completedParts.isEmpty()) {
             abortMultipartUpload(pending.s3Key(), pending.s3UploadId());
+            businessMetrics.uploadCompleted(UploadKind.PSB, UploadResult.FAILURE);
             throw new IllegalArgumentException(
                     "Lista de partes completadas é obrigatória. Esperado: " + pending.totalParts() + " partes");
         }
@@ -240,7 +247,13 @@ public class PresignedUploadService {
                         .build())
                 .build();
 
-        s3Client.completeMultipartUpload(completeRequest);
+        try {
+            s3Client.completeMultipartUpload(completeRequest);
+        } catch (RuntimeException e) {
+            businessMetrics.uploadCompleted(UploadKind.PSB, UploadResult.FAILURE);
+            throw e;
+        }
+        businessMetrics.uploadCompleted(UploadKind.PSB, UploadResult.SUCCESS);
 
         // Gera URL pública
         String downloadUrl = getS3Url(pending.s3Key());
@@ -328,6 +341,8 @@ public class PresignedUploadService {
                 }
             }
 
+            businessMetrics.uploadCompleted(UploadKind.PSB, UploadResult.EXPIRED, aborted);
+
             if (aborted > 0) {
                 log.warn("[PRESIGNED] Startup: {} multipart upload(s) orphao(s) abortado(s) (>{}min)",
                         aborted, UPLOAD_EXPIRATION.toMinutes());
@@ -362,6 +377,8 @@ public class PresignedUploadService {
                         UPLOAD_EXPIRATION.toMinutes(), entry.getKey(), pending.s3Key(), pending.createdAt());
             }
         }
+
+        businessMetrics.uploadCompleted(UploadKind.PSB, UploadResult.EXPIRED, cleaned);
 
         if (cleaned > 0) {
             log.info("[PRESIGNED] Cleanup: {} upload(s) expirado(s) removido(s)", cleaned);

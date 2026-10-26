@@ -1,0 +1,38 @@
+# Alertas sobre logs, avaliados pelo ruler do Loki e entregues ao mesmo
+# Alertmanager dos alertas de métrica.
+
+groups:
+  - name: geosegbar-logs
+    interval: 1m
+    rules:
+      - alert: OomNoKernel
+        expr: |
+          sum(count_over_time({job="kernel"} |~ "(?i)out of memory|oom-kill|killed process" [5m])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: O kernel do servidor matou um processo por falta de memória.
+          description: Veja no painel Servidor e containers qual container estava no limite e no log do kernel qual processo morreu.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#oomnokernel
+
+      - alert: ModSecurityBloqueiosEmPico
+        expr: |
+          sum(count_over_time({job="apache-modsec"} [10m])) > 50
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} eventos do ModSecurity em 10 minutos."
+          description: Varredura ou força bruta nas rotas de código (a regra 429 das rotas de código conta aqui). Veja os IPs no painel Segurança.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#modsecuritybloqueiosempico
+
+      # O SSH só aceita chave; tentativas com senha são ruído de internet. O
+      # limite é alto para avisar só de campanha concentrada.
+      - alert: ForcaBrutaSsh
+        expr: |
+          sum(count_over_time({job="ssh"} |~ "Failed|Invalid user" [10m])) > 300
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} tentativas de SSH recusadas em 10 minutos."
+          description: Confira se nenhuma linha Accepted veio de IP desconhecido no painel Segurança.
+          runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#forcabrutassh

@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 
 import com.geosegbar.common.enums.AnomalyOriginEnum;
 import com.geosegbar.common.enums.TypeQuestionEnum;
+import com.geosegbar.common.metrics.BusinessMetrics;
 import com.geosegbar.common.utils.AuthenticatedUserUtil;
 import com.geosegbar.common.utils.ChecklistOptionTransitionValidator;
 import com.geosegbar.entities.AnomalyEntity;
@@ -83,6 +84,7 @@ public class ChecklistSubmissionPersistenceService {
     private final DamRepository damRepository;
     private final AnomalyPhotoRepository anomalyPhotoRepository;
     private final DocumentationDamRepository documentationDamRepository;
+    private final BusinessMetrics businessMetrics;
 
     @Transactional(timeout = 60)
     public ChecklistResponseSubmissionService.SubmissionResult persistChecklistData(
@@ -159,6 +161,7 @@ public class ChecklistSubmissionPersistenceService {
 
         updateLastAchievementChecklist(submissionDto.getDamId());
 
+        businessMetrics.checklistSubmitted();
         return new ChecklistResponseSubmissionService.SubmissionResult(checklistResponse, pendingUploads);
     }
 
@@ -257,6 +260,7 @@ public class ChecklistSubmissionPersistenceService {
 
         updateLastAchievementChecklist(submissionDto.getDamId());
 
+        businessMetrics.checklistSubmitted();
         return checklistResponse;
     }
 

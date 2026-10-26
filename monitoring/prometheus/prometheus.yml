@@ -1,0 +1,127 @@
+# Prometheus da API GeoSegBar. Ver docs/MONITORAMENTO.md.
+#
+# Este arquivo é o que roda em produção: o deploy do monitoramento copia a pasta
+# monitoring/ inteira para /opt/geosegbar-monitoring. Não há mais configuração
+# gerada dentro de script.
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: geosegbar
+    environment: production
+
+# Exemplares ligam um ponto do histograma de latência ao trace no Tempo.
+# 100 mil exemplares ocupam perto de 10 MB de memória.
+storage:
+  exemplars:
+    max_exemplars: 100000
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  # --------------------------------------------------------------------------
+  # API. Descoberta pelo Docker (via socket-proxy): todo container com o label
+  # com.geosegbar.scrape=true. Blue e green viram instâncias separadas
+  # (instance = nome do container), e os painéis somam as duas.
+  #
+  # A coleta é na porta de management (8081), que o nginx nunca encaminha.
+  # --------------------------------------------------------------------------
+  - job_name: geosegbar-api
+    metrics_path: /actuator/prometheus
+    docker_sd_configs:
+      - host: tcp://socket-proxy:2375
+        refresh_interval: 15s
+        filters:
+          - name: label
+            values: ["com.geosegbar.scrape=true"]
+    relabel_configs:
+      - source_labels: [__meta_docker_network_name]
+        regex: geosegbar-network
+        action: keep
+      - source_labels: [__meta_docker_port_private]
+        regex: "8081"
+        action: keep
+      - source_labels: [__meta_docker_container_name]
+        regex: "/(.*)"
+        target_label: instance
+      - source_labels: [__meta_docker_container_label_com_geosegbar_service]
+        regex: "(.+)"
+        target_label: service
+
+  - job_name: node
+    static_configs:
+      - targets: ["host.docker.internal:9100"]
+        labels:
+          instance: host
+
+  - job_name: cadvisor
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["cadvisor:8080"]
+        labels:
+          instance: host
+    # Guarda só o que os painéis e alertas usam. O cAdvisor publica dezenas de
+    # famílias por container; sem este filtro elas viram milhares de séries.
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: "container_(cpu_usage_seconds_total|memory_working_set_bytes|spec_memory_limit_bytes|network_receive_bytes_total|network_transmit_bytes_total|start_time_seconds|last_seen|oom_events_total|fs_usage_bytes|fs_limit_bytes)|machine_(cpu_cores|memory_bytes)|cadvisor_version_info"
+        action: keep
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+        labels:
+          instance: postgres-prod
+
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+        labels:
+          instance: redis-prod
+
+  # Sondas HTTP das URLs públicas. A lista vem de targets/blackbox.yml, gerado
+  # pelo deploy a partir de BLACKBOX_TARGETS (ver monitoring/.env.example).
+  - job_name: blackbox
+    scrape_interval: 60s
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/targets/blackbox.yml
+        refresh_interval: 5m
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  # O próprio monitoramento: um componente parado é alerta, não silêncio.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+  - job_name: alertmanager
+    static_configs:
+      - targets: ["alertmanager:9093"]
+  - job_name: loki
+    static_configs:
+      - targets: ["loki:3100"]
+  - job_name: tempo
+    static_configs:
+      - targets: ["tempo:3200"]
+  - job_name: alloy
+    static_configs:
+      - targets: ["alloy:12345"]
+  - job_name: grafana
+    static_configs:
+      - targets: ["grafana:3000"]

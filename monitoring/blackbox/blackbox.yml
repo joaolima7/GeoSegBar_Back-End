@@ -1,0 +1,14 @@
+# Módulos do blackbox_exporter. As URLs sondadas ficam em
+# prometheus/targets/blackbox.yml (gerado pelo deploy a partir de BLACKBOX_TARGETS).
+
+modules:
+  http_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: ip4
+      follow_redirects: true
+      fail_if_not_ssl: true
+      # Sem corpo no log da sonda: a resposta não interessa, só o status e o TLS.
+      headers:
+        User-Agent: geosegbar-blackbox

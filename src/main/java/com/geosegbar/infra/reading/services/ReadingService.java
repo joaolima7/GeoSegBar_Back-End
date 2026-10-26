@@ -11,6 +11,8 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -275,68 +277,84 @@ public class ReadingService {
         return createPagedResponse(groupedResult, dateHourPage);
     }
 
+    /**
+     * Últimas {@code limit} datas/horas de leitura de cada instrumento ativo do
+     * cliente, agrupadas por instrumento e por data/hora.
+     *
+     * Uma consulta só (findLatestGroupedReadingRowsByClientId), que traz direto
+     * do banco as leituras dessas datas com saída, autor e valores de entrada.
+     * Antes eram duas consultas, e a segunda carregava TODAS as leituras
+     * ativas dos instrumentos como entidades para filtrar em memória: no
+     * cliente 16, ~39 mil leituras e ~250 mil queries por chamada, 25 s
+     * (medido em produção em 26/10/2026). A consulta nova leva ~14 ms e
+     * devolve o mesmo conjunto de leituras (conferido para todos os clientes
+     * com limite 1, 3 e 10).
+     */
     @Transactional(readOnly = true)
     public List<InstrumentGroupedReadingsDTO> findLatestGroupedReadingsByClientId(Long clientId, int limit) {
-        List<Object[]> latestDateHours = readingRepository.findLatestDistinctDateHoursByClientId(clientId, limit);
+        List<Object[]> rows = readingRepository.findLatestGroupedReadingRowsByClientId(clientId, limit);
 
-        if (latestDateHours.isEmpty()) {
+        if (rows.isEmpty()) {
             return List.of();
         }
 
-        Set<Long> instrumentIds = new HashSet<>();
-        Map<Long, List<DateTimePair>> instrumentDateHoursMap = new HashMap<>();
-
-        for (Object[] row : latestDateHours) {
-            Long instrumentId = ((Number) row[0]).longValue();
-            instrumentIds.add(instrumentId);
-
-            LocalDate date = ((java.sql.Date) row[1]).toLocalDate();
-            LocalTime hour = ((java.sql.Time) row[2]).toLocalTime();
-
-            instrumentDateHoursMap
-                    .computeIfAbsent(instrumentId, k -> new ArrayList<>())
-                    .add(new DateTimePair(date, hour));
+        Set<Long> instrumentIds = new LinkedHashSet<>();
+        for (Object[] row : rows) {
+            instrumentIds.add(((Number) row[1]).longValue());
         }
 
         Map<Long, InstrumentEntity> instrumentsMap = instrumentRepository.findAllById(instrumentIds)
                 .stream()
                 .collect(Collectors.toMap(InstrumentEntity::getId, Function.identity()));
 
-        // Só as barragens que o usuário acessa (ADMIN vê todas). O corte vem
-        // antes de carregar as leituras, para não buscar o que vai ser jogado fora.
+        // Só as barragens que o usuário acessa (ADMIN vê todas). As linhas de
+        // barragens sem acesso são descartadas abaixo, antes de virar resposta.
         Optional<Set<Long>> restriction = damAccessService.listingRestriction();
         if (restriction.isPresent()) {
             Set<Long> allowed = restriction.get();
             instrumentsMap.values().removeIf(i -> i.getDam() == null || !allowed.contains(i.getDam().getId()));
-            instrumentIds.retainAll(instrumentsMap.keySet());
-            if (instrumentIds.isEmpty()) {
+            if (instrumentsMap.isEmpty()) {
                 return List.of();
             }
         }
 
-        List<ReadingEntity> allReadings = readingRepository
-                .findByInstrumentIdsAndActiveTrueWithAllRelations(new ArrayList<>(instrumentIds));
+        // instrumento -> "data hora" -> leituras. A consulta já vem ordenada por
+        // instrumento e da data mais recente para a mais antiga; os
+        // LinkedHashMap mantêm essa ordem. Cada leitura aparece em uma linha por
+        // valor de entrada.
+        Map<Long, Map<String, List<ReadingResponseDTO>>> readingsByInstrument = new LinkedHashMap<>();
+        Map<Long, ReadingResponseDTO> readingsById = new HashMap<>();
 
-        Map<Long, Map<String, List<ReadingEntity>>> readingsByInstrumentAndDateTime = new HashMap<>();
-        for (ReadingEntity reading : allReadings) {
-            Long instId = reading.getInstrument().getId();
-            String dateTimeKey = reading.getDate() + " " + reading.getHour();
-
-            readingsByInstrumentAndDateTime
-                    .computeIfAbsent(instId, k -> new HashMap<>())
-                    .computeIfAbsent(dateTimeKey, k -> new ArrayList<>())
-                    .add(reading);
-        }
-
-        List<InstrumentGroupedReadingsDTO> result = new ArrayList<>(instrumentIds.size());
-
-        for (Map.Entry<Long, List<DateTimePair>> entry : instrumentDateHoursMap.entrySet()) {
-            Long instrumentId = entry.getKey();
-            InstrumentEntity instrument = instrumentsMap.get(instrumentId);
-
+        for (Object[] row : rows) {
+            InstrumentEntity instrument = instrumentsMap.get(((Number) row[1]).longValue());
             if (instrument == null) {
                 continue;
             }
+
+            Long readingId = ((Number) row[0]).longValue();
+            ReadingResponseDTO reading = readingsById.get(readingId);
+            if (reading == null) {
+                reading = mapLatestGroupedRow(row, instrument);
+                readingsById.put(readingId, reading);
+                readingsByInstrument
+                        .computeIfAbsent(instrument.getId(), k -> new LinkedHashMap<>())
+                        .computeIfAbsent(reading.getDate() + " " + reading.getHour(), k -> new ArrayList<>())
+                        .add(reading);
+            }
+
+            if (row[14] != null) {
+                ReadingInputValueDTO input = new ReadingInputValueDTO();
+                input.setInputAcronym((String) row[14]);
+                input.setInputName((String) row[15]);
+                input.setValue(row[16] != null ? ((Number) row[16]).doubleValue() : null);
+                reading.getInputValues().add(input);
+            }
+        }
+
+        List<InstrumentGroupedReadingsDTO> result = new ArrayList<>(readingsByInstrument.size());
+
+        for (Map.Entry<Long, Map<String, List<ReadingResponseDTO>>> entry : readingsByInstrument.entrySet()) {
+            InstrumentEntity instrument = instrumentsMap.get(entry.getKey());
 
             InstrumentGroupedReadingsDTO instrumentDTO = new InstrumentGroupedReadingsDTO();
             instrumentDTO.setInstrumentId(instrument.getId());
@@ -345,23 +363,12 @@ public class ReadingService {
             instrumentDTO.setDamId(instrument.getDam().getId());
             instrumentDTO.setDamName(instrument.getDam().getName());
 
-            Map<String, List<ReadingEntity>> readingsByDateTime
-                    = readingsByInstrumentAndDateTime.getOrDefault(instrumentId, Map.of());
-
-            List<GroupedDateHourReadingsDTO> groupedReadings = new ArrayList<>();
-
-            for (DateTimePair dtp : entry.getValue()) {
-                String dateHourKey = dtp.date + " " + dtp.hour;
-                List<ReadingEntity> readings = readingsByDateTime.getOrDefault(dateHourKey, List.of());
-
-                if (!readings.isEmpty()) {
-                    GroupedDateHourReadingsDTO group = new GroupedDateHourReadingsDTO();
-                    group.setDateTime(dateHourKey);
-                    group.setReadings(readings.stream()
-                            .map(this::mapToResponseDTO)
-                            .collect(Collectors.toList()));
-                    groupedReadings.add(group);
-                }
+            List<GroupedDateHourReadingsDTO> groupedReadings = new ArrayList<>(entry.getValue().size());
+            for (Map.Entry<String, List<ReadingResponseDTO>> dateHour : entry.getValue().entrySet()) {
+                GroupedDateHourReadingsDTO group = new GroupedDateHourReadingsDTO();
+                group.setDateTime(dateHour.getKey());
+                group.setReadings(dateHour.getValue());
+                groupedReadings.add(group);
             }
 
             instrumentDTO.setGroupedReadings(groupedReadings);
@@ -369,6 +376,49 @@ public class ReadingService {
         }
 
         return result;
+    }
+
+    /**
+     * Uma linha de findLatestGroupedReadingRowsByClientId vira a leitura da
+     * resposta, igual ao que mapToResponseDTO monta a partir da entidade. Os
+     * valores de entrada são acrescentados linha a linha pelo chamador.
+     */
+    private ReadingResponseDTO mapLatestGroupedRow(Object[] row, InstrumentEntity instrument) {
+        ReadingResponseDTO dto = new ReadingResponseDTO();
+        dto.setId(((Number) row[0]).longValue());
+        dto.setDate(toLocalDate(row[2]));
+        dto.setHour(toLocalTime(row[3]));
+        dto.setCalculatedValue(toBigDecimal(row[4]));
+        dto.setLimitStatus(row[5] != null ? LimitStatusEnum.valueOf((String) row[5]) : null);
+        dto.setComment((String) row[6]);
+        dto.setActive((Boolean) row[7]);
+        dto.setInstrumentId(instrument.getId());
+        dto.setInstrumentName(instrument.getName());
+        if (row[8] != null) {
+            dto.setOutputId(((Number) row[8]).longValue());
+            dto.setOutputName((String) row[9]);
+            dto.setOutputAcronym((String) row[10]);
+        }
+        if (row[11] != null) {
+            dto.setCreatedBy(new UserInfoDTO(((Number) row[11]).longValue(), (String) row[12], (String) row[13]));
+        }
+        dto.setInputValues(new ArrayList<>());
+        return dto;
+    }
+
+    private static LocalDate toLocalDate(Object value) {
+        return value instanceof java.sql.Date date ? date.toLocalDate() : (LocalDate) value;
+    }
+
+    private static LocalTime toLocalTime(Object value) {
+        return value instanceof java.sql.Time time ? time.toLocalTime() : (LocalTime) value;
+    }
+
+    private static BigDecimal toBigDecimal(Object value) {
+        if (value == null || value instanceof BigDecimal) {
+            return (BigDecimal) value;
+        }
+        return new BigDecimal(value.toString());
     }
 
     @Transactional
@@ -953,7 +1003,4 @@ public class ReadingService {
         return BigDecimal.valueOf(value).setScale(precision, RoundingMode.HALF_UP);
     }
 
-    private record DateTimePair(LocalDate date, LocalTime hour) {
-
-    }
 }

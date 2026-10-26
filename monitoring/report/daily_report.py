@@ -29,6 +29,9 @@ PROM_CONTAINER = "geosegbar-prometheus"
 SECRETS_DIR = os.environ.get("GSB_SECRETS_DIR", "/etc/geosegbar/monitoring/secrets")
 LONG_ROUTES = 'uri!~".*(export|download|upload|massive|import|zip).*"'
 API = 'job="geosegbar-api"'
+# Sem OPTIONS: é a checagem de CORS do navegador antes de cada chamada, responde
+# em ~1 ms e inflaria a contagem e puxaria a latência para baixo.
+HTTP = API + ', method!="OPTIONS"'
 TZ_BRASILIA = datetime.timezone(datetime.timedelta(hours=-3))
 
 
@@ -103,10 +106,10 @@ def build_message(janela="24h"):
     linhas.append(f"📊 <b>GeoSegBar · resumo de {hoje}</b> (últimas {w})")
 
     # ------------------------------------------------------------ tráfego
-    total = scalar(f'sum(increase(http_server_requests_seconds_count{{{API}}}[{w}]))')
-    erros = scalar(f'sum(increase(http_server_requests_seconds_count{{{API}, status=~"5.."}}[{w}]))') or 0.0
+    total = scalar(f'sum(increase(http_server_requests_seconds_count{{{HTTP}}}[{w}]))')
+    erros = scalar(f'sum(increase(http_server_requests_seconds_count{{{HTTP}, status=~"5.."}}[{w}]))') or 0.0
     pico = scalar(f'max_over_time(geosegbar:http_requests:rate5m[{w}])')
-    p95 = scalar(f'histogram_quantile(0.95, sum by (le) (increase(http_server_requests_seconds_bucket{{{API}, {LONG_ROUTES}}}[{w}])))')
+    p95 = scalar(f'histogram_quantile(0.95, sum by (le) (increase(http_server_requests_seconds_bucket{{{HTTP}, {LONG_ROUTES}}}[{w}])))')
     disp = None if not total else 1 - erros / total
     sonda = scalar(f'min(avg_over_time(probe_success{{job="blackbox"}}[{w}]))')
 
@@ -122,11 +125,13 @@ def build_message(janela="24h"):
     # ------------------------------------------------------------ rotas
     lentas = vector(
         f'topk(3, histogram_quantile(0.95, sum by (le, method, uri) '
-        f'(increase(http_server_requests_seconds_bucket{{{API}, {LONG_ROUTES}}}[{w}]))) '
+        f'(increase(http_server_requests_seconds_bucket{{{HTTP}, {LONG_ROUTES}}}[{w}]))) '
         f'and on (method, uri) (sum by (method, uri) '
-        f'(increase(http_server_requests_seconds_count{{{API}}}[{w}])) >= 20))')
-    pesadas = vector(f'topk(3, sum by (method, uri) (increase(http_server_requests_seconds_sum{{{API}}}[{w}])))')
-    com_erro = vector(f'topk(3, sum by (method, uri) (increase(http_server_requests_seconds_count{{{API}, status=~"5.."}}[{w}])) > 0)')
+        f'(increase(http_server_requests_seconds_count{{{HTTP}}}[{w}])) >= 20))')
+    pesadas = vector(f'topk(3, sum by (method, uri) (increase(http_server_requests_seconds_sum{{{HTTP}}}[{w}])))')
+    chamadas = {(r["metric"].get("method"), r["metric"].get("uri")): float(r["value"][1]) for r in
+                vector(f'sum by (method, uri) (increase(http_server_requests_seconds_count{{{HTTP}}}[{w}]))')}
+    com_erro = vector(f'topk(3, sum by (method, uri) (increase(http_server_requests_seconds_count{{{HTTP}, status=~"5.."}}[{w}])) > 0)')
 
     def rota(r):
         m = r["metric"]
@@ -139,9 +144,15 @@ def build_message(janela="24h"):
             linhas.append(f"• {rota(r)}: {dur(float(r['value'][1]))}")
     if pesadas:
         linhas.append("")
-        linhas.append("🏋️ <b>Mais pesadas</b> (tempo total de servidor)")
+        linhas.append("🏋️ <b>Mais pesadas</b> (soma do tempo de todas as chamadas)")
         for r in sorted(pesadas, key=lambda r: -float(r["value"][1])):
-            linhas.append(f"• {rota(r)}: {dur(float(r['value'][1]))}")
+            total_s = float(r["value"][1])
+            n = chamadas.get((r["metric"].get("method"), r["metric"].get("uri")))
+            if n and n >= 0.5:
+                n = round(n)
+                linhas.append(f"• {rota(r)}: {dur(total_s)} em {num(n)} chamada(s), média {dur(total_s / max(n, 1))}")
+            else:
+                linhas.append(f"• {rota(r)}: {dur(total_s)} no total")
     if com_erro:
         linhas.append("")
         linhas.append("🧯 <b>Erros 5xx por rota</b>")
@@ -152,7 +163,7 @@ def build_message(janela="24h"):
     logins = {r["metric"].get("result"): float(r["value"][1]) for r in
               vector(f'sum by (result) (increase(geosegbar_auth_login_total{{{API}}}[{w}]))')}
     bypass = scalar(f'sum(increase(geosegbar_auth_bypass_key_total{{{API}}}[{w}]))') or 0.0
-    negados = scalar(f'sum(increase(http_server_requests_seconds_count{{{API}, status=~"401|403|429"}}[{w}]))')
+    negados = scalar(f'sum(increase(http_server_requests_seconds_count{{{HTTP}, status=~"401|403|429"}}[{w}]))')
     linhas.append("")
     linhas.append("🔐 <b>Segurança</b>")
     ok = logins.get("success", 0) + logins.get("mfa_required", 0)

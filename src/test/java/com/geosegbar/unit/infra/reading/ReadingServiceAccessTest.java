@@ -141,35 +141,98 @@ class ReadingServiceAccessTest {
         verify(readingRepository, never()).findLatestLimitStatusByClientId(anyLong(), anyInt());
     }
 
+    /**
+     * Linha de ReadingRepository.findLatestGroupedReadingRowsByClientId, na
+     * ordem de colunas documentada lá.
+     */
+    private static Object[] row(long readingId, long instrumentId, String date, String hour,
+            String inputAcronym, Double inputValue) {
+        return new Object[]{
+            readingId, instrumentId, Date.valueOf(date), Time.valueOf(hour),
+            new java.math.BigDecimal("1.5"), "NORMAL", null, true,
+            7L, "Cota", "COTA",
+            null, null, null,
+            inputAcronym, inputAcronym == null ? null : "Leitura " + inputAcronym,
+            inputValue == null ? null : new java.math.BigDecimal(inputValue.toString())};
+    }
+
     @Test
-    @DisplayName("últimas leituras agrupadas cortam antes de carregar as leituras")
-    void latestGroupedAreRestrictedBeforeLoadingReadings() {
-        when(readingRepository.findLatestDistinctDateHoursByClientId(1L, 3)).thenReturn(List.of(
-                new Object[]{1L, Date.valueOf("2026-10-01"), Time.valueOf("09:00:00")},
-                new Object[]{2L, Date.valueOf("2026-10-01"), Time.valueOf("10:00:00")}));
+    @DisplayName("últimas leituras agrupadas: barragem sem acesso fica fora da resposta")
+    void latestGroupedAreRestrictedToAllowedDams() {
+        when(readingRepository.findLatestGroupedReadingRowsByClientId(1L, 3)).thenReturn(List.of(
+                row(100L, 1L, "2026-10-01", "09:00:00", "L", 1.0),
+                row(200L, 2L, "2026-10-01", "10:00:00", "L", 2.0)));
         when(instrumentRepository.findAllById(any()))
                 .thenReturn(List.of(instrument(1L, 10L), instrument(2L, 20L)));
         when(damAccessService.listingRestriction()).thenReturn(Optional.of(Set.of(10L)));
-        when(readingRepository.findByInstrumentIdsAndActiveTrueWithAllRelations(List.of(1L)))
-                .thenReturn(List.of());
 
         List<InstrumentGroupedReadingsDTO> result = service.findLatestGroupedReadingsByClientId(1L, 3);
 
         assertThat(result).extracting(InstrumentGroupedReadingsDTO::getInstrumentId).containsExactly(1L);
-        verify(readingRepository).findByInstrumentIdsAndActiveTrueWithAllRelations(List.of(1L));
+        assertThat(result.get(0).getGroupedReadings()).hasSize(1);
+        assertThat(result.get(0).getGroupedReadings().get(0).getReadings())
+                .extracting(r -> r.getId()).containsExactly(100L);
     }
 
     @Test
     @DisplayName("ADMIN continua vendo as leituras de todas as barragens")
     void adminSeesEverything() {
-        when(readingRepository.findLatestDistinctDateHoursByClientId(1L, 3)).thenReturn(List.<Object[]>of(
-                new Object[]{2L, Date.valueOf("2026-10-01"), Time.valueOf("10:00:00")}));
+        when(readingRepository.findLatestGroupedReadingRowsByClientId(1L, 3)).thenReturn(List.<Object[]>of(
+                row(200L, 2L, "2026-10-01", "10:00:00", null, null)));
         when(instrumentRepository.findAllById(any())).thenReturn(List.of(instrument(2L, 20L)));
         when(damAccessService.listingRestriction()).thenReturn(Optional.empty());
-        when(readingRepository.findByInstrumentIdsAndActiveTrueWithAllRelations(any())).thenReturn(List.of());
 
         assertThat(service.findLatestGroupedReadingsByClientId(1L, 3))
                 .extracting(InstrumentGroupedReadingsDTO::getInstrumentId).containsExactly(2L);
+    }
+
+    @Test
+    @DisplayName("últimas leituras agrupadas: datas na ordem da consulta, entradas somadas por leitura")
+    void latestGroupedAssemblesGroupsAndInputs() {
+        when(readingRepository.findLatestGroupedReadingRowsByClientId(1L, 3)).thenReturn(List.of(
+                // leitura 101 (mais recente) com duas entradas, leitura 102 da mesma data/hora sem entrada
+                row(101L, 1L, "2026-10-02", "08:30:00", "L1", 10.25),
+                row(101L, 1L, "2026-10-02", "08:30:00", "L2", 20.5),
+                row(102L, 1L, "2026-10-02", "08:30:00", null, null),
+                // data mais antiga
+                row(90L, 1L, "2026-10-01", "09:00:00", "L1", 9.0)));
+        when(instrumentRepository.findAllById(any())).thenReturn(List.of(instrument(1L, 10L)));
+        when(damAccessService.listingRestriction()).thenReturn(Optional.empty());
+
+        List<InstrumentGroupedReadingsDTO> result = service.findLatestGroupedReadingsByClientId(1L, 3);
+
+        assertThat(result).hasSize(1);
+        InstrumentGroupedReadingsDTO instrumento = result.get(0);
+        assertThat(instrumento.getInstrumentName()).isEqualTo("PZ-1");
+        assertThat(instrumento.getInstrumentType()).isEqualTo("Piezômetro");
+        assertThat(instrumento.getDamId()).isEqualTo(10L);
+        assertThat(instrumento.getGroupedReadings())
+                .extracting(g -> g.getDateTime())
+                .containsExactly("2026-10-02 08:30", "2026-10-01 09:00");
+
+        var recente = instrumento.getGroupedReadings().get(0).getReadings();
+        assertThat(recente).extracting(r -> r.getId()).containsExactly(101L, 102L);
+        assertThat(recente.get(0).getInputValues())
+                .extracting(v -> v.getInputAcronym(), v -> v.getValue())
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("L1", 10.25),
+                        org.assertj.core.groups.Tuple.tuple("L2", 20.5));
+        assertThat(recente.get(1).getInputValues()).isEmpty();
+        assertThat(recente.get(0).getCalculatedValue()).isEqualByComparingTo("1.5");
+        assertThat(recente.get(0).getLimitStatus().name()).isEqualTo("NORMAL");
+        assertThat(recente.get(0).getOutputAcronym()).isEqualTo("COTA");
+        assertThat(recente.get(0).getInstrumentName()).isEqualTo("PZ-1");
+        assertThat(recente.get(0).getCreatedBy()).isNull();
+        assertThat(recente.get(0).getDate()).isEqualTo(LocalDate.of(2026, 10, 2));
+        assertThat(recente.get(0).getHour()).isEqualTo(LocalTime.of(8, 30));
+    }
+
+    @Test
+    @DisplayName("últimas leituras agrupadas: cliente sem leitura devolve lista vazia sem consultar instrumentos")
+    void latestGroupedEmpty() {
+        when(readingRepository.findLatestGroupedReadingRowsByClientId(1L, 3)).thenReturn(List.of());
+
+        assertThat(service.findLatestGroupedReadingsByClientId(1L, 3)).isEmpty();
+        verify(instrumentRepository, never()).findAllById(any());
     }
 
     @Test

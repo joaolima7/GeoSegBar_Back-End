@@ -188,18 +188,6 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             @Param("active") Boolean active,
             Pageable pageable);
 
-    @Query("""
-            SELECT DISTINCT r FROM ReadingEntity r
-            LEFT JOIN FETCH r.instrument i
-            LEFT JOIN FETCH i.instrumentType
-            LEFT JOIN FETCH r.output o
-            LEFT JOIN FETCH r.user u
-            LEFT JOIN FETCH r.inputValues
-            WHERE r.instrument.id IN :instrumentIds AND r.active = true
-            ORDER BY r.date DESC, r.hour DESC
-            """)
-    List<ReadingEntity> findByInstrumentIdsAndActiveTrueWithAllRelations(
-            @Param("instrumentIds") List<Long> instrumentIds);
 
     @Query(value = """
             SELECT DISTINCT r FROM ReadingEntity r
@@ -367,30 +355,62 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
             @Param("clientId") Long clientId,
             @Param("limit") int limit);
 
+    /**
+     * Leituras ativas das {@code limit} últimas datas/horas de cada instrumento
+     * ativo do cliente, com saída, autor e valores de entrada: uma linha por
+     * valor de entrada (leitura sem entrada vem uma vez, com as colunas de
+     * entrada nulas). Usada por ReadingService.findLatestGroupedReadingsByClientId.
+     *
+     * O LATERAL pega as N datas/horas distintas de cada instrumento direto do
+     * índice idx_reading_instrument_active_date_hour, sem ranquear a história
+     * inteira. Em produção (26/10/2026, cliente 16, limite 3): ~14 ms.
+     *
+     * Colunas (aliases únicos: o Hibernate recusa alias repetido em consulta
+     * nativa): 0 reading_id, 1 instrument_id, 2 reading_date, 3 reading_hour,
+     * 4 calculated_value, 5 limit_status, 6 reading_comment, 7 reading_active,
+     * 8 output_id, 9 output_name, 10 output_acronym, 11 user_id, 12 user_name,
+     * 13 user_email, 14 input_acronym, 15 input_name, 16 input_value.
+     */
     @Query(value = """
-            WITH instrument_date_hours AS (
-                SELECT
-                    r.instrument_id,
-                    r.date,
-                    r.hour,
-                    DENSE_RANK() OVER (
-                        PARTITION BY r.instrument_id
-                        ORDER BY r.date DESC, r.hour DESC
-                    ) as date_hour_rank
-                FROM reading r
-                INNER JOIN instrument i ON r.instrument_id = i.id
-                INNER JOIN dam d ON i.dam_id = d.id
-                WHERE d.client_id = :clientId
-                  AND i.active = true
-                  AND r.active = true
-                GROUP BY r.instrument_id, r.date, r.hour
-            )
-            SELECT instrument_id, date, hour
-            FROM instrument_date_hours
-            WHERE date_hour_rank <= :limit
-            ORDER BY instrument_id, date_hour_rank
+            SELECT r.id AS reading_id,
+                   r.instrument_id AS instrument_id,
+                   r.date AS reading_date,
+                   r.hour AS reading_hour,
+                   r.calculated_value AS calculated_value,
+                   r.limit_status AS limit_status,
+                   r.comment AS reading_comment,
+                   r.active AS reading_active,
+                   o.id AS output_id,
+                   o.name AS output_name,
+                   o.acronym AS output_acronym,
+                   u.id AS user_id,
+                   u.name AS user_name,
+                   u.email AS user_email,
+                   riv.input_acronym AS input_acronym,
+                   riv.input_name AS input_name,
+                   riv.value AS input_value
+            FROM instrument i
+            INNER JOIN dam d ON d.id = i.dam_id
+            CROSS JOIN LATERAL (
+                SELECT DISTINCT r2.date, r2.hour
+                FROM reading r2
+                WHERE r2.instrument_id = i.id
+                  AND r2.active = true
+                ORDER BY r2.date DESC, r2.hour DESC
+                LIMIT :limit
+            ) dh
+            INNER JOIN reading r ON r.instrument_id = i.id
+                                AND r.date = dh.date
+                                AND r.hour = dh.hour
+                                AND r.active = true
+            LEFT JOIN output o ON o.id = r.output_id
+            LEFT JOIN users u ON u.id = r.user_id
+            LEFT JOIN reading_input_value riv ON riv.reading_id = r.id
+            WHERE d.client_id = :clientId
+              AND i.active = true
+            ORDER BY r.instrument_id, r.date DESC, r.hour DESC, r.id, riv.id
             """, nativeQuery = true)
-    List<Object[]> findLatestDistinctDateHoursByClientId(
+    List<Object[]> findLatestGroupedReadingRowsByClientId(
             @Param("clientId") Long clientId,
             @Param("limit") int limit);
 

@@ -229,7 +229,10 @@ valida() {
   local titulo="$1"; shift
   local saida
   if ! saida="$("$@" 2>&1)"; then
-    echo "$saida" | tail -30
+    # A causa costuma estar no começo (ex. erro de flag antes da ajuda inteira).
+    echo "$saida" | head -10
+    echo "   ..."
+    echo "$saida" | tail -20
     rm -rf "$STAGE_DIR"
     die "Configuração inválida: $titulo. Nada foi trocado; a stack atual segue no ar."
   fi
@@ -268,10 +271,13 @@ valida "loki.yml (loki -verify-config)" \
     -v "$STAGE_DIR/loki:/etc/loki:ro" \
     "$LOKI_IMAGE" -config.file=/etc/loki/loki.yml -verify-config
 
+# "=true" é obrigatório: no flagset principal do Tempo 2.10 essa flag é
+# registrada como "ignorada" e exige valor; sem ele, sai com "flag needs an
+# argument" e imprime a ajuda.
 valida "tempo.yml (tempo -config.verify)" \
   docker run --rm --network none \
     -v "$STAGE_DIR/tempo:/etc/tempo:ro" \
-    "$TEMPO_IMAGE" -config.file=/etc/tempo/tempo.yml -config.verify
+    "$TEMPO_IMAGE" -config.file=/etc/tempo/tempo.yml -config.verify=true
 
 valida "blackbox.yml (blackbox --config.check)" \
   docker run --rm --network none \

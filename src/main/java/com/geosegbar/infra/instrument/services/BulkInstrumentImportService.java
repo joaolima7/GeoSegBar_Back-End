@@ -186,6 +186,22 @@ public class BulkInstrumentImportService {
                 req.setConstants(constants.getOrDefault(ir.id, Collections.emptyList()));
 
                 List<OutputDTO> outs = outputs.getOrDefault(ir.id, Collections.emptyList());
+                String limitProblem = Boolean.FALSE.equals(req.getNoLimit())
+                        ? outs.stream()
+                                .map(o -> limits.get(new Key(ir.id, o.getAcronym())))
+                                .filter(ld -> ld != null && ld.problem != null)
+                                .map(ld -> ld.problem)
+                                .findFirst()
+                                .orElse(null)
+                        : null;
+                if (limitProblem != null) {
+                    String msg = String.format("Instrument %s (linha %d): %s", ir.id, ir.row, limitProblem);
+                    result.failures++;
+                    result.errors.add(msg);
+                    log.warn("Limite inválido na importação: {}", msg);
+                    continue;
+                }
+
                 for (OutputDTO o : outs) {
                     LimitData ld = limits.get(new Key(ir.id, o.getAcronym()));
                     if (ld != null && Boolean.FALSE.equals(req.getNoLimit())) {
@@ -372,23 +388,25 @@ public class BulkInstrumentImportService {
 
             String type = getString(row, idx, "Tipo de Limite");
             LimitData ld = new LimitData();
+            List<String> problems = new ArrayList<>();
 
             if ("Estatistico".equalsIgnoreCase(type)) {
                 ld.isStatistical = true;
                 ld.statDTO = new StatisticalLimitDTO(
                         null,
-                        getBigDecimal(row, idx, "Valor Inferior"),
-                        getBigDecimal(row, idx, "Valor Superior")
+                        getLimitValue(row, idx, "Valor Inferior", problems),
+                        getLimitValue(row, idx, "Valor Superior", problems)
                 );
             } else {
                 ld.isStatistical = false;
                 ld.detDTO = new DeterministicLimitDTO(
                         null,
-                        getBigDecimal(row, idx, "Valor de Atenção"),
-                        getBigDecimal(row, idx, "Valor de Alerta"),
-                        getBigDecimal(row, idx, "Valor de Emergência")
+                        getLimitValue(row, idx, "Valor de Atenção", problems),
+                        getLimitValue(row, idx, "Valor de Alerta", problems),
+                        getLimitValue(row, idx, "Valor de Emergência", problems)
                 );
             }
+            ld.problem = problems.isEmpty() ? null : String.join("; ", problems);
             map.put(new Key(id, out), ld);
         }
         return map;
@@ -402,7 +420,12 @@ public class BulkInstrumentImportService {
         return idx;
     }
 
-    private BigDecimal getBigDecimal(Row r, Map<String, Integer> ix, String col) {
+    /**
+     * Lê um valor de limite. Célula vazia é nível não aplicado (nulo); qualquer
+     * outro conteúdo que não seja número vira problema da linha, para que um erro
+     * de digitação não desligue um nível em silêncio.
+     */
+    private BigDecimal getLimitValue(Row r, Map<String, Integer> ix, String col, List<String> problems) {
         Integer i = ix.get(col);
         if (i == null) {
             return null;
@@ -414,31 +437,50 @@ public class BulkInstrumentImportService {
 
         switch (c.getCellType()) {
             case NUMERIC:
-
                 return BigDecimal.valueOf(c.getNumericCellValue());
+            case BLANK:
+                return null;
             case STRING:
                 String val = c.getStringCellValue();
                 if (val == null || val.isBlank()) {
                     return null;
                 }
                 try {
-
-                    String cleanVal = val.trim().replace(",", ".");
-                    return new BigDecimal(cleanVal);
+                    return new BigDecimal(val.trim().replace(",", "."));
                 } catch (NumberFormatException e) {
-                    log.warn("Valor inválido na coluna {}: {}", col, val);
+                    problems.add(invalidLimitValue(r, col, val));
                     return null;
                 }
             case FORMULA:
-                try {
-
-                    return BigDecimal.valueOf(c.getNumericCellValue());
-                } catch (Exception e) {
-                    return null;
+                switch (c.getCachedFormulaResultType()) {
+                    case NUMERIC:
+                        return BigDecimal.valueOf(c.getNumericCellValue());
+                    case BLANK:
+                        return null;
+                    case STRING:
+                        String result = c.getStringCellValue();
+                        if (result == null || result.isBlank()) {
+                            return null;
+                        }
+                        try {
+                            return new BigDecimal(result.trim().replace(",", "."));
+                        } catch (NumberFormatException e) {
+                            problems.add(invalidLimitValue(r, col, result));
+                            return null;
+                        }
+                    default:
+                        problems.add(invalidLimitValue(r, col, c.getCellFormula()));
+                        return null;
                 }
             default:
+                problems.add(invalidLimitValue(r, col, c.toString()));
                 return null;
         }
+    }
+
+    private String invalidLimitValue(Row r, String col, String raw) {
+        return String.format("aba Limits, linha %d, coluna '%s': '%s' não é um número válido",
+                r.getRowNum() + 1, col, raw);
     }
 
     private String getString(Row r, Map<String, Integer> ix, String col) {
@@ -525,6 +567,7 @@ public class BulkInstrumentImportService {
         boolean isStatistical;
         StatisticalLimitDTO statDTO;
         DeterministicLimitDTO detDTO;
+        String problem;
     }
 
     private static class InstrumentRow {

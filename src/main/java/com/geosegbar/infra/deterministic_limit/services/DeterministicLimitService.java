@@ -61,7 +61,17 @@ public class DeterministicLimitService {
             throw new InvalidInputException("Este output já possui limite estatístico. Não é possível ter ambos os tipos de limite!");
         }
 
+        DeterministicLimitRules.requireAtLeastOneLevel(
+                limit.getAttentionValue(), limit.getAlertValue(), limit.getEmergencyValue(), output.getName());
+
         Optional<DeterministicLimitEntity> existingLimit = deterministicLimitRepository.findByOutputId(outputId);
+        boolean levelsChanged = existingLimit.isEmpty() || !DeterministicLimitRules.sameLevels(
+                existingLimit.get(), limit.getAttentionValue(), limit.getAlertValue(), limit.getEmergencyValue());
+        if (levelsChanged) {
+            DeterministicLimitRules.requireAscendingOrder(
+                    limit.getAttentionValue(), limit.getAlertValue(), limit.getEmergencyValue(), output.getName());
+        }
+
         DeterministicLimitEntity savedLimit;
 
         if (existingLimit.isPresent()) {

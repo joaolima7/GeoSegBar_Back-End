@@ -1,5 +1,6 @@
 package com.geosegbar.infra.instrument.services;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -42,6 +43,7 @@ import com.geosegbar.exceptions.NotFoundException;
 import com.geosegbar.infra.constant.persistence.jpa.ConstantRepository;
 import com.geosegbar.infra.dam.persistence.jpa.DamRepository;
 import com.geosegbar.infra.deterministic_limit.persistence.jpa.DeterministicLimitRepository;
+import com.geosegbar.infra.deterministic_limit.services.DeterministicLimitRules;
 import com.geosegbar.infra.input.persistence.jpa.InputRepository;
 import com.geosegbar.infra.instrument.dtos.ConstantDTO;
 import com.geosegbar.infra.instrument.dtos.CreateInstrumentRequest;
@@ -370,7 +372,39 @@ public class InstrumentService {
             if (hasStatistical && hasDeterministic) {
                 throw new InvalidInputException("Apenas um tipo de limite (estatístico ou determinístico) deve ser fornecido para um output, não ambos!");
             }
+
+            if (hasDeterministic) {
+                DeterministicLimitDTO limit = outputDTO.getDeterministicLimit();
+                DeterministicLimitRules.requireAtLeastOneLevel(
+                        limit.getAttentionValue(), limit.getAlertValue(), limit.getEmergencyValue(), outputDTO.getName());
+            }
         }
+    }
+
+    private void requireAscendingDeterministicLevels(OutputDTO outputDTO) {
+        DeterministicLimitDTO limit = outputDTO.getDeterministicLimit();
+        if (limit == null) {
+            return;
+        }
+        DeterministicLimitRules.requireAscendingOrder(
+                limit.getAttentionValue(), limit.getAlertValue(), limit.getEmergencyValue(), outputDTO.getName());
+    }
+
+    /**
+     * Na edição, a ordem dos níveis só é exigida quando o limite muda. Há
+     * limites antigos fora de ordem em produção, e eles não podem impedir a
+     * edição de outros campos do instrumento.
+     */
+    private void requireAscendingDeterministicLevelsIfChanged(OutputDTO outputDTO, DeterministicLimitEntity current) {
+        DeterministicLimitDTO incoming = outputDTO.getDeterministicLimit();
+        if (incoming == null) {
+            return;
+        }
+        if (current != null && DeterministicLimitRules.sameLevels(
+                current, incoming.getAttentionValue(), incoming.getAlertValue(), incoming.getEmergencyValue())) {
+            return;
+        }
+        requireAscendingDeterministicLevels(outputDTO);
     }
 
     private void processInputs(InstrumentEntity instrument, List<InputDTO> inputDTOs) {
@@ -454,6 +488,7 @@ public class InstrumentService {
 
             validateEquation(outputDTO.getEquation(), inputAcronyms, constantAcronyms);
             validateOutputRequest(outputDTO, instrument.getNoLimit());
+            requireAscendingDeterministicLevels(outputDTO);
 
             MeasurementUnitEntity measurementUnit = measurementUnitRepository.findById(outputDTO.getMeasurementUnitId())
                     .orElseThrow(() -> new NotFoundException("Unidade de medida não encontrada com ID: " + outputDTO.getMeasurementUnitId()));
@@ -1124,6 +1159,7 @@ public class InstrumentService {
                     .orElseThrow(() -> new NotFoundException("Unidade de medida não encontrada com ID: " + outputDTO.getMeasurementUnitId()));
 
             OutputEntity output = existingOutputsByAcronym.get(outputDTO.getAcronym());
+            requireAscendingDeterministicLevelsIfChanged(outputDTO, output != null ? output.getDeterministicLimit() : null);
 
             if (output == null) {
                 significantChange = true;
@@ -1220,9 +1256,14 @@ public class InstrumentService {
                         StatisticalLimitEntity oldStatLimit = output.getStatisticalLimit();
 
                         if (output.getDeterministicLimit() != null) {
-                            output.getDeterministicLimit().setAttentionValue(outputDTO.getDeterministicLimit().getAttentionValue());
-                            output.getDeterministicLimit().setAlertValue(outputDTO.getDeterministicLimit().getAlertValue());
-                            output.getDeterministicLimit().setEmergencyValue(outputDTO.getDeterministicLimit().getEmergencyValue());
+                            DeterministicLimitEntity currentLimit = output.getDeterministicLimit();
+                            BigDecimal previousAttention = currentLimit.getAttentionValue();
+                            BigDecimal previousAlert = currentLimit.getAlertValue();
+                            BigDecimal previousEmergency = currentLimit.getEmergencyValue();
+                            currentLimit.setAttentionValue(outputDTO.getDeterministicLimit().getAttentionValue());
+                            currentLimit.setAlertValue(outputDTO.getDeterministicLimit().getAlertValue());
+                            currentLimit.setEmergencyValue(outputDTO.getDeterministicLimit().getEmergencyValue());
+                            syncGraphPropertiesWithDeterministicLevels(currentLimit, previousAttention, previousAlert, previousEmergency);
                         } else {
                             DeterministicLimitEntity deterministicLimit = new DeterministicLimitEntity();
                             deterministicLimit.setOutput(output);
@@ -1419,6 +1460,85 @@ public class InstrumentService {
         prop.setLabelEnable(true);
         prop.setIsPrimaryOrdinate(true);
         graphCustomizationPropertiesRepository.save(prop);
+    }
+
+    /**
+     * Mantém as legendas dos padrões de gráfico coerentes com os níveis ativos do
+     * limite determinístico: remove a legenda do nível que deixou de ter valor e,
+     * nos padrões que já exibiam este limite, cria a legenda do nível que passou
+     * a ter valor. Padrões que não exibiam o limite ficam intactos.
+     */
+    private void syncGraphPropertiesWithDeterministicLevels(DeterministicLimitEntity limit,
+            BigDecimal previousAttention, BigDecimal previousAlert, BigDecimal previousEmergency) {
+        if (limit.getId() == null) {
+            return;
+        }
+
+        List<InstrumentGraphCustomizationPropertiesEntity> props
+                = graphCustomizationPropertiesRepository.findByDeterministicLimitId(limit.getId());
+        if (props.isEmpty()) {
+            return;
+        }
+
+        List<InstrumentGraphCustomizationPropertiesEntity> deactivated = props.stream()
+                .filter(p -> p.getLimitValueType() != null && deterministicLevelValue(limit, p.getLimitValueType()) == null)
+                .collect(Collectors.toList());
+        if (!deactivated.isEmpty()) {
+            graphCustomizationPropertiesRepository.deleteAll(deactivated);
+            log.info("Removidas {} legenda(s) de nível desativado do limite determinístico ID: {}",
+                    deactivated.size(), limit.getId());
+        }
+
+        List<LimitValueTypeEnum> activated = new ArrayList<>();
+        if (previousAttention == null && limit.getAttentionValue() != null) {
+            activated.add(LimitValueTypeEnum.DETERMINISTIC_ATTENTION);
+        }
+        if (previousAlert == null && limit.getAlertValue() != null) {
+            activated.add(LimitValueTypeEnum.DETERMINISTIC_ALERT);
+        }
+        if (previousEmergency == null && limit.getEmergencyValue() != null) {
+            activated.add(LimitValueTypeEnum.DETERMINISTIC_EMERGENCY);
+        }
+        if (activated.isEmpty()) {
+            return;
+        }
+
+        Map<Long, InstrumentGraphPatternEntity> patternsById = new HashMap<>();
+        Set<String> existingLegends = new HashSet<>();
+        Set<Long> patternsShowingEveryLevel = new HashSet<>();
+        for (InstrumentGraphCustomizationPropertiesEntity prop : props) {
+            InstrumentGraphPatternEntity pattern = prop.getPattern();
+            patternsById.putIfAbsent(pattern.getId(), pattern);
+            existingLegends.add(pattern.getId() + ":" + prop.getLimitValueType());
+            if (prop.getLimitValueType() == null) {
+                patternsShowingEveryLevel.add(pattern.getId());
+            }
+        }
+        patternsShowingEveryLevel.forEach(patternsById::remove);
+
+        for (InstrumentGraphPatternEntity pattern : patternsById.values()) {
+            for (LimitValueTypeEnum valueType : activated) {
+                if (!existingLegends.contains(pattern.getId() + ":" + valueType)) {
+                    createDeterministicLimitProperty(pattern, limit, valueType);
+                }
+            }
+        }
+
+        log.info("Criadas legendas dos níveis {} do limite determinístico ID: {} em {} padrão(ões)",
+                activated, limit.getId(), patternsById.size());
+    }
+
+    private static BigDecimal deterministicLevelValue(DeterministicLimitEntity limit, LimitValueTypeEnum valueType) {
+        return switch (valueType) {
+            case DETERMINISTIC_ATTENTION ->
+                limit.getAttentionValue();
+            case DETERMINISTIC_ALERT ->
+                limit.getAlertValue();
+            case DETERMINISTIC_EMERGENCY ->
+                limit.getEmergencyValue();
+            default ->
+                null;
+        };
     }
 
     /**

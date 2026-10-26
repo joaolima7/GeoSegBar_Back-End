@@ -369,7 +369,11 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
      * nativa): 0 reading_id, 1 instrument_id, 2 reading_date, 3 reading_hour,
      * 4 calculated_value, 5 limit_status, 6 reading_comment, 7 reading_active,
      * 8 output_id, 9 output_name, 10 output_acronym, 11 user_id, 12 user_name,
-     * 13 user_email, 14 input_acronym, 15 input_name, 16 input_value.
+     * 13 user_email, 14 input_acronym, 15 input_name, 16 input_value,
+     * 17 instrument_name, 18 instrument_type_name, 19 dam_id, 20 dam_name.
+     * Instrumento e barragem vêm na mesma linha para o serviço não carregar
+     * InstrumentEntity: o ManyToOne EAGER de dam puxava, por barragem, cliente,
+     * status, PAE, regulatório e documentação.
      */
     @Query(value = """
             SELECT r.id AS reading_id,
@@ -388,9 +392,14 @@ public interface ReadingRepository extends JpaRepository<ReadingEntity, Long> {
                    u.email AS user_email,
                    riv.input_acronym AS input_acronym,
                    riv.input_name AS input_name,
-                   riv.value AS input_value
+                   riv.value AS input_value,
+                   i.name AS instrument_name,
+                   it.name AS instrument_type_name,
+                   d.id AS dam_id,
+                   d.name AS dam_name
             FROM instrument i
             INNER JOIN dam d ON d.id = i.dam_id
+            INNER JOIN instrument_type it ON it.id = i.instrument_type_id
             CROSS JOIN LATERAL (
                 SELECT DISTINCT r2.date, r2.hour
                 FROM reading r2

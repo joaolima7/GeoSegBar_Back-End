@@ -145,7 +145,7 @@ class ReadingServiceAccessTest {
      * Linha de ReadingRepository.findLatestGroupedReadingRowsByClientId, na
      * ordem de colunas documentada lá.
      */
-    private static Object[] row(long readingId, long instrumentId, String date, String hour,
+    private static Object[] row(long readingId, long instrumentId, long damId, String date, String hour,
             String inputAcronym, Double inputValue) {
         return new Object[]{
             readingId, instrumentId, Date.valueOf(date), Time.valueOf(hour),
@@ -153,17 +153,16 @@ class ReadingServiceAccessTest {
             7L, "Cota", "COTA",
             null, null, null,
             inputAcronym, inputAcronym == null ? null : "Leitura " + inputAcronym,
-            inputValue == null ? null : new java.math.BigDecimal(inputValue.toString())};
+            inputValue == null ? null : new java.math.BigDecimal(inputValue.toString()),
+            "PZ-" + instrumentId, "Piezômetro", damId, "Barragem " + damId};
     }
 
     @Test
     @DisplayName("últimas leituras agrupadas: barragem sem acesso fica fora da resposta")
     void latestGroupedAreRestrictedToAllowedDams() {
         when(readingRepository.findLatestGroupedReadingRowsByClientId(1L, 3)).thenReturn(List.of(
-                row(100L, 1L, "2026-10-01", "09:00:00", "L", 1.0),
-                row(200L, 2L, "2026-10-01", "10:00:00", "L", 2.0)));
-        when(instrumentRepository.findAllById(any()))
-                .thenReturn(List.of(instrument(1L, 10L), instrument(2L, 20L)));
+                row(100L, 1L, 10L, "2026-10-01", "09:00:00", "L", 1.0),
+                row(200L, 2L, 20L, "2026-10-01", "10:00:00", "L", 2.0)));
         when(damAccessService.listingRestriction()).thenReturn(Optional.of(Set.of(10L)));
 
         List<InstrumentGroupedReadingsDTO> result = service.findLatestGroupedReadingsByClientId(1L, 3);
@@ -178,8 +177,7 @@ class ReadingServiceAccessTest {
     @DisplayName("ADMIN continua vendo as leituras de todas as barragens")
     void adminSeesEverything() {
         when(readingRepository.findLatestGroupedReadingRowsByClientId(1L, 3)).thenReturn(List.<Object[]>of(
-                row(200L, 2L, "2026-10-01", "10:00:00", null, null)));
-        when(instrumentRepository.findAllById(any())).thenReturn(List.of(instrument(2L, 20L)));
+                row(200L, 2L, 20L, "2026-10-01", "10:00:00", null, null)));
         when(damAccessService.listingRestriction()).thenReturn(Optional.empty());
 
         assertThat(service.findLatestGroupedReadingsByClientId(1L, 3))
@@ -191,12 +189,11 @@ class ReadingServiceAccessTest {
     void latestGroupedAssemblesGroupsAndInputs() {
         when(readingRepository.findLatestGroupedReadingRowsByClientId(1L, 3)).thenReturn(List.of(
                 // leitura 101 (mais recente) com duas entradas, leitura 102 da mesma data/hora sem entrada
-                row(101L, 1L, "2026-10-02", "08:30:00", "L1", 10.25),
-                row(101L, 1L, "2026-10-02", "08:30:00", "L2", 20.5),
-                row(102L, 1L, "2026-10-02", "08:30:00", null, null),
+                row(101L, 1L, 10L, "2026-10-02", "08:30:00", "L1", 10.25),
+                row(101L, 1L, 10L, "2026-10-02", "08:30:00", "L2", 20.5),
+                row(102L, 1L, 10L, "2026-10-02", "08:30:00", null, null),
                 // data mais antiga
-                row(90L, 1L, "2026-10-01", "09:00:00", "L1", 9.0)));
-        when(instrumentRepository.findAllById(any())).thenReturn(List.of(instrument(1L, 10L)));
+                row(90L, 1L, 10L, "2026-10-01", "09:00:00", "L1", 9.0)));
         when(damAccessService.listingRestriction()).thenReturn(Optional.empty());
 
         List<InstrumentGroupedReadingsDTO> result = service.findLatestGroupedReadingsByClientId(1L, 3);
@@ -206,6 +203,7 @@ class ReadingServiceAccessTest {
         assertThat(instrumento.getInstrumentName()).isEqualTo("PZ-1");
         assertThat(instrumento.getInstrumentType()).isEqualTo("Piezômetro");
         assertThat(instrumento.getDamId()).isEqualTo(10L);
+        assertThat(instrumento.getDamName()).isEqualTo("Barragem 10");
         assertThat(instrumento.getGroupedReadings())
                 .extracting(g -> g.getDateTime())
                 .containsExactly("2026-10-02 08:30", "2026-10-01 09:00");
@@ -227,12 +225,24 @@ class ReadingServiceAccessTest {
     }
 
     @Test
-    @DisplayName("últimas leituras agrupadas: cliente sem leitura devolve lista vazia sem consultar instrumentos")
+    @DisplayName("últimas leituras agrupadas: cliente sem leitura devolve lista vazia")
     void latestGroupedEmpty() {
         when(readingRepository.findLatestGroupedReadingRowsByClientId(1L, 3)).thenReturn(List.of());
 
         assertThat(service.findLatestGroupedReadingsByClientId(1L, 3)).isEmpty();
-        verify(instrumentRepository, never()).findAllById(any());
+        verify(damAccessService, never()).listingRestriction();
+    }
+
+    @Test
+    @DisplayName("últimas leituras agrupadas: nenhuma entidade de instrumento é carregada")
+    void latestGroupedLoadsNoInstrumentEntity() {
+        when(readingRepository.findLatestGroupedReadingRowsByClientId(1L, 3)).thenReturn(List.<Object[]>of(
+                row(100L, 1L, 10L, "2026-10-01", "09:00:00", null, null)));
+        when(damAccessService.listingRestriction()).thenReturn(Optional.empty());
+
+        service.findLatestGroupedReadingsByClientId(1L, 3);
+
+        Mockito.verifyNoInteractions(instrumentRepository);
     }
 
     @Test

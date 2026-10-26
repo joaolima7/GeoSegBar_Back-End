@@ -12,7 +12,6 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -282,7 +281,8 @@ public class ReadingService {
      * cliente, agrupadas por instrumento e por data/hora.
      *
      * Uma consulta só (findLatestGroupedReadingRowsByClientId), que traz direto
-     * do banco as leituras dessas datas com saída, autor e valores de entrada.
+     * do banco as leituras dessas datas com saída, autor, valores de entrada,
+     * instrumento e barragem — nenhuma entidade é carregada.
      * Antes eram duas consultas, e a segunda carregava TODAS as leituras
      * ativas dos instrumentos como entidades para filtrar em memória: no
      * cliente 16, ~39 mil leituras e ~250 mil queries por chamada, 25 s
@@ -298,46 +298,42 @@ public class ReadingService {
             return List.of();
         }
 
-        Set<Long> instrumentIds = new LinkedHashSet<>();
-        for (Object[] row : rows) {
-            instrumentIds.add(((Number) row[1]).longValue());
-        }
-
-        Map<Long, InstrumentEntity> instrumentsMap = instrumentRepository.findAllById(instrumentIds)
-                .stream()
-                .collect(Collectors.toMap(InstrumentEntity::getId, Function.identity()));
-
         // Só as barragens que o usuário acessa (ADMIN vê todas). As linhas de
         // barragens sem acesso são descartadas abaixo, antes de virar resposta.
-        Optional<Set<Long>> restriction = damAccessService.listingRestriction();
-        if (restriction.isPresent()) {
-            Set<Long> allowed = restriction.get();
-            instrumentsMap.values().removeIf(i -> i.getDam() == null || !allowed.contains(i.getDam().getId()));
-            if (instrumentsMap.isEmpty()) {
-                return List.of();
-            }
-        }
+        Set<Long> allowedDams = damAccessService.listingRestriction().orElse(null);
 
         // instrumento -> "data hora" -> leituras. A consulta já vem ordenada por
         // instrumento e da data mais recente para a mais antiga; os
         // LinkedHashMap mantêm essa ordem. Cada leitura aparece em uma linha por
         // valor de entrada.
+        Map<Long, InstrumentGroupedReadingsDTO> instruments = new LinkedHashMap<>();
         Map<Long, Map<String, List<ReadingResponseDTO>>> readingsByInstrument = new LinkedHashMap<>();
         Map<Long, ReadingResponseDTO> readingsById = new HashMap<>();
 
         for (Object[] row : rows) {
-            InstrumentEntity instrument = instrumentsMap.get(((Number) row[1]).longValue());
-            if (instrument == null) {
+            Long damId = ((Number) row[19]).longValue();
+            if (allowedDams != null && !allowedDams.contains(damId)) {
                 continue;
+            }
+
+            Long instrumentId = ((Number) row[1]).longValue();
+            if (!instruments.containsKey(instrumentId)) {
+                InstrumentGroupedReadingsDTO instrumentDTO = new InstrumentGroupedReadingsDTO();
+                instrumentDTO.setInstrumentId(instrumentId);
+                instrumentDTO.setInstrumentName((String) row[17]);
+                instrumentDTO.setInstrumentType((String) row[18]);
+                instrumentDTO.setDamId(damId);
+                instrumentDTO.setDamName((String) row[20]);
+                instruments.put(instrumentId, instrumentDTO);
             }
 
             Long readingId = ((Number) row[0]).longValue();
             ReadingResponseDTO reading = readingsById.get(readingId);
             if (reading == null) {
-                reading = mapLatestGroupedRow(row, instrument);
+                reading = mapLatestGroupedRow(row);
                 readingsById.put(readingId, reading);
                 readingsByInstrument
-                        .computeIfAbsent(instrument.getId(), k -> new LinkedHashMap<>())
+                        .computeIfAbsent(instrumentId, k -> new LinkedHashMap<>())
                         .computeIfAbsent(reading.getDate() + " " + reading.getHour(), k -> new ArrayList<>())
                         .add(reading);
             }
@@ -351,20 +347,13 @@ public class ReadingService {
             }
         }
 
-        List<InstrumentGroupedReadingsDTO> result = new ArrayList<>(readingsByInstrument.size());
+        List<InstrumentGroupedReadingsDTO> result = new ArrayList<>(instruments.size());
 
-        for (Map.Entry<Long, Map<String, List<ReadingResponseDTO>>> entry : readingsByInstrument.entrySet()) {
-            InstrumentEntity instrument = instrumentsMap.get(entry.getKey());
+        for (InstrumentGroupedReadingsDTO instrumentDTO : instruments.values()) {
+            Map<String, List<ReadingResponseDTO>> dateHours = readingsByInstrument.get(instrumentDTO.getInstrumentId());
 
-            InstrumentGroupedReadingsDTO instrumentDTO = new InstrumentGroupedReadingsDTO();
-            instrumentDTO.setInstrumentId(instrument.getId());
-            instrumentDTO.setInstrumentName(instrument.getName());
-            instrumentDTO.setInstrumentType(instrument.getInstrumentType().getName());
-            instrumentDTO.setDamId(instrument.getDam().getId());
-            instrumentDTO.setDamName(instrument.getDam().getName());
-
-            List<GroupedDateHourReadingsDTO> groupedReadings = new ArrayList<>(entry.getValue().size());
-            for (Map.Entry<String, List<ReadingResponseDTO>> dateHour : entry.getValue().entrySet()) {
+            List<GroupedDateHourReadingsDTO> groupedReadings = new ArrayList<>(dateHours.size());
+            for (Map.Entry<String, List<ReadingResponseDTO>> dateHour : dateHours.entrySet()) {
                 GroupedDateHourReadingsDTO group = new GroupedDateHourReadingsDTO();
                 group.setDateTime(dateHour.getKey());
                 group.setReadings(dateHour.getValue());
@@ -383,7 +372,7 @@ public class ReadingService {
      * resposta, igual ao que mapToResponseDTO monta a partir da entidade. Os
      * valores de entrada são acrescentados linha a linha pelo chamador.
      */
-    private ReadingResponseDTO mapLatestGroupedRow(Object[] row, InstrumentEntity instrument) {
+    private ReadingResponseDTO mapLatestGroupedRow(Object[] row) {
         ReadingResponseDTO dto = new ReadingResponseDTO();
         dto.setId(((Number) row[0]).longValue());
         dto.setDate(toLocalDate(row[2]));
@@ -392,8 +381,8 @@ public class ReadingService {
         dto.setLimitStatus(row[5] != null ? LimitStatusEnum.valueOf((String) row[5]) : null);
         dto.setComment((String) row[6]);
         dto.setActive((Boolean) row[7]);
-        dto.setInstrumentId(instrument.getId());
-        dto.setInstrumentName(instrument.getName());
+        dto.setInstrumentId(((Number) row[1]).longValue());
+        dto.setInstrumentName((String) row[17]);
         if (row[8] != null) {
             dto.setOutputId(((Number) row[8]).longValue());
             dto.setOutputName((String) row[9]);

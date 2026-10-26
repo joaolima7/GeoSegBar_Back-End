@@ -391,6 +391,20 @@ for legado in prometheus-prod grafana-prod postgres-exporter-prod; do
   fi
 done
 
+# ---------------------------------------------------------------- resumo diário
+# Todo dia às 21h (horário de Brasília) no mesmo chat dos alertas. Roda de
+# /opt/geosegbar-monitoring (root), nunca da home do wwvpsb. Sem os segredos do
+# Telegram o script só registra que não enviou.
+CRON_RESUMO=/etc/cron.d/geosegbar-monitoring-report
+cat > "$CRON_RESUMO.tmp" <<CRON
+# Gerado por bash/scripts/deploy_monitoring.sh. Resumo diário da API no Telegram
+# (docs/MONITORAMENTO.md, "Resumo diário"). Não edite: o próximo deploy reescreve.
+CRON_TZ=America/Sao_Paulo
+0 21 * * * root /usr/bin/python3 -I $INSTALL_DIR/report/daily_report.py >> /var/log/geosegbar-monitoring-report.log 2>&1
+CRON
+chmod 644 "$CRON_RESUMO.tmp" && mv -f "$CRON_RESUMO.tmp" "$CRON_RESUMO"
+ok "Resumo diário agendado (21h, $CRON_RESUMO)."
+
 echo ""
 ok "Monitoramento no ar."
 if [ "$ALERTAS_DESLIGADOS" = true ]; then

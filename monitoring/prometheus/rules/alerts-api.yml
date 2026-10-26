@@ -54,14 +54,14 @@ groups:
         expr: |
           histogram_quantile(0.95,
             sum by (le) (rate(http_server_requests_seconds_bucket{job="geosegbar-api", uri!~".*(export|download|upload|massive|import|zip).*"}[10m])))
-            > 1
+            > 2
           and sum(rate(http_server_requests_seconds_count{job="geosegbar-api"}[10m])) > 0.05
         for: 15m
         labels:
-          severity: warning
+          severity: critical
         annotations:
           summary: "p95 da API em {{ $value | humanizeDuration }} há 15 minutos."
-          description: A meta é p95 até 1 s, fora as rotas de upload, download, exportação e importação. Abra o painel Endpoints, coluna Tempo total consumido.
+          description: Sobrecarga - a API está respondendo devagar para todos (meta do SLO é p95 até 1 s; o alerta só avisa acima de 2 s). Fora as rotas de upload, download, exportação e importação. Abra o painel Endpoints, coluna Tempo total consumido.
           runbook_url: https://github.com/joaolima7/GeoSegBar_Back-End/blob/main/docs/MONITORAMENTO.md#latenciaalta
 
       - alert: EndpointLento
@@ -111,7 +111,7 @@ groups:
         expr: max by (instance) (tomcat_threads_busy_threads{job="geosegbar-api"} / tomcat_threads_config_max_threads{job="geosegbar-api"}) > 0.9
         for: 10m
         labels:
-          severity: warning
+          severity: critical
         annotations:
           summary: "{{ $labels.instance }} com {{ $value | humanizePercentage }} das threads do Tomcat ocupadas."
           description: Com o pool cheio, requisições novas esperam na fila de aceitação. Veja o painel Endpoints, coluna Tempo total consumido.
@@ -184,7 +184,7 @@ groups:
           and sum(rate(http_server_requests_seconds_count{job="geosegbar-api", status=~"401|403|429"}[10m])) > 1
         for: 10m
         labels:
-          severity: warning
+          severity: critical
         annotations:
           summary: "401/403/429 em {{ $value | humanize }} por segundo, 5 vezes acima da semana passada."
           description: Pode ser varredura, força bruta ou um front com token vencido em loop. Abra o painel Segurança, top IPs com 4xx.

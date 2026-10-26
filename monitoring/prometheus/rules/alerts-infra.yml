@@ -42,7 +42,7 @@ groups:
         expr: node_memory_MemAvailable_bytes{job="node"} / node_memory_MemTotal_bytes{job="node"} < 0.10
         for: 10m
         labels:
-          severity: warning
+          severity: critical
         annotations:
           summary: "Só {{ $value | humanizePercentage }} da memória do servidor disponível."
           description: Abaixo disso o kernel começa a matar processos (OOM killer).
@@ -54,7 +54,7 @@ groups:
             / (container_spec_memory_limit_bytes{job="cadvisor", name!=""} > 0)) > 0.90
         for: 10m
         labels:
-          severity: warning
+          severity: critical
         annotations:
           summary: "Container {{ $labels.name }} usando {{ $value | humanizePercentage }} do limite de memória."
           description: Ao bater no limite o kernel mata o processo do container.

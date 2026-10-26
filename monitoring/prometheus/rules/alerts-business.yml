@@ -18,7 +18,7 @@ groups:
       - alert: PicoDeFalhasDeLogin
         expr: sum(increase(geosegbar_auth_login_total{result="invalid_credentials"}[15m])) > 30
         labels:
-          severity: warning
+          severity: critical
         annotations:
           summary: "{{ $value | humanize }} logins com senha errada em 15 minutos."
           description: Pode ser tentativa de força bruta. Veja os IPs no painel Segurança.

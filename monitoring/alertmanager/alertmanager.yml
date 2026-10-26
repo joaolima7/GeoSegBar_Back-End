@@ -3,6 +3,12 @@
 # Nenhum segredo neste arquivo: token do bot, chat do Telegram e URL do
 # healthchecks.io vêm de compose secrets montados em /run/secrets/
 # (ver docs/MONITORAMENTO.md, "Primeira instalação").
+#
+# Política contra ruído (pedido do João, 26/10/2026): no Telegram, na hora, só
+# severity=critical — fora do ar, sobrecarga, segurança e backup. Avisos
+# (severity=warning) não mandam mensagem: aparecem no resumo diário das 21h
+# (monitoring/report/daily_report.py) e no Grafana. Alerta crítico que continua
+# ativo repete a cada 3 horas, não a cada poucos minutos.
 
 global:
   resolve_timeout: 5m
@@ -15,7 +21,7 @@ route:
   group_by: [alertname]
   group_wait: 30s
   group_interval: 5m
-  repeat_interval: 4h
+  repeat_interval: 3h
   routes:
     # Dead man's switch: o healthchecks.io espera um ping por minuto.
     - matchers:
@@ -28,12 +34,11 @@ route:
     - matchers:
         - severity="critical"
       receiver: telegram-critical
-      repeat_interval: 1h
 
+    # Avisos ficam para o resumo diário.
     - matchers:
         - severity="warning"
-      receiver: telegram-warning
-      repeat_interval: 12h
+      receiver: resumo-diario
 
 inhibit_rules:
   # Com a API fora, latência, SLO e pool viram consequência. Avisa a causa só.
@@ -62,15 +67,9 @@ receivers:
         message: '{{ template "geosegbar.telegram.message" . }}'
         send_resolved: true
 
-  # Mesmo chat, notificação silenciosa: chega sem som.
-  - name: telegram-warning
-    telegram_configs:
-      - bot_token_file: /run/secrets/telegram_bot_token
-        chat_id_file: /run/secrets/telegram_chat_id
-        parse_mode: HTML
-        message: '{{ template "geosegbar.telegram.message" . }}'
-        disable_notifications: true
-        send_resolved: true
+  # Sem integração: o aviso fica registrado no Prometheus (série ALERTS), de
+  # onde o resumo diário lê o que disparou no dia.
+  - name: resumo-diario
 
   - name: healthchecks
     webhook_configs:

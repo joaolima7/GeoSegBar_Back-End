@@ -8,7 +8,7 @@ abre.
 | Métricas | Prometheus | 30 dias (teto 8 GB) | volume, latência, erros, saturação, servidor, banco |
 | Logs | Loki | 30 dias | o que aconteceu, com `requestId`, `userId` e `traceId` |
 | Traces | Tempo | 7 dias | onde cada requisição gastou o tempo (SQL, S3, ANA, SMTP) |
-| Alertas | Alertmanager | n/a | Telegram (crítico com som, aviso em silêncio) |
+| Alertas | Alertmanager | n/a | Telegram: só crítico na hora; avisos no resumo diário das 21h |
 
 Tudo roda no próprio servidor, em `/opt/geosegbar-monitoring`, num compose
 separado do deploy da API. Nenhuma porta nova na internet.
@@ -260,8 +260,32 @@ pelo topo dessa coluna.
 
 ## Alertas
 
-Críticos chegam no Telegram com som, a qualquer hora. Avisos chegam em
-silêncio. O alerta de cada seção abaixo traz este link em "o que fazer".
+**Política contra ruído.** No Telegram, na hora, só chegam os alertas
+críticos: fora do ar (`ApiSemColeta`, `SondaExternaFalhando`, `PostgresFora`,
+`ApiReiniciandoEmLoop`, `OomNoKernel`), sobrecarga (`LatenciaAlta`,
+`ThreadsDoTomcatSaturadas`, `PoolDoBanco*`, `SloDisponibilidadeQueimaRapida`,
+`HostMemoriaBaixa`, `ContainerPertoDoLimiteDeMemoria`, disco), segurança
+(`BypassKeyUsado`, `PicoDeFalhasDeLogin`, `PicoDeNegacoes`) e backup. Um
+crítico que continua ativo repete a cada 3 horas, e chega uma mensagem quando
+ele se resolve. Os avisos (severity `warning`) não mandam mensagem: aparecem no
+resumo diário e no Grafana. Para mudar um alerta de nível, troque o
+`severity` dele na regra.
+
+### Resumo diário
+
+Todo dia às 21h (Brasília), no mesmo chat, sem som: disponibilidade, pico de
+tráfego, p95, rotas mais lentas e mais pesadas, erros 5xx por rota, logins,
+401/403/429, uso do `bypassKey`, CPU, memória, disco, banco, último backup,
+coleta ANA, falhas de jobs e os alertas (críticos e avisos) que dispararam no
+dia. O deploy do monitoramento instala o cron em
+`/etc/cron.d/geosegbar-monitoring-report`; o log fica em
+`/var/log/geosegbar-monitoring-report.log`. Para ver a mensagem sem enviar:
+
+```bash
+ssh geosegbar-vps 'python3 -I /opt/geosegbar-monitoring/report/daily_report.py --dry-run'
+```
+
+O alerta de cada seção abaixo traz este link em "o que fazer".
 
 ### Watchdog
 

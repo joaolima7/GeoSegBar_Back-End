@@ -513,6 +513,9 @@ public class ReadingService {
         LocalTime originalHour = reading.getHour();
 
         boolean isUpdatingInputValues = request.getInputValues() != null && !request.getInputValues().isEmpty();
+        if (isUpdatingInputValues) {
+            request.getInputValues().forEach(ReadingService::requireInputValue);
+        }
 
         if (isUpdatingInputValues && variablesChangedAfterReading(instrument, originalDate, originalHour)) {
             throw new InvalidInputException(
@@ -761,11 +764,24 @@ public class ReadingService {
             if (!inputValues.containsKey(inputAcronym)) {
                 throw new InvalidInputException("Valor não fornecido para o input '" + inputAcronym + "'");
             }
+            requireInputValue(inputAcronym, inputValues.get(inputAcronym));
         }
         for (String providedInput : inputValues.keySet()) {
             if (!requiredInputs.contains(providedInput)) {
                 throw new InvalidInputException("Input '" + providedInput + "' não existe neste instrumento");
             }
+        }
+    }
+
+    /**
+     * Input enviado com valor nulo não é "leitura ausente": a equação do output
+     * só funcionaria por acaso (quando o ramo que usa o input não é avaliado) e a
+     * leitura seria gravada sem aquele valor. Quem não leu um input informa 0.
+     */
+    private static void requireInputValue(String inputAcronym, Double value) {
+        if (value == null || value.isNaN() || value.isInfinite()) {
+            throw new InvalidInputException("Valor não fornecido para o input '" + inputAcronym
+                    + "'. Se não houve leitura, informe 0.");
         }
     }
 

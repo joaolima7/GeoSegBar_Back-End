@@ -180,7 +180,7 @@
         <dependency>
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
-            <version>5.2.3</version>
+            <version>5.4.1</version>
         </dependency>
 
         <!-- Spring Boot Actuator para métricas -->
@@ -270,6 +270,13 @@
                 <version>2.29.0</version> 
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <!-- poi-ooxml 5.4.x precisa do commons-compress 1.27.x; sem isto o
+                 1.24.0 do testcontainers vence a mediação e entra no jar de produção. -->
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-compress</artifactId>
+                <version>1.27.1</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

@@ -7,6 +7,8 @@ import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +17,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.apache.catalina.connector.ClientAbortException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.TransactionSystemException;
@@ -29,6 +32,7 @@ import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.util.ContentCachingRequestWrapper;
 
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.geosegbar.common.email.EmailService;
 import com.geosegbar.common.enums.AuthErrorCodeEnum;
 import com.geosegbar.common.response.WebResponseEntity;
@@ -246,6 +250,36 @@ public class RestExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(WebResponseEntity.errorValidation("Erro de validação", errors));
+    }
+
+    /**
+     * 400: o corpo não é um JSON válido ou traz um valor incompatível com o
+     * campo (ex.: "346,5" em campo numérico). É erro de quem chamou: no handler
+     * genérico virava 500 com e-mail de erro interno.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<WebResponseEntity<String>> handleMessageNotReadable(
+            HttpMessageNotReadableException ex, HttpServletRequest request) {
+        if (isClientAbortException(ex)) {
+            logger.info("Cliente desconectou durante o envio de {} {}",
+                    request.getMethod(), request.getRequestURI());
+        } else {
+            logger.warn("Corpo da requisição inválido em {} {}: {}",
+                    request.getMethod(), request.getRequestURI(), ex.getMessage());
+        }
+
+        String field = ex.getCause() instanceof JsonMappingException mapping
+                ? mapping.getPath().stream()
+                        .map(JsonMappingException.Reference::getFieldName)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.joining("."))
+                : "";
+
+        String message = field.isEmpty()
+                ? "Corpo da requisição inválido."
+                : "Valor inválido para o campo '" + field + "'.";
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(WebResponseEntity.error(message));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
